@@ -1,0 +1,5 @@
+active_tasks.md
+active_files.md
+node_modules/
+.env*
+.DS_Store
