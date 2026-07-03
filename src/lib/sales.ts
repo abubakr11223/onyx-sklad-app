@@ -9,6 +9,7 @@
 
 import { db } from "./db";
 import { computeFreeRemainder, type FreeRemainder } from "./inventory";
+import { lockBatchForUpdate } from "./batch-lock";
 import type { Prisma } from "@prisma/client";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
@@ -615,6 +616,10 @@ export async function sellBatchVolume(
 ): Promise<SellVolumeOk | SaleFail> {
   try {
     return await db.$transaction(async (tx) => {
+      // S2-conc: пессимистический замок на строку партии ДО чтения счётчиков —
+      // сериализует все операции, меняющие свободный остаток (§3), исключая
+      // межоперационный oversell (продажа vs выделение/прямой бой).
+      await lockBatchForUpdate(tx, input.batchId);
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
@@ -656,6 +661,8 @@ export async function sellWholeBatch(
 ): Promise<SellVolumeOk | SaleFail> {
   try {
     return await db.$transaction(async (tx) => {
+      // S2-conc: замок на строку партии ДО чтения счётчиков (см. sellBatchVolume).
+      await lockBatchForUpdate(tx, input.batchId);
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);

@@ -51,3 +51,13 @@ TZ §4.1 qat'iy talabi: priyomkada faqat partiya kiritiladi; plita (slab) yozuvi
 2. **Reservation.BATCH_VOLUME** — tasdiqlandi: B2B «hajmni ushlab turish» broni modelda qoladi (TZ §4.4 ning B2B'ga tabiiy davomi).
 
 **Sabab:** TZ §5.4 «история: что, когда, кому ушло» hisobot talab qiladi — Json ichidan qidirish o'rniga birinchi kundan strukturali jadval arzon; keyin qo'shish — ma'lumot ko'chirish og'rig'i.
+
+## ADR-007 — Partiya-darajali pessimistik qulf (`SELECT … FOR UPDATE`) qoldiqqa ta'sir qiluvchi barcha tranzaksiyalarda (2026-07-04)
+
+**Kontekst:** ADR-005 bo'yicha partiyaning erkin qoldig'i saqlanmay, §3 formuladan hisoblanadi. Turli amallar formulaning turli kirishlarini o'zgartiradi (hajm-sotuv — soldDirect hisoblagichlari; to'g'ridan-to'g'ri boy — Piece originSlabId=null). Bir amalning «o'qish → tekshirish → yozish» oralig'ida ikkinchi amal boshqa kirishni o'zgartirsa, ikkalasi ham tekshiruvdan o'tib qoldiqni manfiyga tushirishi mumkin (S2-B reviewda topilgan, regression bilan ko'paytirilgan: qoldiq −1/−2 ga tushgan).
+
+**Qaror:** Partiyaning §3 hisobiga ta'sir qiluvchi HAR QANDAY tranzaksiya boshida — birinchi operator sifatida — partiya satri `lockBatchForUpdate(tx, batchId)` (`SELECT id FROM "Batch" WHERE id = ${id} FOR UPDATE`) bilan qulflanadi, so'ng qoldiq qulf ostida qayta o'qib tekshiriladi. Yagona yordamchi: `src/lib/batch-lock.ts`. Hozir qamrab olingan: `sellBatchVolume`, `sellWholeBatch`, `reserveBatchVolume`, `registerDirectPiece`. Qoldiqqa neytral amallar (`sellUnit`, `breakSlab`, `splitSlab` — allaqachon ajratilgan birlik statusini o'zgartiradi, formula kirishini emas) qulflanmaydi.
+
+**MAJBURIYAT (kelajakdagi ishlar uchun):** yangi qoldiq-o'zgartiruvchi yozuv yo'li qo'shilganda — ayniqsa **SEPARATE_SLAB** (B2C fotozapros oqimida plita ajratish, `count(Slab)` ni o'zgartiradi) va **ADJUSTMENT** (inventarizatsiya, slabsAdjusted/areaAdjusted) — u ham `lockBatchForUpdate` ni chaqirishi SHART. Aks holda oversell oynasi qayta ochiladi.
+
+**Sabab:** ilova-darajali qulf sxema o'zgarishisiz (migratsiya yo'q) modullararo poyga oynasini yopadi; har tranzaksiya ko'pi bilan bitta partiyani qulflaydi — deadlock xavfi yo'q. Muqobil (barcha tranzaksiyalarni Serializable) ko'proq retry va murakkablik keltirardi.

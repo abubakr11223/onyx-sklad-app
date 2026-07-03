@@ -12,6 +12,7 @@
 import type { PieceKind, UnitStatus, Prisma } from "@prisma/client";
 import { db } from "./db";
 import { computeFreeRemainder } from "./inventory";
+import { lockBatchForUpdate } from "./batch-lock";
 import { parsePositiveDecimal, parsePositiveInt } from "./validators/intake";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
@@ -527,6 +528,12 @@ export async function registerDirectPiece(
   assertValidPieceInput(params);
 
   return db.$transaction(async (tx) => {
+    // S2-conc: прямой Piece (originSlabId = null) — вход формулы §3 (−1 к
+    // slabsFree, −areaM2 к areaFreeM2). Замок на строку партии ПЕРВЫМ, до чтения
+    // счётчиков/плит/кусков, сериализует эту вставку с параллельной продажей
+    // объёма / другим прямым боем — иначе guard читает устаревший остаток и
+    // партию можно увести в минус (см. batch-lock.ts).
+    await lockBatchForUpdate(tx, params.batchId);
     const batch = await tx.batch.findUnique({
       where: { id: params.batchId },
       select: {

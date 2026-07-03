@@ -11,6 +11,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeFreeRemainder } from "@/lib/inventory";
+import { lockBatchForUpdate } from "@/lib/batch-lock";
 
 // ─────────────────────────── Konstantalar / xatolar ───────────────────────────
 
@@ -285,6 +286,12 @@ export async function reserveBatchVolume(
   try {
     return await db.$transaction(
       async (tx) => {
+        // S2-conc: замок на строку партии ПЕРВЫМ — сериализует объёмную бронь
+        // с продажей/выделением/прямым боем, чтобы Σ активных volume-броней не
+        // могла превысить свободный остаток из-за параллельного изменения
+        // ДРУГОГО входа формулы §3. (Serializable оставлен как есть — замок и
+        // изоляция дополняют друг друга; замок закрывает межоперационную гонку.)
+        await lockBatchForUpdate(tx, input.batchId);
         const cfg = await tx.appConfig.findUnique({
           where: { key: RESERVATION_DAYS_KEY },
           select: { value: true },
