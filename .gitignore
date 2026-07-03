@@ -1,5 +1,22 @@
+# multi-agent koordinatsiya (jonli holat)
 active_tasks.md
 active_files.md
+
+# deps
 node_modules/
+
+# env — .env.example dan tashqari hammasi
 .env*
+!.env.example
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# test
+coverage/
+
+# os
 .DS_Store
