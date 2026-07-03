@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onyx — Карта готового проекта</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
+
+  :root{
+    --ink:#16181D;          /* графит */
+    --ink2:#23262E;
+    --panel:#1E2128;
+    --panel2:#252932;
+    --gold:#C9A55C;
+    --gold-deep:#A67C2E;
+    --cream:#F5F2EA;
+    --grey:#8A8F9A;
+    --line:#33373F;
+    --done:#3Fae7a;         /* зелёный готово */
+    --done-bg:rgba(63,174,122,.12);
+    --done-line:rgba(63,174,122,.4);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #20242d 0%, transparent 60%),
+      var(--ink);
+    color:#E8E6E0;
+    font-family:'Montserrat',system-ui,sans-serif;
+    line-height:1.5;
+    padding:32px 20px 80px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+
+  /* HERO */
+  .hero{text-align:center;margin-bottom:14px}
+  .brand{
+    font-weight:700;letter-spacing:.42em;font-size:22px;color:#fff;
+    padding-left:.42em;
+  }
+  .brand .x{color:var(--gold)}
+  .kicker{
+    font-size:11px;letter-spacing:.34em;color:var(--gold);
+    margin-top:8px;font-weight:500;
+  }
+  .title{
+    font-family:'Lora',serif;font-weight:600;font-size:34px;color:#fff;
+    margin:22px 0 6px;
+  }
+  .sub{color:var(--grey);font-size:14.5px;max-width:680px;margin:0 auto 6px;font-weight:400}
+  .finish-line{
+    font-family:'Lora',serif;font-style:italic;color:var(--gold);
+    font-size:16px;margin-top:10px;
+  }
+
+  /* PROGRESS */
+  .overall{
+    max-width:680px;margin:26px auto 8px;background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;padding:18px 22px;
+  }
+  .overall-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+  .overall-top b{font-size:13px;letter-spacing:.16em;color:#fff;font-weight:600}
+  .overall-pct{font-family:'Lora',serif;font-size:26px;color:var(--gold);font-weight:600}
+  .bar{height:9px;border-radius:6px;background:var(--ink2);overflow:hidden}
+  .bar > i{
+    display:block;height:100%;width:0%;border-radius:6px;
+    background:linear-gradient(90deg,var(--gold-deep),var(--gold));
+    transition:width .5s cubic-bezier(.2,.7,.3,1);
+  }
+  .hint{text-align:center;color:var(--grey);font-size:12.5px;margin:14px auto 30px;max-width:620px}
+  .hint b{color:#cfc9bb;font-weight:600}
+
+  /* LAYER */
+  .layer{
+    background:linear-gradient(180deg,var(--panel) 0%, var(--panel2) 100%);
+    border:1px solid var(--line);border-radius:16px;
+    padding:20px 20px 8px;margin-bottom:16px;position:relative;overflow:hidden;
+  }
+  .layer.done{border-color:var(--done-line)}
+  .layer::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:var(--gold-deep);opacity:.55;
+  }
+  .layer.done::before{background:var(--done);opacity:.9}
+  .layer-head{display:flex;align-items:center;gap:14px;margin-bottom:4px;flex-wrap:wrap}
+  .lnum{
+    font-family:'Lora',serif;font-size:13px;color:var(--ink);
+    background:var(--gold);min-width:30px;height:30px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;font-weight:600;flex:0 0 auto;
+  }
+  .layer.done .lnum{background:var(--done);color:#06210f}
+  .lname{font-size:14.5px;font-weight:600;letter-spacing:.08em;color:#fff}
+  .ldesc{color:var(--grey);font-size:12.5px;font-weight:400;width:100%;margin:2px 0 14px 44px}
+  .lcount{
+    margin-left:auto;font-size:12px;color:var(--grey);font-weight:500;
+    letter-spacing:.04em;flex:0 0 auto;
+  }
+  .lcount b{color:var(--gold);font-weight:700}
+  .layer.done .lcount b{color:var(--done)}
+
+  /* GRID of processes */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:10px;padding-bottom:14px}
+  .mod-label{
+    grid-column:1/-1;font-size:10.5px;letter-spacing:.2em;color:var(--gold-deep);
+    font-weight:600;margin:8px 0 -2px 2px;text-transform:uppercase;
+  }
+  .cell{
+    display:flex;gap:11px;align-items:flex-start;cursor:pointer;
+    background:var(--ink2);border:1px solid var(--line);border-radius:11px;
+    padding:12px 13px;transition:all .18s ease;user-select:none;
+  }
+  .cell:hover{border-color:var(--gold-deep);transform:translateY(-1px)}
+  .cell.on{background:var(--done-bg);border-color:var(--done-line)}
+  .box{
+    width:20px;height:20px;border-radius:6px;border:2px solid #4a4f59;
+    flex:0 0 auto;margin-top:1px;display:flex;align-items:center;justify-content:center;
+    transition:all .18s ease;
+  }
+  .cell.on .box{background:var(--done);border-color:var(--done)}
+  .box svg{width:12px;height:12px;opacity:0;transform:scale(.4);transition:all .18s ease}
+  .cell.on .box svg{opacity:1;transform:scale(1)}
+  .ctext{font-size:12.8px;line-height:1.42}
+  .ctext .cid{color:var(--gold);font-weight:600;font-family:'Lora',serif;margin-right:5px}
+  .cell.on .ctext{color:#bfeed4}
+  .cell .res{display:block;color:var(--grey);font-size:11.3px;margin-top:3px;font-weight:400}
+  .cell.on .res{color:rgba(180,230,200,.7)}
+  .open{border-style:dashed;opacity:.85}
+  .open .box{border-radius:50%;border-color:var(--gold-deep)}
+  .tag-open{
+    display:inline-block;font-size:9.5px;letter-spacing:.1em;color:var(--ink);
+    background:var(--gold);border-radius:4px;padding:1px 6px;margin-left:6px;
+    font-weight:700;vertical-align:middle;
+  }
+
+  /* FINISH banner */
+  .finish{
+    text-align:center;border:1px solid var(--line);border-radius:16px;
+    background:linear-gradient(180deg,#1c1f26,#181b21);padding:26px 20px;margin-top:8px;
+    transition:all .4s ease;
+  }
+  .finish.lit{
+    border-color:var(--done-line);
+    background:linear-gradient(180deg,rgba(63,174,122,.14),rgba(63,174,122,.05));
+  }
+  .finish .flabel{font-size:11px;letter-spacing:.3em;color:var(--grey);font-weight:600}
+  .finish .fmain{font-family:'Lora',serif;font-size:22px;color:#fff;margin-top:8px}
+  .finish.lit .fmain{color:#9fe9c0}
+  .finish .fnote{color:var(--grey);font-size:12.5px;margin-top:8px}
+
+  .reset{
+    display:block;margin:26px auto 0;background:transparent;color:var(--grey);
+    border:1px solid var(--line);border-radius:8px;padding:8px 16px;
+    font-family:inherit;font-size:12px;cursor:pointer;letter-spacing:.05em;transition:all .15s
+  }
+  .reset:hover{color:#fff;border-color:var(--gold-deep)}
+  .foot{text-align:center;color:var(--grey);font-size:11.5px;margin-top:24px;letter-spacing:.04em}
+
+  @media(max-width:560px){
+    .title{font-size:26px}.grid{grid-template-columns:1fr}
+    .ldesc{margin-left:0}
+    body{padding:22px 12px 60px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="brand">MULK&nbsp;PRO&nbsp;<span class="x">·</span>&nbsp;ON<span class="x">Y</span>X</div>
+    <div class="kicker">КАРТА ГОТОВОГО ПРОЕКТА</div>
+    <h1 class="title">Как выглядит завершённый Onyx</h1>
+    <p class="sub">Не «что делать», а «как выглядит результат, когда всё работает». Каждая клетка — отдельный процесс с готовым результатом. Отмечай по мере готовности.</p>
+    <div class="finish-line">Проект завершён, когда Onyx реально продаёт через систему.</div>
+  </div>
+
+  <div class="overall">
+    <div class="overall-top">
+      <b>ОБЩАЯ ГОТОВНОСТЬ</b>
+      <span class="overall-pct" id="pct">0%</span>
+    </div>
+    <div class="bar"><i id="barFill"></i></div>
+  </div>
+  <p class="hint">Нажимай на клетку, когда процесс <b>готов</b>. Слой загорается зелёным, когда готовы все его процессы. Финиш — когда зелёный весь верхний слой.</p>
+
+  <div id="layers"></div>
+
+  <div class="finish" id="finishBanner">
+    <div class="flabel">ФИНИШ</div>
+    <div class="fmain" id="finishMain">Onyx ещё не продаёт через систему</div>
+    <div class="fnote" id="finishNote">Загорится, когда готов весь Слой 4.</div>
+  </div>
+
+  <button class="reset" onclick="resetAll()">Сбросить отметки</button>
+  <div class="foot">Mulk Pro · карта обновляется по ходу проекта</div>
+</div>
+
+<script>
+const CHECK = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#06210f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const DATA = [
+  {
+    n:"0", name:"СКЛАД ФИЗИЧЕСКИ ПОДГОТОВЛЕН",
+    desc:"Делается руками на складе — основа для всего остального.",
+    groups:[
+      {mod:null, cells:[
+        {id:"0.1", t:"Карта склада нарисована", r:"~250 соток разбиты на блоки (~200 м²), у каждого буква."},
+        {id:"0.2", t:"Ориентиры расставлены", r:"Флаги с цифрами вкопаны: «блок А, ориентир 2»."},
+        {id:"0.3", t:"Логика локаций согласована", r:"Камень не двигаем — только отмечаем где стоит."},
+      ]}
+    ]
+  },
+  {
+    n:"1", name:"СИСТЕМА ПОСТРОЕНА И РАБОТАЕТ",
+    desc:"Каждый процесс написан и работает технически — проверка на тесте.",
+    groups:[
+      {mod:"Модуль 1 — Склад (ядро)", cells:[
+        {id:"1.1", t:"Приёмка партии", r:"Партия заводится за минуту, может лежать в нескольких местах. Без поплитного учёта."},
+        {id:"1.2", t:"Карточка камня", r:"Название, тип, свойства, фото, цена, локация, наличие."},
+        {id:"1.3", t:"Поиск камня", r:"Ввёл что нужно → за секунды где стоит. Без обхода склада."},
+        {id:"1.4", t:"Фотозапрос через Telegram", r:"Складчику падает задача → фоткает → фото в карточку, переиспользуется."},
+        {id:"1.5", t:"Битые камни + AI-чертёж", r:"Фото → AI рисует чертёж → размеры сторон. Предлагается первым при поиске."},
+        {id:"1.6", t:"«Разбить камень»", r:"Целый → битый/части. Бой, распил в цехе, частичная продажа."},
+        {id:"1.7", t:"Списание при продаже", r:"Продан → ушёл из наличия в историю. Встроено в продажу."},
+        {id:"1.8", t:"Роли и доступы", r:"Владелец видит всё, менеджер — наличие, складчик — задачи."},
+      ]},
+      {mod:"Модуль 2 — QR-каталог", cells:[
+        {id:"2.1", t:"QR в шоу-руме", r:"QR на камнях шоу-рума, привязан к типу. Скан → карточка."},
+        {id:"2.2", t:"AI-визуализация в интерьерах", r:"Камень в ванной/гостиной/ресепшене — генерирует AI. Сложная фича."},
+        {id:"2.3", t:"Разные доступы каталога", r:"Клиент видит без остатка, менеджер — с наличием."},
+      ]},
+      {mod:"Модуль 3 — Платформа для дизайнеров", cells:[
+        {id:"3.1", t:"Наличие камня", r:"Дизайнер заходит → сразу видит что в наличии."},
+        {id:"3.2", t:"Скачивание файлов", r:"Заходит в камень → качает файл для 3D-проекта."},
+        {id:"3.3", t:"Запрос количества → лид", r:"Запросил объём → проверка наличия → заявка менеджеру."},
+        {id:"3.4", t:"Любой интерес = лид", r:"Даже без заказа менеджеру падает заявка, он перезванивает."},
+      ]},
+      {mod:"Сквозное", cells:[
+        {id:"4.1", t:"Двусторонность: Telegram + сайт", r:"Вся система и в Telegram, и на сайте. Одни данные, два входа."},
+      ]},
+    ]
+  },
+  {
+    n:"2", name:"ДАННЫЕ ЗАНЕСЕНЫ, КОМАНДА ОБУЧЕНА",
+    desc:"Система есть — наполняем реальным складом и учим людей.",
+    groups:[
+      {mod:null, cells:[
+        {id:"2А", t:"Склад занесён по блокам", r:"Прошли блок за блоком, весь камень в системе."},
+        {id:"2Б", t:"Обучение написано", r:"Текстовые инструкции по ролям: менеджер, складчик, дизайнер."},
+        {id:"2В", t:"Команда обучена", r:"Каждый прочитал свою инструкцию и понимает систему."},
+      ]}
+    ]
+  },
+  {
+    n:"3", name:"КОМАНДА РЕАЛЬНО РАБОТАЕТ В СИСТЕМЕ",
+    desc:"Самый трудный слой — система живёт, а не лежит.",
+    groups:[
+      {mod:null, cells:[
+        {id:"3А", t:"Менеджеры ведут продажи через систему", r:"Проверяют наличие в системе, не звонят Достон аке."},
+        {id:"3Б", t:"Складчики фоткают по запросам", r:"Задачи в Telegram выполняются, фото в системе."},
+        {id:"3В", t:"Дизайнеры реально заходят", r:"Первые подключены силами менеджеров, оставляют заявки."},
+        {id:"3Г", t:"Данные актуальны", r:"Назначен ответственный, продажи и приёмки отражаются вовремя.", open:true},
+      ]}
+    ]
+  },
+  {
+    n:"4", name:"ONYX ПРОДАЁТ ЧЕРЕЗ СИСТЕМУ",
+    desc:"То, ради чего всё. Бизнес-результат, а не технический. Это финиш.",
+    groups:[
+      {mod:null, cells:[
+        {id:"4А", t:"Реальные продажи через систему", r:"Сделки, где камень найден, показан, подтверждён фото и списан."},
+        {id:"4Б", t:"Проданы битые камни / остатки", r:"Замороженные деньги вернулись — битые продаются первыми."},
+        {id:"4В", t:"Дизайнеры приводят заказы", r:"Заявки с платформы стали продажами или проектами с камнем Onyx."},
+        {id:"4Г", t:"Склад не зависит от одного человека", r:"Любой менеджер находит камень сам. Уязвимость закрыта."},
+      ]}
+    ]
+  },
+];
+
+const state = {};   // id -> bool
+let total = 0;
+DATA.forEach(l=>l.groups.forEach(g=>g.cells.forEach(c=>{state[c.id]=false;total++;})));
+
+// --- Сохранение отметок между перезагрузками (добавлено при интеграции в приложение) ---
+const STORAGE_KEY = 'onyx-karta-v1';
+const DEFAULT_DONE = ['1.1','1.3','1.6','1.7']; // уже работающие функции — отмечены по умолчанию
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const saved = JSON.parse(raw);
+      Object.keys(state).forEach(k=>{ state[k] = saved[k]===true; });
+    } else {
+      DEFAULT_DONE.forEach(k=>{ if(k in state) state[k]=true; });
+      save();
+    }
+  }catch(e){}
+}
+
+const layersEl = document.getElementById('layers');
+
+function render(){
+  layersEl.innerHTML='';
+  // верхний слой первым (4 → 0), как здание сверху вниз на экране, но финиш наверху страницы
+  DATA.slice().reverse().forEach(layer=>{
+    const cells = layer.groups.flatMap(g=>g.cells);
+    const done = cells.filter(c=>state[c.id]).length;
+    const all = cells.length;
+    const layerDone = done===all;
+
+    const lEl=document.createElement('div');
+    lEl.className='layer'+(layerDone?' done':'');
+
+    let html = `<div class="layer-head">
+        <span class="lnum">${layer.n}</span>
+        <span class="lname">${layer.name}</span>
+        <span class="lcount"><b>${done}</b> / ${all}</span>
+        <span class="ldesc">${layer.desc}</span>
+      </div><div class="grid">`;
+
+    layer.groups.forEach(g=>{
+      if(g.mod) html+=`<div class="mod-label">${g.mod}</div>`;
+      g.cells.forEach(c=>{
+        html+=`<div class="cell${state[c.id]?' on':''}${c.open?' open':''}" data-id="${c.id}">
+          <div class="box">${CHECK}</div>
+          <div class="ctext"><span class="cid">${c.id}</span>${c.t}${c.open?'<span class="tag-open">уточнить</span>':''}
+            <span class="res">${c.r}</span>
+          </div>
+        </div>`;
+      });
+    });
+    html+=`</div>`;
+    lEl.innerHTML=html;
+    layersEl.appendChild(lEl);
+  });
+
+  document.querySelectorAll('.cell').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const id=el.dataset.id; state[id]=!state[id]; save(); update();
+    });
+  });
+  update();
+}
+
+function update(){
+  // обновляем классы без полной перерисовки — но проще перерисовать счётчики/слои
+  let doneCount=0;
+  DATA.forEach(l=>l.groups.forEach(g=>g.cells.forEach(c=>{if(state[c.id])doneCount++;})));
+  const pct=Math.round(doneCount/total*100);
+  document.getElementById('pct').textContent=pct+'%';
+  document.getElementById('barFill').style.width=pct+'%';
+
+  // перерисовать состояние ячеек и слоёв
+  document.querySelectorAll('.cell').forEach(el=>{
+    const id=el.dataset.id;
+    el.classList.toggle('on',!!state[id]);
+  });
+  // слои
+  document.querySelectorAll('.layer').forEach(lEl=>{
+    const numTxt=lEl.querySelector('.lnum').textContent;
+    const layer=DATA.find(l=>l.n===numTxt);
+    const cells=layer.groups.flatMap(g=>g.cells);
+    const d=cells.filter(c=>state[c.id]).length;
+    lEl.querySelector('.lcount').innerHTML=`<b>${d}</b> / ${cells.length}`;
+    lEl.classList.toggle('done',d===cells.length);
+    lEl.querySelector('.lnum').textContent=numTxt; // keep
+  });
+
+  // финиш = весь слой 4
+  const l4=DATA.find(l=>l.n==="4").groups.flatMap(g=>g.cells);
+  const finishDone=l4.every(c=>state[c.id]);
+  const fb=document.getElementById('finishBanner');
+  fb.classList.toggle('lit',finishDone);
+  document.getElementById('finishMain').textContent =
+    finishDone ? 'Проект Onyx завершён ✓' : 'Onyx ещё не продаёт через систему';
+  document.getElementById('finishNote').textContent =
+    finishDone ? 'Весь Слой 4 зелёный. Система работает и приносит результат.'
+               : 'Загорится, когда готов весь Слой 4.';
+}
+
+function resetAll(){
+  Object.keys(state).forEach(k=>state[k]=false);
+  save();
+  render();
+}
+
+load();
+render();
+</script>
+</body>
+</html>

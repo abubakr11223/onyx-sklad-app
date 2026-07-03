@@ -23,6 +23,12 @@ export default function Home() {
           Приёмка партии
         </Link>
       </nav>
+      <a
+        href="/karta"
+        className="mt-2 text-sm text-gray-400 underline underline-offset-4 hover:text-gray-600"
+      >
+        Карта готовности проекта
+      </a>
     </main>
   );
 }
