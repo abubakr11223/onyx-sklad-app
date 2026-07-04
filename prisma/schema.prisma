@@ -365,6 +365,15 @@ model AuditLog {
   @@index([action, createdAt])
 }
 
+/// Karta готовности проекта (/karta) holati — localStorage o'rniga Postgres.
+/// Har bir yozuv bitta katakcha. done — bajarilgan/bajarilmagan bayrog'i.
+model KartaCell {
+  cellId    String   @id
+  done      Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
 /// §1.11 — kalit-qiymat sozlamalar (ADR-003). S1: reservationDays, photoStaleMonths.
 model AppConfig {
   id        String   @id @default(cuid())

@@ -282,23 +282,30 @@ const state = {};   // id -> bool
 let total = 0;
 DATA.forEach(l=>l.groups.forEach(g=>g.cells.forEach(c=>{state[c.id]=false;total++;})));
 
-// --- Сохранение отметок между перезагрузками (добавлено при интеграции в приложение) ---
-const STORAGE_KEY = 'onyx-karta-v1';
-const DEFAULT_DONE = ['1.1','1.3','1.6','1.7']; // уже работающие функции — отмечены по умолчанию
-function save(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+// --- Хранение отметок в Postgres через /api/karta (заменило localStorage) ---
+// Режим редактирования включается ?edit в URL. Без него — только чтение + опрос.
+const EDIT = new URLSearchParams(location.search).has('edit');
+const API = '/api/karta';
+
+// Применяет ответ сервера {cells} в state (только известные id).
+function applyCells(cells){
+  if(!cells) return;
+  Object.keys(state).forEach(k=>{ state[k] = cells[k] === true; });
 }
-function load(){
+
+let polling = false; // защита от наложения запросов опроса
+async function poll(){
+  if(polling) return;
+  polling = true;
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      const saved = JSON.parse(raw);
-      Object.keys(state).forEach(k=>{ state[k] = saved[k]===true; });
-    } else {
-      DEFAULT_DONE.forEach(k=>{ if(k in state) state[k]=true; });
-      save();
+    const res = await fetch(API, {cache:'no-store'});
+    if(res.ok){
+      const data = await res.json();
+      applyCells(data.cells);
+      update();
     }
-  }catch(e){}
+  }catch(e){/* сеть — молча игнорируем */}
+  finally{ polling = false; }
 }
 
 const layersEl = document.getElementById('layers');
@@ -338,12 +345,39 @@ function render(){
     layersEl.appendChild(lEl);
   });
 
-  document.querySelectorAll('.cell').forEach(el=>{
-    el.addEventListener('click',()=>{
-      const id=el.dataset.id; state[id]=!state[id]; save(); update();
+  if(EDIT){
+    document.querySelectorAll('.cell').forEach(el=>{
+      el.addEventListener('click',()=>{ toggleCell(el.dataset.id); });
     });
-  });
+  } else {
+    // только чтение: клики не переключают, курсор обычный
+    document.querySelectorAll('.cell').forEach(el=>{ el.style.cursor='default'; });
+  }
   update();
+}
+
+// Оптимистичное переключение в режиме редактирования + POST на сервер.
+async function toggleCell(id){
+  if(!(id in state)) return;
+  const next = !state[id];
+  state[id] = next; update();  // оптимистично
+  try{
+    const res = await fetch(API, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cellId:id, done:next, updatedBy:'owner'}),
+    });
+    if(res.status === 401){
+      state[id] = !next; update();  // откат
+      location.href = '/login?next=' + encodeURIComponent('/karta?edit');
+      return;
+    }
+    if(!res.ok){
+      state[id] = !next; update();  // откат при прочих ошибках
+    }
+  }catch(e){
+    state[id] = !next; update();    // сеть недоступна — откат
+  }
 }
 
 function update(){
@@ -382,14 +416,41 @@ function update(){
                : 'Загорится, когда готов весь Слой 4.';
 }
 
-function resetAll(){
-  Object.keys(state).forEach(k=>state[k]=false);
-  save();
+// Сброс — только в режиме редактирования: POST done:false для каждой активной клетки.
+async function resetAll(){
+  if(!EDIT) return;
+  const active = Object.keys(state).filter(k=>state[k]);
+  for(const id of active){
+    state[id] = false;
+    try{
+      await fetch(API, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({cellId:id, done:false, updatedBy:'owner'}),
+      });
+    }catch(e){/* игнорируем */}
+  }
   render();
 }
 
-load();
-render();
+// Кнопку сброса прячем вне режима редактирования.
+const resetBtn = document.querySelector('.reset');
+if(resetBtn && !EDIT) resetBtn.style.display='none';
+
+// Первичная загрузка состояния с сервера, затем опрос каждые 15с.
+async function init(){
+  try{
+    const res = await fetch(API, {cache:'no-store'});
+    if(res.ok){
+      const data = await res.json();
+      applyCells(data.cells);
+    }
+  }catch(e){/* оффлайн — покажем дефолтное пустое состояние */}
+  render();
+  setInterval(poll, 15000);
+}
+
+init();
 </script>
 </body>
 </html>
