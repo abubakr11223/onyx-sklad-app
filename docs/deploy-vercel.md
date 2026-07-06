@@ -14,11 +14,13 @@ VPS varianti kerak bo'lsa — `docs/deploy-vps.md` (zaxira, hozircha ishlatilmay
 - **Neon** — serverless Postgres. Vercel Marketplace integratsiyasi orqali ulanadi:
   DB'ni yaratadi va ulanish satrlarini (`DATABASE_URL` pooled + `DATABASE_URL_UNPOOLED`
   direct) Vercel muhitiga **avtomatik** qo'yadi — parolni qo'lda ko'chirmaysiz.
-- **Migratsiya** — deploy paytida `vercel-build` skripti `prisma migrate deploy` ni
-  ishga tushiradi (idempotent), jadvallarni Neon'da yaratadi. `KartaCell` ham shu yerda paydo bo'ladi.
+- **Migratsiya** — build'dan AJRATILGAN (Vercel best-practice). `vercel-build` faqat
+  `prisma generate && next build` qiladi. Sababi: Neon free-tier DB bekorchilikda uxlaydi;
+  migratsiyani build ichida yuritish sovuq-ulanishда timeout berib butun build'ni yiqitadi.
+  Migratsiya qo'lda yuritiladi: `npm run migrate:deploy` (pastdagi «Migratsiya qo'shish»).
 
 Kod tomonidan tayyor (bu repo'da): `prisma/schema.prisma` da `directUrl`,
-`package.json` da `vercel-build` + `postinstall`.
+`package.json` da `vercel-build` + `postinstall` + `migrate:deploy`.
 
 ---
 
@@ -55,9 +57,11 @@ Loyiha → **Settings → Environment Variables** → quyidagi 2 tasini qo'shing
 > `AUTH_COOKIE_SECRET` ni menga ko'chirmang — o'zingiz kiriting. `openssl rand -hex 32`
 > chiqishini nusxalab qo'ying.
 
-### 5. Deploy
-1. Loyiha → **Deployments** → **Redeploy** (yoki `git push` — avtomatik).
-2. Build logida `prisma migrate deploy` → `Applying migration ...` ko'rinadi → jadvallar yaratildi.
+### 5. Deploy + birinchi migratsiya
+1. Loyiha → **Deployments** → **Redeploy** (yoki `git push` — avtomatik). Build `next build` bilan tugaydi.
+2. **Birinchi marta** jadvallarni Neon'da yarating (build buni QILMAYDI): lokaldan Neon'ga qarab —
+   `DATABASE_URL="<neon-pooled>" DATABASE_URL_UNPOOLED="<neon-direct>" npm run migrate:deploy`
+   (ulanish satrlarini Vercel → Settings → Environment Variables dan oling). `Applying migration…` → tayyor.
 3. Tugagach Vercel URL beradi: `https://onyx-sklad-app-xxxx.vercel.app`.
 
 ### 6. Tekshirish (telefondan ham)
@@ -82,7 +86,8 @@ O'zgarmagan qoida: `/karta?edit` → login → katakni bos.
 - **Loglar:** Vercel dashboard → Deployments → (deploy) → Runtime/Build Logs.
   Yoki CLI: `vercel logs <url>`.
 - **Migratsiya qo'shish:** lokalda `npx prisma migrate dev --name <ism>` → commit → push.
-  Prod'da `vercel-build` avtomatik `migrate deploy` qiladi.
+  Prod'da (deploy'dan keyin) qo'lda: `DATABASE_URL="<neon-pooled>" DATABASE_URL_UNPOOLED="<neon-direct>" npm run migrate:deploy`.
+  (Build'da avtomatik yuritilmaydi — Neon free-tier sovuq-ulanish timeout'ining oldini olish uchun.)
 - **Demo ma'lumot (ixtiyoriy):** ombor sahifalari bo'sh bo'lmasligi uchun seed kerak bo'lsa,
   lokaldan Neon'ga: `DATABASE_URL="<neon-pooled-url>" DATABASE_URL_UNPOOLED="<neon-direct-url>" npx prisma db seed`.
   Karta uchun seed SHART EMAS (default belgilar kodda).
