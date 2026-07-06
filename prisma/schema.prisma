@@ -10,7 +10,12 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime (serverless funksiyalar) — pooled ulanish (Neon pgbouncer / lokal Postgres).
+  url       = env("DATABASE_URL")
+  // Migratsiya/introspeksiya — to'g'ridan-to'g'ri (pooler orqali migrate ishlamaydi).
+  // Vercel+Neon integratsiyasi DATABASE_URL_UNPOOLED'ni avtomatik beradi; lokalda
+  // .env'da u DATABASE_URL bilan bir xil (lokal Postgres'da pooler yo'q).
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // ───────────────────────── Enums ─────────────────────────
