@@ -1,0 +1,61 @@
+# Onyx — prod deploy (bitta VPS, Docker Compose): app + Postgres + Caddy (avto-HTTPS).
+# Ishga tushirish:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# Muhit o'zgaruvchilari .env.production'dan olinadi (env_file → konteyner ichiga inject).
+# Bu faylni serverda .env.production.example'dan nusxa qilib yarating va
+# HECH QACHON git'ga qo'shmang:
+#   cp .env.production.example .env.production   # keyin haqiqiy qiymatlar bilan to'ldiring
+#
+# Eslatma: quyida healthcheck'dagi $${VAR} — Compose emas, KONTEYNER shell'i
+# tomonidan (env_file'dan) kengaytiriladi (shuning uchun ikki dollar).
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB — env_file'dan.
+    env_file: .env.production
+    volumes:
+      - onyx-pgdata:/var/lib/postgresql/data
+    # Host portga chiqarilmaydi — DB faqat ichki tarmoqdan (app) ko'rinadi.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # DATABASE_URL (host = db), APP_PASSWORD, AUTH_COOKIE_SECRET — env_file'dan.
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    # Host portga chiqarilmaydi — trafik faqat Caddy orqali (reverse proxy).
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    # DOMAIN va ACME_EMAIL — Caddyfile ichida {$DOMAIN}/{$ACME_EMAIL} sifatida o'qiladi.
+    env_file: .env.production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # Let's Encrypt sertifikatlari (saqlanadi)
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  onyx-pgdata:
+  caddy-data:
+  caddy-config:

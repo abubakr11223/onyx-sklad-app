@@ -5,9 +5,10 @@ active_files.md
 # deps
 node_modules/
 
-# env — .env.example dan tashqari hammasi
+# env — .env.example va .env.production.example dan tashqari hammasi
 .env*
 !.env.example
+!.env.production.example
 
 # next.js
 .next/

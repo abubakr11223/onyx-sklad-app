@@ -1,0 +1,32 @@
+# Onyx — Caddy reverse proxy (avtomatik HTTPS).
+#
+# Caddy DOMAIN uchun Let's Encrypt sertifikatini O'ZI oladi va yangilaydi,
+# faqat haqiqiy domen + email berilgan bo'lsa. Qiymatlar .env.production'dan keladi
+# (docker-compose.prod.yml → caddy → env_file), Caddy ularni {$VAR} orqali o'qiydi.
+
+# ── Global sozlamalar ──────────────────────────────────────────────
+{
+	# ACME (Let's Encrypt) ro'yxatdan o'tish uchun email — muddat tugashi ogohlantirishlari.
+	email {$ACME_EMAIL}
+}
+
+# ─────────────────────────────────────────────────────────────────
+# VARIANT A — DOMEN BILAN (tavsiya etiladi). Avto-HTTPS yoqiladi.
+# .env.production'da DOMAIN=onyx.example.com va ACME_EMAIL to'ldirilgan bo'lsin,
+# hamda DNS A-yozuvi shu domenni server IP'siga yo'naltirsin.
+# ─────────────────────────────────────────────────────────────────
+{$DOMAIN} {
+	encode gzip zstd
+	reverse_proxy app:3000
+}
+
+# ─────────────────────────────────────────────────────────────────
+# VARIANT B — DOMENSIZ / faqat IP bilan test (HTTPS YO'Q).
+# Domen hali yo'q bo'lsa: yuqoridagi VARIANT A blokini izohga oling (# bilan),
+# quyidagi blokdagi # larni olib tashlang. So'ng http://<server-ip> ochiladi.
+# Diqqat: TLS bo'lmaydi — parol ochiq kanaldan ketadi, faqat vaqtincha test uchun.
+# ─────────────────────────────────────────────────────────────────
+# :80 {
+# 	encode gzip zstd
+# 	reverse_proxy app:3000
+# }

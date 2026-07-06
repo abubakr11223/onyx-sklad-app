@@ -1,0 +1,37 @@
+# Build kontekstidan chiqarib tashlanadi (image'ga tushmaydi).
+
+# deps / build artefaktlari — image ichida qayta yaratiladi.
+node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# git / muhit
+.git
+.gitignore
+.env
+.env.*
+!.env.production.example
+
+# multi-agent koordinatsiya (jonli holat)
+active_files.md
+active_tasks.md
+.multi-agent
+.claude
+
+# hujjatlar / matnlar — runtime'ga kerak emas.
+docs
+*.md
+tz-onyx-sklad.md
+
+# lokal dev / deploy fayllari
+docker-compose.yml
+docker-compose.prod.yml
+Caddyfile
+Dockerfile
+.dockerignore
+
+# OS
+.DS_Store
