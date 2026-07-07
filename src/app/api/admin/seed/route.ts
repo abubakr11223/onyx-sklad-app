@@ -36,6 +36,19 @@ export async function POST(req: Request) {
       ? (body as { warehouseTelegramId: string }).warehouseTelegramId
       : undefined;
 
-  const result = await seedDemoData(db, { warehouseTelegramId });
-  return Response.json({ ok: true, ...result });
+  try {
+    const result = await seedDemoData(db, { warehouseTelegramId });
+    return Response.json({ ok: true, ...result });
+  } catch (e) {
+    // Diagnostika (vaqtincha): xatoni qaytaramiz — endpoint secret bilan himoyalangan.
+    return Response.json(
+      {
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+        name: e instanceof Error ? e.name : undefined,
+        stack: e instanceof Error ? e.stack?.slice(0, 1500) : undefined,
+      },
+      { status: 500 },
+    );
+  }
 }
