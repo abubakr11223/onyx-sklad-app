@@ -9,6 +9,7 @@ import {
   computeFreeRemainder,
   pieceFitsRequest,
 } from "@/lib/inventory";
+import { requestPhoto } from "./actions";
 
 export const metadata: Metadata = {
   title: "Поиск камня — Onyx",
@@ -61,6 +62,9 @@ export default async function PoiskPage({
   const lenMm = parseMm(params.l);
   const widMm = parseMm(params.w);
   const hasDims = lenMm !== null && widMm !== null;
+  // TG-B1: fotozapros natijasi (redirect'dan qaytgan bayroqlar).
+  const photoOk = firstParam(params.photo) === "ok";
+  const photoErr = firstParam(params.photoErr);
 
   const stoneTypes = await db.stoneType.findMany({
     where: {
@@ -239,6 +243,23 @@ export default async function PoiskPage({
         </button>
       </form>
 
+      {photoOk && (
+        <p
+          role="status"
+          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
+        >
+          Запрос на фото отправлен складчикам.
+        </p>
+      )}
+      {photoErr && (
+        <p
+          role="alert"
+          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
+        >
+          {photoErr}
+        </p>
+      )}
+
       {hasDims && (
         <section className="mt-6 rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
           <h2 className="text-lg font-bold text-amber-900">
@@ -362,10 +383,37 @@ export default async function PoiskPage({
                                     {" "}
                                     ({loc.note})
                                   </span>
-                                )}
+                                )}{" "}
+                                {/* TG-B1: запрос фото по этой локации */}
+                                <form action={requestPhoto} className="inline">
+                                  <input type="hidden" name="batchId" value={b.id} />
+                                  <input
+                                    type="hidden"
+                                    name="batchLocationId"
+                                    value={loc.id}
+                                  />
+                                  <button
+                                    type="submit"
+                                    className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+                                  >
+                                    📷 Фото
+                                  </button>
+                                </form>
                               </li>
                             ))}
                           </ul>
+                          {b.locations.length === 0 && (
+                            // TG-B1: локаций нет — запрос по партии целиком.
+                            <form action={requestPhoto} className="mt-1">
+                              <input type="hidden" name="batchId" value={b.id} />
+                              <button
+                                type="submit"
+                                className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+                              >
+                                📷 Фото
+                              </button>
+                            </form>
+                          )}
                           {availableSlabs.length > 0 && (
                             <ul className="mt-2 space-y-0.5">
                               {availableSlabs.map((s) => (

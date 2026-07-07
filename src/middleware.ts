@@ -11,6 +11,7 @@ const PROTECTED_PREFIXES = [
   "/bron",
   "/razbit",
   "/poisk",
+  "/fotozapros",
 ];
 
 function needsAuth(pathname: string, search: string): boolean {
