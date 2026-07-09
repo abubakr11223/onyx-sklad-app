@@ -15,6 +15,14 @@ import type {
 
 // db'dan bizga faqat User bo'yicha 2 amal kerak. Prisma'ning to'liq tipini
 // talab qilmaymiz — testlar oson mock qilishi uchun minimal shakl.
+// Foto qabul qilish uchun kerakli PhotoRequest yozuvining minimal shakli.
+interface PendingPhotoRequest {
+  id: string;
+  managerId: string;
+  slabId: string | null;
+  batch: { stoneTypeId: string; stoneType: { name: string } | null };
+}
+
 export interface WebhookDeps {
   db: {
     user: {
@@ -25,6 +33,53 @@ export interface WebhookDeps {
       update(args: {
         where: { id: string };
         data: { telegramId: string };
+      }): Promise<unknown>;
+      // Foto oqimi (TG-B2): yuboruvchini telegramId bo'yicha topish.
+      findFirst(args: {
+        where: { telegramId: string; isActive: boolean };
+        select: { id: true; role: true };
+      }): Promise<{ id: string; role: string } | null>;
+      // Menejerni xabardor qilish uchun telegramId'ni olish.
+      findUnique(args: {
+        where: { id: string };
+        select: { telegramId: true };
+      }): Promise<{ telegramId: string | null } | null>;
+    };
+    photoRequest: {
+      // Skladchining eng eski PENDING zaprosini (umumiy navbat yoki o'ziga).
+      findFirst(args: {
+        where: {
+          status: "PENDING";
+          OR: Array<{ assigneeId: null } | { assigneeId: string }>;
+        };
+        orderBy: { createdAt: "asc" };
+        include: {
+          batch: {
+            select: {
+              stoneTypeId: true;
+              stoneType: { select: { name: true } };
+            };
+          };
+        };
+      }): Promise<PendingPhotoRequest | null>;
+      // ATOMIK «egallash» (S2-conc uslubi): faqat hali PENDING bo'lsa DONE qiladi.
+      // count===1 → biz egalladik; count===0 → boshqa skladchi ulgurdi.
+      updateMany(args: {
+        where: { id: string; status: "PENDING" };
+        data: { status: "DONE"; completedAt: Date };
+      }): Promise<{ count: number }>;
+    };
+    photo: {
+      create(args: {
+        data: {
+          storageKey: string;
+          kind: "SLAB";
+          takenAt: Date;
+          takenById: string;
+          stoneTypeId: string;
+          slabId: string | null;
+          photoRequestId: string;
+        };
       }): Promise<unknown>;
     };
   };
@@ -48,6 +103,14 @@ const MSG_ALREADY_LINKED =
 const MSG_TRY_LATER = "Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.";
 const successMessage = (name: string) =>
   `Ro'yxatdan o'tdingiz, ${name}. Endi fotozaproslar shu yerga keladi.`;
+
+// Foto oqimi (TG-B2) matnlari — skladchi/menejer ruscha ko'radi.
+const MSG_PHOTO_NOT_REGISTERED =
+  "Вы не зарегистрированы. Отправьте /start.";
+const MSG_PHOTO_NO_REQUEST = "Сейчас нет активных запросов на фото.";
+const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
+const managerNotifyMessage = (stoneTypeName: string) =>
+  `📷 Фото готово: ${stoneTypeName}.`;
 
 // request_contact klaviaturasi — telefonni bir tugma bilan ulashish.
 const CONTACT_KEYBOARD: TgReplyKeyboardMarkup = {
@@ -100,7 +163,13 @@ export async function handleUpdate(
       return;
     }
 
-    // 2) /start buyrug'i → kontakt so'rash klaviaturasi.
+    // 2) Foto (TG-B2) → PENDING zaprosga biriktirish, DONE qilish, menejerni xabardor.
+    if (Array.isArray(message.photo) && message.photo.length > 0) {
+      await handlePhoto(message, deps);
+      return;
+    }
+
+    // 3) /start buyrug'i → kontakt so'rash klaviaturasi.
     if (typeof message.text === "string" && isStartCommand(message.text)) {
       await deps.sendMessage(chatId, MSG_ASK_CONTACT, {
         reply_markup: CONTACT_KEYBOARD,
@@ -108,7 +177,7 @@ export async function handleUpdate(
       return;
     }
 
-    // 3) Boshqa har qanday update — e'tiborsiz (xatosiz qaytamiz).
+    // 4) Boshqa har qanday update — e'tiborsiz (xatosiz qaytamiz).
   } catch (err) {
     // Webhook doim 200 qaytishi uchun xatoni yutamiz.
     console.error("[telegram-webhook] handleUpdate xatosi:", err);
@@ -174,4 +243,106 @@ async function handleContact(
   await deps.sendMessage(chatId, successMessage(match.name), {
     reply_markup: { remove_keyboard: true },
   });
+}
+
+/**
+ * Skladchi yuborgan fotoni qabul qiladi (TG-B2). Faqat bog'langan (telegramId,
+ * isActive) foydalanuvchi topshira oladi. Foto eng eski PENDING zaprosga
+ * biriktiriladi (umumiy navbat yoki o'ziga tayinlangan), zapros DONE bo'ladi,
+ * menejer xabardor qilinadi. Rasm o'zi saqlanmaydi — Telegram file_id saqlanadi
+ * (storageKey), keyin proksi orqali oqim bilan ko'rsatiladi.
+ *
+ * handleUpdate try/catch ichida — bu funksiya throw qilsa ham webhook 200 qaytadi.
+ */
+async function handlePhoto(
+  message: NonNullable<TgUpdate["message"]>,
+  deps: WebhookDeps,
+): Promise<void> {
+  const chatId = message.chat.id;
+
+  // (1) Yuboruvchi bog'langan va faol bo'lishi shart.
+  const user = await deps.db.user.findFirst({
+    where: { telegramId: String(chatId), isActive: true },
+    select: { id: true, role: true },
+  });
+  if (!user) {
+    await deps.sendMessage(chatId, MSG_PHOTO_NOT_REGISTERED);
+    return;
+  }
+
+  // (2) Eng katta o'lcham — massivning oxirgi elementi (Telegram o'sish tartibi).
+  const photos = message.photo!;
+  const largest = photos[photos.length - 1];
+
+  // (3) PENDING zaprosni ATOMIK egallaymiz (S2-conc uslubi, ADR-007 ruhida).
+  // Eng eski PENDING'ni topib, guarded updateMany bilan (id + status:PENDING → DONE)
+  // egallaymiz. count===1 → biz oldik; count===0 → boshqa skladchi o'sha oniyda
+  // egalladi, keyingi PENDING'ga o'tamiz. Shu bilan ikki skladchi bitta zaprosga
+  // biriktirmaydi (poyga yopildi). Bound: 5 urinish (cheksiz sikl bo'lmasin).
+  let claimed: PendingPhotoRequest | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const request = await deps.db.photoRequest.findFirst({
+      where: {
+        status: "PENDING",
+        OR: [{ assigneeId: null }, { assigneeId: user.id }],
+      },
+      orderBy: { createdAt: "asc" },
+      include: {
+        batch: {
+          select: { stoneTypeId: true, stoneType: { select: { name: true } } },
+        },
+      },
+    });
+    if (!request) break; // PENDING qolmadi.
+    const res = await deps.db.photoRequest.updateMany({
+      where: { id: request.id, status: "PENDING" },
+      data: { status: "DONE", completedAt: new Date() },
+    });
+    if (res.count === 1) {
+      claimed = request;
+      break;
+    }
+    // count===0 — boshqa skladchi egalladi, keyingi PENDING'ni izlaymiz.
+  }
+  if (!claimed) {
+    await deps.sendMessage(chatId, MSG_PHOTO_NO_REQUEST);
+    return;
+  }
+
+  // (4) Photo yozuvi — storageKey = Telegram file_id (Blob yo'q). Zapros allaqachon
+  // biz tomondan DONE qilingan; bu foto aynan shu zaprosga tegishli.
+  // (Kamdan-kam qisman-xato: create yiqilsa, zapros DONE bo'lib foto yo'q qoladi —
+  //  outer try/catch tutadi, skladchi javob olmaydi. Nadir; TG-C follow-up.)
+  await deps.db.photo.create({
+    data: {
+      storageKey: largest.file_id,
+      kind: "SLAB",
+      takenAt: new Date(),
+      takenById: user.id,
+      stoneTypeId: claimed.batch.stoneTypeId,
+      slabId: claimed.slabId ?? null,
+      photoRequestId: claimed.id,
+    },
+  });
+
+  // (5) Skladchiga tasdiq.
+  await deps.sendMessage(chatId, MSG_PHOTO_SAVED);
+
+  // (6) Menejerni xabardor qilamiz — ALOHIDA try/catch: bu yiqilsa skladchining
+  // saqlash+javob oqimi buzilmasin.
+  try {
+    const manager = await deps.db.user.findUnique({
+      where: { id: claimed.managerId },
+      select: { telegramId: true },
+    });
+    if (manager?.telegramId) {
+      const stoneName = claimed.batch.stoneType?.name ?? "камень";
+      await deps.sendMessage(
+        manager.telegramId,
+        managerNotifyMessage(stoneName),
+      );
+    }
+  } catch (err) {
+    console.error("[telegram-webhook] menejerni xabardor qilish xatosi:", err);
+  }
 }

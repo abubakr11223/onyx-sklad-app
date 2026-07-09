@@ -30,12 +30,23 @@ export interface TgContact {
   user_id?: number; // ulashgan kontakt kimga tegishli (o'ziniki bo'lsa = from.id)
 }
 
+// Bitta rasm o'lchami. Telegram bir nechta o'lchamni o'sish tartibida beradi —
+// eng kattasi massivning oxirgi elementi.
+export interface TgPhotoSize {
+  file_id: string;
+  file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+}
+
 export interface TgMessage {
   message_id: number;
   from?: TgUser;
   chat: TgChat;
   text?: string;
   contact?: TgContact;
+  photo?: TgPhotoSize[];
 }
 
 export interface TgUpdate {

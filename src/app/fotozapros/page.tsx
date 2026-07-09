@@ -34,6 +34,7 @@ export default async function FotozaprosPage() {
       batch: { include: { stoneType: true } },
       batchLocation: true,
       assignee: true,
+      photos: { select: { id: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
@@ -80,6 +81,20 @@ export default async function FotozaprosPage() {
                   {dateFmt.format(r.createdAt)}
                   {r.assignee ? ` · ${r.assignee.name}` : " · общая очередь"}
                 </p>
+                {r.photos.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {r.photos.map((photo) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={photo.id}
+                        src={`/api/photo/${photo.id}`}
+                        className="h-20 w-20 rounded border object-cover"
+                        alt="фото"
+                        loading="lazy"
+                      />
+                    ))}
+                  </div>
+                )}
               </li>
             );
           })}
