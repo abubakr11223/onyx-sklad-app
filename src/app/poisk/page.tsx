@@ -3,6 +3,7 @@
 // (ADR-005) — formula src/lib/inventory.ts (data-model.md §3).
 // TODO (keyingi sprint): paginatsiya — seed masshtabida findMany yetarli.
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import {
   CUTTING_MARGIN_MM,
@@ -324,7 +325,14 @@ export default async function PoiskPage({
                   className="rounded-xl border border-gray-200 p-4"
                 >
                   <div className="flex flex-wrap items-baseline gap-x-2">
-                    <h3 className="text-base font-bold">{t.st.name}</h3>
+                    <h3 className="text-base font-bold">
+                      <Link
+                        href={"/kamen/" + t.st.id}
+                        className="hover:underline"
+                      >
+                        {t.st.name}
+                      </Link>
+                    </h3>
                     <span className="text-sm text-gray-500">
                       {t.st.rockType}
                       {t.st.color && <> · {t.st.color}</>}

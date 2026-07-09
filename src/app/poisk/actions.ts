@@ -25,19 +25,33 @@ async function currentManagerId(): Promise<string | null> {
   return manager?.id ?? null;
 }
 
+/**
+ * Куда вернуться после запроса фото. По умолчанию /poisk (поведение как было).
+ * Защита от open-redirect: путь должен быть локальным (начинаться с «/», но не
+ * «//» и не «/\» — иначе браузер трактует как внешний хост).
+ */
+function safeNext(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  if (!s.startsWith("/") || s.startsWith("//") || s.startsWith("/\\")) {
+    return "/poisk";
+  }
+  return s;
+}
+
 export async function requestPhoto(formData: FormData): Promise<void> {
   const batchId = String(formData.get("batchId") ?? "").trim();
   const batchLocationId = String(formData.get("batchLocationId") ?? "").trim() || null;
   const comment = String(formData.get("comment") ?? "").trim() || null;
+  const next = safeNext(formData.get("next"));
 
   if (!batchId) {
-    redirect(`/poisk?photoErr=${encodeURIComponent("Не указана партия")}`);
+    redirect(`${next}?photoErr=${encodeURIComponent("Не указана партия")}`);
   }
 
   const managerId = await currentManagerId();
   if (!managerId) {
     redirect(
-      `/poisk?photoErr=${encodeURIComponent("Менеджер не найден — выполните заполнение базы (seed)")}`,
+      `${next}?photoErr=${encodeURIComponent("Менеджер не найден — выполните заполнение базы (seed)")}`,
     );
   }
 
@@ -48,10 +62,10 @@ export async function requestPhoto(formData: FormData): Promise<void> {
     );
   } catch (e) {
     if (e instanceof PhotoRequestError) {
-      redirect(`/poisk?photoErr=${encodeURIComponent(e.message)}`);
+      redirect(`${next}?photoErr=${encodeURIComponent(e.message)}`);
     }
     throw e;
   }
 
-  redirect("/poisk?photo=ok");
+  redirect(`${next}?photo=ok`);
 }
