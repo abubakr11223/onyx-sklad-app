@@ -6,6 +6,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import { sendMessage } from "@/lib/telegram";
 import {
   PhotoRequestError,
@@ -13,16 +14,12 @@ import {
 } from "@/lib/photo-requests";
 
 /**
- * СТАБ авторизации (auth — следующий спринт): действующий менеджер берётся
- * из seed по роли MANAGER (тот же стаб, что в src/app/bron/actions.ts).
+ * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
+ * По умолчанию демо-роль MANAGER → как и раньше, разрешается в менеджера.
+ * R1: identity plumbing only; role enforcement — R2+.
  */
 async function currentManagerId(): Promise<string | null> {
-  const manager = await db.user.findFirst({
-    where: { role: "MANAGER", isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  return manager?.id ?? null;
+  return (await getCurrentUser())?.id ?? null;
 }
 
 /**

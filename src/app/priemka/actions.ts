@@ -7,6 +7,7 @@
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import {
   validateIntake,
   type IntakeErrors,
@@ -85,17 +86,15 @@ export async function submitIntake(
   if (!result.ok) return { errors: result.errors };
   const data = result.data;
 
+  // Действующий пользователь = текущий (getCurrentUser, DEMO-shim R1).
+  // userId в AuditLog nullable, поэтому пустая база не ломает приёмку.
+  // R1: identity plumbing only; role enforcement — R2+ (в дефолтном демо это
+  // менеджер — валидный User, FK-safe; ролевая проверка складчика придёт позже).
+  const actorId = (await getCurrentUser())?.id ?? null;
+
   let summary: { stoneName: string };
   try {
     summary = await db.$transaction(async (tx) => {
-      // СТАБ авторизации (auth — следующий спринт): действующий складчик
-      // берётся из seed по роли WAREHOUSE. userId в AuditLog nullable,
-      // поэтому пустая база не ломает приёмку.
-      const actor = await tx.user.findFirst({
-        where: { role: "WAREHOUSE", isActive: true },
-        select: { id: true },
-      });
-
       let stoneTypeId: string;
       let stoneName: string;
       if (data.stoneType.kind === "existing") {
@@ -158,7 +157,7 @@ export async function submitIntake(
 
       await tx.auditLog.create({
         data: {
-          userId: actor?.id ?? null,
+          userId: actorId,
           action: "INTAKE",
           entityType: "Batch",
           entityId: batch.id,

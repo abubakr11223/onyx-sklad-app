@@ -5,7 +5,7 @@
 // вызов доменной логики. Вся запись — одной транзакцией внутри breaking.ts.
 
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import {
   BreakError,
   breakSlab,
@@ -23,14 +23,11 @@ export interface BreakFormState {
   errors: BreakFormErrors;
 }
 
-// СТАБ авторизации (auth — следующий спринт): действующий пользователь —
-// складчик из seed по роли WAREHOUSE (TZ §4.3: «Бой/остаток ставит складчик»).
+// Действующий пользователь = текущий (getCurrentUser, DEMO-shim R1).
+// TZ §4.3: «Бой/остаток ставит складчик». R1: identity plumbing only; role
+// enforcement — R2+ (в дефолтном демо это менеджер — валидный User, FK-safe).
 async function currentWarehouseUserId(): Promise<string | null> {
-  const actor = await db.user.findFirst({
-    where: { role: "WAREHOUSE", isActive: true },
-    select: { id: true },
-  });
-  return actor?.id ?? null;
+  return (await getCurrentUser())?.id ?? null;
 }
 
 function readPieceRows(formData: FormData): RawPieceRow[] {

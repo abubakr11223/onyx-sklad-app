@@ -1,0 +1,167 @@
+// R1 — Rol-tizimi: ruxsat-dvigateli testlari (DB YO'Q, sof funksiya).
+// Normativ manba: TZ §3 «Роли и права». To'liq matritsa har 4 rol bo'yicha.
+import { describe, expect, it } from "vitest";
+import { capabilitiesFor, type Capabilities, type Role } from "@/lib/permissions";
+
+// Kutilgan matritsa (TZ §3). purchasePrice ustuni opts'ga bog'liq — pastda
+// alohida tekshiriladi; bu yerda "canSee" default opts=true holatini beramiz.
+const EXPECTED: Record<Role, Capabilities> = {
+  OWNER: {
+    canSeePrices: true,
+    canSeePurchasePrice: true,
+    canSell: true,
+    canReserve: true,
+    canRequestPhoto: true,
+    canManageWarehouse: true,
+    canSeeExactRemainder: true,
+    canSeeAllReservations: true,
+    requestsRouteToManager: false,
+  },
+  MANAGER: {
+    canSeePrices: true,
+    canSeePurchasePrice: true, // opts=true holati; opts=false alohida testlanadi
+    canSell: true,
+    canReserve: true,
+    canRequestPhoto: true,
+    canManageWarehouse: false,
+    canSeeExactRemainder: true,
+    canSeeAllReservations: false,
+    requestsRouteToManager: false,
+  },
+  WAREHOUSE: {
+    canSeePrices: false,
+    canSeePurchasePrice: false,
+    canSell: false,
+    canReserve: false,
+    canRequestPhoto: false,
+    canManageWarehouse: true,
+    canSeeExactRemainder: true,
+    canSeeAllReservations: false,
+    requestsRouteToManager: false,
+  },
+  PARTNER: {
+    canSeePrices: false,
+    canSeePurchasePrice: false,
+    canSell: false,
+    canReserve: false,
+    canRequestPhoto: false,
+    canManageWarehouse: false,
+    canSeeExactRemainder: false,
+    canSeeAllReservations: false,
+    requestsRouteToManager: true,
+  },
+};
+
+const ROLES: Role[] = ["OWNER", "MANAGER", "WAREHOUSE", "PARTNER"];
+
+describe("capabilitiesFor — to'liq matritsa (TZ §3)", () => {
+  for (const role of ROLES) {
+    it(`${role}: har bir huquq maydoni kutilgan qiymatda (opts=true)`, () => {
+      const caps = capabilitiesFor(role, { canSeePurchasePrice: true });
+      expect(caps).toEqual(EXPECTED[role]);
+    });
+  }
+});
+
+describe("canSeePurchasePrice — закупка/маржа qoidalari (TZ §3)", () => {
+  it("OWNER — DOIM true, opts=false bo'lsa ham", () => {
+    expect(
+      capabilitiesFor("OWNER", { canSeePurchasePrice: false }).canSeePurchasePrice,
+    ).toBe(true);
+    expect(
+      capabilitiesFor("OWNER", { canSeePurchasePrice: true }).canSeePurchasePrice,
+    ).toBe(true);
+  });
+
+  it("MANAGER — aynan opts.canSeePurchasePrice (ikkala holat)", () => {
+    expect(
+      capabilitiesFor("MANAGER", { canSeePurchasePrice: true }).canSeePurchasePrice,
+    ).toBe(true);
+    expect(
+      capabilitiesFor("MANAGER", { canSeePurchasePrice: false }).canSeePurchasePrice,
+    ).toBe(false);
+  });
+
+  it("WAREHOUSE — DOIM false, opts e'tiborga olinmaydi", () => {
+    expect(
+      capabilitiesFor("WAREHOUSE", { canSeePurchasePrice: true }).canSeePurchasePrice,
+    ).toBe(false);
+    expect(
+      capabilitiesFor("WAREHOUSE", { canSeePurchasePrice: false }).canSeePurchasePrice,
+    ).toBe(false);
+  });
+
+  it("PARTNER — DOIM false, opts e'tiborga olinmaydi", () => {
+    expect(
+      capabilitiesFor("PARTNER", { canSeePurchasePrice: true }).canSeePurchasePrice,
+    ).toBe(false);
+    expect(
+      capabilitiesFor("PARTNER", { canSeePurchasePrice: false }).canSeePurchasePrice,
+    ).toBe(false);
+  });
+});
+
+describe("requestsRouteToManager — faqat PARTNER oqimi (TZ §3)", () => {
+  it("PARTNER — true", () => {
+    expect(
+      capabilitiesFor("PARTNER", { canSeePurchasePrice: false }).requestsRouteToManager,
+    ).toBe(true);
+  });
+  it("OWNER/MANAGER/WAREHOUSE — false", () => {
+    for (const role of ["OWNER", "MANAGER", "WAREHOUSE"] as Role[]) {
+      expect(
+        capabilitiesFor(role, { canSeePurchasePrice: false }).requestsRouteToManager,
+      ).toBe(false);
+    }
+  });
+});
+
+describe("WAREHOUSE — ombor huquqi bor, sotuv/narx yo'q (TZ §3)", () => {
+  const caps = capabilitiesFor("WAREHOUSE", { canSeePurchasePrice: true });
+  it("canManageWarehouse — true", () => {
+    expect(caps.canManageWarehouse).toBe(true);
+  });
+  it("canSell — false", () => {
+    expect(caps.canSell).toBe(false);
+  });
+  it("canSeePrices — false", () => {
+    expect(caps.canSeePrices).toBe(false);
+  });
+});
+
+describe("Union'dan tashqari rol — deny-by-default (xavfsiz default)", () => {
+  it("noma'lum/kelajakdagi rol → BARCHA huquqlar false", () => {
+    const caps = capabilitiesFor("SUPERADMIN" as unknown as Role, {
+      canSeePurchasePrice: true,
+    });
+    expect(caps.canSell).toBe(false);
+    expect(caps.canSeePrices).toBe(false);
+    expect(caps.canManageWarehouse).toBe(false);
+    expect(caps.canSeePurchasePrice).toBe(false);
+    // to'liqligi uchun — qolgan maydonlar ham false
+    expect(caps.canReserve).toBe(false);
+    expect(caps.canRequestPhoto).toBe(false);
+    expect(caps.canSeeExactRemainder).toBe(false);
+    expect(caps.canSeeAllReservations).toBe(false);
+    expect(caps.requestsRouteToManager).toBe(false);
+  });
+});
+
+describe("OWNER va MANAGER — narx/sotuv/бронь-vidimost farqlari (TZ §3)", () => {
+  const owner = capabilitiesFor("OWNER", { canSeePurchasePrice: false });
+  const manager = capabilitiesFor("MANAGER", { canSeePurchasePrice: true });
+
+  it("OWNER: canSell/canSeePrices/canSeeAllReservations — hammasi true", () => {
+    expect(owner.canSell).toBe(true);
+    expect(owner.canSeePrices).toBe(true);
+    expect(owner.canSeeAllReservations).toBe(true);
+  });
+
+  it("MANAGER: canSeeAllReservations — false (faqat o'ziniki)", () => {
+    expect(manager.canSeeAllReservations).toBe(false);
+  });
+
+  it("MANAGER: canManageWarehouse — false", () => {
+    expect(manager.canManageWarehouse).toBe(false);
+  });
+});

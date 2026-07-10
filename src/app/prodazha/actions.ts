@@ -7,6 +7,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import {
   sellBatchVolume,
   sellUnit,
@@ -47,17 +48,12 @@ function failState(error: SaleError): SaleFormState {
 }
 
 /**
- * СТАБ авторизации (auth — следующий спринт): действующий менеджер
- * берётся из seed по роли MANAGER. После внедрения auth здесь будет
- * пользователь текущей сессии.
+ * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
+ * По умолчанию демо-роль MANAGER → как и раньше, разрешается в менеджера.
+ * R1: identity plumbing only; role enforcement — R2+.
  */
 async function getActingManagerId(): Promise<string | null> {
-  const user = await db.user.findFirst({
-    where: { role: "MANAGER", isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  return user?.id ?? null;
+  return (await getCurrentUser())?.id ?? null;
 }
 
 /** Итог продажи для баннера успеха — «что, сколько, кому». */

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
 
 type NavLink = {
   href: string;
@@ -72,6 +73,9 @@ export default function Nav() {
             })}
           </ul>
         </nav>
+
+        {/* R1: DEMO rol almashtirgich (vaqtinchalik, R6'da olib tashlanadi). */}
+        <DemoRoleSwitcher />
       </div>
     </header>
   );

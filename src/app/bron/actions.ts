@@ -5,7 +5,7 @@
 // стаб-авторизация и маршрутизация ошибок в UI.
 
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import {
   ReservationError,
   cancelReservation,
@@ -18,17 +18,13 @@ export interface ReserveFormState {
 }
 
 /**
- * СТАБ авторизации (auth — следующий спринт): действующий менеджер берётся
- * из seed по роли MANAGER. Правило «бронь снимает только её менеджер или
- * владелец» уже работает в cancelReservation.
+ * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
+ * По умолчанию демо-роль MANAGER → как и раньше. Правило «бронь снимает только
+ * её менеджер или владелец» уже работает в cancelReservation.
+ * R1: identity plumbing only; role enforcement — R2+.
  */
 async function currentManagerId(): Promise<string | null> {
-  const manager = await db.user.findFirst({
-    where: { role: "MANAGER", isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  return manager?.id ?? null;
+  return (await getCurrentUser())?.id ?? null;
 }
 
 function parseIntField(raw: string): number | null {
