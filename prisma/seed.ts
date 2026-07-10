@@ -228,7 +228,7 @@ async function main() {
   await prisma.appConfig.createMany({
     data: [
       { key: "reservationDays", value: "3" },
-      { key: "photoStaleMonths", value: "4" },
+      { key: "photoStaleMonths", value: "6" },
     ],
   });
 

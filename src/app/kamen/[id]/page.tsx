@@ -7,6 +7,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { computeFreeRemainder } from "@/lib/inventory";
+import {
+  PHOTO_STALE_MONTHS_KEY,
+  isPhotoStale,
+  parsePhotoStaleMonthsConfig,
+} from "@/lib/photos";
 import { requestPhoto } from "@/app/poisk/actions";
 
 export const dynamic = "force-dynamic";
@@ -74,20 +79,28 @@ export default async function KamenPage({
   const photoOk = firstParam(sp.photo) === "ok";
   const photoErr = firstParam(sp.photoErr);
 
-  const st = await db.stoneType.findUnique({
-    where: { id },
-    include: {
-      batches: {
-        orderBy: { arrivedAt: "asc" },
-        include: {
-          locations: { orderBy: { createdAt: "asc" } },
-          slabs: true,
+  const [st, photoCfg] = await Promise.all([
+    db.stoneType.findUnique({
+      where: { id },
+      include: {
+        batches: {
+          orderBy: { arrivedAt: "asc" },
+          include: {
+            locations: { orderBy: { createdAt: "asc" } },
+            slabs: true,
+          },
         },
+        pieces: true,
+        photos: { orderBy: { createdAt: "desc" } },
       },
-      pieces: true,
-      photos: { orderBy: { createdAt: "desc" } },
-    },
-  });
+    }),
+    db.appConfig.findUnique({
+      where: { key: PHOTO_STALE_MONTHS_KEY },
+      select: { value: true },
+    }),
+  ]);
+  // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
+  const photoStaleMonths = parsePhotoStaleMonthsConfig(photoCfg?.value);
 
   if (!st) {
     return (
@@ -157,6 +170,9 @@ export default async function KamenPage({
 
   const basePrice = toNum(st.basePrice);
   const propRows = propertyRows(st.properties);
+  // Bitta `now` — barcha fotolarning «eskirgan»ligini bir xil nuqtaga nisbatan
+  // baholaymiz (TZ §5.3).
+  const now = new Date();
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8">
@@ -334,23 +350,40 @@ export default async function KamenPage({
         )}
       </section>
 
-      {/* 6. Фото */}
+      {/* 6. Фото — вечное хранение + дата съёмки и «свежесть» (TZ §5.3) */}
       <section className="mt-4 rounded-xl border border-gray-200 p-4">
         <h2 className="text-lg font-bold">Фото</h2>
         {st.photos.length === 0 ? (
           <p className="mt-2 text-sm text-gray-500">Фото пока нет.</p>
         ) : (
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {st.photos.map((p) => (
-              <img
-                key={p.id}
-                src={"/api/photo/" + p.id}
-                className="aspect-square w-full rounded border object-cover"
-                loading="lazy"
-                alt="фото камня"
-              />
-            ))}
-          </div>
+          <>
+            <p className="mt-1 text-xs text-gray-500">
+              Фото уже есть — склад повторно не снимаем.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {st.photos.map((p) => {
+                const stale = isPhotoStale(p.takenAt, now, photoStaleMonths);
+                return (
+                  <figure key={p.id} className="text-xs">
+                    <img
+                      src={"/api/photo/" + p.id}
+                      className="aspect-square w-full rounded border object-cover"
+                      loading="lazy"
+                      alt="фото камня"
+                    />
+                    <figcaption className="mt-1 text-gray-500">
+                      Снято {dateFmt.format(p.takenAt)}
+                    </figcaption>
+                    {stale && (
+                      <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
+                        ⚠ возможно, переснять
+                      </span>
+                    )}
+                  </figure>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
 
