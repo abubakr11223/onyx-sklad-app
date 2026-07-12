@@ -14,7 +14,7 @@ import {
 } from "@/lib/photos";
 import { getCapabilities } from "@/lib/session";
 import { requestPhoto } from "@/app/poisk/actions";
-import { updateLocation } from "@/app/kamen/actions";
+import { setNeedsCheck, updateLocation } from "@/app/kamen/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +53,41 @@ function NeedsCheckBadge() {
   );
 }
 
+/**
+ * SK-2 — Кнопка-toggle пометки «проверить» (пересорт). Рендерится ТОЛЬКО складу
+ * (caps.canManageWarehouse) рядом с badge'ем. Скрытое `value` несёт
+ * ПРОТИВОПОЛОЖНОЕ текущему needsCheck, поэтому один клик переключает флаг;
+ * подпись отражает текущее состояние (поставить/снять). Server action
+ * setNeedsCheck делает defense-in-depth проверку и пишет аудит STATUS_CHANGE.
+ */
+function NeedsCheckToggle({
+  entityType,
+  entityId,
+  needsCheck,
+  backTo,
+}: {
+  entityType: "Batch" | "Slab" | "Piece";
+  entityId: string;
+  needsCheck: boolean;
+  backTo: string;
+}) {
+  return (
+    <form action={setNeedsCheck} className="ml-2 inline">
+      <input type="hidden" name="entityType" value={entityType} />
+      <input type="hidden" name="entityId" value={entityId} />
+      {/* value = ПРОТИВОПОЛОЖНОЕ текущему → toggle */}
+      <input type="hidden" name="value" value={needsCheck ? "0" : "1"} />
+      <input type="hidden" name="next" value={backTo} />
+      <button
+        type="submit"
+        className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+      >
+        {needsCheck ? "Снять отметку (проверено)" : "Отметить: требует проверки"}
+      </button>
+    </form>
+  );
+}
+
 /** properties (Json) → массив пар ключ/значение для рендера. */
 function propertyRows(properties: unknown): Array<[string, string]> {
   if (!properties || typeof properties !== "object" || Array.isArray(properties)) {
@@ -83,6 +118,9 @@ export default async function KamenPage({
   // SK-1: результат правки локации (redirect'дан қайтган байроқлар, §5.7).
   const locOk = firstParam(sp.locOk) === "1";
   const locErr = firstParam(sp.locErr);
+  // SK-2: результат ручной пометки «проверить» (пересорт, STATUS_CHANGE).
+  const checkOk = firstParam(sp.checkOk) === "1";
+  const checkErr = firstParam(sp.checkErr);
 
   // R2 — rol gate: наличие/фото/локации видит и склад, а вот цену (canSeePrices)
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
@@ -234,6 +272,24 @@ export default async function KamenPage({
         </p>
       )}
 
+      {/* SK-2: результат ручной пометки «проверить» (пересорт). */}
+      {checkOk && (
+        <p
+          role="status"
+          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
+        >
+          Отметка «проверить» обновлена.
+        </p>
+      )}
+      {checkErr && (
+        <p
+          role="alert"
+          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
+        >
+          {checkErr}
+        </p>
+      )}
+
       {/* 2. Наличие */}
       <section className="mt-6 rounded-xl border border-gray-200 p-4">
         <h2 className="text-lg font-bold">Наличие</h2>
@@ -280,6 +336,15 @@ export default async function KamenPage({
                     )}{" "}
                     · Блок {s.block}, ориентир {s.landmark}
                     {s.needsCheck && <NeedsCheckBadge />}
+                    {/* SK-2: пометку «проверить» переключает только склад. */}
+                    {caps.canManageWarehouse && (
+                      <NeedsCheckToggle
+                        entityType="Slab"
+                        entityId={s.id}
+                        needsCheck={s.needsCheck}
+                        backTo={"/kamen/" + id}
+                      />
+                    )}
                   </li>
                 )),
               )}
@@ -304,6 +369,15 @@ export default async function KamenPage({
                   )}{" "}
                   · Блок {p.block}, ориентир {p.landmark}
                   {p.needsCheck && <NeedsCheckBadge />}
+                  {/* SK-2: пометку «проверить» переключает только склад. */}
+                  {caps.canManageWarehouse && (
+                    <NeedsCheckToggle
+                      entityType="Piece"
+                      entityId={p.id}
+                      needsCheck={p.needsCheck}
+                      backTo={"/kamen/" + id}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
@@ -354,6 +428,15 @@ export default async function KamenPage({
                 <div className="font-medium">
                   Партия от {dateFmt.format(b.arrivedAt)}
                   {b.needsCheck && <NeedsCheckBadge />}
+                  {/* SK-2: пометку «проверить» переключает только склад. */}
+                  {caps.canManageWarehouse && (
+                    <NeedsCheckToggle
+                      entityType="Batch"
+                      entityId={b.id}
+                      needsCheck={b.needsCheck}
+                      backTo={"/kamen/" + id}
+                    />
+                  )}
                 </div>
                 {b.locations.length === 0 ? (
                   <p className="mt-1 text-gray-500">Локации не указаны.</p>
