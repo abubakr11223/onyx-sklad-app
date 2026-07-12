@@ -326,12 +326,12 @@ describe("получение фото (TG-B2)", () => {
     // Skladchiga «сохранено» + menejerga bildirishnoma (2 ta sendMessage).
     expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(sendMessage.mock.calls[0][0]).toBe(999);
-    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
     expect(sendMessage.mock.calls[1][0]).toBe("12345");
     expect(sendMessage.mock.calls[1][1]).toContain("Оникс");
   });
 
-  it("noma'lum telegramId (findFirst → null) → Photo YO'Q, «не зарегистрированы»", async () => {
+  it("noma'lum telegramId (findFirst → null) → Photo YO'Q, «ro'yxatda yo'q»", async () => {
     userFindFirst.mockResolvedValue(null);
 
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
@@ -339,10 +339,10 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).not.toHaveBeenCalled();
     expect(prFindFirst).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("не зарегистрированы");
+    expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
   });
 
-  it("PENDING zapros yo'q (findFirst → null) → Photo YO'Q, «нет активных запросов»", async () => {
+  it("PENDING zapros yo'q (findFirst → null) → Photo YO'Q, «faol foto-so'rov yo'q»", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     prFindFirst.mockResolvedValue(null);
 
@@ -351,7 +351,7 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).not.toHaveBeenCalled();
     expect(prUpdateMany).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("нет активных запросов");
+    expect(sendMessage.mock.calls[0][1]).toContain("faol foto-so'rov yo'q");
   });
 
   it("poyga: birinchi zaprosni boshqa skladchi egalladi (count=0) → keyingisiga o'tadi", async () => {
@@ -371,7 +371,7 @@ describe("получение фото (TG-B2)", () => {
     // Foto AYNAN req2 ga biriktirildi (req1 emas — poyga to'g'ri yopildi).
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req2");
-    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
   });
 
   it("menejerni xabardor qilish yiqilsa → throw QILMAYDI, skladchi baribir saqlandi+javob oldi", async () => {
@@ -391,7 +391,7 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(prUpdateMany).toHaveBeenCalledTimes(1);
     // Skladchi tasdiqni oldi.
-    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
   });
 });
 

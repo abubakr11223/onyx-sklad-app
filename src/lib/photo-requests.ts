@@ -116,14 +116,14 @@ export function buildTaskText(
   comment: string | null,
 ): string {
   const where = location
-    ? `Блок ${location.block}, ориентир ${location.landmark}.`
-    : "Локация не указана.";
+    ? `Blok ${location.block}, orientir ${location.landmark}.`
+    : "Lokatsiya ko'rsatilmagan.";
   const lines = [
-    `📷 Задача: сфотографировать ${stoneTypeName}. ${where}`,
+    `📷 Vazifa: ${stoneTypeName} toshini suratga oling. ${where}`,
   ];
   const c = comment?.trim();
-  if (c) lines.push(`Комментарий: ${c}`);
-  lines.push("Просто отправьте фото в ответ.");
+  if (c) lines.push(`Izoh: ${c}`);
+  lines.push("Rasmni shu yerga javob qilib yuboring.");
   return lines.join("\n");
 }
 
@@ -186,7 +186,7 @@ export async function createAndDispatchPhotoRequest(
 
   // (4) vazifa matni. Lokatsiya berilmagan bo'lsa — partiyaning bloklarini
   // ko'rsatamiz (bittadan ortiq bo'lsa), aks holda «локация не указана».
-  const stoneName = batch.stoneType?.name ?? "камень";
+  const stoneName = batch.stoneType?.name ?? "tosh";
   const locForText =
     chosen ??
     (batch.locations.length === 1

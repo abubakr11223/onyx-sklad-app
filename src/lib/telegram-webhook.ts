@@ -112,11 +112,11 @@ const successMessage = (name: string) =>
 
 // Foto oqimi (TG-B2) matnlari — skladchi/menejer ruscha ko'radi.
 const MSG_PHOTO_NOT_REGISTERED =
-  "Вы не зарегистрированы. Отправьте /start.";
-const MSG_PHOTO_NO_REQUEST = "Сейчас нет активных запросов на фото.";
-const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
+  "Siz ro'yxatda yo'qsiz. /start yuboring.";
+const MSG_PHOTO_NO_REQUEST = "Hozircha faol foto-so'rov yo'q.";
+const MSG_PHOTO_SAVED = "✅ Rasm saqlandi, rahmat!";
 const managerNotifyMessage = (stoneTypeName: string) =>
-  `📷 Фото готово: ${stoneTypeName}.`;
+  `📷 Rasm tayyor: ${stoneTypeName}.`;
 
 // SK-4b login matnlari (o'zbekcha — skladchi ko'radi).
 const MSG_LOGIN_NOT_REGISTERED =
@@ -407,7 +407,7 @@ async function handlePhoto(
       select: { telegramId: true },
     });
     if (manager?.telegramId) {
-      const stoneName = claimed.batch.stoneType?.name ?? "камень";
+      const stoneName = claimed.batch.stoneType?.name ?? "tosh";
       await deps.sendMessage(
         manager.telegramId,
         managerNotifyMessage(stoneName),
