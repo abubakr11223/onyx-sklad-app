@@ -14,6 +14,7 @@ import {
 } from "@/lib/photos";
 import { getCapabilities } from "@/lib/session";
 import { requestPhoto } from "@/app/poisk/actions";
+import { updateLocation } from "@/app/kamen/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,9 @@ export default async function KamenPage({
   // Результат фотозапроса (redirect'дан қайтган байроқлар, как в /poisk).
   const photoOk = firstParam(sp.photo) === "ok";
   const photoErr = firstParam(sp.photoErr);
+  // SK-1: результат правки локации (redirect'дан қайтган байроқлар, §5.7).
+  const locOk = firstParam(sp.locOk) === "1";
+  const locErr = firstParam(sp.locErr);
 
   // R2 — rol gate: наличие/фото/локации видит и склад, а вот цену (canSeePrices)
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
@@ -212,6 +216,24 @@ export default async function KamenPage({
         </p>
       )}
 
+      {/* SK-1: результат правки локации (§5.7). */}
+      {locOk && (
+        <p
+          role="status"
+          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
+        >
+          Локация обновлена.
+        </p>
+      )}
+      {locErr && (
+        <p
+          role="alert"
+          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
+        >
+          {locErr}
+        </p>
+      )}
+
       {/* 2. Наличие */}
       <section className="mt-6 rounded-xl border border-gray-200 p-4">
         <h2 className="text-lg font-bold">Наличие</h2>
@@ -336,16 +358,62 @@ export default async function KamenPage({
                 {b.locations.length === 0 ? (
                   <p className="mt-1 text-gray-500">Локации не указаны.</p>
                 ) : (
-                  <ul className="mt-1 space-y-0.5 text-gray-700">
+                  <ul className="mt-1 space-y-2 text-gray-700">
                     {b.locations.map((loc) => (
                       <li key={loc.id}>
-                        Блок {loc.block}, ориентир {loc.landmark}
-                        {loc.slabsHere !== null && <> · ~{loc.slabsHere} плит</>}
-                        {loc.areaHereM2 !== null && (
-                          <> · ≈{m2Fmt.format(Number(loc.areaHereM2))} м²</>
-                        )}
-                        {loc.note && (
-                          <span className="text-gray-500"> ({loc.note})</span>
+                        {/* R2/SK-1: склад (canManageWarehouse) правит локацию
+                            инлайн-формой; менеджер/партнёр видят read-only. */}
+                        {caps.canManageWarehouse ? (
+                          <form
+                            action={updateLocation}
+                            className="flex flex-wrap items-center gap-1.5"
+                          >
+                            <input type="hidden" name="locationId" value={loc.id} />
+                            <input type="hidden" name="next" value={"/kamen/" + id} />
+                            <label className="text-gray-500">Блок</label>
+                            <input
+                              name="block"
+                              defaultValue={loc.block}
+                              className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-sm"
+                            />
+                            <label className="text-gray-500">ориентир</label>
+                            <input
+                              name="landmark"
+                              defaultValue={loc.landmark}
+                              className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-sm"
+                            />
+                            <input
+                              name="note"
+                              defaultValue={loc.note ?? ""}
+                              placeholder="примечание"
+                              className="w-32 rounded border border-gray-300 px-1.5 py-0.5 text-sm"
+                            />
+                            {loc.slabsHere !== null && (
+                              <span className="text-gray-500">~{loc.slabsHere} плит</span>
+                            )}
+                            {loc.areaHereM2 !== null && (
+                              <span className="text-gray-500">
+                                ≈{m2Fmt.format(Number(loc.areaHereM2))} м²
+                              </span>
+                            )}
+                            <button
+                              type="submit"
+                              className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+                            >
+                              Сохранить
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            Блок {loc.block}, ориентир {loc.landmark}
+                            {loc.slabsHere !== null && <> · ~{loc.slabsHere} плит</>}
+                            {loc.areaHereM2 !== null && (
+                              <> · ≈{m2Fmt.format(Number(loc.areaHereM2))} м²</>
+                            )}
+                            {loc.note && (
+                              <span className="text-gray-500"> ({loc.note})</span>
+                            )}
+                          </>
                         )}
                       </li>
                     ))}
