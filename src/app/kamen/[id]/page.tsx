@@ -12,6 +12,7 @@ import {
   isPhotoStale,
   parsePhotoStaleMonthsConfig,
 } from "@/lib/photos";
+import { getCapabilities } from "@/lib/session";
 import { requestPhoto } from "@/app/poisk/actions";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +80,11 @@ export default async function KamenPage({
   const photoOk = firstParam(sp.photo) === "ok";
   const photoErr = firstParam(sp.photoErr);
 
-  const [st, photoCfg] = await Promise.all([
+  // R2 — rol gate: наличие/фото/локации видит и склад, а вот цену (canSeePrices)
+  // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
+  // getCapabilities() — в общий Promise.all, чтобы не добавлять лишний
+  // последовательный round-trip на самой горячей странице.
+  const [st, photoCfg, caps] = await Promise.all([
     db.stoneType.findUnique({
       where: { id },
       include: {
@@ -98,6 +103,7 @@ export default async function KamenPage({
       where: { key: PHOTO_STALE_MONTHS_KEY },
       select: { value: true },
     }),
+    getCapabilities(),
   ]);
   // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
   const photoStaleMonths = parsePhotoStaleMonthsConfig(photoCfg?.value);
@@ -284,7 +290,8 @@ export default async function KamenPage({
       </section>
 
       {/* 3. Цена (только basePrice — purchasePrice не показываем) */}
-      {basePrice !== null && (
+      {/* R2: цену видят только роли с canSeePrices (OWNER/MANAGER), не склад. */}
+      {caps.canSeePrices && basePrice !== null && (
         <section className="mt-4 rounded-xl border border-gray-200 p-4">
           <h2 className="text-lg font-bold">Цена</h2>
           <p className="mt-1 text-sm">{priceFmt.format(basePrice)} за м²</p>
@@ -388,7 +395,8 @@ export default async function KamenPage({
       </section>
 
       {/* 7. Запросить фото — по каждой локации, либо по партии целиком */}
-      {st.batches.length > 0 && (
+      {/* R2: запрос фото — только роли с canRequestPhoto (OWNER/MANAGER). */}
+      {caps.canRequestPhoto && st.batches.length > 0 && (
         <section className="mt-4 rounded-xl border border-gray-200 p-4">
           <h2 className="text-lg font-bold">Запросить фото</h2>
           <ul className="mt-2 space-y-2">

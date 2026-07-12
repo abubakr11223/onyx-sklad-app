@@ -4,6 +4,8 @@
 
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { getCapabilities } from "@/lib/session";
+import NoAccess from "@/components/NoAccess";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
 
 export const metadata: Metadata = {
@@ -31,6 +33,17 @@ export default async function RazbitPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // R2 — rol gate: разбить/бой делает склад (canManageWarehouse: OWNER/WAREHOUSE).
+  // TZ §3: MANAGER складом не управляет — теперь тоже видит <NoAccess/>.
+  const caps = await getCapabilities();
+  if (!caps.canManageWarehouse) {
+    return (
+      <main className="mx-auto max-w-xl p-4 pb-12">
+        <NoAccess />
+      </main>
+    );
+  }
+
   const sp = await searchParams;
 
   const [slabRows, batchRows] = await Promise.all([

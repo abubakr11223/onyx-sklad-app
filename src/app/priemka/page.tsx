@@ -2,6 +2,8 @@
 // загружает виды камня из каталога и показывает уведомление об успехе.
 
 import { db } from "@/lib/db";
+import { getCapabilities } from "@/lib/session";
+import NoAccess from "@/components/NoAccess";
 import IntakeForm from "./IntakeForm";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,17 @@ export default async function PriemkaPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // R2 — rol gate: приёмку делает склад (canManageWarehouse: OWNER/WAREHOUSE).
+  // TZ §3: MANAGER складом не управляет — теперь тоже видит <NoAccess/>.
+  const caps = await getCapabilities();
+  if (!caps.canManageWarehouse) {
+    return (
+      <main className="mx-auto max-w-xl p-4 pb-12">
+        <NoAccess />
+      </main>
+    );
+  }
+
   const sp = await searchParams;
   const stoneTypes = await db.stoneType.findMany({
     where: { isArchived: false },

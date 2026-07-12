@@ -6,6 +6,8 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { computeFreeRemainder } from "@/lib/inventory";
+import { getCapabilities } from "@/lib/session";
+import NoAccess from "@/components/NoAccess";
 import SaleForm, { type StoneTypeGroup } from "./SaleForm";
 
 export const metadata: Metadata = {
@@ -41,6 +43,17 @@ export default async function ProdazhaPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // R2 — rol gate: продажа доступна OWNER/MANAGER (canSell). Складчик — <NoAccess/>.
+  // Nav layout'da qoladi; sahifa mazmuni bloklanadi (kosmetik emas — server-side).
+  const caps = await getCapabilities();
+  if (!caps.canSell) {
+    return (
+      <main className="mx-auto max-w-xl p-4 pb-12">
+        <NoAccess />
+      </main>
+    );
+  }
+
   const sp = await searchParams;
   const ok = first(sp.ok) === "1";
   const what = first(sp.what);

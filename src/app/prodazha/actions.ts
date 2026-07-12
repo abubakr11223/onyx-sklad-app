@@ -7,7 +7,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import {
   sellBatchVolume,
   sellUnit,
@@ -88,6 +88,15 @@ export async function submitSale(
   _prev: SaleFormState,
   formData: FormData,
 ): Promise<SaleFormState> {
+  // R2 — DEFENSE-IN-DEPTH: сайт открыт («kodsiz»), поэтому прямой POST должен
+  // блокироваться на сервере, а не только скрытием UI. Продажа — canSell.
+  if (!(await getCapabilities()).canSell) {
+    return {
+      errors: { form: "Нет доступа: продажа доступна менеджеру" },
+      conflict: null,
+    };
+  }
+
   const str = (name: string) => String(formData.get(name) ?? "").trim();
   const mode = str("mode") as SaleMode;
   const errors: Record<string, string> = {};

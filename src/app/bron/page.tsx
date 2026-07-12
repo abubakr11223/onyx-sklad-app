@@ -11,6 +11,8 @@ import {
   expireOverdueReservations,
   parseReservationDaysConfig,
 } from "@/lib/reservations";
+import { getCapabilities } from "@/lib/session";
+import NoAccess from "@/components/NoAccess";
 import { cancelReservationAction } from "./actions";
 import ReserveForm, {
   type BatchVolumeOption,
@@ -91,6 +93,16 @@ export default async function BronPage({
   searchParams: Promise<Record<string, ParamValue>>;
 }) {
   const params = await searchParams;
+
+  // R2 — rol gate: бронь доступна OWNER/MANAGER (canReserve). Складчик — <NoAccess/>.
+  const caps = await getCapabilities();
+  if (!caps.canReserve) {
+    return (
+      <main className="mx-auto max-w-3xl p-4 sm:p-8">
+        <NoAccess />
+      </main>
+    );
+  }
 
   // Lazy sweep (ADR-003): muddati o'tganlar EXPIRED + birlik AVAILABLE.
   await expireOverdueReservations();

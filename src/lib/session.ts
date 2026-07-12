@@ -69,3 +69,14 @@ export async function getCapabilities(): Promise<Capabilities> {
     canSeePurchasePrice: user.canSeePurchasePrice,
   });
 }
+
+/**
+ * R2 — Bitta huquqni tekshirish. Sahifalar shu bilan `<NoAccess/>` ko'rsatishni
+ * hal qiladi, action'lar esa yozuvdan oldin rad etadi. getCapabilities()
+ * natijasidagi bitta bayroq — qulay qisqartma.
+ */
+export async function requireCapability(
+  key: keyof Capabilities,
+): Promise<boolean> {
+  return (await getCapabilities())[key];
+}

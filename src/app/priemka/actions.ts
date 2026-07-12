@@ -7,7 +7,7 @@
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import {
   validateIntake,
   type IntakeErrors,
@@ -82,6 +82,12 @@ export async function submitIntake(
   _prev: IntakeFormState,
   formData: FormData,
 ): Promise<IntakeFormState> {
+  // R2 — DEFENSE-IN-DEPTH: приёмку делает склад (canManageWarehouse: OWNER/WAREHOUSE).
+  // TZ §3: MANAGER складом не управляет. Прямой POST блокируется на сервере.
+  if (!(await getCapabilities()).canManageWarehouse) {
+    return { errors: { form: "Нет доступа: приёмку оформляет склад" } };
+  }
+
   const result = validateIntake(readInput(formData));
   if (!result.ok) return { errors: result.errors };
   const data = result.data;

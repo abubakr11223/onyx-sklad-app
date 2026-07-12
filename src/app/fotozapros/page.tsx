@@ -2,6 +2,8 @@
 // Server component. Сами фото приходят в TG-B2 — здесь пока только статус.
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { getCapabilities } from "@/lib/session";
+import NoAccess from "@/components/NoAccess";
 
 export const metadata: Metadata = {
   title: "Запросы на фото — Onyx",
@@ -27,6 +29,16 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export default async function FotozaprosPage() {
+  // R2 — rol gate: фотозапросы у OWNER/MANAGER (canRequestPhoto). Складчик — <NoAccess/>.
+  const caps = await getCapabilities();
+  if (!caps.canRequestPhoto) {
+    return (
+      <main className="mx-auto max-w-3xl p-4 sm:p-8">
+        <NoAccess />
+      </main>
+    );
+  }
+
   const requests = await db.photoRequest.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,

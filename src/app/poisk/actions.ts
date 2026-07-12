@@ -6,7 +6,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import { sendMessage } from "@/lib/telegram";
 import {
   PhotoRequestError,
@@ -40,6 +40,12 @@ export async function requestPhoto(formData: FormData): Promise<void> {
   const batchLocationId = String(formData.get("batchLocationId") ?? "").trim() || null;
   const comment = String(formData.get("comment") ?? "").trim() || null;
   const next = safeNext(formData.get("next"));
+
+  // R2 — DEFENSE-IN-DEPTH: запрос фото — canRequestPhoto (OWNER/MANAGER). Склад
+  // видит наличие, но не шлёт фотозапросы. Прямой POST блокируется на сервере.
+  if (!(await getCapabilities()).canRequestPhoto) {
+    redirect(`${next}?photoErr=${encodeURIComponent("Нет доступа: запрос фото доступен менеджеру")}`);
+  }
 
   if (!batchId) {
     redirect(`${next}?photoErr=${encodeURIComponent("Не указана партия")}`);

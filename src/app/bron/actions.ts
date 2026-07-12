@@ -5,7 +5,7 @@
 // стаб-авторизация и маршрутизация ошибок в UI.
 
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import {
   ReservationError,
   cancelReservation,
@@ -46,6 +46,12 @@ export async function createReservation(
   _prev: ReserveFormState,
   formData: FormData,
 ): Promise<ReserveFormState> {
+  // R2 — DEFENSE-IN-DEPTH: бронь доступна OWNER/MANAGER (canReserve). Прямой POST
+  // склада/партнёра блокируется на сервере, не только скрытием UI.
+  if (!(await getCapabilities()).canReserve) {
+    return { errors: { form: "Нет доступа: бронь доступна менеджеру" } };
+  }
+
   const str = (name: string) => String(formData.get(name) ?? "");
 
   const target = str("target"); // "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>"
@@ -126,6 +132,11 @@ export async function createReservation(
 }
 
 export async function cancelReservationAction(formData: FormData): Promise<void> {
+  // R2 — DEFENSE-IN-DEPTH: снятие брони тоже требует canReserve (OWNER/MANAGER).
+  if (!(await getCapabilities()).canReserve) {
+    redirect(`/bron?err=${encodeURIComponent("Нет доступа: бронь доступна менеджеру")}`);
+  }
+
   const id = String(formData.get("reservationId") ?? "");
   if (!id) redirect("/bron");
 

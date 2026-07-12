@@ -5,7 +5,7 @@
 // вызов доменной логики. Вся запись — одной транзакцией внутри breaking.ts.
 
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import {
   BreakError,
   breakSlab,
@@ -78,6 +78,12 @@ export async function submitBreak(
   _prev: BreakFormState,
   formData: FormData,
 ): Promise<BreakFormState> {
+  // R2 — DEFENSE-IN-DEPTH: бой/распил делает склад (canManageWarehouse:
+  // OWNER/WAREHOUSE). TZ §3: MANAGER складом не управляет. Прямой POST блокируется.
+  if (!(await getCapabilities()).canManageWarehouse) {
+    return { errors: { form: "Нет доступа: разбить камень может склад" } };
+  }
+
   const str = (name: string) => String(formData.get(name) ?? "").trim();
   const mode = str("mode");
   const errors: BreakFormErrors = {};

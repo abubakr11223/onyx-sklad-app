@@ -1,8 +1,31 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
+import { capabilitiesFor, type Role } from "@/lib/permissions";
+import { canAccessNav } from "@/lib/nav-access";
+
+// ⚠️ R2 — bu FAQAT kosmetik: joriy rol ishlatolmaydigan havolalar yashiriladi.
+// Haqiqiy majburlash — sahifa + server-action gate'lari (sayt «kodsiz» ochiq).
+// Cookie'ni klientda o'qiymiz (DemoRoleSwitcher bilan bir xil — server parent
+// cookie'ni uzatmaydi). Literal takror: server-only session.ts'ni klientga
+// import qilmaslik uchun.
+const DEMO_ROLE_COOKIE = "onyx_demo_role";
+const ROLES = ["OWNER", "MANAGER", "WAREHOUSE", "PARTNER"] as const;
+const DEFAULT_ROLE: Role = "MANAGER";
+
+function readCookieRole(): Role {
+  if (typeof document === "undefined") return DEFAULT_ROLE;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${DEMO_ROLE_COOKIE}=([^;]+)`),
+  );
+  const value = match ? decodeURIComponent(match[1]) : "";
+  return (ROLES as readonly string[]).includes(value)
+    ? (value as Role)
+    : DEFAULT_ROLE;
+}
 
 type NavLink = {
   href: string;
@@ -24,6 +47,16 @@ const LINKS: NavLink[] = [
 
 export default function Nav() {
   const pathname = usePathname();
+
+  // Rolni klientda effektda o'qiymiz (SSR/hidratsiya farqidan qochib): birinchi
+  // render server bilan bir xil DEFAULT_ROLE bilan chiqadi, keyin filtrlanadi.
+  const [role, setRole] = useState<Role>(DEFAULT_ROLE);
+  useEffect(() => {
+    setRole(readCookieRole());
+  }, []);
+
+  const caps = capabilitiesFor(role, { canSeePurchasePrice: false });
+  const visibleLinks = LINKS.filter((link) => canAccessNav(link.href, caps));
 
   const isActive = (href: string) =>
     href !== "/" && pathname?.startsWith(href);
@@ -49,7 +82,7 @@ export default function Nav() {
 
         <nav className="flex-1 overflow-x-auto">
           <ul className="flex items-center gap-1 whitespace-nowrap">
-            {LINKS.map((link) => {
+            {visibleLinks.map((link) => {
               const active = !!isActive(link.href);
               return (
                 <li key={link.href}>
