@@ -118,11 +118,15 @@ const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
 const managerNotifyMessage = (stoneTypeName: string) =>
   `📷 Фото готово: ${stoneTypeName}.`;
 
-// SK-4b login matnlari (ruscha — foydalanuvchiga ko'rinadi).
+// SK-4b login matnlari (o'zbekcha — skladchi ko'radi).
 const MSG_LOGIN_NOT_REGISTERED =
-  "Вы не зарегистрированы. Отправьте /start, чтобы привязать телефон.";
+  "Siz ro'yxatda yo'qsiz. Telefon raqamingizni bog'lash uchun /start yuboring.";
 const loginLinkMessage = (url: string) =>
-  `Ссылка для входа (действует 2 минуты): ${url}\nНикому не пересылайте.`;
+  `Kirish havolasi (2 daqiqa amal qiladi):\n${url}\nHavolani hech kimga yubormang.`;
+// Sozlama yetishmasa (AUTH_COOKIE_SECRET yoki APP_BASE_URL yo'q) — buzuq havola
+// o'rniga shu xabar. Skladchini chalg'itmaydi; sabab log'da qoladi.
+const MSG_LOGIN_UNAVAILABLE =
+  "Hozircha kirib bo'lmadi. Birozdan so'ng qayta urinib ko'ring yoki menejeringizga murojaat qiling.";
 
 // request_contact klaviaturasi — telefonni bir tugma bilan ulashish.
 const CONTACT_KEYBOARD: TgReplyKeyboardMarkup = {
@@ -238,6 +242,15 @@ async function handleLogin(chatId: number, deps: WebhookDeps): Promise<void> {
   }
   const expiresAtMs = Date.now() + 2 * 60 * 1000; // 2 daqiqa.
   const token = await deps.signMagicLinkToken(user.id, expiresAtMs);
+  // Himoya: token bo'sh (AUTH_COOKIE_SECRET yo'q) yoki bazaviy URL yo'q bo'lsa —
+  // buzuq «/login/tg?token=» havolasi yuborilmasin. Aniq xabar beramiz.
+  if (!token || !deps.appBaseUrl) {
+    console.warn(
+      "[telegram-webhook] /login: token yoki appBaseUrl bo'sh — env sozlanmagan (AUTH_COOKIE_SECRET / APP_BASE_URL).",
+    );
+    await deps.sendMessage(chatId, MSG_LOGIN_UNAVAILABLE);
+    return;
+  }
   const url = `${deps.appBaseUrl}/login/tg?token=${token}`;
   await deps.sendMessage(chatId, loginLinkMessage(url));
 }

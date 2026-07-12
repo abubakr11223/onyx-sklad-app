@@ -441,15 +441,27 @@ describe("/login — magic-link (SK-4b)", () => {
     expect(opts).toBeUndefined();
   });
 
-  it("noma'lum telegramId → «не зарегистрированы», link YO'Q", async () => {
+  it("noma'lum telegramId → «ro'yxatda yo'q», link YO'Q", async () => {
     userFindFirst.mockResolvedValue(null);
 
     await handleUpdate(loginUpdate(999), makeDeps());
 
     expect(signMagicLinkToken).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("не зарегистрированы");
+    expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
     expect(sendMessage.mock.calls[0][1]).not.toContain("token=");
+  });
+
+  it("token bo'sh (AUTH_COOKIE_SECRET yo'q) → buzuq havola O'RNIGA aniq xabar", async () => {
+    userFindFirst.mockResolvedValue({ id: "u1", role: "WAREHOUSE" });
+    signMagicLinkToken.mockResolvedValue(""); // imzo kaliti yo'q → bo'sh token.
+
+    await handleUpdate(loginUpdate(999), makeDeps());
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    // Buzuq «/login/tg?token=» yuborilmaydi; o'rniga tushunarli xabar.
+    expect(sendMessage.mock.calls[0][1]).not.toContain("token=");
+    expect(sendMessage.mock.calls[0][1]).toContain("Hozircha kirib bo'lmadi");
   });
 
   it("/loginfoo (yopishgan) → login deb qabul QILINMAYDI", async () => {
