@@ -18,6 +18,8 @@ const userFindUnique = vi.fn();
 const prFindFirst = vi.fn();
 const prUpdateMany = vi.fn();
 const photoCreate = vi.fn();
+// SK-4b: magic-link imzolovchisi mock'i.
+const signMagicLinkToken = vi.fn();
 
 function makeDeps(): WebhookDeps {
   return {
@@ -37,6 +39,8 @@ function makeDeps(): WebhookDeps {
       },
     },
     sendMessage: (...a: unknown[]) => sendMessage(...a),
+    signMagicLinkToken: (...a: unknown[]) => signMagicLinkToken(...a),
+    appBaseUrl: "https://onyx.test",
   } as unknown as WebhookDeps;
 }
 
@@ -57,6 +61,8 @@ beforeEach(() => {
   prFindFirst.mockResolvedValue(null);
   prUpdateMany.mockResolvedValue({ count: 1 });
   photoCreate.mockResolvedValue({});
+  signMagicLinkToken.mockReset();
+  signMagicLinkToken.mockResolvedValue("SIGNED_TOKEN");
 });
 
 // ── Update yasovchilar ──
@@ -386,6 +392,70 @@ describe("получение фото (TG-B2)", () => {
     expect(prUpdateMany).toHaveBeenCalledTimes(1);
     // Skladchi tasdiqni oldi.
     expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+  });
+});
+
+// ── /login (SK-4b) ──
+function loginUpdate(chatId = 555, text = "/login"): TgUpdate {
+  return {
+    update_id: 6,
+    message: {
+      message_id: 30,
+      from: { id: chatId },
+      chat: { id: chatId },
+      text,
+    },
+  };
+}
+
+describe("/login — magic-link (SK-4b)", () => {
+  it("bog'langan telegramId → magic-link imzolanadi va URL yuboriladi", async () => {
+    userFindFirst.mockResolvedValue({ id: "u1", role: "MANAGER" });
+
+    await handleUpdate(loginUpdate(999), makeDeps());
+
+    // Imzolovchi userId + kelajakdagi muddat (Number) bilan chaqirildi.
+    expect(signMagicLinkToken).toHaveBeenCalledTimes(1);
+    expect(signMagicLinkToken).toHaveBeenCalledWith("u1", expect.any(Number));
+    const expiresAtMs = signMagicLinkToken.mock.calls[0][1] as number;
+    expect(expiresAtMs).toBeGreaterThan(Date.now());
+
+    // Foydalanuvchiga URL (base + token) yuborildi, DB yozuv YO'Q.
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][0]).toBe(999);
+    expect(sendMessage.mock.calls[0][1]).toContain(
+      "https://onyx.test/login/tg?token=SIGNED_TOKEN",
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("`/start login` deep-link ham login oqimini ishga tushiradi", async () => {
+    userFindFirst.mockResolvedValue({ id: "u1", role: "WAREHOUSE" });
+
+    await handleUpdate(loginUpdate(999, "/start login"), makeDeps());
+
+    expect(signMagicLinkToken).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("SIGNED_TOKEN");
+    // Kontakt-so'rov klaviaturasi YO'Q (bu /start onboarding emas).
+    const opts = sendMessage.mock.calls[0][2];
+    expect(opts).toBeUndefined();
+  });
+
+  it("noma'lum telegramId → «не зарегистрированы», link YO'Q", async () => {
+    userFindFirst.mockResolvedValue(null);
+
+    await handleUpdate(loginUpdate(999), makeDeps());
+
+    expect(signMagicLinkToken).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("не зарегистрированы");
+    expect(sendMessage.mock.calls[0][1]).not.toContain("token=");
+  });
+
+  it("/loginfoo (yopishgan) → login deb qabul QILINMAYDI", async () => {
+    await handleUpdate(loginUpdate(999, "/loginfoo"), makeDeps());
+    expect(signMagicLinkToken).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });
 

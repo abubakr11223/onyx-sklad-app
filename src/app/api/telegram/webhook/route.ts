@@ -2,6 +2,7 @@
 // `x-telegram-bot-api-secret-token` sarlavhasida keladi — uni timing-safe
 // solishtiramiz (auth.ts naqshi). Auth o'tsa update handler chaqiriladi va
 // DOIM 200 qaytadi (Telegram qayta urmasligi uchun). Auth xatosi → 401.
+import { signMagicLinkToken } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendMessage } from "@/lib/telegram";
 import type { TgUpdate } from "@/lib/telegram";
@@ -47,6 +48,12 @@ export async function POST(req: Request) {
   }
 
   // Auth o'tdi — nima bo'lsa ham 200 qaytamiz (handler o'zi xatolarni yutadi).
-  await handleUpdate(update, { db, sendMessage });
+  // SK-4b: magic-link imzolovchisi + bazaviy URL inyeksiya qilinadi.
+  await handleUpdate(update, {
+    db,
+    sendMessage,
+    signMagicLinkToken,
+    appBaseUrl: process.env.APP_BASE_URL ?? "",
+  });
   return Response.json({ ok: true });
 }

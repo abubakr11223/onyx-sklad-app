@@ -88,6 +88,12 @@ export interface WebhookDeps {
     text: string,
     opts?: SendMessageOptions,
   ): Promise<void>;
+  // SK-4b: Telegram magic-link login. Handler'ni hermetik saqlash uchun
+  // imzolovchi va bazaviy URL inyeksiya qilinadi (route real, testlar mock).
+  // signMagicLinkToken — auth.ts'dagi sof HMAC imzolovchisi (DB YO'Q).
+  signMagicLinkToken(userId: string, expiresAtMs: number): Promise<string>;
+  // appBaseUrl — magic-link URL'ining bazasi, masalan `https://onyx.example`.
+  appBaseUrl: string;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -111,6 +117,12 @@ const MSG_PHOTO_NO_REQUEST = "Сейчас нет активных запрос�
 const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
 const managerNotifyMessage = (stoneTypeName: string) =>
   `📷 Фото готово: ${stoneTypeName}.`;
+
+// SK-4b login matnlari (ruscha — foydalanuvchiga ko'rinadi).
+const MSG_LOGIN_NOT_REGISTERED =
+  "Вы не зарегистрированы. Отправьте /start, чтобы привязать телефон.";
+const loginLinkMessage = (url: string) =>
+  `Ссылка для входа (действует 2 минуты): ${url}\nНикому не пересылайте.`;
 
 // request_contact klaviaturasi — telefonni bir tugma bilan ulashish.
 const CONTACT_KEYBOARD: TgReplyKeyboardMarkup = {
@@ -138,6 +150,22 @@ export function normalizePhone(s: string | null | undefined): string {
 function isStartCommand(text: string): boolean {
   const first = text.trim().split(/\s+/)[0];
   return first === "/start" || first.startsWith("/start@");
+}
+
+/**
+ * `/login` login niyatini aniqlaydi (SK-4b). Ikki shakl:
+ *  - to'g'ridan `/login` yoki `/login@BotName`;
+ *  - deep-link: `t.me/<bot>?start=login` → Telegram `/start login` yuboradi.
+ * `/loginfoo` kabi yopishgan matnga tegmaydi.
+ */
+function isLoginCommand(text: string): boolean {
+  const parts = text.trim().split(/\s+/);
+  const first = parts[0];
+  if (first === "/login" || first.startsWith("/login@")) return true;
+  if ((first === "/start" || first.startsWith("/start@")) && parts[1] === "login") {
+    return true;
+  }
+  return false;
 }
 
 // ───────────────────────── Handler ─────────────────────────
@@ -169,7 +197,14 @@ export async function handleUpdate(
       return;
     }
 
-    // 3) /start buyrug'i → kontakt so'rash klaviaturasi.
+    // 3) /login (yoki `/start login` deep-link) → magic-link yuborish.
+    //    /start dan OLDIN tekshiriladi (chunki `/start login` ikkalasiga ham mos).
+    if (typeof message.text === "string" && isLoginCommand(message.text)) {
+      await handleLogin(chatId, deps);
+      return;
+    }
+
+    // 4) /start buyrug'i → kontakt so'rash klaviaturasi.
     if (typeof message.text === "string" && isStartCommand(message.text)) {
       await deps.sendMessage(chatId, MSG_ASK_CONTACT, {
         reply_markup: CONTACT_KEYBOARD,
@@ -177,11 +212,34 @@ export async function handleUpdate(
       return;
     }
 
-    // 4) Boshqa har qanday update — e'tiborsiz (xatosiz qaytamiz).
+    // 5) Boshqa har qanday update — e'tiborsiz (xatosiz qaytamiz).
   } catch (err) {
     // Webhook doim 200 qaytishi uchun xatoni yutamiz.
     console.error("[telegram-webhook] handleUpdate xatosi:", err);
   }
+}
+
+/**
+ * `/login` oqimi (SK-4b). Bu Telegram chat'i faol foydalanuvchiga bog'langan
+ * bo'lsa — 2 daqiqalik magic-link yuboriladi; aks holda «ro'yxatda yo'q» xabari.
+ * DB YOZUV YO'Q: token stateless imzolangan (auth.signMagicLinkToken).
+ *
+ * ⚠️ Stateless token DB'siz haqiqiy bir-martalik bo'la olmaydi — 2 daqiqalik
+ * qisqa muddat yumshatuvi (deps.signMagicLinkToken'ga now+ttl beriladi).
+ */
+async function handleLogin(chatId: number, deps: WebhookDeps): Promise<void> {
+  const user = await deps.db.user.findFirst({
+    where: { telegramId: String(chatId), isActive: true },
+    select: { id: true, role: true },
+  });
+  if (!user) {
+    await deps.sendMessage(chatId, MSG_LOGIN_NOT_REGISTERED);
+    return;
+  }
+  const expiresAtMs = Date.now() + 2 * 60 * 1000; // 2 daqiqa.
+  const token = await deps.signMagicLinkToken(user.id, expiresAtMs);
+  const url = `${deps.appBaseUrl}/login/tg?token=${token}`;
+  await deps.sendMessage(chatId, loginLinkMessage(url));
 }
 
 async function handleContact(

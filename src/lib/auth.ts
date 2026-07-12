@@ -101,3 +101,109 @@ export async function isAuthedFromCookie(
   if (!cookieValue) return false;
   return verifyToken(cookieValue);
 }
+
+// ───────────────────────── SK-4b: identity-carrying tokens ─────────────────────────
+// Yuqoridagi TOKEN_PAYLOAD identitetsiz parol-darvozasi uchun. Quyidagilar esa
+// aniq foydalanuvchini (userId) tashuvchi imzolangan tokenlar — Telegram magic-link
+// login uchun. HAMMASI STATELESS: faqat AUTH_COOKIE_SECRET ustidagi HMAC, DB YO'Q.
+//
+// Prefiks izolatsiyasi: magic-token payload'i `magic.` bilan, session-token esa
+// `session.` bilan boshlanadi. Imzo payload'ni (prefiks bilan) qamraydi, shuning
+// uchun bir turdagi tokenni boshqasi sifatida qayta ishlatib bo'lmaydi (replay yo'q).
+
+/** Session cookie nomi — eski parol-darvozasi `onyx_auth`dan ALOHIDA. */
+export const SESSION_COOKIE = "onyx_session";
+
+/**
+ * Magic-link tokeni: `magic.<userId>.<expiresAtMs>.<sigHex>`.
+ * userId — cuid (nuqtasiz), expiresAtMs — millisekundlar (raqamlar), sig — HMAC hex.
+ * Secret yo'q bo'lsa — fail-closed: "" qaytadi (signToken naqshi).
+ *
+ * ⚠️ HALOLLIK: stateless token DB'siz haqiqiy «bir martalik» bo'la olmaydi —
+ * imzo yaroqlik muddati ichida qayta ishlatilishi mumkin. Yumshatuv: 2 daqiqalik
+ * qisqa muddat (route real chaqiruvda beradi). Haqiqiy single-use (DB'da ishlatilgan
+ * jeton belgisi) — keyingi bosqichga qoldirilgan yaxshilanish.
+ */
+export async function signMagicLinkToken(
+  userId: string,
+  expiresAtMs: number,
+): Promise<string> {
+  const secret = getEnv("AUTH_COOKIE_SECRET");
+  if (!secret) {
+    console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — magic-link token yaratib bo'lmadi.");
+    return "";
+  }
+  const payload = `magic.${userId}.${expiresAtMs}`;
+  const sig = await hmacHex(payload, secret);
+  return `${payload}.${sig}`;
+}
+
+/**
+ * Magic-link tokenini tekshiradi. HECH QACHON throw qilmaydi — tipiklashgan natija.
+ * Tartib: shakl → prefiks → imzo (timing-safe) → muddat.
+ */
+export async function verifyMagicLinkToken(
+  token: string,
+  nowMs: number,
+): Promise<
+  | { ok: true; userId: string }
+  | { ok: false; reason: "malformed" | "badsig" | "expired" }
+> {
+  const secret = getEnv("AUTH_COOKIE_SECRET");
+  if (!secret) {
+    console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — magic-link token rad etildi.");
+    return { ok: false, reason: "badsig" };
+  }
+  if (!token) return { ok: false, reason: "malformed" };
+  // Aynan 4 qism: [prefiks, userId, expiresAtMs, sig]. userId cuid (nuqtasiz),
+  // expiresAtMs raqam, sig hex — hech biri nuqta tutmaydi.
+  const parts = token.split(".");
+  if (parts.length !== 4) return { ok: false, reason: "malformed" };
+  const [prefix, userId, expiresAtStr, sig] = parts;
+  if (prefix !== "magic") return { ok: false, reason: "malformed" };
+  if (!userId || !/^\d+$/.test(expiresAtStr)) {
+    return { ok: false, reason: "malformed" };
+  }
+  const payload = `magic.${userId}.${expiresAtStr}`;
+  const expected = await hmacHex(payload, secret);
+  if (!timingSafeEqual(sig, expected)) return { ok: false, reason: "badsig" };
+  const expiresAtMs = Number(expiresAtStr);
+  if (nowMs > expiresAtMs) return { ok: false, reason: "expired" };
+  return { ok: true, userId };
+}
+
+/**
+ * Session tokeni: `session.<userId>.<sigHex>`. Muddat YO'Q — umr cookie maxAge bilan
+ * boshqariladi. Secret yo'q bo'lsa — fail-closed ("").
+ */
+export async function signSessionToken(userId: string): Promise<string> {
+  const secret = getEnv("AUTH_COOKIE_SECRET");
+  if (!secret) {
+    console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — session token yaratib bo'lmadi.");
+    return "";
+  }
+  const payload = `session.${userId}`;
+  const sig = await hmacHex(payload, secret);
+  return `${payload}.${sig}`;
+}
+
+/**
+ * Session tokenini tekshiradi. Imzo yaroqli va prefiks `session` bo'lsa — userId,
+ * aks holda null. HECH QACHON throw qilmaydi.
+ */
+export async function verifySessionToken(token: string): Promise<string | null> {
+  const secret = getEnv("AUTH_COOKIE_SECRET");
+  if (!secret) {
+    console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — session token rad etildi.");
+    return null;
+  }
+  if (!token) return null;
+  // Aynan 3 qism: [prefiks, userId, sig]. (Magic-token 4 qism → bu yerda rad etiladi.)
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [prefix, userId, sig] = parts;
+  if (prefix !== "session" || !userId) return null;
+  const expected = await hmacHex(`session.${userId}`, secret);
+  if (!timingSafeEqual(sig, expected)) return null;
+  return userId;
+}
