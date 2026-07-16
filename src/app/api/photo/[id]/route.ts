@@ -1,11 +1,26 @@
 // Rasm proksisi (TG-B2). storageKey = Telegram file_id. Bu endpoint file_id
-// bo'yicha getFile → file_path oladi, so'ng downloadFile bilan baytlarni oqim
-// qilib qaytaradi. Rasmni o'zimiz saqlamaymiz — talab bo'yicha Telegram'dan.
-// Ochiq GET (thumbnail'lar <img src> orqali yuklanadi).
+// bo'yicha getFile → file_path oladi, so'ng downloadFile bilan baytlarni qaytaradi.
+// Rasmni o'zimiz saqlamaymiz — talab bo'yicha Telegram'dan. Ochiq GET.
+//
+// BATCH-B (perf): rasm mazmuni id bo'yicha O'ZGARMAS — shuning uchun uzoq muddatli
+// CDN kesh (bir viewer'ga bir marta Telegram'dan olinadi, keyin CDN'dan). `dynamic`
+// force-dynamic OLIB TASHLANDI: keshni sarlavhalar boshqaradi, handler cache-miss'da
+// baribir dinamik ishlaydi (DB + tashqi fetch). Content-Type file_path kengaytmasidan
+// (png/jpeg/webp) — hardcoded jpeg emas.
+// DEFER: baytlar hali ham to'liq buferlanadi (streaming — telegram.ts downloadFile'ni
+// o'zgartirishni talab qiladi, u bu batch lock'ida emas). Kichik thumbnail saqlash ham
+// webhook o'zgarishini talab qiladi (kelgusi batch).
 import { db } from "@/lib/db";
 import { downloadFile, getFile } from "@/lib/telegram";
 
-export const dynamic = "force-dynamic";
+/** file_path kengaytmasidan MIME (Telegram jpeg/png/webp beradi). */
+function contentTypeFromPath(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
+}
 
 export async function GET(
   _req: Request,
@@ -47,8 +62,10 @@ export async function GET(
   // lekin DOM lib tipi SharedArrayBuffer'ni istisno qilmagani uchun cast qilamiz.
   return new Response(bytes as unknown as BodyInit, {
     headers: {
-      "Content-Type": "image/jpeg",
-      "Cache-Control": "public, max-age=86400, immutable",
+      "Content-Type": contentTypeFromPath(file.file_path),
+      // Brauzer keshi + CDN keshi (Vercel): id bo'yicha mazmun o'zgarmas.
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "CDN-Cache-Control": "public, s-maxage=31536000",
     },
   });
 }

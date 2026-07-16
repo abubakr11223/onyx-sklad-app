@@ -4,7 +4,11 @@
 // Server component; свободный остаток партий ВЫЧИСЛЯЕТСЯ (ADR-005, §3).
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { computeFreeRemainder } from "@/lib/inventory";
+import {
+  EMPTY_AGGREGATE,
+  freeRemainderFromAggregate,
+  getBatchRemainders,
+} from "@/lib/batch-remainders";
 import {
   DEFAULT_RESERVATION_DAYS,
   RESERVATION_DAYS_KEY,
@@ -114,7 +118,9 @@ export default async function BronPage({
     batch: { select: { arrivedAt: true, stoneType: { select: { name: true } } } },
   } as const;
 
-  const [active, history, cfg] = await Promise.all([
+  // BATCH-B (perf): данные брони и каталог для формы — одним параллельным
+  // Promise.all (мигрируем разрозненный await в общую группу, как в /kamen).
+  const [active, history, cfg, stoneTypes] = await Promise.all([
     db.reservation.findMany({
       where: { status: "ACTIVE" },
       orderBy: { expiresAt: "asc" },
@@ -130,53 +136,66 @@ export default async function BronPage({
       where: { key: RESERVATION_DAYS_KEY },
       select: { value: true },
     }),
+    // ── Yangi bron formasi: AVAILABLE birliklar + partiya hajmi ──
+    // §3 formula uchun partiyaning BARCHA plita/boy qatorlari EMAS — faqat
+    // hisoblagichlar; qoldiq getBatchRemainders (SQL agregat) orqali (pastda).
+    db.stoneType.findMany({
+      where: { isArchived: false },
+      orderBy: { name: "asc" },
+      include: {
+        slabs: {
+          where: { status: "AVAILABLE", needsCheck: false },
+          orderBy: { label: "asc" },
+          select: {
+            id: true,
+            label: true,
+            lengthMm: true,
+            widthMm: true,
+            block: true,
+            landmark: true,
+          },
+        },
+        pieces: {
+          where: { status: "AVAILABLE", needsCheck: false },
+          select: {
+            id: true,
+            kind: true,
+            boundingLengthMm: true,
+            boundingWidthMm: true,
+            block: true,
+            landmark: true,
+          },
+        },
+        batches: {
+          where: { needsCheck: false },
+          orderBy: { arrivedAt: "asc" },
+          select: {
+            id: true,
+            arrivedAt: true,
+            slabsTotal: true,
+            areaTotalM2: true,
+            slabsAdjusted: true,
+            areaAdjustedM2: true,
+            slabsSoldDirect: true,
+            areaSoldDirectM2: true,
+            reservations: {
+              where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
+              select: { qtySlabs: true, qtyAreaM2: true },
+            },
+          },
+        },
+      },
+    }),
   ]);
   const defaultDays = cfg
     ? parseReservationDaysConfig(cfg.value)
     : DEFAULT_RESERVATION_DAYS;
 
-  // ── Yangi bron formasi uchun ma'lumot: AVAILABLE birliklar + partiya hajmi ──
-  const stoneTypes = await db.stoneType.findMany({
-    where: { isArchived: false },
-    orderBy: { name: "asc" },
-    include: {
-      slabs: {
-        where: { status: "AVAILABLE", needsCheck: false },
-        orderBy: { label: "asc" },
-        select: {
-          id: true,
-          label: true,
-          lengthMm: true,
-          widthMm: true,
-          block: true,
-          landmark: true,
-        },
-      },
-      pieces: {
-        where: { status: "AVAILABLE", needsCheck: false },
-        select: {
-          id: true,
-          kind: true,
-          boundingLengthMm: true,
-          boundingWidthMm: true,
-          block: true,
-          landmark: true,
-        },
-      },
-      batches: {
-        where: { needsCheck: false },
-        orderBy: { arrivedAt: "asc" },
-        include: {
-          slabs: { select: { areaM2: true } },
-          pieces: { where: { originSlabId: null }, select: { areaM2: true } },
-          reservations: {
-            where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
-            select: { qtySlabs: true, qtyAreaM2: true },
-          },
-        },
-      },
-    },
-  });
+  // §3 formula: partiya qoldiqlari SQL agregatlaridan (butun ombor tortilmaydi).
+  const remainders = await getBatchRemainders(
+    db,
+    stoneTypes.flatMap((st) => st.batches.map((b) => b.id)),
+  );
 
   const stones: StoneGroup[] = stoneTypes
     .map((st) => {
@@ -194,7 +213,7 @@ export default async function BronPage({
       }));
       const batches: BatchVolumeOption[] = st.batches
         .map((b) => {
-          const free = computeFreeRemainder(
+          const free = freeRemainderFromAggregate(
             {
               slabsTotal: b.slabsTotal,
               areaTotalM2: toNum(b.areaTotalM2),
@@ -203,8 +222,7 @@ export default async function BronPage({
               slabsSoldDirect: b.slabsSoldDirect,
               areaSoldDirectM2: Number(b.areaSoldDirectM2),
             },
-            b.slabs.map((s) => ({ areaM2: toNum(s.areaM2) })),
-            b.pieces.map((p) => ({ areaM2: toNum(p.areaM2) })),
+            remainders.get(b.id) ?? EMPTY_AGGREGATE,
           );
           const reservedSlabs = b.reservations.reduce(
             (n, r) => n + (r.qtySlabs ?? 0),

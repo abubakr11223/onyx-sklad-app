@@ -5,7 +5,11 @@
 
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
-import { computeFreeRemainder } from "@/lib/inventory";
+import {
+  EMPTY_AGGREGATE,
+  freeRemainderFromAggregate,
+  getBatchRemainders,
+} from "@/lib/batch-remainders";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import SaleForm, { type StoneTypeGroup } from "./SaleForm";
@@ -60,16 +64,43 @@ export default async function ProdazhaPage({
   const customer = first(sp.customer);
 
   const [stoneTypesRaw, recentSales] = await Promise.all([
+    // BATCH-B (perf): весь склад больше не тянется. Для формулы §3 берём только
+    // счётчики партий + агрегаты (getBatchRemainders ниже); для пикера — только
+    // продаваемые плиты (AVAILABLE/RESERVED) и куски (AVAILABLE). SOLD/история
+    // не грузятся.
     db.stoneType.findMany({
       where: { isArchived: false },
       orderBy: { name: "asc" },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        rockType: true,
         batches: {
           orderBy: { arrivedAt: "asc" },
-          include: {
-            // §3: выделенные плиты в ЛЮБОМ статусе минусуются из остатка.
+          select: {
+            id: true,
+            arrivedAt: true,
+            needsCheck: true,
+            slabsTotal: true,
+            areaTotalM2: true,
+            slabsAdjusted: true,
+            areaAdjustedM2: true,
+            slabsSoldDirect: true,
+            areaSoldDirectM2: true,
+            // Пикер: только продаваемые плиты (не весь исторический хвост).
             slabs: {
-              include: {
+              where: { status: { in: ["AVAILABLE", "RESERVED"] } },
+              select: {
+                id: true,
+                label: true,
+                status: true,
+                needsCheck: true,
+                lengthMm: true,
+                widthMm: true,
+                areaM2: true,
+                isAreaEstimated: true,
+                block: true,
+                landmark: true,
                 reservations: {
                   where: { status: "ACTIVE" },
                   select: { manager: { select: { name: true } } },
@@ -78,7 +109,19 @@ export default async function ProdazhaPage({
             },
           },
         },
-        pieces: true,
+        pieces: {
+          where: { status: "AVAILABLE" },
+          select: {
+            id: true,
+            kind: true,
+            needsCheck: true,
+            boundingLengthMm: true,
+            boundingWidthMm: true,
+            areaM2: true,
+            block: true,
+            landmark: true,
+          },
+        },
       },
     }),
     db.saleRecord.findMany({
@@ -92,6 +135,12 @@ export default async function ProdazhaPage({
       },
     }),
   ]);
+
+  // §3 формула: свободный остаток партий по SQL-агрегатам (весь склад не тянем).
+  const remainders = await getBatchRemainders(
+    db,
+    stoneTypesRaw.flatMap((st) => st.batches.map((b) => b.id)),
+  );
 
   const stoneTypes: StoneTypeGroup[] = stoneTypesRaw
     .map((st) => {
@@ -114,9 +163,7 @@ export default async function ProdazhaPage({
           reservedBy: s.reservations[0]?.manager.name ?? null,
         }));
 
-      const pieces = st.pieces
-        .filter((p) => p.status === "AVAILABLE")
-        .map((p) => ({
+      const pieces = st.pieces.map((p) => ({
           id: p.id,
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
           needsCheck: p.needsCheck,
@@ -130,11 +177,9 @@ export default async function ProdazhaPage({
         }));
 
       const batches = st.batches.map((b) => {
-        // §3: куски напрямую из партии (originSlabId IS NULL) — минус из остатка.
-        const directPieces = st.pieces.filter(
-          (p) => p.batchId === b.id && p.originSlabId === null,
-        );
-        const free = computeFreeRemainder(
+        // §3: те же числа, что и раньше, но через SQL-агрегат (плиты любого статуса
+        // + куски напрямую из партии originSlabId IS NULL) — без row-fetch.
+        const free = freeRemainderFromAggregate(
           {
             slabsTotal: b.slabsTotal,
             areaTotalM2: toNum(b.areaTotalM2),
@@ -143,8 +188,7 @@ export default async function ProdazhaPage({
             slabsSoldDirect: b.slabsSoldDirect,
             areaSoldDirectM2: Number(b.areaSoldDirectM2),
           },
-          b.slabs.map((s) => ({ areaM2: toNum(s.areaM2) })),
-          directPieces.map((p) => ({ areaM2: toNum(p.areaM2) })),
+          remainders.get(b.id) ?? EMPTY_AGGREGATE,
         );
         const freeParts = [
           free.slabsFree !== null && `~${free.slabsFree} плит`,

@@ -1,12 +1,16 @@
 // Карточка камня (TZ §5, п.1.2) — per-stone detail page.
-// Server component. Наличие СЧИТАЕТСЯ так же, как в /poisk (ADR-005):
-// сумма computeFreeRemainder по партиям (src/lib/inventory.ts). Фото — по
+// Server component. Наличие СЧИТАЕТСЯ так же, как в /poisk (ADR-005): сумма §3
+// формулы по партиям (inventory.ts), входы — SQL-агрегат (batch-remainders.ts). Фото — по
 // Photo.stoneTypeId, рендер через прокси /api/photo/[id]. Запрос фото —
 // server action requestPhoto (тот же, что в поиске).
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { computeFreeRemainder } from "@/lib/inventory";
+import {
+  EMPTY_AGGREGATE,
+  freeRemainderFromAggregate,
+  getBatchRemainders,
+} from "@/lib/batch-remainders";
 import {
   PHOTO_STALE_MONTHS_KEY,
   isPhotoStale,
@@ -127,18 +131,65 @@ export default async function KamenPage({
   // getCapabilities() — в общий Promise.all, чтобы не добавлять лишний
   // последовательный round-trip на самой горячей странице.
   const [st, photoCfg, caps] = await Promise.all([
+    // BATCH-B (perf): весь склад не тянем. Для формулы §3 — счётчики партий +
+    // агрегаты (getBatchRemainders ниже); для показа — только AVAILABLE плиты/куски
+    // и последние 12 фото. Наличие и «свежесть» фото (TG-C) считаются так же.
     db.stoneType.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        rockType: true,
+        color: true,
+        basePrice: true,
+        description: true,
+        properties: true,
         batches: {
           orderBy: { arrivedAt: "asc" },
-          include: {
+          select: {
+            id: true,
+            arrivedAt: true,
+            needsCheck: true,
+            slabsTotal: true,
+            areaTotalM2: true,
+            slabsAdjusted: true,
+            areaAdjustedM2: true,
+            slabsSoldDirect: true,
+            areaSoldDirectM2: true,
             locations: { orderBy: { createdAt: "asc" } },
-            slabs: true,
+            // Показываем только плиты «в наличии» (SOLD/RESERVED не рендерим).
+            slabs: {
+              where: { status: "AVAILABLE" },
+              select: {
+                id: true,
+                label: true,
+                lengthMm: true,
+                widthMm: true,
+                areaM2: true,
+                isAreaEstimated: true,
+                block: true,
+                landmark: true,
+                needsCheck: true,
+              },
+            },
           },
         },
-        pieces: true,
-        photos: { orderBy: { createdAt: "desc" } },
+        pieces: {
+          where: { status: "AVAILABLE" },
+          select: {
+            id: true,
+            kind: true,
+            boundingLengthMm: true,
+            boundingWidthMm: true,
+            thicknessMm: true,
+            areaM2: true,
+            block: true,
+            landmark: true,
+            needsCheck: true,
+          },
+        },
+        // «Показать все» — задел на следующий батч (пагинация фото).
+        photos: { orderBy: { createdAt: "desc" }, take: 12 },
       },
     }),
     db.appConfig.findUnique({
@@ -164,14 +215,16 @@ export default async function KamenPage({
     );
   }
 
-  // Наличие: тот же расчёт, что в /poisk — computeFreeRemainder по каждой
-  // партии, затем суммирование (null'ы — честно вне суммы, показываем «+»).
+  // Наличие: тот же расчёт, что в /poisk — §3 формула по каждой партии, затем
+  // суммирование (null'ы — честно вне суммы, показываем «+»). Числа те же, но
+  // входы — SQL-агрегат (плиты любого статуса + куски originSlabId IS NULL),
+  // а не row-fetch (par.: src/tests/batch-remainders.test.ts).
+  const remainders = await getBatchRemainders(
+    db,
+    st.batches.map((b) => b.id),
+  );
   const batches = st.batches.map((b) => {
-    // §3: Piece, отколотый от плиты (originSlabId ≠ null), в формулу НЕ входит.
-    const directPieces = st.pieces.filter(
-      (p) => p.batchId === b.id && p.originSlabId === null,
-    );
-    const free = computeFreeRemainder(
+    const free = freeRemainderFromAggregate(
       {
         slabsTotal: b.slabsTotal,
         areaTotalM2: toNum(b.areaTotalM2),
@@ -180,16 +233,15 @@ export default async function KamenPage({
         slabsSoldDirect: b.slabsSoldDirect,
         areaSoldDirectM2: Number(b.areaSoldDirectM2),
       },
-      b.slabs.map((s) => ({ areaM2: toNum(s.areaM2) })),
-      directPieces.map((p) => ({ areaM2: toNum(p.areaM2) })),
+      remainders.get(b.id) ?? EMPTY_AGGREGATE,
     );
-    // RESERVED/SOLD/… никогда не «в наличии» — как в /poisk.
-    const availableSlabs = b.slabs.filter((s) => s.status === "AVAILABLE");
+    // b.slabs уже отфильтрованы до AVAILABLE в запросе — как в /poisk.
+    const availableSlabs = b.slabs;
     return { batch: b, free, availableSlabs };
   });
 
-  // Отдельные бой/остатки в наличии (как в /poisk).
-  const availablePieces = st.pieces.filter((p) => p.status === "AVAILABLE");
+  // Отдельные бой/остатки в наличии (st.pieces уже AVAILABLE в запросе).
+  const availablePieces = st.pieces;
 
   let slabsFreeSum = 0;
   let slabsKnown = false;
