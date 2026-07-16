@@ -12,6 +12,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeFreeRemainder } from "@/lib/inventory";
 import { lockBatchForUpdate } from "@/lib/batch-lock";
+import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "@/lib/validators/intake";
 
 // ─────────────────────────── Konstantalar / xatolar ───────────────────────────
 
@@ -121,6 +122,14 @@ export function canReserveVolume(
   if (qtyAreaM2 != null && (!Number.isFinite(qtyAreaM2) || qtyAreaM2 <= 0)) {
     return { ok: false, reason: "Площадь — число больше нуля" };
   }
+  // A1-b: верхний предел ДО записи брони — иначе qtySlabs/qtyAreaM2 переполнят
+  // Int4 / Decimal(12,3). Обычный отказ валидации, а не 500 из БД.
+  if (qtySlabs != null && qtySlabs > MAX_INT_FIELD) {
+    return { ok: false, reason: "Слишком большое число плит" };
+  }
+  if (qtyAreaM2 != null && qtyAreaM2 > MAX_DECIMAL_FIELD) {
+    return { ok: false, reason: "Слишком большая площадь" };
+  }
   if (qtySlabs != null && avail.slabsFree != null) {
     const freeLeft = avail.slabsFree - avail.reservedSlabs;
     if (qtySlabs > freeLeft) {
@@ -140,6 +149,27 @@ export function canReserveVolume(
     }
   }
   return { ok: true };
+}
+
+/**
+ * A2: Σ активных volume-броней, ещё НЕ истёкших (expiresAt > now). Истёкшая
+ * бронь фактически свободна — она не должна урезать свободный остаток при
+ * расчёте новой брони (иначе «висит», пока кто-то не откроет /bron и не
+ * запустит sweep). Чистая — тестируется без БД.
+ */
+export function sumActiveVolumeHolds(
+  holds: readonly {
+    qtySlabs: number | null;
+    qtyAreaM2: number | null;
+    expiresAt: Date;
+  }[],
+  now: Date,
+): { reservedSlabs: number; reservedAreaM2: number } {
+  const active = holds.filter((h) => h.expiresAt.getTime() > now.getTime());
+  return {
+    reservedSlabs: active.reduce((n, h) => n + (h.qtySlabs ?? 0), 0),
+    reservedAreaM2: active.reduce((n, h) => n + (h.qtyAreaM2 ?? 0), 0),
+  };
 }
 
 /**
@@ -296,8 +326,9 @@ export async function reserveBatchVolume(
           where: { key: RESERVATION_DAYS_KEY },
           select: { value: true },
         });
+        const now = new Date();
         const days = resolveReservationDays(input.days ?? null, cfg?.value);
-        const expiresAt = computeExpiresAt(new Date(), days);
+        const expiresAt = computeExpiresAt(now, days);
 
         const batch = await tx.batch.findUnique({
           where: { id: input.batchId },
@@ -308,9 +339,11 @@ export async function reserveBatchVolume(
               where: { originSlabId: null },
               select: { areaM2: true },
             },
+            // A2: грузим все активные брони с expiresAt; истёкшие отсекаем ниже
+            // чистым sumActiveVolumeHolds (не режут остаток до sweep).
             reservations: {
               where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
-              select: { qtySlabs: true, qtyAreaM2: true },
+              select: { qtySlabs: true, qtyAreaM2: true, expiresAt: true },
             },
           },
         });
@@ -336,13 +369,13 @@ export async function reserveBatchVolume(
           batch.slabs.map((s) => ({ areaM2: toNum(s.areaM2) })),
           batch.pieces.map((p) => ({ areaM2: toNum(p.areaM2) })),
         );
-        const reservedSlabs = batch.reservations.reduce(
-          (n, r) => n + (r.qtySlabs ?? 0),
-          0,
-        );
-        const reservedAreaM2 = batch.reservations.reduce(
-          (n, r) => n + (toNum(r.qtyAreaM2) ?? 0),
-          0,
+        const { reservedSlabs, reservedAreaM2 } = sumActiveVolumeHolds(
+          batch.reservations.map((r) => ({
+            qtySlabs: r.qtySlabs,
+            qtyAreaM2: toNum(r.qtyAreaM2),
+            expiresAt: r.expiresAt,
+          })),
+          now,
         );
 
         const decision = canReserveVolume(

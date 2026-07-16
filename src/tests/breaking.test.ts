@@ -194,4 +194,34 @@ describe("assertValidPieceInput — вход не из формы (Telegram-бо
       }
     }
   });
+
+  it("A1: мм-габариты сверх 1 000 000 → INVALID_PIECE (не Int4-переполнение → 500)", () => {
+    const overCap: PieceInput[] = [
+      { ...validPiece, boundingLengthMm: 1_000_001 },
+      { ...validPiece, boundingWidthMm: 2_147_483_648 },
+      { ...validPiece, thicknessMm: 5_000_000 },
+      { ...validPiece, areaM2: 1_000_000_000 }, // > Decimal(12,3)
+    ];
+    for (const bad of overCap) {
+      try {
+        assertValidPieceInput(bad);
+        expect.unreachable("ожидалась BreakError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(BreakError);
+        expect((err as BreakError).code).toBe("INVALID_PIECE");
+      }
+    }
+  });
+
+  it("A1: значения ровно на границе допустимы", () => {
+    expect(() =>
+      assertValidPieceInput({
+        ...validPiece,
+        boundingLengthMm: 1_000_000,
+        boundingWidthMm: 1_000_000,
+        thicknessMm: 1_000_000,
+        areaM2: 999_999_999.999,
+      }),
+    ).not.toThrow();
+  });
 });

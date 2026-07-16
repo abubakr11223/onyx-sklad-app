@@ -10,6 +10,7 @@
 import { db } from "./db";
 import { computeFreeRemainder, type FreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
+import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "./validators/intake";
 import type { Prisma } from "@prisma/client";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
@@ -57,8 +58,16 @@ export type SellableUnitStatus =
 export interface UnitSaleDecisionInput {
   unitStatus: SellableUnitStatus;
   needsCheck: boolean;
-  /** managerId активной (ACTIVE) брони на единицу; null = активной брони нет. */
+  /**
+   * managerId ЭФФЕКТИВНОЙ (ACTIVE и ещё НЕ истёкшей) брони на единицу;
+   * null = эффективной брони нет (A2: истёкшая бронь сюда не попадает).
+   */
   activeReservationManagerId: string | null;
+  /**
+   * A2: на единице есть ACTIVE-бронь, но она ИСТЕКЛА (sweep ещё не прошёл).
+   * Истёкшая бронь фактически свободна и не должна блокировать продажу.
+   */
+  expiredReservationPresent?: boolean;
   actingManagerId: string;
   actingRole: ActorRole;
 }
@@ -99,8 +108,14 @@ export function decideUnitSale(input: UnitSaleDecisionInput): UnitSaleDecision {
       return { ok: true, expectedStatus: "AVAILABLE", viaReservation: false };
     case "RESERVED": {
       if (input.activeReservationManagerId === null) {
+        // A2: единственная бронь на единице ИСТЕКЛА → она фактически свободна,
+        // продажу не блокирует. Единица в БД ещё RESERVED (sweep не прошёл),
+        // поэтому условный UPDATE ждёт RESERVED; брони к погашению нет.
+        if (input.expiredReservationPresent) {
+          return { ok: true, expectedStatus: "RESERVED", viaReservation: false };
+        }
         // Статус RESERVED, а активной брони нет — состояние меняется параллельно
-        // (снятие/истечение брони). Пусть пользователь обновит данные.
+        // (снятие брони). Пусть пользователь обновит данные.
         return fail("CONFLICT", "Состояние брони изменилось — обновите страницу и повторите");
       }
       const isOwnerOverride = input.actingRole === "OWNER";
@@ -163,6 +178,15 @@ export function checkVolumeSaleGuard(
   if (qtyAreaM2 !== null && (!Number.isFinite(qtyAreaM2) || qtyAreaM2 <= 0)) {
     return fail("INVALID_INPUT", "Площадь — положительное число, например 12,5");
   }
+  // A1-b: верхний предел ДО инкремента slabsSoldDirect/areaSoldDirectM2 —
+  // для m²-only партий (slabsFree = null) slab-проверка ниже пропускается, и
+  // огромный qtySlabs иначе переполнил бы Int4. Обычная ошибка, не 500.
+  if (qtySlabs !== null && qtySlabs > MAX_INT_FIELD) {
+    return fail("INVALID_INPUT", "Слишком большое число плит");
+  }
+  if (qtyAreaM2 !== null && qtyAreaM2 > MAX_DECIMAL_FIELD) {
+    return fail("INVALID_INPUT", "Слишком большая площадь");
+  }
   if (qtySlabs !== null && free.slabsFree !== null) {
     if (qtySlabs + input.othersReservedSlabs > free.slabsFree) {
       return fail(
@@ -206,6 +230,102 @@ export function computeWholeBatchSale(
     return fail("INSUFFICIENT_REMAINDER", "Свободного остатка в партии нет — продавать нечего");
   }
   return { ok: true, qtySlabs, qtyAreaM2 };
+}
+
+// ─────────────── A2/A3: истечение и погашение volume-броней (чистое) ───────────────
+
+/** Строка volume-брони, приведённая к number (Decimal → number вызывающим). */
+export interface VolumeHoldRow {
+  id: string;
+  managerId: string;
+  qtySlabs: number | null;
+  qtyAreaM2: number | null;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+/**
+ * A2: активная (ACTIVE) бронь учитывается, ТОЛЬКО пока не истекла (expiresAt >
+ * now). Истёкшая бронь фактически свободна — не режет остаток и не гасится.
+ */
+export function isHoldEffective(expiresAt: Date, now: Date): boolean {
+  return expiresAt.getTime() > now.getTime();
+}
+
+/**
+ * A2: Σ активных, ещё НЕ истёкших volume-броней ДРУГИХ менеджеров. Истёкшие в
+ * сумму не входят (иначе продолжали бы «съедать» свободный остаток до sweep).
+ */
+export function sumEffectiveOthersHolds(
+  reservations: readonly VolumeHoldRow[],
+  actorId: string,
+  now: Date,
+): { slabs: number; areaM2: number } {
+  const others = reservations.filter(
+    (r) => r.managerId !== actorId && isHoldEffective(r.expiresAt, now),
+  );
+  return {
+    slabs: others.reduce((s, r) => s + (r.qtySlabs ?? 0), 0),
+    areaM2: others.reduce((s, r) => s + (r.qtyAreaM2 ?? 0), 0),
+  };
+}
+
+/** Собственная volume-бронь (уже отфильтрована по актору и эффективности). */
+export interface OwnHold {
+  id: string;
+  qtySlabs: number | null;
+  qtyAreaM2: number | null;
+}
+
+/**
+ * A3 — консервативное погашение СВОИХ volume-броней объёмной продажей.
+ * Правило (никогда не закрывает бронь, которую продажа не покрыла):
+ *  • брони обрабатываются СТАРЕЙШИЕ ПЕРВЫМИ;
+ *  • бюджет = проданное количество в каждой единице (плиты и/или м²);
+ *  • бронь гасится ТОЛЬКО если бюджет ПОЛНОСТЬЮ покрывает её во ВСЕХ единицах,
+ *    в которых она измерена (продажа обязана давать эту единицу); тогда её
+ *    количество вычитается из бюджета;
+ *  • на ПЕРВОЙ непокрытой броне — стоп (последующие не трогаем).
+ * Если бронь измерена в единице, которой продажа не даёт (напр. бронь в м²,
+ * продажа в плитах) — она непокрыта → стоп. Когда сомневаемся — НЕ гасим.
+ */
+export function selectCoveredOwnHolds(
+  holdsOldestFirst: readonly OwnHold[],
+  soldSlabs: number | null,
+  soldAreaM2: number | null,
+): string[] {
+  let budgetSlabs = soldSlabs; // null = продажа не даёт этой единицы
+  let budgetArea = soldAreaM2;
+  const completed: string[] = [];
+  for (const h of holdsOldestFirst) {
+    const needsSlabs = h.qtySlabs !== null;
+    const needsArea = h.qtyAreaM2 !== null;
+    if (!needsSlabs && !needsArea) break; // бронь без размера — не трогаем
+    if (needsSlabs && (budgetSlabs === null || h.qtySlabs! > budgetSlabs)) break;
+    if (needsArea && (budgetArea === null || h.qtyAreaM2! > budgetArea + AREA_EPS)) break;
+    if (needsSlabs) budgetSlabs = (budgetSlabs as number) - (h.qtySlabs as number);
+    if (needsArea) budgetArea = (budgetArea as number) - (h.qtyAreaM2 as number);
+    completed.push(h.id);
+  }
+  return completed;
+}
+
+/**
+ * A2+A3: из всех volume-броней партии отбирает СВОИ, ещё НЕ истёкшие,
+ * сортирует старейшими вперёд и возвращает id тех, что продажа реально
+ * покрыла (selectCoveredOwnHolds). Чужие и истёкшие брони не трогаются.
+ */
+export function selectOwnHoldsToComplete(
+  reservations: readonly VolumeHoldRow[],
+  actorId: string,
+  soldSlabs: number | null,
+  soldAreaM2: number | null,
+  now: Date,
+): string[] {
+  const ownEffective = reservations
+    .filter((r) => r.managerId === actorId && isHoldEffective(r.expiresAt, now))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  return selectCoveredOwnHolds(ownEffective, soldSlabs, soldAreaM2);
 }
 
 // ───────────────────── Транзакционные операции (БД) ─────────────────────
@@ -296,13 +416,14 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
 
+      const now = new Date();
       const unitSelect = {
         id: true,
         status: true,
         needsCheck: true,
         reservations: {
           where: { status: "ACTIVE" as const },
-          select: { id: true, managerId: true },
+          select: { id: true, managerId: true, expiresAt: true },
         },
       };
       const unit =
@@ -313,11 +434,19 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         throw new SaleLogicError({ code: "NOT_FOUND", message: "Камень не найден" });
       }
 
-      const activeReservation = unit.reservations[0] ?? null;
+      // A2: истёкшая ACTIVE-бронь (sweep ещё не прошёл) фактически свободна —
+      // не блокирует продажу и не гасится как выполненная. Эффективная — только
+      // ещё не истёкшая; истёкшие закрываем EXPIRED в этой же транзакции.
+      const effectiveReservation =
+        unit.reservations.find((r) => isHoldEffective(r.expiresAt, now)) ?? null;
+      const expiredReservations = unit.reservations.filter(
+        (r) => !isHoldEffective(r.expiresAt, now),
+      );
       const decision = decideUnitSale({
         unitStatus: unit.status,
         needsCheck: unit.needsCheck,
-        activeReservationManagerId: activeReservation?.managerId ?? null,
+        activeReservationManagerId: effectiveReservation?.managerId ?? null,
+        expiredReservationPresent: expiredReservations.length > 0,
         actingManagerId: actor.id,
         actingRole: actor.role,
       });
@@ -343,9 +472,9 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
 
       // Переход №4: бронь → COMPLETED той же транзакцией.
       let completedReservationId: string | null = null;
-      if (decision.viaReservation && activeReservation) {
+      if (decision.viaReservation && effectiveReservation) {
         const res = await tx.reservation.updateMany({
-          where: { id: activeReservation.id, status: "ACTIVE" },
+          where: { id: effectiveReservation.id, status: "ACTIVE" },
           data: { status: "COMPLETED", resolvedAt: new Date() },
         });
         if (res.count === 0) {
@@ -354,7 +483,20 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
             message: "Бронь изменилась параллельно — обновите страницу и повторите",
           });
         }
-        completedReservationId = activeReservation.id;
+        completedReservationId = effectiveReservation.id;
+      }
+
+      // A2: продали из-под ИСТЁКШИХ броней (viaReservation=false) — закрываем их
+      // EXPIRED в этой же транзакции, чтобы на проданной единице не осталась
+      // «висящая» ACTIVE-бронь до следующего sweep.
+      if (!decision.viaReservation && expiredReservations.length > 0) {
+        await tx.reservation.updateMany({
+          where: {
+            id: { in: expiredReservations.map((r) => r.id) },
+            status: "ACTIVE",
+          },
+          data: { status: "EXPIRED", resolvedAt: new Date() },
+        });
       }
 
       const sale = await tx.saleRecord.create({
@@ -440,6 +582,8 @@ interface BatchForVolume {
     managerId: string;
     qtySlabs: number | null;
     qtyAreaM2: { toString(): string } | null;
+    expiresAt: Date;
+    createdAt: Date;
   }[];
 }
 
@@ -461,9 +605,19 @@ async function loadBatchForVolume(
       // §3: выделенные плиты — в ЛЮБОМ статусе; куски — только прямые (originSlabId null).
       slabs: { select: { areaM2: true } },
       pieces: { where: { originSlabId: null }, select: { areaM2: true } },
+      // A2: грузим ВСЕ активные volume-брони (в т.ч. истёкшие — статус ещё
+      // ACTIVE до sweep) вместе с expiresAt/createdAt; фильтрация по истечению
+      // и порядок «старейшие вперёд» — в чистых хелперах ниже.
       reservations: {
         where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
-        select: { id: true, managerId: true, qtySlabs: true, qtyAreaM2: true },
+        select: {
+          id: true,
+          managerId: true,
+          qtySlabs: true,
+          qtyAreaM2: true,
+          expiresAt: true,
+          createdAt: true,
+        },
       },
     },
   });
@@ -511,16 +665,27 @@ async function executeVolumeSale(
     customerContact: string | null;
     price: number | null;
     wholeBatch: boolean;
+    now: Date;
   },
 ): Promise<SellVolumeOk> {
-  const { actor, batch, free, qtySlabs, qtyAreaM2 } = params;
+  const { actor, batch, free, qtySlabs, qtyAreaM2, now } = params;
 
-  const others = batch.reservations.filter((r) => r.managerId !== actor.id);
-  const own = batch.reservations.filter((r) => r.managerId === actor.id);
+  // A2: brони приводим к number и фильтруем истёкшие в чистых хелперах.
+  const holds: VolumeHoldRow[] = batch.reservations.map((r) => ({
+    id: r.id,
+    managerId: r.managerId,
+    qtySlabs: r.qtySlabs,
+    qtyAreaM2: toNum(r.qtyAreaM2),
+    expiresAt: r.expiresAt,
+    createdAt: r.createdAt,
+  }));
+
+  // A2: только НЕ истёкшие чужие брони режут доступный остаток.
+  const others = sumEffectiveOthersHolds(holds, actor.id, now);
   const guard = checkVolumeSaleGuard({
     free,
-    othersReservedSlabs: others.reduce((s, r) => s + (r.qtySlabs ?? 0), 0),
-    othersReservedAreaM2: others.reduce((s, r) => s + (toNum(r.qtyAreaM2) ?? 0), 0),
+    othersReservedSlabs: others.slabs,
+    othersReservedAreaM2: others.areaM2,
     qtySlabs,
     qtyAreaM2,
   });
@@ -550,14 +715,21 @@ async function executeVolumeSale(
     });
   }
 
-  // Менеджер продаёт в счёт СВОЕЙ volume-брони — бронь погашается (COMPLETED).
-  let completedReservationIds: string[] = [];
-  if (own.length > 0) {
+  // A3: гасим ТОЛЬКО те свои volume-брони, которые продажа реально покрыла
+  // (старейшие вперёд, бюджет = проданное кол-во). Никогда не закрываем бронь,
+  // которую продажа не покрыла (иначе камень другого клиента молча освободится).
+  const completedReservationIds = selectOwnHoldsToComplete(
+    holds,
+    actor.id,
+    qtySlabs,
+    qtyAreaM2,
+    now,
+  );
+  if (completedReservationIds.length > 0) {
     await tx.reservation.updateMany({
-      where: { id: { in: own.map((r) => r.id) }, status: "ACTIVE" },
+      where: { id: { in: completedReservationIds }, status: "ACTIVE" },
       data: { status: "COMPLETED", resolvedAt: new Date() },
     });
-    completedReservationIds = own.map((r) => r.id);
   }
 
   const sale = await tx.saleRecord.create({
@@ -620,6 +792,7 @@ export async function sellBatchVolume(
       // сериализует все операции, меняющие свободный остаток (§3), исключая
       // межоперационный oversell (продажа vs выделение/прямой бой).
       await lockBatchForUpdate(tx, input.batchId);
+      const now = new Date();
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
@@ -635,6 +808,7 @@ export async function sellBatchVolume(
         customerContact: input.customerContact?.trim() || null,
         price,
         wholeBatch: false,
+        now,
       });
     });
   } catch (e) {
@@ -663,6 +837,7 @@ export async function sellWholeBatch(
     return await db.$transaction(async (tx) => {
       // S2-conc: замок на строку партии ДО чтения счётчиков (см. sellBatchVolume).
       await lockBatchForUpdate(tx, input.batchId);
+      const now = new Date();
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
@@ -680,6 +855,7 @@ export async function sellWholeBatch(
         customerContact: input.customerContact?.trim() || null,
         price,
         wholeBatch: true,
+        now,
       });
     });
   } catch (e) {

@@ -12,6 +12,7 @@ import {
   reserveBatchVolume,
   reserveUnit,
 } from "@/lib/reservations";
+import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
@@ -27,20 +28,9 @@ async function currentManagerId(): Promise<string | null> {
   return (await getCurrentUser())?.id ?? null;
 }
 
-function parseIntField(raw: string): number | null {
-  const s = raw.trim();
-  if (!s) return null;
-  const n = Number.parseInt(s, 10);
-  return Number.isFinite(n) ? n : Number.NaN;
-}
-
-/** «12,5» и «12.5» — оба валидны (менеджер вводит с телефона). */
-function parseDecimalField(raw: string): number | null {
-  const s = raw.trim().replace(",", ".");
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : Number.NaN;
-}
+// A7: строгие парсеры из validators/intake — «12,5» плит и «3x» дней больше не
+// молча усекаются parseInt-ом до 12/3, а дают ошибку поля (undefined). Пустое →
+// null (срок берётся из конфига; количество проверяется отдельно).
 
 export async function createReservation(
   _prev: ReserveFormState,
@@ -57,7 +47,7 @@ export async function createReservation(
   const target = str("target"); // "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>"
   const customerName = str("customerName");
   const customerContact = str("customerContact").trim() || null;
-  const daysRaw = parseIntField(str("days"));
+  const daysRaw = parsePositiveInt(str("days"));
 
   const errors: Record<string, string> = {};
   const [targetKind, targetId] = target.split(":", 2);
@@ -67,17 +57,19 @@ export async function createReservation(
   if (!customerName.trim()) {
     errors.customerName = "Укажите клиента — анонимных броней не бывает";
   }
-  if (Number.isNaN(daysRaw)) {
+  if (daysRaw === undefined) {
     errors.days = "Срок — целое число дней";
   }
 
   let qtySlabs: number | null = null;
   let qtyAreaM2: number | null = null;
   if (targetKind === "BATCH") {
-    qtySlabs = parseIntField(str("qtySlabs"));
-    qtyAreaM2 = parseDecimalField(str("qtyAreaM2"));
-    if (Number.isNaN(qtySlabs)) errors.qtySlabs = "Целое число плит";
-    if (Number.isNaN(qtyAreaM2)) errors.qtyAreaM2 = "Число, например 12,5";
+    const qs = parsePositiveInt(str("qtySlabs"));
+    const qa = parsePositiveDecimal(str("qtyAreaM2"));
+    if (qs === undefined) errors.qtySlabs = "Целое число плит";
+    if (qa === undefined) errors.qtyAreaM2 = "Число, например 12,5";
+    qtySlabs = qs ?? null;
+    qtyAreaM2 = qa ?? null;
     if (qtySlabs === null && qtyAreaM2 === null && !errors.qtySlabs && !errors.qtyAreaM2) {
       errors.qtySlabs = "Укажите количество: плиты и/или м²";
     }
@@ -100,7 +92,7 @@ export async function createReservation(
         qtyAreaM2,
         customerName,
         customerContact,
-        days: daysRaw,
+        days: daysRaw ?? null,
         managerId,
       });
     } else {
@@ -109,7 +101,7 @@ export async function createReservation(
         unitId: targetId,
         customerName,
         customerContact,
-        days: daysRaw,
+        days: daysRaw ?? null,
         managerId,
       });
     }

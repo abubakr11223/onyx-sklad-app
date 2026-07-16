@@ -52,28 +52,40 @@ export type IntakeResult =
   | { ok: true; data: ValidIntake }
   | { ok: false; errors: IntakeErrors };
 
+// A1: верхние пределы под типы столбцов Postgres. Значения выше — не 500 из-за
+// переполнения Int4 / Decimal(12,3), а обычная ошибка валидации (undefined →
+// «Слишком большое значение» в вызывающем слое). Общая точка для приёмки,
+// продажи, брони, разбить и singan (все идут через эти парсеры).
+/** Целые (штуки, мм, количества) — столбцы Int4 (макс 2 147 483 647). */
+export const MAX_INT_FIELD = 1_000_000;
+/** Площадь и объёмы — Decimal(12,3) (макс 999 999 999.999). */
+export const MAX_DECIMAL_FIELD = 999_999_999.999;
+
 /**
  * «12,5» → 12.5. Возвращает:
  *  - null — поле пустое (не заполнено);
- *  - undefined — не число, ноль или отрицательное;
- *  - number — корректное положительное число.
+ *  - undefined — не число, ноль, отрицательное ИЛИ больше MAX_DECIMAL_FIELD;
+ *  - number — корректное положительное число в пределах Decimal(12,3).
  */
 export function parsePositiveDecimal(raw: string): number | null | undefined {
   const s = raw.trim().replace(",", ".");
   if (s === "") return null;
   if (!/^\d+(\.\d+)?$/.test(s)) return undefined;
   const n = Number(s);
-  if (!Number.isFinite(n) || n <= 0) return undefined;
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_DECIMAL_FIELD) return undefined;
   return n;
 }
 
-/** То же для целых («40»). Дробное, ноль, отрицательное → undefined. */
+/**
+ * То же для целых («40»). Дробное, ноль, отрицательное ИЛИ больше
+ * MAX_INT_FIELD → undefined (защита от переполнения Int4, A1).
+ */
 export function parsePositiveInt(raw: string): number | null | undefined {
   const s = raw.trim();
   if (s === "") return null;
   if (!/^\d+$/.test(s)) return undefined;
   const n = Number(s);
-  if (!Number.isSafeInteger(n) || n <= 0) return undefined;
+  if (!Number.isSafeInteger(n) || n <= 0 || n > MAX_INT_FIELD) return undefined;
   return n;
 }
 

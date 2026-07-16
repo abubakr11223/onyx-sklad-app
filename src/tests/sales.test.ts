@@ -6,12 +6,34 @@ import {
   checkVolumeSaleGuard,
   computeWholeBatchSale,
   decideUnitSale,
+  isHoldEffective,
   roleCanSell,
+  selectCoveredOwnHolds,
+  selectOwnHoldsToComplete,
+  sumEffectiveOthersHolds,
   type UnitSaleDecisionInput,
+  type VolumeHoldRow,
 } from "@/lib/sales";
 
 const MANAGER_A = "mgr-a";
 const MANAGER_B = "mgr-b";
+
+const HOUR = 60 * 60 * 1000;
+const NOW = new Date("2026-07-16T12:00:00.000Z");
+const FUTURE = new Date(NOW.getTime() + 24 * HOUR);
+const PAST = new Date(NOW.getTime() - HOUR);
+
+function hold(over: Partial<VolumeHoldRow> = {}): VolumeHoldRow {
+  return {
+    id: "res-1",
+    managerId: MANAGER_A,
+    qtySlabs: null,
+    qtyAreaM2: null,
+    expiresAt: FUTURE,
+    createdAt: NOW,
+    ...over,
+  };
+}
 
 function baseInput(over: Partial<UnitSaleDecisionInput> = {}): UnitSaleDecisionInput {
   return {
@@ -206,6 +228,42 @@ describe("checkVolumeSaleGuard — охрана объёмной продажи 
       if (!r.ok) expect(r.error.code).toBe("INVALID_INPUT");
     }
   });
+
+  it("A1-b: объём сверх предела → INVALID_INPUT ДО инкремента (m²-only партия)", () => {
+    // slabsFree = null (контроль плит отключён) — иначе огромный qtySlabs
+    // проскочил бы охрану и переполнил Int4 slabsSoldDirect.
+    const mFree = { slabsFree: null, areaFreeM2: null };
+    const overSlabs = checkVolumeSaleGuard({
+      ...noHolds,
+      free: mFree,
+      qtySlabs: 1_000_001,
+      qtyAreaM2: null,
+    });
+    expect(overSlabs.ok).toBe(false);
+    if (!overSlabs.ok) expect(overSlabs.error.code).toBe("INVALID_INPUT");
+
+    const overArea = checkVolumeSaleGuard({
+      ...noHolds,
+      free: mFree,
+      qtySlabs: null,
+      qtyAreaM2: 1_000_000_000,
+    });
+    expect(overArea.ok).toBe(false);
+    if (!overArea.ok) expect(overArea.error.code).toBe("INVALID_INPUT");
+  });
+
+  it("A1-b: ровно на пределе (без учёта остатка) охрана по величине пропускает", () => {
+    // slabsFree/areaFreeM2 = null → проверка достаточности не работает,
+    // но и переполнения нет: значение на границе типа — валидно.
+    expect(
+      checkVolumeSaleGuard({
+        ...noHolds,
+        free: { slabsFree: null, areaFreeM2: null },
+        qtySlabs: 1_000_000,
+        qtyAreaM2: 999_999_999.999,
+      }),
+    ).toEqual({ ok: true });
+  });
 });
 
 describe("computeWholeBatchSale — оптовый выкуп партии (TZ §7.6)", () => {
@@ -245,5 +303,159 @@ describe("computeWholeBatchSale — оптовый выкуп партии (TZ �
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
     }
+  });
+});
+
+// ───────────────────────────── A2: истечение броней ─────────────────────────────
+
+describe("isHoldEffective — истёкшая бронь фактически свободна (A2)", () => {
+  it("будущая expiresAt → эффективна; прошлая/ровно now → нет", () => {
+    expect(isHoldEffective(FUTURE, NOW)).toBe(true);
+    expect(isHoldEffective(PAST, NOW)).toBe(false);
+    expect(isHoldEffective(NOW, NOW)).toBe(false); // ровно now — уже не блокирует
+  });
+});
+
+describe("decideUnitSale — истёкшая бронь не блокирует продажу единицы (A2)", () => {
+  it("RESERVED, чужая бронь ИСТЕКЛА → продажа проходит (не RESERVED_BY_OTHER)", () => {
+    const d = decideUnitSale(
+      baseInput({
+        unitStatus: "RESERVED",
+        activeReservationManagerId: null, // эффективной нет (истекла)
+        expiredReservationPresent: true,
+      }),
+    );
+    expect(d).toEqual({ ok: true, expectedStatus: "RESERVED", viaReservation: false });
+  });
+
+  it("RESERVED, чужая бронь ЕЩЁ активна → по-прежнему RESERVED_BY_OTHER", () => {
+    const d = decideUnitSale(
+      baseInput({
+        unitStatus: "RESERVED",
+        activeReservationManagerId: MANAGER_B,
+        expiredReservationPresent: false,
+      }),
+    );
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.error.code).toBe("RESERVED_BY_OTHER");
+  });
+
+  it("RESERVED без брони и без истёкшей → CONFLICT (рассинхрон, без регресса)", () => {
+    const d = decideUnitSale(
+      baseInput({ unitStatus: "RESERVED", expiredReservationPresent: false }),
+    );
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.error.code).toBe("CONFLICT");
+  });
+});
+
+describe("sumEffectiveOthersHolds — истёкшие чужие брони не режут остаток (A2)", () => {
+  it("будущая чужая бронь учитывается", () => {
+    const holds = [hold({ id: "r1", managerId: MANAGER_B, qtySlabs: 5, qtyAreaM2: 30 })];
+    expect(sumEffectiveOthersHolds(holds, MANAGER_A, NOW)).toEqual({
+      slabs: 5,
+      areaM2: 30,
+    });
+  });
+
+  it("ИСТЁКШАЯ чужая бронь НЕ уменьшает доступный остаток", () => {
+    const holds = [
+      hold({ id: "r1", managerId: MANAGER_B, qtySlabs: 5, qtyAreaM2: 30, expiresAt: PAST }),
+    ];
+    expect(sumEffectiveOthersHolds(holds, MANAGER_A, NOW)).toEqual({
+      slabs: 0,
+      areaM2: 0,
+    });
+  });
+
+  it("свои брони в чужую сумму не входят; истёкшие отбрасываются", () => {
+    const holds = [
+      hold({ id: "own", managerId: MANAGER_A, qtySlabs: 9, qtyAreaM2: 99 }),
+      hold({ id: "b-live", managerId: MANAGER_B, qtySlabs: 2, qtyAreaM2: 10 }),
+      hold({ id: "b-dead", managerId: MANAGER_B, qtySlabs: 7, qtyAreaM2: 70, expiresAt: PAST }),
+    ];
+    expect(sumEffectiveOthersHolds(holds, MANAGER_A, NOW)).toEqual({
+      slabs: 2,
+      areaM2: 10,
+    });
+  });
+});
+
+// ─────────────── A3: погашение только покрытых своих volume-броней ───────────────
+
+describe("selectCoveredOwnHolds — не гасит бронь, которую продажа не покрыла (A3)", () => {
+  it("(a) продажа 2 при бронях 5 и 3 → НИ одна не гасится", () => {
+    const holds = [
+      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
+      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
+    ];
+    expect(selectCoveredOwnHolds(holds, 2, null)).toEqual([]);
+  });
+
+  it("(b) продажа 3 при бронях 3 (старше) и 5 → гасится только 3", () => {
+    const holds = [
+      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
+      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
+    ];
+    expect(selectCoveredOwnHolds(holds, 3, null)).toEqual(["h3"]);
+  });
+
+  it("(c) продажа 8 при бронях 5 и 3 → гасятся обе", () => {
+    const holds = [
+      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
+      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
+    ];
+    expect(selectCoveredOwnHolds(holds, 8, null)).toEqual(["h5", "h3"]);
+  });
+
+  it("стоп на первой непокрытой: продажа 6 при 5 (старше) и 3 → только 5", () => {
+    const holds = [
+      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
+      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
+    ];
+    // после 5 бюджет = 1, следующую (3) не покрывает → стоп.
+    expect(selectCoveredOwnHolds(holds, 6, null)).toEqual(["h5"]);
+  });
+
+  it("бронь в м², продажа в плитах → не гасится (единица не предоставлена)", () => {
+    const holds = [{ id: "area", qtySlabs: null, qtyAreaM2: 10 }];
+    expect(selectCoveredOwnHolds(holds, 100, null)).toEqual([]);
+  });
+
+  it("бронь по обеим единицам гасится, только если покрыты ОБЕ", () => {
+    const holds = [{ id: "both", qtySlabs: 3, qtyAreaM2: 20 }];
+    expect(selectCoveredOwnHolds(holds, 3, 20)).toEqual(["both"]);
+    expect(selectCoveredOwnHolds(holds, 3, 19)).toEqual([]); // площади не хватает
+    expect(selectCoveredOwnHolds(holds, 3, null)).toEqual([]); // продажа без м²
+  });
+});
+
+describe("selectOwnHoldsToComplete — свои + не истёкшие + старейшие вперёд (A2+A3)", () => {
+  const t = (min: number) => new Date(NOW.getTime() + min * 60 * 1000);
+
+  it("(d) чужие брони не трогаются — гасятся только свои", () => {
+    const holds = [
+      hold({ id: "b", managerId: MANAGER_B, qtySlabs: 1, createdAt: t(-10) }),
+      hold({ id: "a", managerId: MANAGER_A, qtySlabs: 3, createdAt: t(-5) }),
+    ];
+    expect(selectOwnHoldsToComplete(holds, MANAGER_A, 100, null, NOW)).toEqual(["a"]);
+  });
+
+  it("сортирует свои по createdAt (старейшая вперёд) для правила бюджета", () => {
+    // Порядок в массиве обратный времени — функция должна отсортировать.
+    const holds = [
+      hold({ id: "new5", managerId: MANAGER_A, qtySlabs: 5, createdAt: t(5) }),
+      hold({ id: "old3", managerId: MANAGER_A, qtySlabs: 3, createdAt: t(-5) }),
+    ];
+    // Продажа 3: старейшая (old3, 3) покрыта → гасится; new5 (5) — нет.
+    expect(selectOwnHoldsToComplete(holds, MANAGER_A, 3, null, NOW)).toEqual(["old3"]);
+  });
+
+  it("истёкшая своя бронь не гасится (A2), даже если бюджет её покрыл бы", () => {
+    const holds = [
+      hold({ id: "dead", managerId: MANAGER_A, qtySlabs: 2, expiresAt: PAST, createdAt: t(-10) }),
+      hold({ id: "live", managerId: MANAGER_A, qtySlabs: 2, expiresAt: FUTURE, createdAt: t(-5) }),
+    ];
+    expect(selectOwnHoldsToComplete(holds, MANAGER_A, 4, null, NOW)).toEqual(["live"]);
   });
 });

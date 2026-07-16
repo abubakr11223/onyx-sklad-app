@@ -10,6 +10,7 @@ import {
   computeExpiresAt,
   parseReservationDaysConfig,
   resolveReservationDays,
+  sumActiveVolumeHolds,
 } from "@/lib/reservations";
 
 describe("parseReservationDaysConfig — ADR-003", () => {
@@ -124,6 +125,55 @@ describe("canReserveVolume — §1.6 BATCH_VOLUME invarianti", () => {
     const a = { slabsFree: 2, areaFreeM2: 10, reservedSlabs: 2, reservedAreaM2: 10 };
     expect(canReserveVolume(a, 1, null).ok).toBe(false);
     expect(canReserveVolume(a, null, 0.5).ok).toBe(false);
+  });
+
+  it("A1-b: miqdor tur chegarasidan oshsa → rad (Int4/Decimal overflow oldi)", () => {
+    // slabsFree/areaFreeM2 = null → yetarlilik tekshiruvi o'chgan, lekin kap ishlaydi.
+    const a = { slabsFree: null, areaFreeM2: null, reservedSlabs: 0, reservedAreaM2: 0 };
+    expect(canReserveVolume(a, 1_000_001, null).ok).toBe(false);
+    expect(canReserveVolume(a, null, 1_000_000_000).ok).toBe(false);
+    // Chegaraning o'zi — o'tadi (yetarlilik nazorati o'chgani uchun).
+    expect(canReserveVolume(a, 1_000_000, null)).toEqual({ ok: true });
+    expect(canReserveVolume(a, null, 999_999_999.999)).toEqual({ ok: true });
+  });
+});
+
+describe("sumActiveVolumeHolds — muddati o'tgan bron qoldiqni kesmaydi (A2)", () => {
+  const NOW = new Date("2026-07-16T12:00:00.000Z");
+  const future = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+  const past = new Date(NOW.getTime() - 60 * 1000);
+
+  it("faol (muddati o'tmagan) bronlar yig'iladi", () => {
+    const holds = [
+      { qtySlabs: 3, qtyAreaM2: 15, expiresAt: future },
+      { qtySlabs: 2, qtyAreaM2: 10, expiresAt: future },
+    ];
+    expect(sumActiveVolumeHolds(holds, NOW)).toEqual({
+      reservedSlabs: 5,
+      reservedAreaM2: 25,
+    });
+  });
+
+  it("muddati o'tgan bron yig'indiga KIRMAYDI (erkin qoldiqni kamaytirmaydi)", () => {
+    const holds = [
+      { qtySlabs: 3, qtyAreaM2: 15, expiresAt: future },
+      { qtySlabs: 8, qtyAreaM2: 80, expiresAt: past }, // muddati o'tgan
+    ];
+    expect(sumActiveVolumeHolds(holds, NOW)).toEqual({
+      reservedSlabs: 3,
+      reservedAreaM2: 15,
+    });
+  });
+
+  it("null miqdorlar 0 sifatida", () => {
+    const holds = [
+      { qtySlabs: null, qtyAreaM2: 12, expiresAt: future },
+      { qtySlabs: 4, qtyAreaM2: null, expiresAt: future },
+    ];
+    expect(sumActiveVolumeHolds(holds, NOW)).toEqual({
+      reservedSlabs: 4,
+      reservedAreaM2: 12,
+    });
   });
 });
 

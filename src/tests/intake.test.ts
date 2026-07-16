@@ -3,6 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  MAX_DECIMAL_FIELD,
+  MAX_INT_FIELD,
   parsePositiveDecimal,
   parsePositiveInt,
   validateIntake,
@@ -45,6 +47,14 @@ describe("parsePositiveDecimal", () => {
     expect(parsePositiveDecimal("12,5,5")).toBeUndefined();
     expect(parsePositiveDecimal("1e3")).toBeUndefined();
   });
+
+  it("A1: значение на границе Decimal(12,3) проходит, выше — undefined (не 500)", () => {
+    expect(parsePositiveDecimal(String(MAX_DECIMAL_FIELD))).toBe(MAX_DECIMAL_FIELD);
+    expect(parsePositiveDecimal("999999999.999")).toBe(999999999.999);
+    // Выше предела Decimal(12,3) → ошибка валидации, а не переполнение БД.
+    expect(parsePositiveDecimal("1000000000")).toBeUndefined();
+    expect(parsePositiveDecimal("999999999999999")).toBeUndefined();
+  });
 });
 
 describe("parsePositiveInt", () => {
@@ -63,6 +73,15 @@ describe("parsePositiveInt", () => {
     expect(parsePositiveInt("0")).toBeUndefined();
     expect(parsePositiveInt("-3")).toBeUndefined();
     expect(parsePositiveInt("сорок")).toBeUndefined();
+  });
+
+  it("A1: значение на границе (1 000 000) проходит, выше — undefined (не 500)", () => {
+    expect(parsePositiveInt(String(MAX_INT_FIELD))).toBe(MAX_INT_FIELD);
+    expect(parsePositiveInt("1000000")).toBe(1000000);
+    // Выше предела — обычная ошибка поля, а не переполнение Int4 → 500.
+    expect(parsePositiveInt("1000001")).toBeUndefined();
+    expect(parsePositiveInt("2147483648")).toBeUndefined();
+    expect(parsePositiveInt("9007199254740992")).toBeUndefined();
   });
 });
 

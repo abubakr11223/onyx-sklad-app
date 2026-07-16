@@ -13,7 +13,12 @@ import type { PieceKind, UnitStatus, Prisma } from "@prisma/client";
 import { db } from "./db";
 import { computeFreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
-import { parsePositiveDecimal, parsePositiveInt } from "./validators/intake";
+import {
+  MAX_DECIMAL_FIELD,
+  MAX_INT_FIELD,
+  parsePositiveDecimal,
+  parsePositiveInt,
+} from "./validators/intake";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
 
@@ -212,15 +217,22 @@ export function assertValidPieceInput(p: PieceInput): void {
       "Стороны куска: минимум 3 целых положительных числа (мм)",
     );
   }
-  const posInt = (n: number) => Number.isSafeInteger(n) && n > 0;
+  // A1: верхняя граница мм (MAX_INT_FIELD) — иначе Int4-переполнение при вставке
+  // Piece (bounding*/thickness — столбцы Int). Слишком большое → ошибка домена,
+  // а не 500 из БД. Ловит и вход из бота (не через parsePieceRow).
+  const posInt = (n: number) =>
+    Number.isSafeInteger(n) && n > 0 && n <= MAX_INT_FIELD;
   if (!posInt(p.boundingLengthMm) || !posInt(p.boundingWidthMm)) {
-    throw new BreakError("INVALID_PIECE", "Габариты куска — целые положительные мм");
+    throw new BreakError("INVALID_PIECE", "Габариты куска — целые положительные мм (не больше 1 000 000)");
   }
   if (p.thicknessMm !== null && !posInt(p.thicknessMm)) {
-    throw new BreakError("INVALID_PIECE", "Толщина куска — целое положительное число");
+    throw new BreakError("INVALID_PIECE", "Толщина куска — целое положительное число (не больше 1 000 000)");
   }
-  if (p.areaM2 !== null && !(Number.isFinite(p.areaM2) && p.areaM2 > 0)) {
-    throw new BreakError("INVALID_PIECE", "Площадь куска — положительное число");
+  if (
+    p.areaM2 !== null &&
+    !(Number.isFinite(p.areaM2) && p.areaM2 > 0 && p.areaM2 <= MAX_DECIMAL_FIELD)
+  ) {
+    throw new BreakError("INVALID_PIECE", "Площадь куска — положительное число в допустимых пределах");
   }
   if (!p.block.trim() || !p.landmark.trim()) {
     throw new BreakError("INVALID_PIECE", "У куска должны быть блок и ориентир");
@@ -636,6 +648,163 @@ export async function registerDirectPiece(
       pieceId: piece.id,
       areaM2,
       areaEstimated,
+      slabsFreeAfter: after.slabsFree,
+      areaFreeM2After: after.areaFreeM2,
+    };
+  });
+}
+
+// ──────────────── registerDirectPiecesMany — многострочный бой (A4) ────────────────
+
+export interface RegisterDirectPiecesManyParams {
+  /** ≥1 кусок; block/landmark у каждого свои (PieceInput). */
+  rows: PieceInput[];
+  batchId: string;
+  /** Флаг формы «бой был целой плитой» — общий для всех строк (см. §3). */
+  decrementSlabs: boolean;
+  byUserId: string;
+  /** §5.5b: AI-chertyoj — общий (обычно null для /razbit direct). */
+  drawingUrl?: string | null;
+}
+
+export interface RegisterDirectPiecesManyResult {
+  pieceIds: string[];
+  slabsFreeAfter: number | null;
+  areaFreeM2After: number | null;
+}
+
+/**
+ * A4: несколько прямых боёв (originSlabId = null) ОДНОЙ транзакцией —
+ * атомарно, всё-или-ничего. В отличие от цикла registerDirectPiece (по
+ * транзакции на строку), здесь:
+ *  • ОДИН lockBatchForUpdate ПЕРВЫМ оператором (та же гарантия сериализации §3);
+ *  • guard §3 считается на СУММЕ всех строк (не построчно) — партия не уйдёт
+ *    в минус из-за агрегата, даже если каждая строка по отдельности прошла бы;
+ *  • при ошибке (guard/валидация) не пишется НИ одной строки — worker не
+ *    получит форму, наполовину сохранённую, и не задублирует при повторе.
+ * Поведение registerDirectPiece НЕ меняется — у него свои вызывающие (в т.ч.
+ * §5.5b singan), которым нужна одна строка на транзакцию.
+ */
+export async function registerDirectPiecesMany(
+  params: RegisterDirectPiecesManyParams,
+): Promise<RegisterDirectPiecesManyResult> {
+  if (params.rows.length === 0) {
+    throw new BreakError("NO_PIECES", "Укажите хотя бы один кусок (бой/остаток)");
+  }
+  params.rows.forEach(assertValidPieceInput);
+
+  return db.$transaction(async (tx) => {
+    // S2-conc: замок на строку партии ПЕРВЫМ — до чтения счётчиков/плит/кусков.
+    await lockBatchForUpdate(tx, params.batchId);
+    const batch = await tx.batch.findUnique({
+      where: { id: params.batchId },
+      select: {
+        id: true,
+        stoneTypeId: true,
+        slabsTotal: true,
+        areaTotalM2: true,
+        slabsAdjusted: true,
+        areaAdjustedM2: true,
+        slabsSoldDirect: true,
+        areaSoldDirectM2: true,
+        slabs: { select: { areaM2: true } },
+        pieces: { where: { originSlabId: null }, select: { areaM2: true } },
+      },
+    });
+    if (!batch) throw new BreakError("BATCH_NOT_FOUND", "Партия не найдена");
+
+    // Fallback площади (§3) — построчно, тот же принцип, что в registerDirectPiece.
+    const prepared = params.rows.map((p) => {
+      let areaM2 = p.areaM2;
+      let areaEstimated = false;
+      if (areaM2 === null && params.decrementSlabs) {
+        const estimate = estimatePieceAreaM2(toNum(batch.areaTotalM2), batch.slabsTotal);
+        if (estimate !== null) {
+          areaM2 = Math.round(estimate * 1000) / 1000;
+          areaEstimated = true;
+        }
+      }
+      return { input: p, areaM2, areaEstimated };
+    });
+
+    // Guard §3 на АГРЕГАТЕ: все новые куски добавляются разом.
+    const after = computeFreeRemainder(
+      {
+        slabsTotal: batch.slabsTotal,
+        areaTotalM2: toNum(batch.areaTotalM2),
+        slabsAdjusted: batch.slabsAdjusted,
+        areaAdjustedM2: toNum(batch.areaAdjustedM2) ?? 0,
+        slabsSoldDirect: batch.slabsSoldDirect,
+        areaSoldDirectM2: toNum(batch.areaSoldDirectM2) ?? 0,
+      },
+      batch.slabs.map((s) => ({ areaM2: toNum(s.areaM2) })),
+      [
+        ...batch.pieces.map((p) => ({ areaM2: toNum(p.areaM2) })),
+        ...prepared.map((pp) => ({ areaM2: pp.areaM2 })),
+      ],
+    );
+    if (after.slabsFree !== null && after.slabsFree < 0) {
+      throw new BreakError(
+        "INSUFFICIENT_REMAINDER",
+        "В партии не осталось столько свободных плит — бой списать не из чего",
+      );
+    }
+    if (after.areaFreeM2 !== null && after.areaFreeM2 < -1e-9) {
+      throw new BreakError(
+        "INSUFFICIENT_REMAINDER",
+        "Суммарная площадь боя больше свободного остатка партии",
+      );
+    }
+
+    const pieceIds: string[] = [];
+    for (const pp of prepared) {
+      const p = pp.input;
+      const piece = await tx.piece.create({
+        data: {
+          stoneTypeId: batch.stoneTypeId,
+          batchId: batch.id,
+          originSlabId: null,
+          kind: p.kind,
+          sidesMm: p.sidesMm,
+          boundingLengthMm: p.boundingLengthMm,
+          boundingWidthMm: p.boundingWidthMm,
+          thicknessMm: p.thicknessMm,
+          areaM2: pp.areaM2 === null ? null : String(pp.areaM2),
+          drawingUrl: params.drawingUrl ?? null,
+          block: p.block,
+          landmark: p.landmark,
+          createdById: params.byUserId,
+        },
+        select: { id: true },
+      });
+      pieceIds.push(piece.id);
+
+      await tx.auditLog.create({
+        data: {
+          userId: params.byUserId,
+          action: "BREAK",
+          entityType: "Piece",
+          entityId: piece.id,
+          payload: {
+            batchId: batch.id,
+            direct: true,
+            batchRows: params.rows.length, // A4: часть атомарной многострочной записи
+            decrementSlabs: params.decrementSlabs,
+            kind: p.kind,
+            sidesMm: p.sidesMm,
+            boundingLengthMm: p.boundingLengthMm,
+            boundingWidthMm: p.boundingWidthMm,
+            areaM2: pp.areaM2,
+            areaEstimated: pp.areaEstimated,
+            slabsFreeAfter: after.slabsFree,
+            areaFreeM2After: after.areaFreeM2,
+          },
+        },
+      });
+    }
+
+    return {
+      pieceIds,
       slabsFreeAfter: after.slabsFree,
       areaFreeM2After: after.areaFreeM2,
     };

@@ -10,7 +10,7 @@ import {
   BreakError,
   breakSlab,
   parsePieceRow,
-  registerDirectPiece,
+  registerDirectPiecesMany,
   splitSlab,
   type PieceInput,
   type RawPieceRow,
@@ -138,14 +138,16 @@ export async function submitBreak(
       if (Object.keys(errors).length > 0) return { errors };
 
       const decrementSlabs = formData.get("decrementSlabs") === "1";
-      // Каждый кусок — своя транзакция (registerDirectPiece); при ошибке на
-      // строке N куски 1…N−1 уже записаны — они реальные камни, это ок.
-      let created = 0;
-      for (const piece of pieces) {
-        await registerDirectPiece({ ...piece, batchId, decrementSlabs, byUserId });
-        created += 1;
-      }
-      redirect(successUrl("direct", null, created, null));
+      // A4: все строки — ОДНОЙ атомарной транзакцией (registerDirectPiecesMany):
+      // guard §3 на сумме, всё-или-ничего. Ошибка на любой строке → не записано
+      // НИЧЕГО, поэтому повторная отправка формы не задублирует куски 1…N−1.
+      const result = await registerDirectPiecesMany({
+        rows: pieces,
+        batchId,
+        decrementSlabs,
+        byUserId,
+      });
+      redirect(successUrl("direct", null, result.pieceIds.length, null));
     }
 
     return { errors: { form: "Неизвестный режим формы — обновите страницу" } };
