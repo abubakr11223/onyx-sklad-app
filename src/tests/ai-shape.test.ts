@@ -103,6 +103,45 @@ describe("analyzeBrokenStoneShape — §5.5a", () => {
     }
   });
 
+  it("yopuvchi dublikat uch (oxirgisi ≈ birinchisi) tashlanadi: 6 uch → 5 tomon", async () => {
+    // Jonli sinov: model polygon'ni birinchi uchni takrorlab «yopadi».
+    const pentagon = [
+      { x: 0.5, y: 0 },
+      { x: 1, y: 0.4 },
+      { x: 0.8, y: 1 },
+      { x: 0.2, y: 1 },
+      { x: 0, y: 0.4 },
+      { x: 0.51, y: 0.01 }, // birinchisiga ~0.01 masofada — dublikat
+    ];
+    const { client } = makeClient({ sideCount: 6, vertices: pentagon });
+
+    const result = await analyzeBrokenStoneShape("QUJD", "image/jpeg", { client });
+
+    expect(result).not.toBeNull();
+    expect(result!.sideCount).toBe(5);
+    expect(result!.vertices).toEqual(pentagon.slice(0, 5));
+  });
+
+  it("oxirgi uch birinchisidan uzoq bo'lsa — dedup QILINMAYDI", async () => {
+    // QUAD_VERTICES: oxirgi {0,1} birinchi {0,0}dan y bo'yicha 1 uzoqda.
+    const { client } = makeClient({ sideCount: 4, vertices: QUAD_VERTICES });
+    const result = await analyzeBrokenStoneShape("QUJD", "image/jpeg", { client });
+    expect(result).toEqual({ sideCount: 4, vertices: QUAD_VERTICES });
+  });
+
+  it("dedup'dan keyin 3 uchdan kam qolsa → null", async () => {
+    const { client } = makeClient({
+      sideCount: 3,
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0.01, y: 0.01 }, // birinchisining dublikati → 2 uch qoladi
+      ],
+    });
+    const result = await analyzeBrokenStoneShape("QUJD", "image/jpeg", { client });
+    expect(result).toBeNull();
+  });
+
   it("base64 ichidagi probel/yangi qatorlar yuborishdan oldin tozalanadi", async () => {
     const { client, parse } = makeClient({
       sideCount: 4,

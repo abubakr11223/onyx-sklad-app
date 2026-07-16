@@ -7,6 +7,7 @@ import {
   normalizePhone,
   type WebhookDeps,
 } from "@/lib/telegram-webhook";
+import { decodeShapeDraft } from "@/lib/singan";
 
 // ── Mock deps ──
 const findMany = vi.fn();
@@ -20,8 +21,11 @@ const prUpdateMany = vi.fn();
 const photoCreate = vi.fn();
 // SK-4b: magic-link imzolovchisi mock'i.
 const signMagicLinkToken = vi.fn();
+// §5.5b (singan tosh) mock'lari.
+const downloadPhotoBase64 = vi.fn();
+const analyzeShape = vi.fn();
 
-function makeDeps(): WebhookDeps {
+function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
   return {
     db: {
       user: {
@@ -41,6 +45,9 @@ function makeDeps(): WebhookDeps {
     sendMessage: (...a: unknown[]) => sendMessage(...a),
     signMagicLinkToken: (...a: unknown[]) => signMagicLinkToken(...a),
     appBaseUrl: "https://onyx.test",
+    downloadPhotoBase64: (...a: unknown[]) => downloadPhotoBase64(...a),
+    analyzeShape: (...a: unknown[]) => analyzeShape(...a),
+    ...overrides,
   } as unknown as WebhookDeps;
 }
 
@@ -63,7 +70,19 @@ beforeEach(() => {
   photoCreate.mockResolvedValue({});
   signMagicLinkToken.mockReset();
   signMagicLinkToken.mockResolvedValue("SIGNED_TOKEN");
+  downloadPhotoBase64.mockReset();
+  analyzeShape.mockReset();
+  downloadPhotoBase64.mockResolvedValue({ base64: "QUJD", mediaType: "image/jpeg" });
+  analyzeShape.mockResolvedValue({ sideCount: 4, vertices: QUAD });
 });
+
+// §5.5b — mock AI qaytaradigan standart polygon.
+const QUAD = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+];
 
 // ── Update yasovchilar ──
 function startUpdate(chatId = 555): TgUpdate {
@@ -260,10 +279,11 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
   });
 });
 
-// ── Foto update yasovchisi (TG-B2) ──
+// ── Foto update yasovchisi (TG-B2 / §5.5b caption bilan) ──
 function photoUpdate(opts?: {
   chatId?: number;
   fileIds?: string[];
+  caption?: string;
 }): TgUpdate {
   const chatId = opts?.chatId ?? 555;
   const fileIds = opts?.fileIds ?? ["small_id", "large_id"];
@@ -280,6 +300,7 @@ function photoUpdate(opts?: {
         width: 100 * (i + 1),
         height: 100 * (i + 1),
       })),
+      ...(opts?.caption !== undefined ? { caption: opts.caption } : {}),
     },
   };
 }
@@ -392,6 +413,145 @@ describe("получение фото (TG-B2)", () => {
     expect(prUpdateMany).toHaveBeenCalledTimes(1);
     // Skladchi tasdiqni oldi.
     expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+  });
+});
+
+// ── §5.5b — singan tosh (rasm + «singan» izohi → AI-shakl → havola) ──
+describe("singan tosh oqimi (§5.5b)", () => {
+  it("rasm + «singan» izohi → yuklab olish, AI, /singan?d= havolasi; ESKI foto-oqim CHAQIRILMAYDI", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+
+    await handleUpdate(
+      photoUpdate({
+        chatId: 999,
+        fileIds: ["small_id", "large_id"],
+        caption: "singan tosh",
+      }),
+      makeDeps(),
+    );
+
+    // Eng KATTA (oxirgi) file_id yuklab olinadi, AI chaqiriladi.
+    expect(downloadPhotoBase64).toHaveBeenCalledTimes(1);
+    expect(downloadPhotoBase64).toHaveBeenCalledWith("large_id");
+    expect(analyzeShape).toHaveBeenCalledTimes(1);
+    expect(analyzeShape).toHaveBeenCalledWith("QUJD", "image/jpeg");
+
+    // Havola yuborildi va draft ROUND-TRIP dekodlanadi (vertices + file_id).
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    const text = sendMessage.mock.calls[0][1] as string;
+    expect(text).toContain("https://onyx.test/singan?d=");
+    expect(text).toContain("4 tomon");
+    const encoded = text.split("/singan?d=")[1].trim();
+    expect(decodeShapeDraft(encoded)).toEqual({
+      vertices: QUAD,
+      fileId: "large_id",
+    });
+
+    // PhotoRequest oqimi umuman ishlamadi (marshrutlash to'g'ri).
+    expect(prFindFirst).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+  });
+
+  it("«Бой» (kirill, katta harf) izohi ham singan oqimiga tushadi", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, caption: "Бой камня" }),
+      makeDeps(),
+    );
+
+    expect(analyzeShape).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("/singan?d=");
+  });
+
+  it("AI null (ishlamadi) → halol xabar (/razbit), havola YO'Q", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    analyzeShape.mockResolvedValue(null);
+
+    await handleUpdate(photoUpdate({ chatId: 999, caption: "singan" }), makeDeps());
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("/razbit");
+    expect(sendMessage.mock.calls[0][1]).not.toContain("?d=");
+  });
+
+  it("rasm yuklab olinmadi (null) → xabar, AI CHAQIRILMAYDI", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    downloadPhotoBase64.mockResolvedValue(null);
+
+    await handleUpdate(photoUpdate({ chatId: 999, caption: "singan" }), makeDeps());
+
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("yuklab olib bo'lmadi");
+  });
+
+  it("ro'yxatda yo'q yuboruvchi → «ro'yxatda yo'q», yuklab olish YO'Q", async () => {
+    userFindFirst.mockResolvedValue(null);
+
+    await handleUpdate(photoUpdate({ chatId: 999, caption: "singan" }), makeDeps());
+
+    expect(downloadPhotoBase64).not.toHaveBeenCalled();
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
+  });
+
+  it("appBaseUrl bo'sh → buzuq havola O'RNIGA aniq xabar, AI ham chaqirilmaydi", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, caption: "singan" }),
+      makeDeps({ appBaseUrl: "" }),
+    );
+
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).not.toContain("?d=");
+    expect(sendMessage.mock.calls[0][1]).toContain("havola tayyorlab bo'lmadi");
+  });
+
+  it("izohsiz rasm → ESKI PhotoRequest oqimi o'zgarishsiz (AI tegmaydi)", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(downloadPhotoBase64).not.toHaveBeenCalled();
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+  });
+
+  it("boshqa izohli rasm («chiroyli tosh») ham eski oqimda qoladi", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, caption: "chiroyli tosh" }),
+      makeDeps(),
+    );
+
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("/singan matn buyrug'i (rasmsiz) → yo'riqnoma xabari", async () => {
+    await handleUpdate(loginUpdate(999, "/singan"), makeDeps());
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("singan");
+    expect(downloadPhotoBase64).not.toHaveBeenCalled();
+  });
+
+  it("/singan@BotName ham yo'riqnoma beradi; /singanfoo — YO'Q", async () => {
+    await handleUpdate(loginUpdate(999, "/singan@OnyxSkladBot"), makeDeps());
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+
+    sendMessage.mockClear();
+    await handleUpdate(loginUpdate(999, "/singanfoo"), makeDeps());
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });
 

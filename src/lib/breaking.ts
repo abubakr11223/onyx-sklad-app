@@ -501,6 +501,8 @@ export interface RegisterDirectPieceParams extends PieceInput {
    */
   decrementSlabs: boolean;
   byUserId: string;
+  /** §5.5b: AI-chertyoj (o'zi-yetarli SVG data-URI). Ixtiyoriy — default null. */
+  drawingUrl?: string | null;
 }
 
 export interface RegisterDirectPieceResult {
@@ -600,6 +602,7 @@ export async function registerDirectPiece(
         boundingWidthMm: params.boundingWidthMm,
         thicknessMm: params.thicknessMm,
         areaM2: areaM2 === null ? null : String(areaM2),
+        drawingUrl: params.drawingUrl ?? null, // §5.5b — AI-chertyoj (ixtiyoriy)
         block: params.block,
         landmark: params.landmark,
         createdById: params.byUserId,

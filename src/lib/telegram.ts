@@ -47,6 +47,8 @@ export interface TgMessage {
   text?: string;
   contact?: TgContact;
   photo?: TgPhotoSize[];
+  /** Rasm/hujjat ostidagi izoh (§5.5b: «singan» marshrutlash shu orqali). */
+  caption?: string;
 }
 
 export interface TgUpdate {

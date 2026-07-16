@@ -10,6 +10,7 @@ import type {
   TgReplyKeyboardMarkup,
   TgUpdate,
 } from "@/lib/telegram";
+import { encodeShapeDraft } from "@/lib/singan";
 
 // ───────────────────────── Deps (inyeksiya) ─────────────────────────
 
@@ -94,6 +95,17 @@ export interface WebhookDeps {
   signMagicLinkToken(userId: string, expiresAtMs: number): Promise<string>;
   // appBaseUrl — magic-link URL'ining bazasi, masalan `https://onyx.example`.
   appBaseUrl: string;
+  // §5.5b — singan tosh oqimi. Handler hermetik qolsin deb rasmni yuklab olish
+  // va AI-shakl aniqlash ham INYEKSIYA qilinadi (route real, testlar mock).
+  // Rasm baytlari → base64 + media turi; xatoda null (fail-closed).
+  downloadPhotoBase64(
+    fileId: string,
+  ): Promise<{ base64: string; mediaType: "image/jpeg" | "image/png" } | null>;
+  // AI shakl-aniqlash (ai-shape.analyzeBrokenStoneShape); xatoda null.
+  analyzeShape(
+    imageBase64: string,
+    mediaType: "image/jpeg" | "image/png",
+  ): Promise<{ sideCount: number; vertices: { x: number; y: number }[] } | null>;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -127,6 +139,19 @@ const loginLinkMessage = (url: string) =>
 // o'rniga shu xabar. Skladchini chalg'itmaydi; sabab log'da qoladi.
 const MSG_LOGIN_UNAVAILABLE =
   "Hozircha kirib bo'lmadi. Birozdan so'ng qayta urinib ko'ring yoki menejeringizga murojaat qiling.";
+
+// §5.5b — singan tosh (AI-shakl) matnlari (o'zbekcha — skladchi ko'radi).
+const MSG_SINGAN_INSTRUCTION =
+  "Singan tosh: rasm yuboring va izohiga (caption) «singan» deb yozing — AI shaklni chizadi, keyin o'lchovlarni saytda kiritasiz.";
+const MSG_SINGAN_DOWNLOAD_FAILED =
+  "Rasmni yuklab olib bo'lmadi. Birozdan so'ng qayta yuborib ko'ring.";
+const MSG_SINGAN_AI_FAILED =
+  "AI hozircha ishlamadi — /razbit sahifasi orqali qo'lda kiriting yoki keyinroq qayta urinib ko'ring.";
+// APP_BASE_URL sozlanmagan — buzuq havola yubormaymiz (MSG_LOGIN_UNAVAILABLE uslubi).
+const MSG_SINGAN_UNAVAILABLE =
+  "Hozircha havola tayyorlab bo'lmadi. Birozdan so'ng qayta urinib ko'ring yoki menejeringizga murojaat qiling.";
+const singanLinkMessage = (sides: number, url: string) =>
+  `Shakl topildi: ${sides} tomon. O'lchovlarni kiritish uchun havolani oching:\n${url}`;
 
 // request_contact klaviaturasi — telefonni bir tugma bilan ulashish.
 const CONTACT_KEYBOARD: TgReplyKeyboardMarkup = {
@@ -162,6 +187,23 @@ function isStartCommand(text: string): boolean {
  *  - deep-link: `t.me/<bot>?start=login` → Telegram `/start login` yuboradi.
  * `/loginfoo` kabi yopishgan matnga tegmaydi.
  */
+/**
+ * §5.5b — rasm izohi «singan tosh» oqimini so'rayaptimi? «singan» (lotin) yoki
+ * «бой» (kirill) so'zi izohning istalgan joyida, katta-kichikligidan qat'i nazar.
+ */
+function isBrokenStoneCaption(caption: string): boolean {
+  return /singan|бой/i.test(caption);
+}
+
+/**
+ * `/singan` buyrug'ini aniqlaydi (isLoginCommand uslubi): birinchi so'z aynan
+ * `/singan` yoki `/singan@BotName`. `/singanfoo` kabi yopishgan matnga tegmaydi.
+ */
+function isSinganCommand(text: string): boolean {
+  const first = text.trim().split(/\s+/)[0];
+  return first === "/singan" || first.startsWith("/singan@");
+}
+
 function isLoginCommand(text: string): boolean {
   const parts = text.trim().split(/\s+/);
   const first = parts[0];
@@ -195,9 +237,27 @@ export async function handleUpdate(
       return;
     }
 
-    // 2) Foto (TG-B2) → PENDING zaprosga biriktirish, DONE qilish, menejerni xabardor.
+    // 2a) §5.5b: rasm + «singan»/«бой» izohi → AI-shakl oqimi. Izohsiz (yoki
+    //     boshqa izohli) rasm 2b'dagi ESKI PhotoRequest oqimida qoladi.
+    if (
+      Array.isArray(message.photo) &&
+      message.photo.length > 0 &&
+      typeof message.caption === "string" &&
+      isBrokenStoneCaption(message.caption)
+    ) {
+      await handleBrokenStone(message, deps);
+      return;
+    }
+
+    // 2b) Foto (TG-B2) → PENDING zaprosga biriktirish, DONE qilish, menejerni xabardor.
     if (Array.isArray(message.photo) && message.photo.length > 0) {
       await handlePhoto(message, deps);
+      return;
+    }
+
+    // 2c) §5.5b: `/singan` matn buyrug'i (rasmsiz) → yo'riqnoma.
+    if (typeof message.text === "string" && isSinganCommand(message.text)) {
+      await deps.sendMessage(chatId, MSG_SINGAN_INSTRUCTION);
       return;
     }
 
@@ -253,6 +313,67 @@ async function handleLogin(chatId: number, deps: WebhookDeps): Promise<void> {
   }
   const url = `${deps.appBaseUrl}/login/tg?token=${token}`;
   await deps.sendMessage(chatId, loginLinkMessage(url));
+}
+
+/**
+ * §5.5b — singan tosh oqimi: rasm + «singan» izohi. Rasm yuklab olinadi, AI
+ * shaklni polygon sifatida aniqlaydi, natija (vertices + file_id) stateless
+ * draft qilib URL'ga kodlanadi va skladchiga /singan havolasi yuboriladi.
+ * O'lchovlarni odam saytda kiritadi (TZ §5.5 — AI faqat SHAKL chizadi).
+ *
+ * Fail-closed: yuklab olish/AI xatosi → halol o'zbekcha xabar, /razbit qo'lda
+ * yo'li ochiq qoladi. handleUpdate try/catch ichida — throw bo'lsa ham 200.
+ */
+async function handleBrokenStone(
+  message: NonNullable<TgUpdate["message"]>,
+  deps: WebhookDeps,
+): Promise<void> {
+  const chatId = message.chat.id;
+
+  // (1) Yuboruvchi bog'langan va faol bo'lishi shart (foto oqimidagi guard).
+  const user = await deps.db.user.findFirst({
+    where: { telegramId: String(chatId), isActive: true },
+    select: { id: true, role: true },
+  });
+  if (!user) {
+    await deps.sendMessage(chatId, MSG_PHOTO_NOT_REGISTERED);
+    return;
+  }
+
+  // (2) APP_BASE_URL sozlanmagan bo'lsa — AI'ga pul sarflamasdan darhol
+  // to'xtaymiz (buzuq havola yuborilmasin, MSG_LOGIN_UNAVAILABLE uslubi).
+  if (!deps.appBaseUrl) {
+    console.warn(
+      "[telegram-webhook] singan: appBaseUrl bo'sh — env sozlanmagan (APP_BASE_URL).",
+    );
+    await deps.sendMessage(chatId, MSG_SINGAN_UNAVAILABLE);
+    return;
+  }
+
+  // (3) Eng katta o'lcham — massivning oxirgi elementi (Telegram o'sish tartibi).
+  const photos = message.photo!;
+  const largest = photos[photos.length - 1];
+
+  const downloaded = await deps.downloadPhotoBase64(largest.file_id);
+  if (!downloaded) {
+    await deps.sendMessage(chatId, MSG_SINGAN_DOWNLOAD_FAILED);
+    return;
+  }
+
+  // (4) AI shakl-aniqlash (fail-closed: null → halol xabar, qo'lda yo'l qoladi).
+  const shape = await deps.analyzeShape(downloaded.base64, downloaded.mediaType);
+  if (!shape) {
+    await deps.sendMessage(chatId, MSG_SINGAN_AI_FAILED);
+    return;
+  }
+
+  // (5) Stateless draft: polygon + file_id → base64url → /singan?d=… havolasi.
+  const draft = encodeShapeDraft({
+    vertices: shape.vertices,
+    fileId: largest.file_id,
+  });
+  const url = `${deps.appBaseUrl}/singan?d=${draft}`;
+  await deps.sendMessage(chatId, singanLinkMessage(shape.sideCount, url));
 }
 
 async function handleContact(

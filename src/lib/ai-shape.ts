@@ -141,9 +141,27 @@ export async function analyzeBrokenStoneShape(
       return null;
     }
 
+    // Jonli sinovda model polygon'ni ba'zan birinchi uchni TAKRORLAB «yopadi»
+    // (5 tomon → 6 uch). Oxirgi uch birinchisiga juda yaqin bo'lsa (ikkala o'q
+    // bo'yicha ~0.02 epsilon ichida) — tashlab yuboramiz, aks holda chertyojda
+    // ortiqcha «tomon» paydo bo'ladi. Модель иногда замыкает полигон, повторяя
+    // первую вершину — убираем дубликат.
+    const EPS = 0.02;
+    const vertices = [...parsed.vertices];
+    const first = vertices[0];
+    const last = vertices[vertices.length - 1];
+    if (Math.abs(last.x - first.x) <= EPS && Math.abs(last.y - first.y) <= EPS) {
+      vertices.pop();
+    }
+    // Dedup'dan keyin ham haqiqiy polygon qolishi shart (kamida 3 uch).
+    if (vertices.length < 3) {
+      console.warn("[ai-shape] dedup'dan keyin polygon juda kichik — null qaytarildi.");
+      return null;
+    }
+
     // sideCount'ni uchlar sonidan hosil qilamiz (AI qaytargan raqamga ishonmasdan) —
     // determinik va polygon bilan izchil.
-    return { sideCount: sideCount(parsed.vertices), vertices: parsed.vertices };
+    return { sideCount: sideCount(vertices), vertices };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[ai-shape] API/parse xatosi — null qaytarildi: ${msg}`);
