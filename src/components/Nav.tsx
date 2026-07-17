@@ -1,104 +1,77 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// Верхняя навигация (десктоп). Мобиль использует BottomTabBar — здесь
+// `hidden md:block`.
+//
+// ⚠️ R2 — навигация КОСМЕТИЧНА: скрывает ссылки, недоступные текущей роли.
+// Реальная защита — гейты страниц + server-action'ов (сайт «kodsiz» открыт).
+//
+// Флик ссылок исправлен: раньше роль читалась cookie в useEffect (первый рендер
+// шёл с DEFAULT_ROLE, ссылки мигали). Теперь capabilities приходят пропом с
+// СЕРВЕРА (layout → getCapabilities), поэтому первый же рендер уже правильный —
+// ни рассинхрона гидратации, ни мигания. usePathname оставляет "use client".
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
-import { capabilitiesFor, type Role } from "@/lib/permissions";
-import { canAccessNav } from "@/lib/nav-access";
+import { visibleNavItems, type NavItem } from "@/components/nav-items";
+import type { Capabilities } from "@/lib/permissions";
 
-// ⚠️ R2 — bu FAQAT kosmetik: joriy rol ishlatolmaydigan havolalar yashiriladi.
-// Haqiqiy majburlash — sahifa + server-action gate'lari (sayt «kodsiz» ochiq).
-// Cookie'ni klientda o'qiymiz (DemoRoleSwitcher bilan bir xil — server parent
-// cookie'ni uzatmaydi). Literal takror: server-only session.ts'ni klientga
-// import qilmaslik uchun.
-const DEMO_ROLE_COOKIE = "onyx_demo_role";
-const ROLES = ["OWNER", "MANAGER", "WAREHOUSE", "PARTNER"] as const;
-const DEFAULT_ROLE: Role = "MANAGER";
-
-function readCookieRole(): Role {
-  if (typeof document === "undefined") return DEFAULT_ROLE;
-  const match = document.cookie.match(
-    new RegExp(`(?:^|;\\s*)${DEMO_ROLE_COOKIE}=([^;]+)`),
-  );
-  const value = match ? decodeURIComponent(match[1]) : "";
-  return (ROLES as readonly string[]).includes(value)
-    ? (value as Role)
-    : DEFAULT_ROLE;
-}
-
-type NavLink = {
-  href: string;
-  label: string;
-  emoji?: string;
-  /** Внешняя (статическая) страница — рендерим обычным <a>, не next/link. */
-  external?: boolean;
-};
-
-const LINKS: NavLink[] = [
-  { href: "/priemka", label: "Приёмка", emoji: "📦" },
-  { href: "/poisk", label: "Поиск", emoji: "🔍" },
-  { href: "/bron", label: "Бронь", emoji: "🔖" },
-  { href: "/prodazha", label: "Продажа", emoji: "💰" },
-  { href: "/razbit", label: "Разбить", emoji: "🪓" },
-  { href: "/fotozapros", label: "Фотозапросы", emoji: "📷" },
-  { href: "/karta", label: "Карта", emoji: "🗺️", external: true },
-];
-
-export default function Nav() {
+export default function Nav({ caps }: { caps: Capabilities }) {
   const pathname = usePathname();
+  const links = visibleNavItems(caps);
 
-  // Rolni klientda effektda o'qiymiz (SSR/hidratsiya farqidan qochib): birinchi
-  // render server bilan bir xil DEFAULT_ROLE bilan chiqadi, keyin filtrlanadi.
-  const [role, setRole] = useState<Role>(DEFAULT_ROLE);
-  useEffect(() => {
-    setRole(readCookieRole());
-  }, []);
-
-  const caps = capabilitiesFor(role, { canSeePurchasePrice: false });
-  const visibleLinks = LINKS.filter((link) => canAccessNav(link.href, caps));
-
-  const isActive = (href: string) =>
-    href !== "/" && pathname?.startsWith(href);
+  const isActive = (href: string) => href !== "/" && pathname?.startsWith(href);
 
   const linkClass = (active: boolean) =>
     [
-      "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition",
+      "inline-flex min-h-11 items-center gap-1.5 rounded-field px-3 text-sm transition",
       active
-        ? "bg-gray-100 font-semibold text-gray-900"
-        : "text-gray-500 hover:text-gray-900 hover:bg-gray-50",
+        ? "bg-gold/12 font-semibold text-gold-deep"
+        : "text-ink/70 hover:bg-ink/5 hover:text-ink",
     ].join(" ");
 
+  const inner = (item: NavItem, active: boolean) => (
+    <>
+      <item.Icon width={18} height={18} className={active ? "text-gold-deep" : ""} />
+      {item.label}
+    </>
+  );
+
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5">
+    <header className="sticky top-0 z-50 hidden border-b border-ink/10 bg-paper/85 backdrop-blur md:block">
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5">
         <Link
           href="/"
-          className="shrink-0 whitespace-nowrap text-lg font-bold tracking-wide text-gray-900"
+          className="shrink-0 whitespace-nowrap font-serif text-lg font-bold tracking-wide text-ink"
         >
-          Onyx
-          <span className="ml-1 text-sm font-normal text-gray-400">· склад</span>
+          On<span className="text-gold">y</span>x
+          <span className="ml-1 font-sans text-sm font-normal text-ink/60">
+            · склад
+          </span>
         </Link>
 
-        <nav className="flex-1 overflow-x-auto">
+        <nav aria-label="Основная навигация" className="flex-1 overflow-x-auto">
           <ul className="flex items-center gap-1 whitespace-nowrap">
-            {visibleLinks.map((link) => {
-              const active = !!isActive(link.href);
+            {links.map((item) => {
+              const active = !!isActive(item.href);
               return (
-                <li key={link.href}>
-                  {link.external ? (
-                    <a href={link.href} className={linkClass(active)}>
-                      {link.emoji && (
-                        <span aria-hidden="true">{link.emoji}</span>
-                      )}
-                      {link.label}
+                <li key={item.href}>
+                  {item.external ? (
+                    <a
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={linkClass(active)}
+                    >
+                      {inner(item, active)}
                     </a>
                   ) : (
-                    <Link href={link.href} className={linkClass(active)}>
-                      {link.emoji && (
-                        <span aria-hidden="true">{link.emoji}</span>
-                      )}
-                      {link.label}
+                    <Link
+                      href={item.href}
+                      aria-current={active ? "page" : undefined}
+                      className={linkClass(active)}
+                    >
+                      {inner(item, active)}
                     </Link>
                   )}
                 </li>
@@ -107,7 +80,7 @@ export default function Nav() {
           </ul>
         </nav>
 
-        {/* R1: DEMO rol almashtirgich (vaqtinchalik, R6'da olib tashlanadi). */}
+        {/* R1: DEMO-переключатель роли (временно, убирается в R6). */}
         <DemoRoleSwitcher />
       </div>
     </header>

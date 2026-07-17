@@ -1,103 +1,75 @@
+// Главная — роль-фильтрованные разделы (аудит: MANAGER видел «Приёмку» и
+// упирался в «Нет доступа»). Тот же капабилити-фильтр, что и у навигации.
+// Тяжёлые запросы НЕ грузим (дашборд-счётчики отложены в C2 как рискованные).
+
 import Link from "next/link";
+import { getCapabilities } from "@/lib/session";
+import { visibleNavItems, type NavItem } from "@/components/nav-items";
+import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
 
-type Section = {
-  href: string;
-  title: string;
-  description: string;
-  emoji: string;
-  /** Внешняя (статическая) страница — рендерим обычным <a>, не next/link. */
-  external?: boolean;
-};
+export const dynamic = "force-dynamic";
 
-const SECTIONS: Section[] = [
-  {
-    href: "/priemka",
-    title: "Приёмка",
-    description: "Завести партию за минуту",
-    emoji: "📦",
-  },
-  {
-    href: "/poisk",
-    title: "Поиск",
-    description: "Найти камень по названию и размеру",
-    emoji: "🔍",
-  },
-  {
-    href: "/bron",
-    title: "Бронь",
-    description: "Держать камень под клиента",
-    emoji: "🔖",
-  },
-  {
-    href: "/prodazha",
-    title: "Продажа",
-    description: "Оформить продажу и списание",
-    emoji: "💰",
-  },
-  {
-    href: "/razbit",
-    title: "Разбить",
-    description: "Целый → бой / части",
-    emoji: "🪓",
-  },
-  {
-    href: "/fotozapros",
-    title: "Фотозапросы",
-    description: "Запросы фото складчикам",
-    emoji: "📷",
-  },
-  {
-    href: "/karta",
-    title: "Карта",
-    description: "Готовность проекта",
-    emoji: "🗺️",
-    external: true,
-  },
-];
+export default async function Home() {
+  const caps = await getCapabilities();
+  const sections = visibleNavItems(caps);
 
-export default function Home() {
+  const cardClass =
+    "group flex items-start gap-3 rounded-card border border-ink/10 bg-paper-2/50 p-5 " +
+    "transition hover:border-gold hover:bg-paper-2 " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
+
+  const inner = (section: NavItem) => (
+    <>
+      <span
+        aria-hidden="true"
+        className="flex size-11 shrink-0 items-center justify-center rounded-field bg-gold/12 text-gold-deep transition group-hover:bg-gold group-hover:text-ink"
+      >
+        <section.Icon width={22} height={22} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-lg font-semibold text-ink">
+          {section.label}
+        </span>
+        <span className="mt-1 block text-sm text-ink/60">
+          {section.description}
+        </span>
+      </span>
+    </>
+  );
+
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-          Onyx — складская система
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · склад
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink sm:text-4xl">
+          Складская система
         </h1>
-        <p className="mt-2 text-lg text-gray-500">
+        <p className="mt-2 text-lg text-ink/60">
           Учёт натурального камня: партии, плиты, остатки, брони.
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {SECTIONS.map((section) => {
-          const cardClass =
-            "group block rounded-xl border border-gray-200 p-5 transition hover:border-gray-400 hover:shadow-sm";
-          const inner = (
-            <>
-              <div className="flex items-center gap-2">
-                <span aria-hidden="true" className="text-xl">
-                  {section.emoji}
-                </span>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {section.title}
-                </h2>
-              </div>
-              <p className="mt-1.5 text-sm text-gray-500">
-                {section.description}
-              </p>
-            </>
-          );
-
-          return section.external ? (
+        {sections.map((section) =>
+          section.external ? (
             <a key={section.href} href={section.href} className={cardClass}>
-              {inner}
+              {inner(section)}
             </a>
           ) : (
             <Link key={section.href} href={section.href} className={cardClass}>
-              {inner}
+              {inner(section)}
             </Link>
-          );
-        })}
+          ),
+        )}
       </div>
+
+      {/* DEMO-переключатель роли доступен и на мобиле (в топ-навигации он скрыт
+          под md). Приглушён — временный демо-контроль (убирается в R6). */}
+      <footer className="mt-12 flex justify-center md:hidden">
+        <DemoRoleSwitcher />
+      </footer>
     </main>
   );
 }

@@ -1,1 +1,53 @@
 @import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Onyx — фирменные токены. Бренд «Графит + золото» (см. public/karta.html).
+   Only ADD tokens: Tailwind v4 merges @theme with its defaults, so every
+   existing utility across the app (gray, green, rounded and the rest) keeps
+   working.
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Brand surfaces & ink */
+  --color-paper: #f5f2ea; /* бумага/фон */
+  --color-paper-2: #efe9dc; /* чуть глубже — приподнятые поверхности */
+  --color-ink: #16181d; /* графит — текст + основные кнопки */
+  --color-ink-2: #23262e; /* графит-2 — hover основной кнопки */
+
+  /* Brand accent */
+  --color-gold: #c9a55c; /* золото — марка, активная навигация, акценты */
+  --color-gold-deep: #8a6414; /* золото-глубокое — pressed/hover + мелкий ТЕКСТ
+     активной навигации. Затемнён с #a67c2e (3.4:1, провал) до 4.8:1 на бумаге
+     — проходит WCAG AA 4.5:1 как текст. */
+
+  /* Semantic status — подобраны читаемыми как ТЕКСТ на бумаге (≥4.5:1).
+     Аудит: «требует проверки» сейчас красный и путается с ошибкой; здесь
+     доступен отдельный warning=AMBER, чтобы C2 переключил его. */
+  --color-success: #1f7a4d; /* зелёный «готово» */
+  --color-warning: #9a6b00; /* ЯНТАРНЫЙ — «требует проверки» (для C2) */
+  --color-danger: #b23b2e; /* красный — только ошибки */
+
+  /* Radii — ровно два: поля/кнопки и карточки */
+  --radius-field: 0.625rem; /* 10px — inputs, buttons, badges */
+  --radius-card: 1rem; /* 16px — cards, panels */
+
+  /* Type roles. Fonts self-hosted через next/font недоступны в этом
+     оффлайн-сэндбоксе (нет сети), поэтому — системный стек с теми же ролями:
+     sans = роль Montserrat (UI), serif = роль Lora (заголовки страниц).
+     На Vercel (есть сеть) это меняется на next/font без правок разметки. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+
+  /* Небольшая типо-шкала сверх дефолтной: заголовок страницы (Lora-роль). */
+  --text-display: 2rem;
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.01em;
+}
+
+/* Базовый вид: бумажный фон + графитовый текст на весь документ. */
+@layer base {
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+}
