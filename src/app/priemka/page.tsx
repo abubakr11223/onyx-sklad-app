@@ -4,6 +4,8 @@
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
+import Alert from "@/components/ui/Alert";
+import Badge from "@/components/ui/Badge";
 import IntakeForm from "./IntakeForm";
 
 export const dynamic = "force-dynamic";
@@ -49,22 +51,27 @@ export default async function PriemkaPage({
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
-      <h1 className="mb-1 text-3xl font-bold tracking-tight">Приёмка партии</h1>
-      <p className="mb-5 text-base text-gray-500">
-        Партия целиком — без поимённого учёта плит.
-      </p>
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · склад
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          Приёмка партии
+        </h1>
+        <p className="mt-2 text-base text-ink/60">
+          Партия целиком — без поимённого учёта плит.
+        </p>
+      </header>
 
       {ok && stone && (
-        <div
-          role="status"
-          className="mb-5 rounded-2xl border border-green-300 bg-green-50 p-4 text-base text-green-900"
-        >
-          <p className="font-semibold">Партия принята ✓</p>
-          <p>
-            {stone}
-            {qty && ` — ${qty}`}
-          </p>
-        </div>
+        <Alert variant="success" title="Партия принята" className="mb-6">
+          <span className="font-medium text-ink">{stone}</span>
+          {qty && (
+            <Badge variant="neutral" className="ml-2 align-middle">
+              {qty}
+            </Badge>
+          )}
+        </Alert>
       )}
 
       <IntakeForm stoneTypes={stoneTypes} defaultDate={today} />

@@ -2,9 +2,15 @@
 
 // Форма приёмки партии (TZ §5.1, §6.3): партия целиком, без поимённых плит
 // (ADR-004). Крупные touch-поля — складчик работает с телефона.
+// C-pilot: разметка переведена на бренд-дизайн-систему (Button/Field/Card/Alert).
+// Поведение, имена полей и контракт валидации НЕ менялись.
 
 import { useActionState, useRef, useState } from "react";
 import { submitIntake, type IntakeFormState } from "./actions";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Field, { inputClass } from "@/components/ui/Field";
+import Alert from "@/components/ui/Alert";
 
 export interface StoneTypeOption {
   id: string;
@@ -14,14 +20,15 @@ export interface StoneTypeOption {
 
 const initialState: IntakeFormState = { errors: {} };
 
-const inputCls =
-  "h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-lg " +
-  "focus:border-gray-900 focus:outline-none";
-const labelCls = "mb-1 block text-base font-medium text-gray-700";
+/** Звёздочка «обязательное поле». */
+function Req() {
+  return <span className="text-danger">*</span>;
+}
 
-function FieldError({ msg }: { msg?: string }) {
+/** Кросс-полевая ошибка (не привязана к одному input — quantity/locations). */
+function CrossError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="mt-1 text-sm font-medium text-red-600">{msg}</p>;
+  return <p className="text-sm font-medium text-danger">{msg}</p>;
 }
 
 export default function IntakeForm({
@@ -44,57 +51,59 @@ export default function IntakeForm({
     setRowIds((ids) => (ids.length > 1 ? ids.filter((x) => x !== id) : ids));
   };
 
-  const toggleCls = (active: boolean) =>
-    `h-12 flex-1 rounded-xl text-base font-semibold transition-colors ${
-      active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"
-    }`;
-
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      <FieldError msg={e.form} />
+      {e.form && <Alert variant="danger">{e.form}</Alert>}
 
       {/* ── Вид камня ── */}
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-3 text-lg font-semibold">Вид камня</h2>
-        <div className="mb-3 flex gap-2">
-          <button type="button" className={toggleCls(!isNewType)} onClick={() => setIsNewType(false)}>
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Вид камня</h2>
+        <div className="mb-4 flex gap-2">
+          <Button
+            variant={isNewType ? "secondary" : "primary"}
+            onClick={() => setIsNewType(false)}
+            className="flex-1"
+          >
             Из каталога
-          </button>
-          <button type="button" className={toggleCls(isNewType)} onClick={() => setIsNewType(true)}>
+          </Button>
+          <Button
+            variant={isNewType ? "primary" : "secondary"}
+            onClick={() => setIsNewType(true)}
+            className="flex-1"
+          >
             Новый вид
-          </button>
+          </Button>
         </div>
 
         {isNewType ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <input type="hidden" name="newStoneType" value="1" />
-            <div>
-              <label htmlFor="newName" className={labelCls}>
-                Название <span className="text-red-600">*</span>
-              </label>
-              <input id="newName" name="newName" className={inputCls} placeholder="Например: Травертин Noce" />
-              <FieldError msg={e.newName} />
-            </div>
-            <div>
-              <label htmlFor="newRockType" className={labelCls}>
-                Порода <span className="text-red-600">*</span>
-              </label>
-              <input id="newRockType" name="newRockType" className={inputCls} placeholder="мрамор, гранит, оникс…" />
-              <FieldError msg={e.newRockType} />
-            </div>
-            <div>
-              <label htmlFor="newColor" className={labelCls}>
-                Цвет
-              </label>
-              <input id="newColor" name="newColor" className={inputCls} placeholder="бежевый" />
-            </div>
+            <Field
+              id="newName"
+              name="newName"
+              label={<>Название <Req /></>}
+              placeholder="Например: Травертин Noce"
+              error={e.newName}
+            />
+            <Field
+              id="newRockType"
+              name="newRockType"
+              label={<>Порода <Req /></>}
+              placeholder="мрамор, гранит, оникс…"
+              error={e.newRockType}
+            />
+            <Field id="newColor" name="newColor" label="Цвет" placeholder="бежевый" />
           </div>
         ) : (
-          <div>
-            <label htmlFor="stoneTypeId" className={labelCls}>
-              Вид <span className="text-red-600">*</span>
-            </label>
-            <select id="stoneTypeId" name="stoneTypeId" className={inputCls} defaultValue="">
+          <Field id="stoneTypeId" label={<>Вид <Req /></>} error={e.stoneTypeId}>
+            <select
+              id="stoneTypeId"
+              name="stoneTypeId"
+              defaultValue=""
+              className={inputClass}
+              aria-invalid={e.stoneTypeId ? true : undefined}
+              aria-describedby={e.stoneTypeId ? "stoneTypeId-error" : undefined}
+            >
               <option value="" disabled>
                 — выберите вид —
               </option>
@@ -104,138 +113,142 @@ export default function IntakeForm({
                 </option>
               ))}
             </select>
-            <FieldError msg={e.stoneTypeId} />
-          </div>
+          </Field>
         )}
-      </section>
+      </Card>
 
       {/* ── Количество ── */}
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-1 text-lg font-semibold">Количество</h2>
-        <p className="mb-3 text-sm text-gray-500">Плиты и/или площадь — минимум одно.</p>
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold text-ink">Количество</h2>
+        <p className="mb-4 text-sm text-ink/60">Плиты и/или площадь — минимум одно.</p>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="slabsTotal" className={labelCls}>
-              Плит
-            </label>
-            <input
-              id="slabsTotal"
-              name="slabsTotal"
-              inputMode="numeric"
-              className={inputCls}
-              placeholder="40"
-            />
-            <FieldError msg={e.slabsTotal} />
-          </div>
-          <div>
-            <label htmlFor="areaTotalM2" className={labelCls}>
-              Площадь, м²
-            </label>
-            <input
-              id="areaTotalM2"
-              name="areaTotalM2"
-              inputMode="decimal"
-              className={inputCls}
-              placeholder="220 или 12,5"
-            />
-            <FieldError msg={e.areaTotalM2} />
-          </div>
+          <Field
+            id="slabsTotal"
+            name="slabsTotal"
+            inputMode="numeric"
+            label="Плит"
+            placeholder="40"
+            error={e.slabsTotal}
+          />
+          <Field
+            id="areaTotalM2"
+            name="areaTotalM2"
+            inputMode="decimal"
+            label="Площадь, м²"
+            placeholder="220 или 12,5"
+            error={e.areaTotalM2}
+          />
         </div>
-        <FieldError msg={e.quantity} />
-      </section>
+        <div className="mt-1.5">
+          <CrossError msg={e.quantity} />
+        </div>
+      </Card>
 
       {/* ── Локации ── */}
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-1 text-lg font-semibold">Локации</h2>
-        <p className="mb-3 text-sm text-gray-500">
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold text-ink">Локации</h2>
+        <p className="mb-3 text-sm text-ink/60">
           Куда разгрузили. Одна партия может лежать в нескольких местах — это норма.
         </p>
-        <FieldError msg={e.locations} />
+        <div className="mb-3">
+          <CrossError msg={e.locations} />
+        </div>
         <div className="flex flex-col gap-4">
           {rowIds.map((id, idx) => (
-            <div key={id} className="rounded-xl border border-gray-200 bg-white p-3">
+            <div key={id} className="rounded-card border border-ink/10 bg-paper p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-base font-semibold text-gray-700">Локация {idx + 1}</span>
+                <span className="text-base font-semibold text-ink">Локация {idx + 1}</span>
                 {rowIds.length > 1 && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removeRow(id)}
-                    className="h-10 rounded-lg px-3 text-base font-medium text-red-600"
+                    className="text-danger hover:bg-danger/10"
                   >
                     Убрать
-                  </button>
+                  </Button>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>
-                    Блок <span className="text-red-600">*</span>
-                  </label>
-                  <input name="locBlock" className={inputCls} placeholder="А" />
-                  <FieldError msg={e[`loc-${idx}-block`]} />
-                </div>
-                <div>
-                  <label className={labelCls}>
-                    Ориентир <span className="text-red-600">*</span>
-                  </label>
-                  <input name="locLandmark" className={inputCls} placeholder="2 или 1–2" />
-                  <FieldError msg={e[`loc-${idx}-landmark`]} />
-                </div>
-                <div>
-                  <label className={labelCls}>Плит здесь</label>
-                  <input name="locSlabsHere" inputMode="numeric" className={inputCls} placeholder="25" />
-                  <FieldError msg={e[`loc-${idx}-slabsHere`]} />
-                </div>
-                <div>
-                  <label className={labelCls}>м² здесь</label>
-                  <input name="locAreaHereM2" inputMode="decimal" className={inputCls} placeholder="137,5" />
-                  <FieldError msg={e[`loc-${idx}-areaHereM2`]} />
-                </div>
+                <Field
+                  id={`locBlock-${idx}`}
+                  name="locBlock"
+                  label={<>Блок <Req /></>}
+                  placeholder="А"
+                  error={e[`loc-${idx}-block`]}
+                />
+                <Field
+                  id={`locLandmark-${idx}`}
+                  name="locLandmark"
+                  label={<>Ориентир <Req /></>}
+                  placeholder="2 или 1–2"
+                  error={e[`loc-${idx}-landmark`]}
+                />
+                <Field
+                  id={`locSlabsHere-${idx}`}
+                  name="locSlabsHere"
+                  inputMode="numeric"
+                  label="Плит здесь"
+                  placeholder="25"
+                  error={e[`loc-${idx}-slabsHere`]}
+                />
+                <Field
+                  id={`locAreaHereM2-${idx}`}
+                  name="locAreaHereM2"
+                  inputMode="decimal"
+                  label="м² здесь"
+                  placeholder="137,5"
+                  error={e[`loc-${idx}-areaHereM2`]}
+                />
               </div>
             </div>
           ))}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={addRow}
-          className="mt-3 h-12 w-full rounded-xl border-2 border-dashed border-gray-300 text-base font-semibold text-gray-600"
+          className="mt-3 w-full border-dashed"
         >
           + Добавить локацию
-        </button>
-      </section>
+        </Button>
+      </Card>
 
       {/* ── Детали ── */}
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-3 text-lg font-semibold">Детали</h2>
-        <div className="flex flex-col gap-3">
-          <div>
-            <label htmlFor="arrivedAt" className={labelCls}>
-              Дата прихода
-            </label>
-            <input id="arrivedAt" name="arrivedAt" type="date" defaultValue={defaultDate} className={inputCls} />
-            <FieldError msg={e.arrivedAt} />
-          </div>
-          <div>
-            <label htmlFor="supplierNote" className={labelCls}>
-              Поставщик / документ
-            </label>
-            <input
-              id="supplierNote"
-              name="supplierNote"
-              className={inputCls}
-              placeholder="Инвойс TR-118, контейнер…"
-            />
-          </div>
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Детали</h2>
+        <div className="flex flex-col gap-4">
+          <Field
+            id="arrivedAt"
+            name="arrivedAt"
+            type="date"
+            defaultValue={defaultDate}
+            label="Дата прихода"
+            error={e.arrivedAt}
+          />
+          <Field
+            id="supplierNote"
+            name="supplierNote"
+            label="Поставщик / документ"
+            placeholder="Инвойс TR-118, контейнер…"
+          />
         </div>
-      </section>
+      </Card>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="h-16 rounded-2xl bg-gray-900 text-xl font-bold text-white disabled:opacity-50"
+      {/* Липкая нижняя панель отправки — большой палец достаёт CTA на мобиле;
+          на десктопе (md:) возвращается в обычный поток. Реальный submit
+          формы (без JS) сохраняется — устойчивость к слабой сети. */}
+      <div
+        className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
+                   md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
       >
-        {pending ? "Сохранение…" : "Принять партию"}
-      </button>
+        <Button
+          type="submit"
+          disabled={pending}
+          className="min-h-14 w-full text-lg font-bold"
+        >
+          {pending ? "Сохранение…" : "Принять партию"}
+        </Button>
+      </div>
     </form>
   );
 }
