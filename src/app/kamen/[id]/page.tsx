@@ -3,6 +3,11 @@
 // формулы по партиям (inventory.ts), входы — SQL-агрегат (batch-remainders.ts). Фото — по
 // Photo.stoneTypeId, рендер через прокси /api/photo/[id]. Запрос фото —
 // server action requestPhoto (тот же, что в поиске).
+//
+// BATCH-C: разметка переведена на бренд-дизайн-систему (Card/Alert/Badge/Button
+// + Icons) и добавлен лайтбокс фото (PhotoLightbox). Данные, server actions,
+// имена полей форм и ролевые гейты (canManageWarehouse/canSeePrices/
+// canRequestPhoto) НЕ менялись — правка чисто презентационная.
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -19,6 +24,12 @@ import {
 import { getCapabilities } from "@/lib/session";
 import { requestPhoto } from "@/app/poisk/actions";
 import { setNeedsCheck, updateLocation } from "@/app/kamen/actions";
+import Card from "@/components/ui/Card";
+import Alert from "@/components/ui/Alert";
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
+import { CameraIcon } from "@/components/ui/Icons";
+import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +49,13 @@ const PIECE_KIND_RU: Record<string, string> = {
   OFFCUT: "остаток",
 };
 
+// Стиль узкого инлайн-поля склада (SK-1) — бренд-токены, но фиксированная
+// ширина под горизонтальную форму (Field даёт w-full/столбец). min-h-11 —
+// зона касания 44px (складчик работает с телефона).
+const inlineInput =
+  "min-h-11 rounded-field border border-ink/20 bg-paper px-2 text-sm text-ink " +
+  "placeholder:text-ink/40 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/40";
+
 type ParamValue = string | string[] | undefined;
 
 function firstParam(v: ParamValue): string {
@@ -50,10 +68,11 @@ function toNum(d: { toString(): string } | null): number | null {
 }
 
 function NeedsCheckBadge() {
+  // TZ §5.3: «требует проверки» — ЯНТАРНЫЙ (warning), отделён от danger=ошибка.
   return (
-    <span className="ml-2 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+    <Badge variant="warning" className="ml-2 align-middle">
       требует проверки
-    </span>
+    </Badge>
   );
 }
 
@@ -82,12 +101,9 @@ function NeedsCheckToggle({
       {/* value = ПРОТИВОПОЛОЖНОЕ текущему → toggle */}
       <input type="hidden" name="value" value={needsCheck ? "0" : "1"} />
       <input type="hidden" name="next" value={backTo} />
-      <button
-        type="submit"
-        className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
-      >
+      <Button type="submit" variant="secondary" size="sm" className="align-middle">
         {needsCheck ? "Снять отметку (проверено)" : "Отметить: требует проверки"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -204,11 +220,19 @@ export default async function KamenPage({
   if (!st) {
     return (
       <main className="mx-auto max-w-3xl p-4 sm:p-8">
-        <h1 className="text-2xl font-bold tracking-tight">Камень не найден</h1>
-        <p className="mt-2 text-gray-600">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          Камень не найден
+        </h1>
+        <p className="mt-2 text-base text-ink/70">
           Возможно, он архивирован или ссылка устарела.
         </p>
-        <Link href="/poisk" className="mt-4 inline-block text-blue-700 hover:underline">
+        <Link
+          href="/poisk"
+          className="mt-4 inline-block text-sm font-medium text-gold-deep hover:underline"
+        >
           ← Поиск
         </Link>
       </main>
@@ -273,93 +297,90 @@ export default async function KamenPage({
   // Bitta `now` — barcha fotolarning «eskirgan»ligini bir xil nuqtaga nisbatan
   // baholaymiz (TZ §5.3).
   const now = new Date();
+  // Фото → сериализуемые пропсы для клиентского лайтбокса (id/caption/stale).
+  // «Свежесть» (TG-C, §5.3) считается на сервере — как и раньше.
+  const photoItems: LightboxPhoto[] = st.photos.map((p) => ({
+    id: p.id,
+    caption: `Снято ${dateFmt.format(p.takenAt)}`,
+    stale: isPhotoStale(p.takenAt, now, photoStaleMonths),
+  }));
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8">
-      <Link href="/poisk" className="text-sm text-blue-700 hover:underline">
+      <Link
+        href="/poisk"
+        className="text-sm font-medium text-gold-deep hover:underline"
+      >
         ← Поиск
       </Link>
 
       {/* 1. Заголовок */}
-      <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
-        {st.name}
-      </h1>
-      <p className="mt-1 text-sm text-gray-500">
-        {st.rockType}
-        {st.color && <> · {st.color}</>}
-      </p>
+      <header className="mt-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · камень
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          {st.name}
+        </h1>
+        <p className="mt-1 text-sm text-ink/60">
+          {st.rockType}
+          {st.color && <> · {st.color}</>}
+        </p>
+      </header>
 
       {photoOk && (
-        <p
-          role="status"
-          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
-        >
+        <Alert variant="success" className="mt-4">
           Запрос на фото отправлен складчикам.
-        </p>
+        </Alert>
       )}
       {photoErr && (
-        <p
-          role="alert"
-          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
-        >
+        <Alert variant="danger" className="mt-4">
           {photoErr}
-        </p>
+        </Alert>
       )}
 
       {/* SK-1: результат правки локации (§5.7). */}
       {locOk && (
-        <p
-          role="status"
-          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
-        >
+        <Alert variant="success" className="mt-4">
           Локация обновлена.
-        </p>
+        </Alert>
       )}
       {locErr && (
-        <p
-          role="alert"
-          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
-        >
+        <Alert variant="danger" className="mt-4">
           {locErr}
-        </p>
+        </Alert>
       )}
 
       {/* SK-2: результат ручной пометки «проверить» (пересорт). */}
       {checkOk && (
-        <p
-          role="status"
-          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
-        >
+        <Alert variant="success" className="mt-4">
           Отметка «проверить» обновлена.
-        </p>
+        </Alert>
       )}
       {checkErr && (
-        <p
-          role="alert"
-          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
-        >
+        <Alert variant="danger" className="mt-4">
           {checkErr}
-        </p>
+        </Alert>
       )}
 
       {/* 2. Наличие */}
-      <section className="mt-6 rounded-xl border border-gray-200 p-4">
-        <h2 className="text-lg font-bold">Наличие</h2>
-        <p className="mt-1 text-sm">
+      <Card className="mt-6">
+        <h2 className="text-lg font-semibold text-ink">Наличие</h2>
+        <p className="mt-1 text-sm text-ink/70">
           {totalParts.length > 0 ? (
             <>
-              <span className="font-medium text-green-700">Свободно:</span>{" "}
+              <span className="font-semibold text-success">Свободно:</span>{" "}
               {totalParts.join(" · ")}
               {(slabsUnknown && !slabsKnown) || (areaUnknown && !areaKnown) ? (
                 <NeedsCheckBadge />
               ) : null}
             </>
           ) : (
-            <span className="text-gray-500">Нет в наличии (по объёму партий)</span>
+            <span className="text-ink/50">Нет в наличии (по объёму партий)</span>
           )}
         </p>
         {slabsUnknown && !slabsKnown && (
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-ink/55">
             Количество плит неизвестно — партия учтена только в м².
           </p>
         )}
@@ -368,14 +389,14 @@ export default async function KamenPage({
             разобранная партия читается как «нет в наличии»). */}
         {batches.some((x) => x.availableSlabs.length > 0) && (
           <div className="mt-3">
-            <h3 className="text-sm font-medium text-gray-700">
+            <h3 className="text-sm font-semibold text-ink/70">
               Отдельные плиты
             </h3>
-            <ul className="mt-1 space-y-0.5 text-sm text-gray-700">
+            <ul className="mt-1 space-y-0.5 text-sm text-ink/70">
               {batches.flatMap(({ availableSlabs }) =>
                 availableSlabs.map((s) => (
                   <li key={s.id}>
-                    <span className="font-medium">{s.label}</span>
+                    <span className="font-semibold text-ink">{s.label}</span>
                     {s.lengthMm !== null && s.widthMm !== null && (
                       <> · {s.lengthMm}×{s.widthMm} мм</>
                     )}
@@ -407,11 +428,11 @@ export default async function KamenPage({
         {/* Бой и остатки в наличии — как в /poisk. */}
         {availablePieces.length > 0 && (
           <div className="mt-3">
-            <h3 className="text-sm font-medium text-gray-700">Бой и остатки</h3>
-            <ul className="mt-1 space-y-0.5 text-sm text-gray-700">
+            <h3 className="text-sm font-semibold text-ink/70">Бой и остатки</h3>
+            <ul className="mt-1 space-y-0.5 text-sm text-ink/70">
               {availablePieces.map((p) => (
                 <li key={p.id}>
-                  <span className="font-medium">
+                  <span className="font-semibold text-ink">
                     {PIECE_KIND_RU[p.kind] ?? p.kind}
                   </span>{" "}
                   · Габарит {p.boundingLengthMm}×{p.boundingWidthMm} мм
@@ -435,49 +456,54 @@ export default async function KamenPage({
             </ul>
           </div>
         )}
-      </section>
+      </Card>
 
       {/* 3. Цена (только basePrice — purchasePrice не показываем) */}
       {/* R2: цену видят только роли с canSeePrices (OWNER/MANAGER), не склад. */}
       {caps.canSeePrices && basePrice !== null && (
-        <section className="mt-4 rounded-xl border border-gray-200 p-4">
-          <h2 className="text-lg font-bold">Цена</h2>
-          <p className="mt-1 text-sm">{priceFmt.format(basePrice)} за м²</p>
-        </section>
+        <Card className="mt-4">
+          <h2 className="text-lg font-semibold text-ink">Цена</h2>
+          <p className="mt-1 text-sm text-ink/70">
+            {priceFmt.format(basePrice)} за м²
+          </p>
+        </Card>
       )}
 
       {/* 4. Свойства + описание */}
       {(propRows.length > 0 || st.description) && (
-        <section className="mt-4 rounded-xl border border-gray-200 p-4">
-          <h2 className="text-lg font-bold">Свойства</h2>
+        <Card className="mt-4">
+          <h2 className="text-lg font-semibold text-ink">Свойства</h2>
           {propRows.length > 0 && (
             <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
               {propRows.map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-2 text-sm">
-                  <dt className="text-gray-500">{k}</dt>
-                  <dd className="text-right font-medium text-gray-900">{v}</dd>
+                  <dt className="text-ink/55">{k}</dt>
+                  <dd className="text-right font-semibold text-ink">{v}</dd>
                 </div>
               ))}
             </dl>
           )}
           {st.description && (
-            <p className="mt-2 whitespace-pre-line text-sm text-gray-700">
+            <p className="mt-2 whitespace-pre-line text-sm text-ink/70">
               {st.description}
             </p>
           )}
-        </section>
+        </Card>
       )}
 
       {/* 5. Локации */}
-      <section className="mt-4 rounded-xl border border-gray-200 p-4">
-        <h2 className="text-lg font-bold">Локации</h2>
+      <Card className="mt-4">
+        <h2 className="text-lg font-semibold text-ink">Локации</h2>
         {st.batches.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">Партий нет.</p>
+          <p className="mt-2 text-sm text-ink/50">Партий нет.</p>
         ) : (
           <ul className="mt-2 space-y-3">
             {st.batches.map((b) => (
-              <li key={b.id} className="rounded-lg bg-gray-50 p-3 text-sm">
-                <div className="font-medium">
+              <li
+                key={b.id}
+                className="rounded-card border border-ink/10 bg-paper p-3 text-sm"
+              >
+                <div className="font-semibold text-ink">
                   Партия от {dateFmt.format(b.arrivedAt)}
                   {b.needsCheck && <NeedsCheckBadge />}
                   {/* SK-2: пометку «проверить» переключает только склад. */}
@@ -491,9 +517,9 @@ export default async function KamenPage({
                   )}
                 </div>
                 {b.locations.length === 0 ? (
-                  <p className="mt-1 text-gray-500">Локации не указаны.</p>
+                  <p className="mt-1 text-ink/50">Локации не указаны.</p>
                 ) : (
-                  <ul className="mt-1 space-y-2 text-gray-700">
+                  <ul className="mt-1 space-y-2 text-ink/70">
                     {b.locations.map((loc) => (
                       <li key={loc.id}>
                         {/* R2/SK-1: склад (canManageWarehouse) правит локацию
@@ -505,38 +531,35 @@ export default async function KamenPage({
                           >
                             <input type="hidden" name="locationId" value={loc.id} />
                             <input type="hidden" name="next" value={"/kamen/" + id} />
-                            <label className="text-gray-500">Блок</label>
+                            <label className="text-ink/55">Блок</label>
                             <input
                               name="block"
                               defaultValue={loc.block}
-                              className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-sm"
+                              className={inlineInput + " w-16"}
                             />
-                            <label className="text-gray-500">ориентир</label>
+                            <label className="text-ink/55">ориентир</label>
                             <input
                               name="landmark"
                               defaultValue={loc.landmark}
-                              className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-sm"
+                              className={inlineInput + " w-20"}
                             />
                             <input
                               name="note"
                               defaultValue={loc.note ?? ""}
                               placeholder="примечание"
-                              className="w-32 rounded border border-gray-300 px-1.5 py-0.5 text-sm"
+                              className={inlineInput + " w-32"}
                             />
                             {loc.slabsHere !== null && (
-                              <span className="text-gray-500">~{loc.slabsHere} плит</span>
+                              <span className="text-ink/55">~{loc.slabsHere} плит</span>
                             )}
                             {loc.areaHereM2 !== null && (
-                              <span className="text-gray-500">
+                              <span className="text-ink/55">
                                 ≈{m2Fmt.format(Number(loc.areaHereM2))} м²
                               </span>
                             )}
-                            <button
-                              type="submit"
-                              className="rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
-                            >
+                            <Button type="submit" variant="secondary" size="sm">
                               Сохранить
-                            </button>
+                            </Button>
                           </form>
                         ) : (
                           <>
@@ -546,7 +569,7 @@ export default async function KamenPage({
                               <> · ≈{m2Fmt.format(Number(loc.areaHereM2))} м²</>
                             )}
                             {loc.note && (
-                              <span className="text-gray-500"> ({loc.note})</span>
+                              <span className="text-ink/55"> ({loc.note})</span>
                             )}
                           </>
                         )}
@@ -558,72 +581,53 @@ export default async function KamenPage({
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
       {/* 6. Фото — вечное хранение + дата съёмки и «свежесть» (TZ §5.3) */}
-      <section className="mt-4 rounded-xl border border-gray-200 p-4">
-        <h2 className="text-lg font-bold">Фото</h2>
-        {st.photos.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">Фото пока нет.</p>
+      <Card className="mt-4">
+        <h2 className="text-lg font-semibold text-ink">Фото</h2>
+        {photoItems.length === 0 ? (
+          <p className="mt-2 text-sm text-ink/50">Фото пока нет.</p>
         ) : (
           <>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-ink/55">
               Фото уже есть — склад повторно не снимаем.
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {st.photos.map((p) => {
-                const stale = isPhotoStale(p.takenAt, now, photoStaleMonths);
-                return (
-                  <figure key={p.id} className="text-xs">
-                    <img
-                      src={"/api/photo/" + p.id}
-                      className="aspect-square w-full rounded border object-cover"
-                      loading="lazy"
-                      alt="фото камня"
-                    />
-                    <figcaption className="mt-1 text-gray-500">
-                      Снято {dateFmt.format(p.takenAt)}
-                    </figcaption>
-                    {stale && (
-                      <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
-                        ⚠ возможно, переснять
-                      </span>
-                    )}
-                  </figure>
-                );
-              })}
-            </div>
+            {/* Клиентский лайтбокс: клик по миниатюре → фото во весь экран.
+                Миниатюры и прокси /api/photo/[id] — без изменений. */}
+            <PhotoLightbox photos={photoItems} />
           </>
         )}
-      </section>
+      </Card>
 
       {/* 7. Запросить фото — по каждой локации, либо по партии целиком */}
       {/* R2: запрос фото — только роли с canRequestPhoto (OWNER/MANAGER). */}
       {caps.canRequestPhoto && st.batches.length > 0 && (
-        <section className="mt-4 rounded-xl border border-gray-200 p-4">
-          <h2 className="text-lg font-bold">Запросить фото</h2>
+        <Card className="mt-4">
+          <h2 className="text-lg font-semibold text-ink">Запросить фото</h2>
           <ul className="mt-2 space-y-2">
             {st.batches.map((b) => (
               <li key={b.id} className="text-sm">
-                <div className="text-gray-600">
+                <div className="text-ink/60">
                   Партия от {dateFmt.format(b.arrivedAt)}
                 </div>
                 {b.locations.length === 0 ? (
                   <form action={requestPhoto} className="mt-1">
                     <input type="hidden" name="batchId" value={b.id} />
                     <input type="hidden" name="next" value={"/kamen/" + id} />
-                    <button
-                      type="submit"
-                      className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
-                    >
-                      📷 Запросить фото
-                    </button>
+                    <Button type="submit" variant="secondary" size="sm">
+                      <CameraIcon width={16} height={16} />
+                      Запросить фото
+                    </Button>
                   </form>
                 ) : (
                   <ul className="mt-1 space-y-1">
                     {b.locations.map((loc) => (
                       <li key={loc.id}>
-                        <form action={requestPhoto} className="flex items-center gap-2">
+                        <form
+                          action={requestPhoto}
+                          className="flex flex-wrap items-center gap-2"
+                        >
                           <input type="hidden" name="batchId" value={b.id} />
                           <input
                             type="hidden"
@@ -631,15 +635,13 @@ export default async function KamenPage({
                             value={loc.id}
                           />
                           <input type="hidden" name="next" value={"/kamen/" + id} />
-                          <span className="text-gray-700">
+                          <span className="text-ink/70">
                             Блок {loc.block}, ориентир {loc.landmark}
                           </span>
-                          <button
-                            type="submit"
-                            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
-                          >
-                            📷 Запросить фото
-                          </button>
+                          <Button type="submit" variant="secondary" size="sm">
+                            <CameraIcon width={16} height={16} />
+                            Запросить фото
+                          </Button>
                         </form>
                       </li>
                     ))}
@@ -648,7 +650,7 @@ export default async function KamenPage({
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
     </main>
   );

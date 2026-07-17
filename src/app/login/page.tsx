@@ -1,7 +1,14 @@
 import { login } from "./actions";
+import { buttonClass } from "@/components/ui/Button";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Field from "@/components/ui/Field";
+import Alert from "@/components/ui/Alert";
 
 // Minimal parol-darvozasi sahifasi. `next` — muvaffaqiyatdan keyingi manzil.
 // `?error=1` bo'lsa — xato xabari ko'rsatiladi.
+// C-pilot: разметка переведена на бренд-дизайн-систему (Field/Card/Button/Alert).
+// Поведение, server-action (login), имена полей (name=) и редиректы НЕ менялись.
 export default async function LoginPage({
   searchParams,
 }: {
@@ -23,59 +30,65 @@ export default async function LoginPage({
     : null;
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-bold tracking-tight">Onyx</h1>
-      <p className="text-sm text-gray-500">Введите пароль для доступа</p>
+    <main className="flex min-h-screen flex-col items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <header className="mb-6 text-center">
+          <h1 className="font-serif text-display font-bold tracking-tight text-ink">
+            Onyx
+          </h1>
+          <p className="mt-2 text-base text-ink/70">Введите пароль для доступа</p>
+        </header>
 
-      <form
-        action={login}
-        className="flex w-full max-w-xs flex-col gap-3"
-      >
-        <input type="hidden" name="next" value={next} />
-        <input
-          type="password"
-          name="password"
-          autoFocus
-          required
-          placeholder="Пароль"
-          className="h-12 rounded-xl border border-gray-300 px-4 text-lg outline-none focus:border-gray-900"
-        />
-        {hasError && (
-          <p className="text-sm text-red-600">Неверный пароль. Попробуйте снова.</p>
-        )}
-        <button
-          type="submit"
-          className="flex h-12 items-center justify-center rounded-xl bg-gray-900 px-6 text-lg font-medium text-white hover:bg-gray-700"
-        >
-          Войти
-        </button>
-      </form>
+        <Card>
+          {hasError && (
+            <Alert variant="danger" className="mb-4">
+              Неверный пароль. Попробуйте снова.
+            </Alert>
+          )}
+          {magicError && (
+            <Alert variant="danger" className="mb-4">
+              Ссылка для входа недействительна или устарела. Запросите новую в
+              Telegram.
+            </Alert>
+          )}
 
-      {magicError && (
-        <p className="max-w-xs text-center text-sm text-red-600">
-          Ссылка для входа недействительна или устарела. Запросите новую в Telegram.
-        </p>
-      )}
+          <form action={login} className="flex flex-col gap-4">
+            <input type="hidden" name="next" value={next} />
 
-      {/* SK-4b: Telegram magic-link login (parolsiz, o'zi sifatida). */}
-      <div className="flex w-full max-w-xs flex-col items-center gap-2">
-        <div className="flex items-center gap-3 self-stretch text-xs text-gray-400">
-          <span className="h-px flex-1 bg-gray-200" />
-          или
-          <span className="h-px flex-1 bg-gray-200" />
-        </div>
-        {tgDeepLink ? (
-          <a
-            href={tgDeepLink}
-            className="flex h-12 w-full items-center justify-center rounded-xl border border-gray-300 px-6 text-lg font-medium text-gray-900 hover:bg-gray-50"
-          >
-            Войти через Telegram
-          </a>
-        ) : (
-          <p className="max-w-xs text-center text-sm text-gray-500">
-            Откройте бота и отправьте /login
-          </p>
-        )}
+            <Field
+              id="password"
+              name="password"
+              type="password"
+              label="Пароль"
+              placeholder="Пароль"
+              autoFocus
+              required
+              aria-invalid={hasError ? true : undefined}
+            />
+
+            <Button type="submit" className="w-full">
+              Войти
+            </Button>
+          </form>
+
+          {/* SK-4b: Telegram magic-link login (parolsiz, o'zi sifatida). */}
+          <div className="mt-5 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-3 self-stretch text-xs text-ink/50">
+              <span className="h-px flex-1 bg-ink/10" />
+              или
+              <span className="h-px flex-1 bg-ink/10" />
+            </div>
+            {tgDeepLink ? (
+              <a href={tgDeepLink} className={buttonClass("secondary", "md", "w-full")}>
+                Войти через Telegram
+              </a>
+            ) : (
+              <p className="text-center text-sm text-ink/70">
+                Откройте бота и отправьте /login
+              </p>
+            )}
+          </div>
+        </Card>
       </div>
     </main>
   );

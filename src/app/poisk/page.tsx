@@ -14,6 +14,12 @@ import {
   freeRemainderFromAggregate,
   getBatchRemainders,
 } from "@/lib/batch-remainders";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import Alert from "@/components/ui/Alert";
+import Button, { buttonClass } from "@/components/ui/Button";
+import { inputClass } from "@/components/ui/Field";
+import { SearchIcon } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
   title: "Поиск камня — Onyx",
@@ -63,14 +69,6 @@ function buildHref(base: {
   if (base.w !== null) sp.set("w", String(base.w));
   sp.set("after", base.after);
   return "/poisk?" + sp.toString();
-}
-
-function NeedsCheckBadge() {
-  return (
-    <span className="ml-2 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
-      требует проверки
-    </span>
-  );
 }
 
 export default async function PoiskPage({
@@ -282,86 +280,90 @@ export default async function PoiskPage({
   );
 
   return (
-    <main className="mx-auto max-w-3xl p-4 sm:p-8">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-        Поиск камня
-      </h1>
+    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · склад
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          Поиск камня
+        </h1>
+      </header>
 
-      <form method="get" className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
-        <label htmlFor="q" className="block text-sm font-medium text-gray-700">
-          Название / порода / цвет
-        </label>
-        <input
-          id="q"
-          name="q"
-          type="text"
-          defaultValue={q}
-          placeholder="травертин, мрамор, бежевый…"
-          className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base"
-        />
-        <fieldset className="mt-3">
-          <legend className="text-sm font-medium text-gray-700">
-            Нужный размер (мм)
-          </legend>
-          <div className="mt-1 flex items-center gap-2">
+      <Card>
+        <form method="get" className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="q" className="text-sm font-semibold text-ink">
+              Название / порода / цвет
+            </label>
             <input
-              name="l"
-              type="number"
-              min={1}
-              defaultValue={lenMm ?? ""}
-              placeholder="Длина"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base"
-            />
-            <span className="text-gray-500">×</span>
-            <input
-              name="w"
-              type="number"
-              min={1}
-              defaultValue={widMm ?? ""}
-              placeholder="Ширина"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base"
+              id="q"
+              name="q"
+              type="search"
+              inputMode="search"
+              defaultValue={q}
+              placeholder="травертин, мрамор, бежевый…"
+              className={inputClass}
             />
           </div>
-          <p className="mt-1 text-xs text-gray-500">
-            Подбор с запасом на рез {CUTTING_MARGIN_MM} мм; поворот заготовки
-            учитывается.
-          </p>
-        </fieldset>
-        <button
-          type="submit"
-          className="mt-3 w-full rounded-lg bg-gray-900 px-4 py-2 font-medium text-white sm:w-auto"
-        >
-          Найти
-        </button>
-      </form>
+
+          <fieldset>
+            <legend className="text-sm font-semibold text-ink">
+              Нужный размер (мм)
+            </legend>
+            <div className="mt-1.5 flex items-center gap-2">
+              <input
+                name="l"
+                type="text"
+                inputMode="numeric"
+                defaultValue={lenMm ?? ""}
+                placeholder="Длина"
+                className={inputClass}
+              />
+              <span className="text-ink/50">×</span>
+              <input
+                name="w"
+                type="text"
+                inputMode="numeric"
+                defaultValue={widMm ?? ""}
+                placeholder="Ширина"
+                className={inputClass}
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-ink/60">
+              Подбор с запасом на рез {CUTTING_MARGIN_MM} мм; поворот заготовки
+              учитывается.
+            </p>
+          </fieldset>
+
+          <Button type="submit" className="w-full sm:w-auto sm:self-start">
+            <SearchIcon className="h-5 w-5" />
+            Найти
+          </Button>
+        </form>
+      </Card>
 
       {photoOk && (
-        <p
-          role="status"
-          className="mt-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900"
-        >
+        <Alert variant="success" className="mt-4">
           Запрос на фото отправлен складчикам.
-        </p>
+        </Alert>
       )}
       {photoErr && (
-        <p
-          role="alert"
-          className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
-        >
+        <Alert variant="danger" className="mt-4">
           {photoErr}
-        </p>
+        </Alert>
       )}
 
       {hasDims && (
-        <section className="mt-6 rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
-          <h2 className="text-lg font-bold text-amber-900">
+        <section className="mt-6 rounded-card border border-warning/40 bg-warning/10 p-4">
+          <h2 className="text-lg font-bold text-ink">
             Бой и остатки — предложить первыми
           </h2>
-          <p className="text-sm text-amber-800">
+          <p className="text-sm text-ink/70">
             Под размер {lenMm}×{widMm} мм (с запасом на рез)
           </p>
           {fittingPieces.length === 0 ? (
-            <p className="mt-3 text-sm text-amber-900">
+            <p className="mt-3 text-sm text-ink/70">
               Подходящих остатков и боя нет — ниже целые плиты и партии.
             </p>
           ) : (
@@ -369,20 +371,25 @@ export default async function PoiskPage({
               {fittingPieces.map((p) => (
                 <li
                   key={p.id}
-                  className="rounded-lg border border-amber-200 bg-white p-3"
+                  className="rounded-card border border-ink/10 bg-paper p-3"
                 >
-                  <div className="font-medium">
-                    {p.stoneType.name} — {PIECE_KIND_RU[p.kind] ?? p.kind}
-                    {p.needsCheck && <NeedsCheckBadge />}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-ink">
+                    <span>{p.stoneType.name}</span>
+                    <Badge variant="neutral">
+                      {PIECE_KIND_RU[p.kind] ?? p.kind}
+                    </Badge>
+                    {p.needsCheck && (
+                      <Badge variant="warning">требует проверки</Badge>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-ink/70">
                     Габарит {p.boundingLengthMm}×{p.boundingWidthMm} мм
                     {p.thicknessMm !== null && <> · толщина {p.thicknessMm} мм</>}
                     {p.areaM2 !== null && (
                       <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
                     )}
                   </div>
-                  <div className="text-sm text-gray-800">
+                  <div className="text-sm text-ink">
                     Блок {p.block}, ориентир {p.landmark}
                   </div>
                 </li>
@@ -393,11 +400,11 @@ export default async function PoiskPage({
       )}
 
       <section className="mt-6">
-        <h2 className="text-lg font-bold">
+        <h2 className="text-lg font-bold text-ink">
           {hasDims ? "Целые плиты и партии" : "В наличии"}
         </h2>
         {visibleTypes.length === 0 ? (
-          <p className="mt-3 text-gray-500">Ничего не найдено.</p>
+          <p className="mt-3 text-ink/70">Ничего не найдено.</p>
         ) : (
           <ul className="mt-3 space-y-4">
             {visibleTypes.map((t) => {
@@ -413,28 +420,28 @@ export default async function PoiskPage({
               return (
                 <li
                   key={t.st.id}
-                  className="rounded-xl border border-gray-200 p-4"
+                  className="rounded-card border border-ink/10 bg-paper-2/60 p-4"
                 >
                   <div className="flex flex-wrap items-baseline gap-x-2">
-                    <h3 className="text-base font-bold">
+                    <h3 className="text-base font-bold text-ink">
                       <Link
                         href={"/kamen/" + t.st.id}
-                        className="hover:underline"
+                        className="hover:text-gold-deep hover:underline"
                       >
                         {t.st.name}
                       </Link>
                     </h3>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-ink/60">
                       {t.st.rockType}
                       {t.st.color && <> · {t.st.color}</>}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm">
+                  <p className="mt-2 text-sm text-ink/70">
                     {t.hasAvailability ? (
                       <>
-                        <span className="font-medium text-green-700">
-                          В наличии:
-                        </span>{" "}
+                        <Badge variant="success" className="align-middle">
+                          В наличии
+                        </Badge>{" "}
                         {totalParts.length > 0
                           ? totalParts.join(" · ")
                           : "данных по объёму нет"}
@@ -446,7 +453,9 @@ export default async function PoiskPage({
                         )}
                       </>
                     ) : (
-                      <span className="text-gray-500">Нет в наличии</span>
+                      <Badge variant="neutral" className="align-middle">
+                        Нет в наличии
+                      </Badge>
                     )}
                   </p>
                   {/* Партии/локации/плиты — на карточке камня (/kamen/[id]),
@@ -461,7 +470,7 @@ export default async function PoiskPage({
           <div className="mt-4">
             <Link
               href={buildHref({ q, l: lenMm, w: widMm, after: nextCursor })}
-              className="inline-block rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className={buttonClass("secondary", "sm")}
             >
               Показать ещё →
             </Link>
