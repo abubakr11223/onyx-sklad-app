@@ -4,9 +4,16 @@
 // вид камня → цель (плита / кусок / объём партии / вся партия) → клиент и
 // цена → подтверждение. Конфликт («уже продан», чужая бронь, не хватает
 // остатка) показывается КРУПНО (TZ §7.1).
+// BATCH-C: разметка переведена на бренд-дизайн-систему (Button/Field/Card/
+// Alert/Badge). Поведение, имена полей и контракт валидации НЕ менялись.
 
 import { useActionState, useState } from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Field from "@/components/ui/Field";
+import Alert from "@/components/ui/Alert";
+import Badge from "@/components/ui/Badge";
 
 export interface SlabOption {
   id: string;
@@ -55,36 +62,31 @@ interface Target {
 
 const initialState: SaleFormState = { errors: {}, conflict: null };
 
-const inputCls =
-  "h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-lg " +
-  "focus:border-gray-900 focus:outline-none";
-const labelCls = "mb-1 block text-base font-medium text-gray-700";
+// Крупная кликабельная карточка выбора (плита / кусок / вид камня) — не обычная
+// Button: левое выравнивание, две строки. Стиль ввода/касания — бренд-токены.
 const cardBtnCls =
-  "w-full rounded-xl border border-gray-200 bg-white p-3 text-left " +
-  "active:bg-gray-100 disabled:opacity-50";
+  "w-full rounded-card border border-ink/10 bg-paper p-3 text-left transition " +
+  "hover:border-gold active:bg-ink/5 disabled:opacity-50 disabled:pointer-events-none";
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="mt-1 text-sm font-medium text-red-600">{msg}</p>;
+  return <p className="mt-1 text-sm font-medium text-danger">{msg}</p>;
 }
 
+// «требует проверки» — предупреждение (ЯНТАРНЫЙ), а не ошибка (TZ §7.1, аудит).
 function NeedsCheckBadge() {
   return (
-    <span className="ml-2 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+    <Badge variant="warning" className="ml-2 align-middle">
       требует проверки
-    </span>
+    </Badge>
   );
 }
 
 function BackButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mb-3 h-10 rounded-lg px-2 text-base font-medium text-gray-600"
-    >
+    <Button variant="ghost" size="sm" onClick={onClick} className="mb-3 -ml-1">
       ← {label}
-    </button>
+    </Button>
   );
 }
 
@@ -108,10 +110,10 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
   // ── Шаг 1: вид камня ──
   if (!stone) {
     return (
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-3 text-lg font-semibold">1. Вид камня</h2>
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">1. Вид камня</h2>
         {stoneTypes.length === 0 ? (
-          <p className="text-gray-500">Продавать нечего — нет камня в наличии.</p>
+          <p className="text-ink/60">Продавать нечего — нет камня в наличии.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {stoneTypes.map((st) => {
@@ -125,31 +127,31 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
               return (
                 <li key={st.id}>
                   <button type="button" className={cardBtnCls} onClick={() => setStone(st)}>
-                    <span className="block text-base font-semibold">
+                    <span className="block text-base font-semibold text-ink">
                       {st.name}{" "}
-                      <span className="font-normal text-gray-500">({st.rockType})</span>
+                      <span className="font-normal text-ink/60">({st.rockType})</span>
                     </span>
-                    <span className="block text-sm text-gray-600">{parts}</span>
+                    <span className="block text-sm text-ink/70">{parts}</span>
                   </button>
                 </li>
               );
             })}
           </ul>
         )}
-      </section>
+      </Card>
     );
   }
 
   // ── Шаг 2: цель продажи ──
   if (!target) {
     return (
-      <section className="rounded-2xl bg-gray-50 p-4">
+      <Card>
         <BackButton onClick={() => setStone(null)} label="Вид камня" />
-        <h2 className="mb-3 text-lg font-semibold">2. Что продаём — {stone.name}</h2>
+        <h2 className="mb-3 text-lg font-semibold text-ink">2. Что продаём — {stone.name}</h2>
 
         {stone.slabs.length > 0 && (
           <>
-            <h3 className="mb-2 text-base font-semibold text-gray-700">Плиты</h3>
+            <h3 className="mb-2 text-base font-semibold text-ink/70">Плиты</h3>
             <ul className="mb-4 flex flex-col gap-2">
               {stone.slabs.map((s) => (
                 <li key={s.id}>
@@ -166,16 +168,16 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
                       })
                     }
                   >
-                    <span className="block text-base font-semibold">
+                    <span className="block text-base font-semibold text-ink">
                       {s.label}
                       {s.status === "RESERVED" && s.reservedBy && (
-                        <span className="ml-2 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                        <Badge variant="warning" className="ml-2 align-middle">
                           бронь: {s.reservedBy}
-                        </span>
+                        </Badge>
                       )}
                       {s.needsCheck && <NeedsCheckBadge />}
                     </span>
-                    <span className="block text-sm text-gray-600">
+                    <span className="block text-sm text-ink/70">
                       {s.detail} · {s.place}
                     </span>
                   </button>
@@ -187,7 +189,7 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
 
         {stone.pieces.length > 0 && (
           <>
-            <h3 className="mb-2 text-base font-semibold text-gray-700">Бой и остатки</h3>
+            <h3 className="mb-2 text-base font-semibold text-ink/70">Бой и остатки</h3>
             <ul className="mb-4 flex flex-col gap-2">
               {stone.pieces.map((p) => (
                 <li key={p.id}>
@@ -204,11 +206,11 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
                       })
                     }
                   >
-                    <span className="block text-base font-semibold">
+                    <span className="block text-base font-semibold text-ink">
                       {p.kindRu}
                       {p.needsCheck && <NeedsCheckBadge />}
                     </span>
-                    <span className="block text-sm text-gray-600">
+                    <span className="block text-sm text-ink/70">
                       {p.detail} · {p.place}
                     </span>
                   </button>
@@ -220,22 +222,26 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
 
         {stone.batches.length > 0 && (
           <>
-            <h3 className="mb-2 text-base font-semibold text-gray-700">
+            <h3 className="mb-2 text-base font-semibold text-ink/70">
               Объём из партии (B2B, без выделения плит)
             </h3>
             <ul className="flex flex-col gap-2">
               {stone.batches.map((b) => (
-                <li key={b.id} className="rounded-xl border border-gray-200 bg-white p-3">
-                  <div className="text-base font-semibold">
+                <li
+                  key={b.id}
+                  className="rounded-card border border-ink/10 bg-paper p-3"
+                >
+                  <div className="text-base font-semibold text-ink">
                     {b.title}
                     {b.needsCheck && <NeedsCheckBadge />}
                   </div>
-                  <div className="text-sm text-gray-600">{b.freeText}</div>
+                  <div className="text-sm text-ink/70">{b.freeText}</div>
                   <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
+                      size="sm"
                       disabled={b.needsCheck || !b.hasFree}
-                      className="h-11 flex-1 rounded-lg bg-gray-900 px-3 text-sm font-semibold text-white disabled:opacity-40"
+                      className="flex-1"
                       onClick={() =>
                         pickTarget({
                           mode: "BATCH_VOLUME",
@@ -246,11 +252,12 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
                       }
                     >
                       Продать объём
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       disabled={b.needsCheck || !b.hasFree}
-                      className="h-11 flex-1 rounded-lg border border-gray-900 px-3 text-sm font-semibold text-gray-900 disabled:opacity-40"
+                      className="flex-1"
                       onClick={() =>
                         pickTarget({
                           mode: "WHOLE_BATCH",
@@ -261,7 +268,7 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
                       }
                     >
                       Выкупить целиком
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -270,9 +277,9 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
         )}
 
         {stone.slabs.length === 0 && stone.pieces.length === 0 && stone.batches.length === 0 && (
-          <p className="text-gray-500">По этому виду продавать нечего.</p>
+          <p className="text-ink/60">По этому виду продавать нечего.</p>
         )}
-      </section>
+      </Card>
     );
   }
 
@@ -287,43 +294,33 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
   // ── Шаг 3: клиент и цена ──
   if (!confirming) {
     return (
-      <section className="rounded-2xl bg-gray-50 p-4">
+      <Card>
         <BackButton onClick={() => setTarget(null)} label="Выбор камня" />
-        <h2 className="mb-1 text-lg font-semibold">3. Клиент и цена</h2>
-        <p className="mb-3 text-sm text-gray-600">
+        <h2 className="mb-1 text-lg font-semibold text-ink">3. Клиент и цена</h2>
+        <p className="mb-3 text-sm text-ink/70">
           {target.title} · {target.subtitle}
         </p>
 
         {isVolume && (
           <div className="mb-3 grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="f-qtySlabs" className={labelCls}>
-                Плит
-              </label>
-              <input
-                id="f-qtySlabs"
-                inputMode="numeric"
-                className={inputCls}
-                placeholder="10"
-                value={qtySlabs}
-                onChange={(ev) => setQtySlabs(ev.target.value)}
-              />
-              <FieldError msg={e.qtySlabs} />
-            </div>
-            <div>
-              <label htmlFor="f-qtyArea" className={labelCls}>
-                Площадь, м²
-              </label>
-              <input
-                id="f-qtyArea"
-                inputMode="decimal"
-                className={inputCls}
-                placeholder="55 или 12,5"
-                value={qtyAreaM2}
-                onChange={(ev) => setQtyAreaM2(ev.target.value)}
-              />
-              <FieldError msg={e.qtyAreaM2} />
-            </div>
+            <Field
+              id="f-qtySlabs"
+              inputMode="numeric"
+              label="Плит"
+              placeholder="10"
+              value={qtySlabs}
+              onChange={(ev) => setQtySlabs(ev.target.value)}
+              error={e.qtySlabs}
+            />
+            <Field
+              id="f-qtyArea"
+              inputMode="decimal"
+              label="Площадь, м²"
+              placeholder="55 или 12,5"
+              value={qtyAreaM2}
+              onChange={(ev) => setQtyAreaM2(ev.target.value)}
+              error={e.qtyAreaM2}
+            />
             <div className="col-span-2">
               <FieldError msg={e.qty} />
             </div>
@@ -331,114 +328,99 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
         )}
 
         <div className="flex flex-col gap-3">
-          <div>
-            <label htmlFor="f-customer" className={labelCls}>
-              Клиент <span className="text-red-600">*</span>
-            </label>
-            <input
-              id="f-customer"
-              className={inputCls}
-              placeholder="Иван Петров / ООО «Стройка»"
-              value={customerName}
-              onChange={(ev) => setCustomerName(ev.target.value)}
-            />
-            <FieldError msg={e.customerName} />
-          </div>
-          <div>
-            <label htmlFor="f-contact" className={labelCls}>
-              Контакт
-            </label>
-            <input
-              id="f-contact"
-              className={inputCls}
-              placeholder="+998 90 …"
-              value={customerContact}
-              onChange={(ev) => setCustomerContact(ev.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="f-price" className={labelCls}>
-              Цена (необязательно)
-            </label>
-            <input
-              id="f-price"
-              inputMode="decimal"
-              className={inputCls}
-              placeholder="1500"
-              value={price}
-              onChange={(ev) => setPrice(ev.target.value)}
-            />
-            <FieldError msg={e.price} />
-          </div>
+          <Field
+            id="f-customer"
+            label={
+              <>
+                Клиент <span className="text-danger">*</span>
+              </>
+            }
+            placeholder="Иван Петров / ООО «Стройка»"
+            value={customerName}
+            onChange={(ev) => setCustomerName(ev.target.value)}
+            error={e.customerName}
+          />
+          <Field
+            id="f-contact"
+            label="Контакт"
+            placeholder="+998 90 …"
+            value={customerContact}
+            onChange={(ev) => setCustomerContact(ev.target.value)}
+          />
+          <Field
+            id="f-price"
+            inputMode="decimal"
+            label="Цена (необязательно)"
+            placeholder="1500"
+            value={price}
+            onChange={(ev) => setPrice(ev.target.value)}
+            error={e.price}
+          />
         </div>
 
-        <button
+        <Button
           type="button"
           onClick={() => setConfirming(true)}
           disabled={!customerName.trim() || (isVolume && !qtySlabs.trim() && !qtyAreaM2.trim())}
-          className="mt-4 h-14 w-full rounded-xl bg-gray-900 text-lg font-bold text-white disabled:opacity-40"
+          className="mt-4 min-h-14 w-full text-lg font-bold"
         >
           Далее — подтверждение
-        </button>
-      </section>
+        </Button>
+      </Card>
     );
   }
 
   // ── Шаг 4: подтверждение ──
   return (
-    <section className="rounded-2xl bg-gray-50 p-4">
+    <Card>
       <BackButton onClick={() => setConfirming(false)} label="Изменить данные" />
-      <h2 className="mb-3 text-lg font-semibold">4. Подтверждение продажи</h2>
+      <h2 className="mb-3 text-lg font-semibold text-ink">4. Подтверждение продажи</h2>
 
       {state.conflict && (
-        <div
-          role="alert"
-          className="mb-4 rounded-2xl border-2 border-red-400 bg-red-50 p-4"
-        >
-          <p className="text-xl font-bold text-red-700">Продажа не прошла</p>
-          <p className="mt-1 text-base text-red-800">{state.conflict}</p>
-          <p className="mt-2 text-sm text-red-700">
+        <Alert variant="danger" title="Продажа не прошла" className="mb-4">
+          <p>{state.conflict}</p>
+          <p className="mt-2 text-sm">
             Обновите страницу, чтобы увидеть актуальное наличие.
           </p>
-        </div>
+        </Alert>
       )}
       <FieldError msg={e.form} />
 
-      <dl className="rounded-xl border border-gray-200 bg-white p-4 text-base">
+      <dl className="rounded-card border border-ink/10 bg-paper p-4 text-base">
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-gray-500">Что</dt>
-          <dd className="text-right font-semibold">{target.title}</dd>
+          <dt className="text-ink/60">Что</dt>
+          <dd className="text-right font-semibold text-ink">{target.title}</dd>
         </div>
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-gray-500">Детали</dt>
-          <dd className="text-right text-sm text-gray-700">{target.subtitle}</dd>
+          <dt className="text-ink/60">Детали</dt>
+          <dd className="text-right text-sm text-ink/70">{target.subtitle}</dd>
         </div>
         {isVolume && qtyText && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-gray-500">Объём</dt>
-            <dd className="text-right font-semibold">{qtyText}</dd>
+            <dt className="text-ink/60">Объём</dt>
+            <dd className="text-right font-semibold text-ink">{qtyText}</dd>
           </div>
         )}
         {target.mode === "WHOLE_BATCH" && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-gray-500">Объём</dt>
-            <dd className="text-right font-semibold">весь свободный остаток</dd>
+            <dt className="text-ink/60">Объём</dt>
+            <dd className="text-right font-semibold text-ink">весь свободный остаток</dd>
           </div>
         )}
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-gray-500">Клиент</dt>
-          <dd className="text-right font-semibold">{customerName}</dd>
+          <dt className="text-ink/60">Клиент</dt>
+          <dd className="text-right font-semibold text-ink">{customerName}</dd>
         </div>
         {customerContact.trim() && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-gray-500">Контакт</dt>
-            <dd className="text-right">{customerContact}</dd>
+            <dt className="text-ink/60">Контакт</dt>
+            <dd className="text-right text-ink">{customerContact}</dd>
           </div>
         )}
         {price.trim() && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-gray-500">Цена</dt>
-            <dd className="text-right font-semibold">{price}</dd>
+            <dt className="text-ink/60">Цена</dt>
+            <dd className="text-right font-semibold text-ink">{price}</dd>
           </div>
         )}
       </dl>
@@ -455,17 +437,17 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
         <input type="hidden" name="price" value={price} />
         {isVolume && <input type="hidden" name="qtySlabs" value={qtySlabs} />}
         {isVolume && <input type="hidden" name="qtyAreaM2" value={qtyAreaM2} />}
-        <button
+        <Button
           type="submit"
           disabled={pending}
-          className="mt-4 h-16 w-full rounded-2xl bg-green-700 text-xl font-bold text-white disabled:opacity-50"
+          className="mt-4 min-h-16 w-full text-xl font-bold"
         >
           {pending ? "Оформление…" : "Подтвердить продажу"}
-        </button>
+        </Button>
       </form>
-      <p className="mt-2 text-center text-sm text-gray-500">
+      <p className="mt-2 text-center text-sm text-ink/60">
         Камень списывается из наличия сразу в момент продажи (TZ §5.4).
       </p>
-    </section>
+    </Card>
   );
 }

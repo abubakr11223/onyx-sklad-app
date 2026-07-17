@@ -17,6 +17,9 @@ import {
 } from "@/lib/reservations";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
+import Alert from "@/components/ui/Alert";
+import Badge from "@/components/ui/Badge";
+import Card from "@/components/ui/Card";
 import { cancelReservationAction } from "./actions";
 import ReserveForm, {
   type BatchVolumeOption,
@@ -274,80 +277,88 @@ export default async function BronPage({
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Брони</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        Срок брони по умолчанию — {defaultDays} дн.; по истечении камень
-        автоматически возвращается «В наличии».
-      </p>
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · менеджер
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          Брони
+        </h1>
+        <p className="mt-2 text-base text-ink/60">
+          Срок брони по умолчанию — {defaultDays} дн.; по истечении камень
+          автоматически возвращается «В наличии».
+        </p>
+      </header>
 
       {ok && (
-        <p className="mt-4 rounded-xl bg-green-50 p-3 font-medium text-green-800">
+        <Alert variant="success" className="mb-4">
           Бронь оформлена.
-        </p>
+        </Alert>
       )}
       {cancelled && (
-        <p className="mt-4 rounded-xl bg-green-50 p-3 font-medium text-green-800">
+        <Alert variant="success" className="mb-4">
           Бронь снята — камень снова «В наличии».
-        </p>
+        </Alert>
       )}
       {err && (
-        <p className="mt-4 rounded-xl bg-red-50 p-3 font-medium text-red-700">
+        <Alert variant="danger" className="mb-4">
           {err}
-        </p>
+        </Alert>
       )}
 
       {/* ── Faol bronlar ── */}
       <section className="mt-6">
-        <h2 className="text-lg font-bold">Активные брони</h2>
+        <h2 className="text-lg font-semibold text-ink">Активные брони</h2>
         {active.length === 0 ? (
-          <p className="mt-3 text-gray-500">Активных броней нет.</p>
+          <p className="mt-3 text-ink/70">Активных броней нет.</p>
         ) : (
           <ul className="mt-3 space-y-3">
             {active.map((r) => {
               const expiresToday = r.expiresAt <= endOfToday;
               return (
-                <li key={r.id} className="rounded-xl border border-gray-200 p-4">
-                  <div className="font-medium">{stoneLabel(r)}</div>
-                  <div className="mt-1 text-sm text-gray-700">
-                    Клиент: {r.customerName}
-                    {r.customerContact && <> · {r.customerContact}</>}
-                  </div>
-                  <div className="text-sm text-gray-700">
-                    Менеджер: {r.manager.name}
-                  </div>
-                  <div className="mt-1 text-sm">
-                    <span
-                      className={
-                        expiresToday
-                          ? "rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700"
-                          : "text-gray-700"
-                      }
-                    >
-                      до {dateTimeFmt.format(r.expiresAt)}
-                      {expiresToday && " — истекает сегодня"}
-                    </span>
-                  </div>
-                  {/* Ikki bosqichli snятие: details ochiladi → tasdiq tugmasi. */}
-                  <details className="mt-2">
-                    <summary className="inline-block h-11 cursor-pointer list-none rounded-lg border border-red-200 px-4 leading-[2.75rem] text-base font-medium text-red-600">
-                      Снять бронь…
-                    </summary>
-                    <form
-                      action={cancelReservationAction}
-                      className="mt-2 flex flex-wrap items-center gap-3 rounded-lg bg-red-50 p-3"
-                    >
-                      <input type="hidden" name="reservationId" value={r.id} />
-                      <span className="text-sm text-red-800">
-                        Камень вернётся «В наличии». Точно снять?
-                      </span>
-                      <button
-                        type="submit"
-                        className="h-11 rounded-lg bg-red-600 px-4 text-base font-semibold text-white"
+                <li key={r.id}>
+                  <Card>
+                    <div className="font-medium text-ink">{stoneLabel(r)}</div>
+                    <div className="mt-1 text-sm text-ink/70">
+                      Клиент: {r.customerName}
+                      {r.customerContact && <> · {r.customerContact}</>}
+                    </div>
+                    <div className="text-sm text-ink/70">
+                      Менеджер: {r.manager.name}
+                    </div>
+                    <div className="mt-1.5 text-sm">
+                      {expiresToday ? (
+                        <Badge variant="warning">
+                          до {dateTimeFmt.format(r.expiresAt)} — истекает сегодня
+                        </Badge>
+                      ) : (
+                        <span className="text-ink/70">
+                          до {dateTimeFmt.format(r.expiresAt)}
+                        </span>
+                      )}
+                    </div>
+                    {/* Ikki bosqichli snятие: details ochiladi → tasdiq tugmasi. */}
+                    <details className="mt-3">
+                      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-field border border-danger/30 px-4 text-base font-medium text-danger">
+                        Снять бронь…
+                      </summary>
+                      <form
+                        action={cancelReservationAction}
+                        className="mt-2 flex flex-wrap items-center gap-3 rounded-card border border-danger/30 bg-danger/10 p-3"
                       >
-                        Да, снять бронь
-                      </button>
-                    </form>
-                  </details>
+                        <input type="hidden" name="reservationId" value={r.id} />
+                        <span className="text-sm text-danger">
+                          Камень вернётся «В наличии». Точно снять?
+                        </span>
+                        <button
+                          type="submit"
+                          className="inline-flex min-h-11 items-center justify-center rounded-field bg-danger px-4 text-base font-semibold text-paper transition hover:bg-danger/90"
+                        >
+                          Да, снять бронь
+                        </button>
+                      </form>
+                    </details>
+                  </Card>
                 </li>
               );
             })}
@@ -356,36 +367,36 @@ export default async function BronPage({
       </section>
 
       {/* ── Yangi bron ── */}
-      <section className="mt-8 rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-3 text-lg font-bold">Новая бронь</h2>
+      <section className="mt-8 rounded-card border border-ink/10 bg-paper-2/60 p-4">
+        <h2 className="mb-3 text-lg font-semibold text-ink">Новая бронь</h2>
         <ReserveForm stones={stones} defaultDays={defaultDays} />
       </section>
 
       {/* ── Tarix ── */}
       <section className="mt-8">
-        <h2 className="text-lg font-bold">История (последние 20)</h2>
+        <h2 className="text-lg font-semibold text-ink">История (последние 20)</h2>
         {history.length === 0 ? (
-          <p className="mt-3 text-gray-500">Пока пусто.</p>
+          <p className="mt-3 text-ink/70">Пока пусто.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {history.map((r) => (
               <li
                 key={r.id}
-                className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm"
+                className="rounded-card border border-ink/10 bg-paper-2/60 p-3 text-sm text-ink/80"
               >
-                <span className="font-medium">{stoneLabel(r)}</span> · клиент{" "}
-                {r.customerName} · менеджер {r.manager.name} ·{" "}
-                <span
-                  className={
+                <span className="font-medium text-ink">{stoneLabel(r)}</span> ·
+                клиент {r.customerName} · менеджер {r.manager.name} ·{" "}
+                <Badge
+                  variant={
                     r.status === "COMPLETED"
-                      ? "font-semibold text-green-700"
+                      ? "success"
                       : r.status === "EXPIRED"
-                        ? "font-semibold text-amber-700"
-                        : "font-semibold text-gray-600"
+                        ? "warning"
+                        : "neutral"
                   }
                 >
                   {HISTORY_STATUS_RU[r.status] ?? r.status}
-                </span>
+                </Badge>
                 {r.resolvedAt && <> {dateFmt.format(r.resolvedAt)}</>}
               </li>
             ))}

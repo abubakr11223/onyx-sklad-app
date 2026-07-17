@@ -3,6 +3,8 @@
 // raqamlangan tomonlar bilan ko'rsatadi va skladchidan har tomonning REAL
 // o'lchamini so'raydi. Saqlash — ./actions.submitSingan (registerDirectPiece).
 // Web-UI tili — RUSCHA (faqat bot o'zbekcha).
+// C-pilot: разметка переведена на бренд-дизайн-систему (Button/Field/Card/Alert).
+// Поведение, имена полей, валидация и поток данных НЕ менялись.
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -12,6 +14,10 @@ import NoAccess from "@/components/NoAccess";
 import { decodeShapeDraft } from "@/lib/singan";
 import { renderChertyoj } from "@/lib/chertyoj";
 import { submitSingan } from "./actions";
+import Button, { buttonClass } from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Field, { inputClass } from "@/components/ui/Field";
+import Alert from "@/components/ui/Alert";
 
 export const metadata: Metadata = {
   title: "Бой по фото — Onyx",
@@ -27,9 +33,20 @@ function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:border-blue-500 focus:outline-none";
-const labelCls = "mb-1 block text-sm font-medium text-gray-700";
+/** Единая шапка страницы: gold-deep надзаголовок + serif-заголовок. */
+function PageHeader({ subtitle }: { subtitle?: string }) {
+  return (
+    <header className="mb-6">
+      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        Onyx · склад
+      </p>
+      <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        Бой по фото
+      </h1>
+      {subtitle && <p className="mt-2 text-base text-ink/60">{subtitle}</p>}
+    </header>
+  );
+}
 
 export default async function SinganPage({
   searchParams,
@@ -55,22 +72,18 @@ export default async function SinganPage({
   if (ok) {
     return (
       <main className="mx-auto max-w-xl p-4 pb-12">
-        <h1 className="mb-4 text-3xl font-bold tracking-tight">Бой по фото</h1>
-        <div
-          role="status"
-          className="rounded-2xl border border-green-300 bg-green-50 p-4 text-base text-green-900"
-        >
-          <p className="font-semibold">Кусок записан ✓</p>
-          <p className="mt-1">Чертёж и фото сохранены в карточке камня.</p>
+        <PageHeader />
+        <Alert variant="success" title="Кусок записан">
+          <p className="text-ink/70">Чертёж и фото сохранены в карточке камня.</p>
           {stoneId && (
             <Link
               href={`/kamen/${stoneId}`}
-              className="mt-3 inline-flex rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
+              className={buttonClass("primary", "md", "mt-3")}
             >
               Открыть карточку камня
             </Link>
           )}
-        </div>
+        </Alert>
       </main>
     );
   }
@@ -80,20 +93,16 @@ export default async function SinganPage({
   if (!draft) {
     return (
       <main className="mx-auto max-w-xl p-4 pb-12">
-        <h1 className="mb-4 text-3xl font-bold tracking-tight">Бой по фото</h1>
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-base text-amber-900">
-          <p className="font-semibold">Ссылка не открылась</p>
-          <p className="mt-1">
+        <PageHeader />
+        <Alert variant="warning" title="Ссылка не открылась">
+          <p className="text-ink/70">
             Ссылка повреждена или устарела. Отправьте фото со словом «singan» в
             бот ещё раз — или введите бой вручную.
           </p>
-          <Link
-            href="/razbit"
-            className="mt-3 inline-flex rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700"
-          >
+          <Link href="/razbit" className={buttonClass("primary", "md", "mt-3")}>
             Ввести вручную (/razbit)
           </Link>
-        </div>
+        </Alert>
       </main>
     );
   }
@@ -117,127 +126,95 @@ export default async function SinganPage({
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
-      <h1 className="mb-1 text-3xl font-bold tracking-tight">Бой по фото</h1>
-      <p className="mb-5 text-base text-gray-500">
-        AI распознал форму куска. Измерьте каждую сторону рулеткой и введите
-        размеры в мм — номера сторон совпадают с чертежом.
-      </p>
+      <PageHeader subtitle="AI распознал форму куска. Измерьте каждую сторону рулеткой и введите размеры в мм — номера сторон совпадают с чертежом." />
 
       {err && (
-        <div
-          role="alert"
-          className="mb-5 rounded-2xl border border-red-300 bg-red-50 p-4 text-base text-red-900"
-        >
+        <Alert variant="danger" className="mb-6">
           {err}
-        </div>
+        </Alert>
       )}
 
-      <div className="mb-5 flex justify-center rounded-2xl border border-gray-200 bg-white p-4">
-        {/* SVG — bizning renderChertyoj mahsuloti (validatsiya + ekranlash). */}
+      <div className="mb-6 flex justify-center rounded-card border border-ink/10 bg-paper-2/60 p-4">
+        {/* SVG — bizning renderChertyoj mahsuloti (validatsiya + ekranlash).
+            Ko'rsatish usuli O'ZGARMADI: inline-SVG dangerouslySetInnerHTML orqali. */}
         <div dangerouslySetInnerHTML={{ __html: svg }} />
       </div>
 
-      <form action={submitSingan} className="space-y-5">
+      <form action={submitSingan} className="flex flex-col gap-6">
         <input type="hidden" name="d" value={first(sp.d) ?? ""} />
 
-        <fieldset className="rounded-2xl border border-gray-200 bg-white p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-700">
+        {/* ── Стороны ── */}
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-ink">
             Стороны, мм ({draft.vertices.length})
-          </legend>
+          </h2>
           <div className="grid grid-cols-2 gap-3">
             {sideNumbers.map((n) => (
-              <div key={n}>
-                <label className={labelCls} htmlFor={`side_${n}`}>
-                  Сторона {n}
-                </label>
-                <input
-                  id={`side_${n}`}
-                  name={`side_${n}`}
-                  inputMode="numeric"
-                  placeholder="напр. 1180"
-                  required
-                  className={inputCls}
-                />
-              </div>
+              <Field
+                key={n}
+                id={`side_${n}`}
+                name={`side_${n}`}
+                inputMode="numeric"
+                label={`Сторона ${n}`}
+                placeholder="напр. 1180"
+                required
+              />
             ))}
           </div>
-        </fieldset>
+        </Card>
 
-        <fieldset className="rounded-2xl border border-gray-200 bg-white p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-700">
-            Габариты и площадь
-          </legend>
+        {/* ── Габариты и площадь ── */}
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-ink">Габариты и площадь</h2>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls} htmlFor="boundingLengthMm">
-                Длина, мм
-              </label>
-              <input
-                id="boundingLengthMm"
-                name="boundingLengthMm"
-                inputMode="numeric"
-                required
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="boundingWidthMm">
-                Ширина, мм
-              </label>
-              <input
-                id="boundingWidthMm"
-                name="boundingWidthMm"
-                inputMode="numeric"
-                required
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="thicknessMm">
-                Толщина, мм
-              </label>
-              <input
-                id="thicknessMm"
-                name="thicknessMm"
-                inputMode="numeric"
-                placeholder="необязательно"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="areaM2">
-                Площадь, м²
-              </label>
-              <input
-                id="areaM2"
-                name="areaM2"
-                inputMode="decimal"
-                placeholder="необязательно"
-                className={inputCls}
-              />
-            </div>
+            <Field
+              id="boundingLengthMm"
+              name="boundingLengthMm"
+              inputMode="numeric"
+              label="Длина, мм"
+              required
+            />
+            <Field
+              id="boundingWidthMm"
+              name="boundingWidthMm"
+              inputMode="numeric"
+              label="Ширина, мм"
+              required
+            />
+            <Field
+              id="thicknessMm"
+              name="thicknessMm"
+              inputMode="numeric"
+              label="Толщина, мм"
+              placeholder="необязательно"
+            />
+            <Field
+              id="areaM2"
+              name="areaM2"
+              inputMode="decimal"
+              label="Площадь, м²"
+              placeholder="необязательно"
+            />
           </div>
-        </fieldset>
+        </Card>
 
-        <fieldset className="rounded-2xl border border-gray-200 bg-white p-4">
-          <legend className="px-1 text-sm font-semibold text-gray-700">
-            Партия и место
-          </legend>
-          <div className="space-y-3">
-            <div>
-              <label className={labelCls} htmlFor="kind">
-                Тип
-              </label>
-              <select id="kind" name="kind" defaultValue="BROKEN" className={inputCls}>
+        {/* ── Партия и место ── */}
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-ink">Партия и место</h2>
+          <div className="flex flex-col gap-4">
+            <Field id="kind" label="Тип">
+              <select
+                id="kind"
+                name="kind"
+                defaultValue="BROKEN"
+                className={inputClass}
+              >
                 <option value="BROKEN">Бой</option>
                 <option value="OFFCUT">Остаток</option>
               </select>
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="batchId">
-                Партия (камень)
-              </label>
-              <select id="batchId" name="batchId" required className={inputCls}>
+            </Field>
+            <Field id="batchId" label="Партия (камень)">
+              <select id="batchId" name="batchId" required className={inputClass}>
                 <option value="">— выберите партию —</option>
                 {batchRows.map((b) => {
                   const qty = [
@@ -255,46 +232,41 @@ export default async function SinganPage({
                   );
                 })}
               </select>
-            </div>
-            <label className="flex items-center gap-2 text-base text-gray-800">
+            </Field>
+            <label className="flex items-center gap-2 text-base text-ink/80">
               <input type="checkbox" name="decrementSlabs" value="1" />
               Бой был целой плитой партии (−1 плита)
             </label>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls} htmlFor="block">
-                  Блок
-                </label>
-                <input
-                  id="block"
-                  name="block"
-                  placeholder="напр. А"
-                  required
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls} htmlFor="landmark">
-                  Ориентир
-                </label>
-                <input
-                  id="landmark"
-                  name="landmark"
-                  placeholder="напр. 2"
-                  required
-                  className={inputCls}
-                />
-              </div>
+              <Field
+                id="block"
+                name="block"
+                label="Блок"
+                placeholder="напр. А"
+                required
+              />
+              <Field
+                id="landmark"
+                name="landmark"
+                label="Ориентир"
+                placeholder="напр. 2"
+                required
+              />
             </div>
           </div>
-        </fieldset>
+        </Card>
 
-        <button
-          type="submit"
-          className="w-full rounded-xl bg-gray-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-gray-700"
+        {/* Липкая нижняя панель отправки — CTA под большим пальцем на мобиле;
+            на десктопе (md:) возвращается в обычный поток. Реальный submit
+            серверного экшена (без JS) сохраняется. */}
+        <div
+          className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
+                     md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
         >
-          Сохранить
-        </button>
+          <Button type="submit" className="min-h-14 w-full text-lg font-bold">
+            Сохранить
+          </Button>
+        </div>
       </form>
     </main>
   );

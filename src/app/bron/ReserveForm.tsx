@@ -2,9 +2,14 @@
 
 // Форма новой брони (TZ §6.6): вид камня → конкретная плита / остаток /
 // объём из партии → клиент и срок. Крупные touch-поля — менеджер с телефона.
+// C-pilot: разметка переведена на бренд-дизайн-систему (Button/Field/Alert).
+// Поведение, имена полей и контракт валидации НЕ менялись.
 
 import { useActionState, useState } from "react";
 import { createReservation, type ReserveFormState } from "./actions";
+import Button from "@/components/ui/Button";
+import Field, { inputClass } from "@/components/ui/Field";
+import Alert from "@/components/ui/Alert";
 
 export interface UnitOption {
   /** "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>" */
@@ -29,16 +34,11 @@ export interface StoneGroup {
 
 const initialState: ReserveFormState = { errors: {} };
 
-const inputCls =
-  "h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-lg " +
-  "focus:border-gray-900 focus:outline-none";
-const labelCls = "mb-1 block text-base font-medium text-gray-700";
-
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
-function FieldError({ msg }: { msg?: string }) {
-  if (!msg) return null;
-  return <p className="mt-1 text-sm font-medium text-red-600">{msg}</p>;
+/** Звёздочка «обязательное поле». */
+function Req() {
+  return <span className="text-danger">*</span>;
 }
 
 export default function ReserveForm({
@@ -70,7 +70,7 @@ export default function ReserveForm({
 
   if (stones.length === 0) {
     return (
-      <p className="text-gray-500">
+      <p className="text-ink/70">
         Нет камня, доступного для брони: все плиты и остатки заняты, свободного
         объёма в партиях нет.
       </p>
@@ -79,15 +79,13 @@ export default function ReserveForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <FieldError msg={e.form} />
+      {e.form && <Alert variant="danger">{e.form}</Alert>}
 
-      <div>
-        <label htmlFor="bron-stone" className={labelCls}>
-          Вид камня <span className="text-red-600">*</span>
-        </label>
+      {/* ── Вид камня (клиентский фильтр — без name, не уходит на сервер) ── */}
+      <Field id="bron-stone" label={<>Вид камня <Req /></>}>
         <select
           id="bron-stone"
-          className={inputCls}
+          className={inputClass}
           value={stoneId}
           onChange={(ev) => {
             setStoneId(ev.target.value);
@@ -103,19 +101,18 @@ export default function ReserveForm({
             </option>
           ))}
         </select>
-      </div>
+      </Field>
 
       {stone && (
-        <div>
-          <label htmlFor="bron-target" className={labelCls}>
-            Что бронируем <span className="text-red-600">*</span>
-          </label>
+        <Field id="bron-target" label={<>Что бронируем <Req /></>} error={e.target}>
           <select
             id="bron-target"
             name="target"
-            className={inputCls}
+            className={inputClass}
             value={target}
             onChange={(ev) => setTarget(ev.target.value)}
+            aria-invalid={e.target ? true : undefined}
+            aria-describedby={e.target ? "bron-target-error" : undefined}
           >
             <option value="" disabled>
               — выберите плиту, остаток или объём —
@@ -148,94 +145,76 @@ export default function ReserveForm({
               </optgroup>
             )}
           </select>
-          <FieldError msg={e.target} />
-        </div>
+        </Field>
       )}
 
+      {/* Объём из партии — «требует ввода количества»: янтарный caution-блок. */}
       {isBatch && (
-        <div className="rounded-xl bg-amber-50 p-3">
-          <p className="mb-2 text-sm text-amber-900">
-            Свободно под бронь: {freeParts.length > 0 ? freeParts.join(" · ") : "нет данных"}.
-            Укажите плиты и/или м².
+        <div className="rounded-card border border-warning/40 bg-warning/10 p-4">
+          <p className="mb-3 text-sm text-warning">
+            Свободно под бронь:{" "}
+            {freeParts.length > 0 ? freeParts.join(" · ") : "нет данных"}. Укажите
+            плиты и/или м².
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="bron-qty-slabs" className={labelCls}>
-                Плит
-              </label>
-              <input
-                id="bron-qty-slabs"
-                name="qtySlabs"
-                inputMode="numeric"
-                className={inputCls}
-                placeholder="10"
-              />
-              <FieldError msg={e.qtySlabs} />
-            </div>
-            <div>
-              <label htmlFor="bron-qty-area" className={labelCls}>
-                м²
-              </label>
-              <input
-                id="bron-qty-area"
-                name="qtyAreaM2"
-                inputMode="decimal"
-                className={inputCls}
-                placeholder="55 или 12,5"
-              />
-              <FieldError msg={e.qtyAreaM2} />
-            </div>
+            <Field
+              id="bron-qty-slabs"
+              name="qtySlabs"
+              inputMode="numeric"
+              label="Плит"
+              placeholder="10"
+              error={e.qtySlabs}
+            />
+            <Field
+              id="bron-qty-area"
+              name="qtyAreaM2"
+              inputMode="decimal"
+              label="м²"
+              placeholder="55 или 12,5"
+              error={e.qtyAreaM2}
+            />
           </div>
         </div>
       )}
 
-      <div>
-        <label htmlFor="bron-customer" className={labelCls}>
-          Клиент <span className="text-red-600">*</span>
-        </label>
-        <input
-          id="bron-customer"
-          name="customerName"
-          className={inputCls}
-          placeholder="Иван Петров"
-        />
-        <FieldError msg={e.customerName} />
-      </div>
+      <Field
+        id="bron-customer"
+        name="customerName"
+        label={<>Клиент <Req /></>}
+        placeholder="Иван Петров"
+        error={e.customerName}
+      />
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="bron-contact" className={labelCls}>
-            Контакт
-          </label>
-          <input
-            id="bron-contact"
-            name="customerContact"
-            className={inputCls}
-            placeholder="+998 …"
-          />
-        </div>
-        <div>
-          <label htmlFor="bron-days" className={labelCls}>
-            Срок, дней
-          </label>
-          <input
-            id="bron-days"
-            name="days"
-            inputMode="numeric"
-            className={inputCls}
-            placeholder={`по умолчанию ${defaultDays}`}
-          />
-          <FieldError msg={e.days} />
-        </div>
+        <Field
+          id="bron-contact"
+          name="customerContact"
+          label="Контакт"
+          placeholder="+998 …"
+        />
+        <Field
+          id="bron-days"
+          name="days"
+          inputMode="numeric"
+          label="Срок, дней"
+          placeholder={`по умолчанию ${defaultDays}`}
+          error={e.days}
+        />
       </div>
 
-      <button
-        type="submit"
-        disabled={pending || !target}
-        className="h-16 rounded-2xl bg-gray-900 text-xl font-bold text-white disabled:opacity-50"
-      >
-        {pending ? "Бронирование…" : "Забронировать"}
-      </button>
+      {/* CTA — в обычном потоке (НЕ sticky): форма «Новая бронь» встроена в
+          середину страницы (над ней Активные брони, под ней История), поэтому
+          липкая панель наезжала бы на Историю при скролле. Реальный submit
+          формы (без JS) сохраняется — устойчивость к слабой сети. */}
+      <div className="mt-2">
+        <Button
+          type="submit"
+          disabled={pending || !target}
+          className="min-h-14 w-full text-lg font-bold"
+        >
+          {pending ? "Бронирование…" : "Забронировать"}
+        </Button>
+      </div>
     </form>
   );
 }

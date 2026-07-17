@@ -2,9 +2,15 @@
 
 // Форма «Разбить камень» (TZ §5.6, §6.4) — складчик с телефона:
 // крупные поля, минимум текста, шаг подтверждения перед записью.
+// C-batch: разметка переведена на бренд-дизайн-систему (Button/Field/Card/Alert).
+// Поведение, имена полей, порядок строк и контракт валидации НЕ менялись.
 
 import { useActionState, useRef, useState } from "react";
 import { submitBreak, type BreakFormState } from "./actions";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Field, { inputClass } from "@/components/ui/Field";
+import Alert from "@/components/ui/Alert";
 
 export interface SlabOption {
   id: string;
@@ -24,14 +30,15 @@ export interface BatchOption {
 
 const initialState: BreakFormState = { errors: {} };
 
-const inputCls =
-  "h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-lg " +
-  "focus:border-gray-900 focus:outline-none";
-const labelCls = "mb-1 block text-base font-medium text-gray-700";
+/** Звёздочка «обязательное поле». */
+function Req() {
+  return <span className="text-danger">*</span>;
+}
 
-function FieldError({ msg }: { msg?: string }) {
+/** Кросс-полевая ошибка (не привязана к одному input — напр. pieces). */
+function CrossError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="mt-1 text-sm font-medium text-red-600">{msg}</p>;
+  return <p className="text-sm font-medium text-danger">{msg}</p>;
 }
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
@@ -64,45 +71,44 @@ export default function BreakForm({
   const removeRow = (id: number) =>
     setRowIds((ids) => (ids.length > 1 ? ids.filter((x) => x !== id) : ids));
 
-  const toggleCls = (active: boolean) =>
-    `h-12 flex-1 rounded-xl text-base font-semibold transition-colors ${
-      active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"
-    }`;
-
   const slabGroups = groupBy(slabs, (s) => s.stoneName);
   const batchGroups = groupBy(batches, (b) => b.stoneName);
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      <FieldError msg={e.form} />
+      {e.form && <Alert variant="danger">{e.form}</Alert>}
       <input type="hidden" name="mode" value={mode} />
 
       {/* ── Что разбиваем ── */}
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-3 text-lg font-semibold">Что разбиваем</h2>
-        <div className="mb-3 flex gap-2">
-          <button
-            type="button"
-            className={toggleCls(mode === "slab")}
+      <Card>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Что разбиваем</h2>
+        <div className="mb-4 flex gap-2">
+          <Button
+            variant={mode === "slab" ? "primary" : "secondary"}
             onClick={() => setMode("slab")}
+            className="flex-1"
           >
             Плита
-          </button>
-          <button
-            type="button"
-            className={toggleCls(mode === "direct")}
+          </Button>
+          <Button
+            variant={mode === "direct" ? "primary" : "secondary"}
             onClick={() => setMode("direct")}
+            className="flex-1"
           >
             Бой в партии
-          </button>
+          </Button>
         </div>
 
         {mode === "slab" ? (
-          <div>
-            <label htmlFor="slabId" className={labelCls}>
-              Плита <span className="text-red-600">*</span>
-            </label>
-            <select id="slabId" name="slabId" className={inputCls} defaultValue="">
+          <Field id="slabId" label={<>Плита <Req /></>} error={e.slabId}>
+            <select
+              id="slabId"
+              name="slabId"
+              className={inputClass}
+              defaultValue=""
+              aria-invalid={e.slabId ? true : undefined}
+              aria-describedby={e.slabId ? "slabId-error" : undefined}
+            >
               <option value="" disabled>
                 — выберите плиту —
               </option>
@@ -117,15 +123,18 @@ export default function BreakForm({
                 </optgroup>
               ))}
             </select>
-            <FieldError msg={e.slabId} />
-          </div>
+          </Field>
         ) : (
-          <div className="flex flex-col gap-3">
-            <div>
-              <label htmlFor="batchId" className={labelCls}>
-                Партия <span className="text-red-600">*</span>
-              </label>
-              <select id="batchId" name="batchId" className={inputCls} defaultValue="">
+          <div className="flex flex-col gap-4">
+            <Field id="batchId" label={<>Партия <Req /></>} error={e.batchId}>
+              <select
+                id="batchId"
+                name="batchId"
+                className={inputClass}
+                defaultValue=""
+                aria-invalid={e.batchId ? true : undefined}
+                aria-describedby={e.batchId ? "batchId-error" : undefined}
+              >
                 <option value="" disabled>
                   — выберите партию —
                 </option>
@@ -139,205 +148,210 @@ export default function BreakForm({
                   </optgroup>
                 ))}
               </select>
-              <FieldError msg={e.batchId} />
-            </div>
-            <label className="flex min-h-12 items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 text-base">
+            </Field>
+            <label className="flex min-h-11 items-center gap-3 rounded-field border border-ink/15 bg-paper p-3 text-base text-ink">
               <input
                 type="checkbox"
                 name="decrementSlabs"
                 value="1"
                 defaultChecked
-                className="h-6 w-6 accent-gray-900"
+                className="h-6 w-6 accent-ink"
               />
               Это была целая плита партии (списать плиту)
             </label>
           </div>
         )}
-      </section>
+      </Card>
 
       {/* ── Куски ── */}
-      <section className="rounded-2xl bg-gray-50 p-4">
-        <h2 className="mb-1 text-lg font-semibold">Куски</h2>
-        <p className="mb-3 text-sm text-gray-500">
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold text-ink">Куски</h2>
+        <p className="mb-3 text-sm text-ink/60">
           Размеры каждой стороны в мм через запятую. Фото и AI-чертёж появятся в
           следующем этапе — пока размеры вносятся вручную.
         </p>
-        <FieldError msg={e.pieces} />
+        <div className="mb-3">
+          <CrossError msg={e.pieces} />
+        </div>
         <div className="flex flex-col gap-4">
           {rowIds.map((id, idx) => (
-            <div key={id} className="rounded-xl border border-gray-200 bg-white p-3">
+            <div key={id} className="rounded-card border border-ink/10 bg-paper p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-base font-semibold text-gray-700">Кусок {idx + 1}</span>
+                <span className="text-base font-semibold text-ink">Кусок {idx + 1}</span>
                 {rowIds.length > 1 && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => removeRow(id)}
-                    className="h-10 rounded-lg px-3 text-base font-medium text-red-600"
+                    className="text-danger hover:bg-danger/10"
                   >
                     Убрать
-                  </button>
+                  </Button>
                 )}
               </div>
               <div className="flex flex-col gap-3">
-                <div>
-                  <label className={labelCls}>
-                    Тип <span className="text-red-600">*</span>
-                  </label>
-                  <select name="pKind" className={inputCls} defaultValue="BROKEN">
+                <Field id={`pKind-${idx}`} label={<>Тип <Req /></>} error={e[`p-${idx}-kind`]}>
+                  <select
+                    id={`pKind-${idx}`}
+                    name="pKind"
+                    className={inputClass}
+                    defaultValue="BROKEN"
+                    aria-invalid={e[`p-${idx}-kind`] ? true : undefined}
+                    aria-describedby={e[`p-${idx}-kind`] ? `pKind-${idx}-error` : undefined}
+                  >
                     <option value="BROKEN">Бой</option>
                     <option value="OFFCUT">Остаток</option>
                   </select>
-                  <FieldError msg={e[`p-${idx}-kind`]} />
-                </div>
-                <div>
-                  <label className={labelCls}>
-                    Стороны, мм <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    name="pSides"
-                    inputMode="numeric"
-                    className={inputCls}
-                    placeholder="1180, 640, 950, 610"
-                  />
-                  <FieldError msg={e[`p-${idx}-sidesMm`]} />
-                </div>
+                </Field>
+                <Field
+                  id={`pSides-${idx}`}
+                  name="pSides"
+                  inputMode="numeric"
+                  label={<>Стороны, мм <Req /></>}
+                  placeholder="1180, 640, 950, 610"
+                  error={e[`p-${idx}-sidesMm`]}
+                />
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>
-                      Длина, мм <span className="text-red-600">*</span>
-                    </label>
-                    <input name="pBoundLen" inputMode="numeric" className={inputCls} placeholder="1180" />
-                    <FieldError msg={e[`p-${idx}-boundingLengthMm`]} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>
-                      Ширина, мм <span className="text-red-600">*</span>
-                    </label>
-                    <input name="pBoundWidth" inputMode="numeric" className={inputCls} placeholder="640" />
-                    <FieldError msg={e[`p-${idx}-boundingWidthMm`]} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Толщина, мм</label>
-                    <input name="pThickness" inputMode="numeric" className={inputCls} placeholder="20" />
-                    <FieldError msg={e[`p-${idx}-thicknessMm`]} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Площадь, м²</label>
-                    <input name="pArea" inputMode="decimal" className={inputCls} placeholder="0,6" />
-                    <FieldError msg={e[`p-${idx}-areaM2`]} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>
-                      Блок <span className="text-red-600">*</span>
-                    </label>
-                    <input name="pBlock" className={inputCls} placeholder="А" />
-                    <FieldError msg={e[`p-${idx}-block`]} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>
-                      Ориентир <span className="text-red-600">*</span>
-                    </label>
-                    <input name="pLandmark" className={inputCls} placeholder="2 или 1–2" />
-                    <FieldError msg={e[`p-${idx}-landmark`]} />
-                  </div>
+                  <Field
+                    id={`pBoundLen-${idx}`}
+                    name="pBoundLen"
+                    inputMode="numeric"
+                    label={<>Длина, мм <Req /></>}
+                    placeholder="1180"
+                    error={e[`p-${idx}-boundingLengthMm`]}
+                  />
+                  <Field
+                    id={`pBoundWidth-${idx}`}
+                    name="pBoundWidth"
+                    inputMode="numeric"
+                    label={<>Ширина, мм <Req /></>}
+                    placeholder="640"
+                    error={e[`p-${idx}-boundingWidthMm`]}
+                  />
+                  <Field
+                    id={`pThickness-${idx}`}
+                    name="pThickness"
+                    inputMode="numeric"
+                    label="Толщина, мм"
+                    placeholder="20"
+                    error={e[`p-${idx}-thicknessMm`]}
+                  />
+                  <Field
+                    id={`pArea-${idx}`}
+                    name="pArea"
+                    inputMode="decimal"
+                    label="Площадь, м²"
+                    placeholder="0,6"
+                    error={e[`p-${idx}-areaM2`]}
+                  />
+                  <Field
+                    id={`pBlock-${idx}`}
+                    name="pBlock"
+                    label={<>Блок <Req /></>}
+                    placeholder="А"
+                    error={e[`p-${idx}-block`]}
+                  />
+                  <Field
+                    id={`pLandmark-${idx}`}
+                    name="pLandmark"
+                    label={<>Ориентир <Req /></>}
+                    placeholder="2 или 1–2"
+                    error={e[`p-${idx}-landmark`]}
+                  />
                 </div>
               </div>
             </div>
           ))}
         </div>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={addRow}
-          className="mt-3 h-12 w-full rounded-xl border-2 border-dashed border-gray-300 text-base font-semibold text-gray-600"
+          className="mt-3 w-full border-dashed"
         >
           + Добавить кусок
-        </button>
-      </section>
+        </Button>
+      </Card>
 
       {/* ── Распил: часть ушла клиенту (только для плиты) ── */}
       {mode === "slab" && (
-        <section className="rounded-2xl bg-gray-50 p-4">
-          <label className="flex min-h-12 items-center gap-3 text-base font-medium">
+        <Card>
+          <label className="flex min-h-11 items-center gap-3 text-base font-medium text-ink">
             <input
               type="checkbox"
               name="soldPart"
               value="1"
               checked={soldPart}
               onChange={(ev) => setSoldPart(ev.target.checked)}
-              className="h-6 w-6 accent-gray-900"
+              className="h-6 w-6 accent-ink"
             />
             Часть ушла клиенту / в изделие (распил)
           </label>
           {soldPart && (
-            <div className="mt-3 flex flex-col gap-3">
-              <p className="text-sm text-gray-500">
+            <div className="mt-3 flex flex-col gap-4">
+              <p className="text-sm text-ink/60">
                 Факт попадёт в журнал. Продажу оформляет менеджер в разделе продаж.
               </p>
-              <div>
-                <label htmlFor="soldCustomerName" className={labelCls}>
-                  Кому <span className="text-red-600">*</span>
-                </label>
-                <input
-                  id="soldCustomerName"
-                  name="soldCustomerName"
-                  className={inputCls}
-                  placeholder="Клиент / заказ"
-                />
-                <FieldError msg={e.soldCustomerName} />
-              </div>
-              <div>
-                <label htmlFor="soldPrice" className={labelCls}>
-                  Цена (если известна)
-                </label>
-                <input
-                  id="soldPrice"
-                  name="soldPrice"
-                  inputMode="decimal"
-                  className={inputCls}
-                  placeholder="250"
-                />
-                <FieldError msg={e.soldPrice} />
-              </div>
+              <Field
+                id="soldCustomerName"
+                name="soldCustomerName"
+                label={<>Кому <Req /></>}
+                placeholder="Клиент / заказ"
+                error={e.soldCustomerName}
+              />
+              <Field
+                id="soldPrice"
+                name="soldPrice"
+                inputMode="decimal"
+                label="Цена (если известна)"
+                placeholder="250"
+                error={e.soldPrice}
+              />
             </div>
           )}
-        </section>
+        </Card>
       )}
 
-      {/* ── Шаг подтверждения ── */}
-      {confirming ? (
-        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
-          <p className="mb-3 text-base font-semibold text-amber-900">
-            Проверьте данные выше.{" "}
-            {mode === "slab"
-              ? "Плита будет переведена в «Бой / остаток» — вернуть её обратно нельзя."
-              : "Бой будет записан в партию и спишется из её остатка."}
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              className="h-14 flex-1 rounded-xl bg-gray-200 text-lg font-semibold text-gray-700"
-            >
-              Назад
-            </button>
-            <button
-              type="submit"
-              disabled={pending}
-              className="h-14 flex-1 rounded-xl bg-gray-900 text-lg font-bold text-white disabled:opacity-50"
-            >
-              {pending ? "Запись…" : "Подтвердить"}
-            </button>
+      {/* Липкая нижняя панель — большой палец достаёт CTA на мобиле; на
+          десктопе (md:) возвращается в обычный поток. Реальный submit формы
+          (без JS) сохраняется — устойчивость к слабой сети. */}
+      <div
+        className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
+                   md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
+      >
+        {confirming ? (
+          <div className="flex flex-col gap-3">
+            <Alert variant="warning" title="Проверьте данные выше.">
+              {mode === "slab"
+                ? "Плита будет переведена в «Бой / остаток» — вернуть её обратно нельзя."
+                : "Бой будет записан в партию и спишется из её остатка."}
+            </Alert>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirming(false)}
+                className="min-h-14 flex-1 text-lg"
+              >
+                Назад
+              </Button>
+              <Button
+                type="submit"
+                disabled={pending}
+                className="min-h-14 flex-1 text-lg font-bold"
+              >
+                {pending ? "Запись…" : "Подтвердить"}
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="h-16 rounded-2xl bg-gray-900 text-xl font-bold text-white"
-        >
-          Продолжить
-        </button>
-      )}
+        ) : (
+          <Button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="min-h-14 w-full text-lg font-bold"
+          >
+            Продолжить
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

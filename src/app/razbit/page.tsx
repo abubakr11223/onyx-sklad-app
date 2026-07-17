@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
+import Alert from "@/components/ui/Alert";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
 
 export const metadata: Metadata = {
@@ -100,27 +101,30 @@ export default async function RazbitPage({
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
-      <h1 className="mb-1 text-3xl font-bold tracking-tight">Разбить камень</h1>
-      <p className="mb-5 text-base text-gray-500">
-        Бой или распил: система всегда отражает реальное состояние склада.
-      </p>
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · склад
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          Разбить камень
+        </h1>
+        <p className="mt-2 text-base text-ink/60">
+          Бой или распил: система всегда отражает реальное состояние склада.
+        </p>
+      </header>
 
       {ok && okText && (
-        <div
-          role="status"
-          className="mb-5 rounded-2xl border border-green-300 bg-green-50 p-4 text-base text-green-900"
-        >
-          <p className="font-semibold">{okText} ✓</p>
+        <Alert variant="success" title={okText} className="mb-6">
           <p>
             {label && `${label} — `}
             {pieceCount && `кусков: ${pieceCount}`}
           </p>
           {reserveCancelled && (
-            <p className="mt-1 font-medium text-amber-800">
+            <p className="mt-1 font-medium text-warning">
               Бронь на плиту снята — менеджер увидит причину в журнале.
             </p>
           )}
-        </div>
+        </Alert>
       )}
 
       <BreakForm slabs={slabs} batches={batches} />

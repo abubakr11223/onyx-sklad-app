@@ -12,6 +12,7 @@ import {
 } from "@/lib/batch-remainders";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
+import Alert from "@/components/ui/Alert";
 import SaleForm, { type StoneTypeGroup } from "./SaleForm";
 
 export const metadata: Metadata = {
@@ -218,30 +219,31 @@ export default async function ProdazhaPage({
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
-      <h1 className="mb-1 text-3xl font-bold tracking-tight">Продажа и списание</h1>
-      <p className="mb-5 text-base text-gray-500">
-        Камень списывается из наличия в момент продажи — не «потом отмечу».
-      </p>
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          Onyx · продажа
+        </p>
+        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          Продажа и списание
+        </h1>
+        <p className="mt-2 text-base text-ink/60">
+          Камень списывается из наличия в момент продажи — не «потом отмечу».
+        </p>
+      </header>
 
       {ok && what && (
-        <div
-          role="status"
-          className="mb-5 rounded-2xl border border-green-300 bg-green-50 p-4 text-base text-green-900"
-        >
-          <p className="font-semibold">Продажа оформлена ✓</p>
-          <p>
-            {what}
-            {customer && <> → {customer}</>}
-          </p>
-        </div>
+        <Alert variant="success" title="Продажа оформлена" className="mb-6">
+          {what}
+          {customer && <> → {customer}</>}
+        </Alert>
       )}
 
       <SaleForm stoneTypes={stoneTypes} />
 
       <section className="mt-8">
-        <h2 className="text-lg font-bold">Последние продажи</h2>
+        <h2 className="text-lg font-bold text-ink">Последние продажи</h2>
         {recentSales.length === 0 ? (
-          <p className="mt-2 text-gray-500">Продаж пока не было.</p>
+          <p className="mt-2 text-ink/60">Продаж пока не было.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {recentSales.map((s) => {
@@ -261,16 +263,19 @@ export default async function ProdazhaPage({
                     .join(" / ") || null;
               }
               return (
-                <li key={s.id} className="rounded-xl border border-gray-200 p-3 text-sm">
-                  <div className="font-semibold">
+                <li
+                  key={s.id}
+                  className="rounded-card border border-ink/10 bg-paper-2/60 p-3 text-sm"
+                >
+                  <div className="font-semibold text-ink">
                     {title}
-                    {qty && <span className="font-normal"> · {qty}</span>}
+                    {qty && <span className="font-normal text-ink/70"> · {qty}</span>}
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-ink/70">
                     Клиент: {s.customerName}
                     {s.customerContact && <> ({s.customerContact})</>}
                   </div>
-                  <div className="text-gray-500">
+                  <div className="text-ink/60">
                     {s.manager.name} · {dateTimeFmt.format(s.soldAt)}
                   </div>
                 </li>
