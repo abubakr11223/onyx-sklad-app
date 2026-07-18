@@ -5,6 +5,9 @@ import {
   buildMovePayload,
   isNoopMove,
   validateLocationEdit,
+  validateNewLocation,
+  validateQtyMove,
+  validateSlabLocation,
   type NormalizedLocation,
 } from "@/lib/locations";
 
@@ -124,5 +127,169 @@ describe("isNoopMove — no-op guard (нет аудита MOVE без право
     const payload = buildMovePayload(before, after);
     expect(payload).toEqual({ from: { note: "x" }, to: { note: null } });
     expect(isNoopMove(payload)).toBe(false);
+  });
+});
+
+// ─────────────────────── SK-1b (1): validateNewLocation ──────────────────────
+
+describe("validateNewLocation — §5.7 добавление локации", () => {
+  it("полный ввод: block/landmark + qty («12,5») + note → ok, нормализовано", () => {
+    const r = validateNewLocation({
+      block: "  А ",
+      landmark: " 1–2 ",
+      slabsHere: "40",
+      areaHereM2: "12,5",
+      note: "  у ворот ",
+    });
+    expect(r).toEqual({
+      ok: true,
+      data: {
+        block: "А",
+        landmark: "1–2",
+        slabsHere: 40,
+        areaHereM2: 12.5,
+        note: "у ворот",
+      },
+    });
+  });
+
+  it("qty/note опциональны: пусто/absent → null", () => {
+    const blanks = validateNewLocation({
+      block: "Б",
+      landmark: "3",
+      slabsHere: "",
+      areaHereM2: "  ",
+      note: "",
+    });
+    expect(blanks).toEqual({
+      ok: true,
+      data: { block: "Б", landmark: "3", slabsHere: null, areaHereM2: null, note: null },
+    });
+
+    const absent = validateNewLocation({ block: "Б", landmark: "3" });
+    expect(absent).toEqual({
+      ok: true,
+      data: { block: "Б", landmark: "3", slabsHere: null, areaHereM2: null, note: null },
+    });
+  });
+
+  it("пустой block/landmark → те же русские ошибки, что у правки", () => {
+    expect(validateNewLocation({ block: "", landmark: "2" })).toEqual({
+      ok: false,
+      error: "Укажите блок",
+    });
+    expect(validateNewLocation({ block: "А", landmark: "  " })).toEqual({
+      ok: false,
+      error: "Укажите ориентир",
+    });
+  });
+
+  it("неверное/отрицательное число плит → ошибка формата", () => {
+    expect(
+      validateNewLocation({ block: "А", landmark: "2", slabsHere: "-3" }),
+    ).toEqual({ ok: false, error: "Число плит — целое положительное число" });
+    expect(
+      validateNewLocation({ block: "А", landmark: "2", slabsHere: "3,5" }),
+    ).toEqual({ ok: false, error: "Число плит — целое положительное число" });
+  });
+
+  it("неверная площадь → ошибка формата площади", () => {
+    expect(
+      validateNewLocation({ block: "А", landmark: "2", areaHereM2: "abc" }),
+    ).toEqual({ ok: false, error: "Площадь — положительное число, например 12,5" });
+  });
+});
+
+// ──────────────────────── SK-1b (2): validateQtyMove ─────────────────────────
+
+describe("validateQtyMove — перенос количества A→B", () => {
+  const source = { slabsHere: 10, areaHereM2: 20 };
+
+  it("плиты в пределах наличия → ok, area=null", () => {
+    expect(validateQtyMove({ qtySlabs: "4" }, source)).toEqual({
+      ok: true,
+      data: { qtySlabs: 4, qtyAreaM2: null },
+    });
+  });
+
+  it("площадь «12,5» в пределах наличия → ok", () => {
+    expect(validateQtyMove({ qtyAreaM2: "12,5" }, source)).toEqual({
+      ok: true,
+      data: { qtySlabs: null, qtyAreaM2: 12.5 },
+    });
+  });
+
+  it("оба поля разом → ok", () => {
+    expect(validateQtyMove({ qtySlabs: "10", qtyAreaM2: "20" }, source)).toEqual({
+      ok: true,
+      data: { qtySlabs: 10, qtyAreaM2: 20 },
+    });
+  });
+
+  it("ни одного количества → «Укажите количество для переноса»", () => {
+    expect(validateQtyMove({ qtySlabs: "", qtyAreaM2: "" }, source)).toEqual({
+      ok: false,
+      error: "Укажите количество для переноса",
+    });
+    expect(validateQtyMove({}, source)).toEqual({
+      ok: false,
+      error: "Укажите количество для переноса",
+    });
+  });
+
+  it("плит больше наличия → «Недостаточно плит в источнике»", () => {
+    expect(validateQtyMove({ qtySlabs: "11" }, source)).toEqual({
+      ok: false,
+      error: "Недостаточно плит в источнике",
+    });
+  });
+
+  it("slabsHere=null у источника, а плиты просят → недостаточно", () => {
+    expect(
+      validateQtyMove({ qtySlabs: "1" }, { slabsHere: null, areaHereM2: 20 }),
+    ).toEqual({ ok: false, error: "Недостаточно плит в источнике" });
+  });
+
+  it("площади больше наличия → «Недостаточно площади в источнике»", () => {
+    expect(validateQtyMove({ qtyAreaM2: "20,5" }, source)).toEqual({
+      ok: false,
+      error: "Недостаточно площади в источнике",
+    });
+  });
+
+  it("неверный формат количества плит → ошибка формата", () => {
+    expect(validateQtyMove({ qtySlabs: "3,5" }, source)).toEqual({
+      ok: false,
+      error: "Число плит — целое положительное число",
+    });
+  });
+
+  it("ровно всё наличие (граница ≥) → ok", () => {
+    expect(validateQtyMove({ qtySlabs: "10", qtyAreaM2: "20" }, source).ok).toBe(true);
+  });
+});
+
+// ─────────────────────── SK-1b (3): validateSlabLocation ─────────────────────
+
+describe("validateSlabLocation — локация плиты (без note)", () => {
+  it("block/landmark тримятся → ok, только block/landmark", () => {
+    expect(validateSlabLocation({ block: "  А ", landmark: " 2 " })).toEqual({
+      ok: true,
+      data: { block: "А", landmark: "2" },
+    });
+  });
+
+  it("пустой block → «Укажите блок»", () => {
+    expect(validateSlabLocation({ block: "  ", landmark: "2" })).toEqual({
+      ok: false,
+      error: "Укажите блок",
+    });
+  });
+
+  it("пустой landmark → «Укажите ориентир»", () => {
+    expect(validateSlabLocation({ block: "А", landmark: "" })).toEqual({
+      ok: false,
+      error: "Укажите ориентир",
+    });
   });
 });

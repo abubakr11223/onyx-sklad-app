@@ -23,7 +23,13 @@ import {
 } from "@/lib/photos";
 import { getCapabilities } from "@/lib/session";
 import { requestPhoto } from "@/app/poisk/actions";
-import { setNeedsCheck, updateLocation } from "@/app/kamen/actions";
+import {
+  addLocation,
+  moveQty,
+  setNeedsCheck,
+  updateLocation,
+  updateSlabLocation,
+} from "@/app/kamen/actions";
 import Card from "@/components/ui/Card";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -103,6 +109,141 @@ function NeedsCheckToggle({
       <input type="hidden" name="next" value={backTo} />
       <Button type="submit" variant="secondary" size="sm" className="align-middle">
         {needsCheck ? "Снять отметку (проверено)" : "Отметить: требует проверки"}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * SK-1b (3) — Правка локации ПЛИТЫ (block/landmark) складом. Инлайн-форма как у
+ * локации партии, но без note (у Slab нет такого поля). Server action
+ * updateSlabLocation делает defense-in-depth и пишет аудит MOVE.
+ */
+function SlabLocationForm({
+  slabId,
+  block,
+  landmark,
+  backTo,
+}: {
+  slabId: string;
+  block: string;
+  landmark: string;
+  backTo: string;
+}) {
+  return (
+    <form
+      action={updateSlabLocation}
+      className="mt-1 flex flex-wrap items-center gap-1.5"
+    >
+      <input type="hidden" name="slabId" value={slabId} />
+      <input type="hidden" name="next" value={backTo} />
+      <label className="text-ink/55">Блок</label>
+      <input name="block" defaultValue={block} className={inlineInput + " w-16"} />
+      <label className="text-ink/55">ориентир</label>
+      <input
+        name="landmark"
+        defaultValue={landmark}
+        className={inlineInput + " w-20"}
+      />
+      <Button type="submit" variant="secondary" size="sm">
+        Сохранить локацию плиты
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * SK-1b (2) — Перенос количества из одной локации партии в другую (A→B).
+ * Показываем только когда у партии ≥2 локаций (есть куда переносить). Числовые
+ * поля — text + inputMode (НЕ type="number"). Server action moveQty берёт
+ * FOR UPDATE на обе строки и не даёт уйти в минус.
+ */
+function MoveQtyForm({
+  sourceId,
+  others,
+  backTo,
+}: {
+  sourceId: string;
+  others: Array<{ id: string; block: string; landmark: string }>;
+  backTo: string;
+}) {
+  return (
+    <form action={moveQty} className="mt-1 flex flex-wrap items-center gap-1.5">
+      <input type="hidden" name="sourceLocationId" value={sourceId} />
+      <input type="hidden" name="next" value={backTo} />
+      <span className="text-ink/55">Перенести в</span>
+      <select
+        name="destLocationId"
+        defaultValue=""
+        className={inlineInput + " w-44"}
+      >
+        <option value="" disabled>
+          выберите локацию
+        </option>
+        {others.map((o) => (
+          <option key={o.id} value={o.id}>
+            Блок {o.block}, ор. {o.landmark}
+          </option>
+        ))}
+      </select>
+      <input
+        name="qtySlabs"
+        inputMode="numeric"
+        placeholder="плит"
+        className={inlineInput + " w-16"}
+      />
+      <input
+        name="qtyAreaM2"
+        inputMode="decimal"
+        placeholder="м²"
+        className={inlineInput + " w-16"}
+      />
+      <Button type="submit" variant="secondary" size="sm">
+        Переместить
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * SK-1b (1) — Добавить НОВУЮ локацию к партии. block/landmark обязательны,
+ * ~плиты/≈м²/примечание — опциональны. Числовые поля — text + inputMode.
+ * Server action addLocation проверяет права и пишет аудит MOVE(created).
+ */
+function AddLocationForm({
+  batchId,
+  backTo,
+}: {
+  batchId: string;
+  backTo: string;
+}) {
+  return (
+    <form action={addLocation} className="mt-2 flex flex-wrap items-center gap-1.5">
+      <input type="hidden" name="batchId" value={batchId} />
+      <input type="hidden" name="next" value={backTo} />
+      <label className="text-ink/55">Блок</label>
+      <input name="block" placeholder="А" className={inlineInput + " w-16"} />
+      <label className="text-ink/55">ориентир</label>
+      <input name="landmark" placeholder="2" className={inlineInput + " w-20"} />
+      <input
+        name="slabsHere"
+        inputMode="numeric"
+        placeholder="плит"
+        className={inlineInput + " w-16"}
+      />
+      <input
+        name="areaHereM2"
+        inputMode="decimal"
+        placeholder="м²"
+        className={inlineInput + " w-16"}
+      />
+      <input
+        name="note"
+        placeholder="примечание"
+        className={inlineInput + " w-32"}
+      />
+      <Button type="submit" variant="secondary" size="sm">
+        + Добавить локацию
       </Button>
     </form>
   );
@@ -420,6 +561,15 @@ export default async function KamenPage({
                         backTo={"/kamen/" + id}
                       />
                     )}
+                    {/* SK-1b (3): локацию плиты (block/landmark) правит склад. */}
+                    {caps.canManageWarehouse && (
+                      <SlabLocationForm
+                        slabId={s.id}
+                        block={s.block}
+                        landmark={s.landmark}
+                        backTo={"/kamen/" + id}
+                      />
+                    )}
                   </li>
                 )),
               )}
@@ -585,9 +735,28 @@ export default async function KamenPage({
                             )}
                           </>
                         )}
+                        {/* SK-1b (2): перенос количества A→B — только когда у
+                            партии есть куда переносить (≥2 локаций). */}
+                        {caps.canManageWarehouse && b.locations.length >= 2 && (
+                          <MoveQtyForm
+                            sourceId={loc.id}
+                            others={b.locations
+                              .filter((o) => o.id !== loc.id)
+                              .map((o) => ({
+                                id: o.id,
+                                block: o.block,
+                                landmark: o.landmark,
+                              }))}
+                            backTo={"/kamen/" + id}
+                          />
+                        )}
                       </li>
                     ))}
                   </ul>
+                )}
+                {/* SK-1b (1): добавить новую локацию к партии — только склад. */}
+                {caps.canManageWarehouse && (
+                  <AddLocationForm batchId={b.id} backTo={"/kamen/" + id} />
                 )}
               </li>
             ))}
