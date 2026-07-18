@@ -11,6 +11,7 @@ import type {
   TgUpdate,
 } from "@/lib/telegram";
 import { encodeShapeDraft } from "@/lib/singan";
+import { capabilitiesFor, type Role } from "@/lib/permissions";
 
 // ───────────────────────── Deps (inyeksiya) ─────────────────────────
 
@@ -125,6 +126,11 @@ const successMessage = (name: string) =>
 // Foto oqimi (TG-B2) matnlari — skladchi/menejer ruscha ko'radi.
 const MSG_PHOTO_NOT_REGISTERED =
   "Siz ro'yxatda yo'qsiz. /start yuboring.";
+// D3 — foto qabul / singan oqimlari FAQAT sklad xodimlari uchun (TZ §3:
+// canManageWarehouse — OWNER/WAREHOUSE). MANAGER/PARTNER va noma'lum rol
+// bu funksiyalarni ishga tushira olmaydi (zapros egallamaydi, AI chaqirmaydi).
+const MSG_PHOTO_NOT_WAREHOUSE =
+  "Bu funksiya faqat sklad xodimlari uchun.";
 const MSG_PHOTO_NO_REQUEST = "Hozircha faol foto-so'rov yo'q.";
 const MSG_PHOTO_SAVED = "✅ Rasm saqlandi, rahmat!";
 const managerNotifyMessage = (stoneTypeName: string) =>
@@ -340,6 +346,17 @@ async function handleBrokenStone(
     return;
   }
 
+  // (1b) D3 — sklad huquqi shart. Singan (bay) yozib olish ombor ishi; sklad
+  // bo'lmagan rol (MANAGER/PARTNER/noma'lum) AI'ga tegmaydi, hech narsa
+  // yuklab olinmaydi. capabilitiesFor — yagona haqiqat manbai (TZ §3).
+  if (
+    !capabilitiesFor(user.role as Role, { canSeePurchasePrice: false })
+      .canManageWarehouse
+  ) {
+    await deps.sendMessage(chatId, MSG_PHOTO_NOT_WAREHOUSE);
+    return;
+  }
+
   // (2) APP_BASE_URL sozlanmagan bo'lsa — AI'ga pul sarflamasdan darhol
   // to'xtaymiz (buzuq havola yuborilmasin, MSG_LOGIN_UNAVAILABLE uslubi).
   if (!deps.appBaseUrl) {
@@ -459,6 +476,17 @@ async function handlePhoto(
   });
   if (!user) {
     await deps.sendMessage(chatId, MSG_PHOTO_NOT_REGISTERED);
+    return;
+  }
+
+  // (1b) D3 — foto-zaproslar FAQAT sklad xodimlariga yuboriladi (photo-requests.ts:
+  // role WAREHOUSE). Sklad huquqi bo'lmagan rol (MANAGER/PARTNER/noma'lum) navbatdagi
+  // zaprosni egallab qo'ymasin: hech qanday findFirst/updateMany va Photo create YO'Q.
+  if (
+    !capabilitiesFor(user.role as Role, { canSeePurchasePrice: false })
+      .canManageWarehouse
+  ) {
+    await deps.sendMessage(chatId, MSG_PHOTO_NOT_WAREHOUSE);
     return;
   }
 

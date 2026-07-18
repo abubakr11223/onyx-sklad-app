@@ -363,6 +363,58 @@ describe("получение фото (TG-B2)", () => {
     expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
   });
 
+  it("D3 — MANAGER (bog'langan, faol) → «faqat sklad», zapros egallanmaydi", async () => {
+    userFindFirst.mockResolvedValue({ id: "m1", role: "MANAGER" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    // Hech qanday zapros topilmaydi/egallanmaydi, foto saqlanmaydi.
+    expect(prFindFirst).not.toHaveBeenCalled();
+    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+  });
+
+  it("D3 — PARTNER (bog'langan, faol) → «faqat sklad», zapros egallanmaydi", async () => {
+    userFindFirst.mockResolvedValue({ id: "p1", role: "PARTNER" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(prFindFirst).not.toHaveBeenCalled();
+    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+  });
+
+  it("D3 — noma'lum/buzuq rol → deny-by-default, zapros egallanmaydi", async () => {
+    userFindFirst.mockResolvedValue({ id: "x1", role: "SUPERADMIN" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(prFindFirst).not.toHaveBeenCalled();
+    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+  });
+
+  it("D3 — OWNER ham sklad huquqli → foto qabul qilinadi (happy path)", async () => {
+    userFindFirst.mockResolvedValue({ id: "o1", role: "OWNER" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    expect(prUpdateMany).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+  });
+
   it("PENDING zapros yo'q (findFirst → null) → Photo YO'Q, «faol foto-so'rov yo'q»", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     prFindFirst.mockResolvedValue(null);
@@ -494,6 +546,28 @@ describe("singan tosh oqimi (§5.5b)", () => {
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
     expect(analyzeShape).not.toHaveBeenCalled();
     expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
+  });
+
+  it("D3 — MANAGER (sklad emas) → «faqat sklad», yuklab olish/AI YO'Q", async () => {
+    userFindFirst.mockResolvedValue({ id: "m1", role: "MANAGER" });
+
+    await handleUpdate(photoUpdate({ chatId: 999, caption: "singan" }), makeDeps());
+
+    expect(downloadPhotoBase64).not.toHaveBeenCalled();
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+    expect(sendMessage.mock.calls[0][1]).not.toContain("?d=");
+  });
+
+  it("D3 — noma'lum rol (deny-by-default) → «faqat sklad», AI YO'Q", async () => {
+    userFindFirst.mockResolvedValue({ id: "x1", role: "GARBAGE" });
+
+    await handleUpdate(photoUpdate({ chatId: 999, caption: "бой" }), makeDeps());
+
+    expect(downloadPhotoBase64).not.toHaveBeenCalled();
+    expect(analyzeShape).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
   });
 
   it("appBaseUrl bo'sh → buzuq havola O'RNIGA aniq xabar, AI ham chaqirilmaydi", async () => {
