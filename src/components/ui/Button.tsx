@@ -6,10 +6,11 @@
 //   primary   — графит (основное действие)
 //   secondary — контур (второстепенное)
 //   ghost     — без фона (третьестепенное)
+//   danger    — красный (деструктивное действие)
 
 import type { ButtonHTMLAttributes } from "react";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "md" | "sm";
 
 const BASE =
@@ -23,6 +24,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary:
     "border border-ink/20 bg-transparent text-ink hover:border-gold hover:text-gold-deep",
   ghost: "bg-transparent text-ink hover:bg-ink/5",
+  danger: "bg-danger text-paper hover:bg-danger/90 active:bg-danger/90",
 };
 
 // min-h-11 = 44px — минимальная зона касания (мобиль-first).

@@ -25,6 +25,8 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
   // Индекс открытого фото; null — оверлей закрыт.
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // Контейнер оверлея — для ловушки фокуса (Tab не уходит на страницу под ним).
+  const dialogRef = useRef<HTMLDivElement>(null);
   // Куда вернуть фокус после закрытия (миниатюра, с которой открыли).
   const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -34,19 +36,53 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
     lastTriggerRef.current?.focus();
   }, []);
 
-  // Esc закрывает оверлей; вешаем слушатель только когда он открыт.
+  // Esc закрывает оверлей; Tab/Shift+Tab циклится ВНУТРИ диалога (ловушка
+  // фокуса — не уходит на страницу под оверлеем). Слушатель — только когда открыт.
   useEffect(() => {
     if (openIndex === null) return;
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") close();
+      if (ev.key === "Escape") {
+        close();
+        return;
+      }
+      if (ev.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) {
+        ev.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (ev.shiftKey) {
+        if (active === first || !dialog.contains(active)) {
+          ev.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialog.contains(active)) {
+        ev.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [openIndex, close]);
 
-  // При открытии — фокус на кнопку закрытия (клавиатурная навигация).
+  // При открытии — фокус на кнопку закрытия (клавиатурная навигация) и блокировка
+  // прокрутки фона (body-scroll-lock); при закрытии/размонтаже — точный возврат
+  // предыдущего значения overflow (без утечки).
   useEffect(() => {
-    if (openIndex !== null) closeButtonRef.current?.focus();
+    if (openIndex === null) return;
+    closeButtonRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
   }, [openIndex]);
 
   const open = photos[openIndex ?? -1] ?? null;
@@ -87,6 +123,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
 
       {open && (
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Просмотр фото"

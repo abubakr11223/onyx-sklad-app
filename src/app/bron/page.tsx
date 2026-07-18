@@ -19,6 +19,7 @@ import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { cancelReservationAction } from "./actions";
 import ReserveForm, {
@@ -350,12 +351,9 @@ export default async function BronPage({
                         <span className="text-sm text-danger">
                           Камень вернётся «В наличии». Точно снять?
                         </span>
-                        <button
-                          type="submit"
-                          className="inline-flex min-h-11 items-center justify-center rounded-field bg-danger px-4 text-base font-semibold text-paper transition hover:bg-danger/90"
-                        >
+                        <Button variant="danger" type="submit">
                           Да, снять бронь
-                        </button>
+                        </Button>
                       </form>
                     </details>
                   </Card>

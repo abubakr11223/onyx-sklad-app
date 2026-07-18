@@ -10,7 +10,17 @@ import {
   freeRemainderFromAggregate,
 } from "@/lib/batch-remainders";
 
-const baseBatch = {
+// slabsTotal/areaTotalM2 nullable — ba'zi testlar ularni null bilan override qiladi
+// (m²-only yoki dona-only partiya). Tip aniq berilmasa `number` chiqariladi va
+// { ...baseBatch, slabsTotal: null } TS2322 beradi.
+const baseBatch: {
+  slabsTotal: number | null;
+  areaTotalM2: number | null;
+  slabsAdjusted: number;
+  areaAdjustedM2: number;
+  slabsSoldDirect: number;
+  areaSoldDirectM2: number;
+} = {
   slabsTotal: 40,
   areaTotalM2: 220,
   slabsAdjusted: 0,
@@ -21,7 +31,7 @@ const baseBatch = {
 
 /** Bir xil kirishni ikki yo'l bilan hisoblab, teng ekanini tasdiqlaydi. */
 function assertParity(
-  batch: typeof baseBatch & { slabsTotal: number | null; areaTotalM2: number | null },
+  batch: typeof baseBatch,
   slabs: { areaM2: number | null }[],
   pieces: { areaM2: number | null }[],
 ) {

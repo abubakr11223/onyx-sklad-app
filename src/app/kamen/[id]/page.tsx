@@ -202,6 +202,8 @@ export default async function KamenPage({
             block: true,
             landmark: true,
             needsCheck: true,
+            // AI-чертёж (§5.5): data:image/svg+xml URI, показываем как <img>.
+            drawingUrl: true,
           },
         },
         // «Показать все» — задел на следующий батч (пагинация фото).
@@ -449,6 +451,16 @@ export default async function KamenPage({
                       entityId={p.id}
                       needsCheck={p.needsCheck}
                       backTo={"/kamen/" + id}
+                    />
+                  )}
+                  {/* AI-чертёж (§5.5): data:image/svg+xml URI. Только <img> —
+                      без dangerouslySetInnerHTML (SVG рендерится без скриптов).
+                      Пусто/нет → ничего не рендерим (без битой картинки). */}
+                  {p.drawingUrl && (
+                    <img
+                      src={p.drawingUrl}
+                      alt="Чертёж (размеры)"
+                      className="mt-1 block w-full max-w-xs rounded-field border border-ink/10"
                     />
                   )}
                 </li>
