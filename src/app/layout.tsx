@@ -1,9 +1,29 @@
 import type { Metadata } from "next";
+import { Montserrat, Lora } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import BottomTabBar from "@/components/BottomTabBar";
 import { getCapabilities } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
+
+// Фирменная типографика бренда «Графит + золото» (см. public/karta.html):
+// Montserrat = UI/sans, Lora = заголовки/serif. Оба грузятся через next/font
+// (сеть до fonts.gstatic.com на билде есть) с cyrillic-сабсетом — интерфейс на
+// русском. globals.css потребляет эти переменные (--font-montserrat/--font-lora)
+// с системным стеком как fallback.
+const montserrat = Montserrat({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-montserrat",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
+
+const lora = Lora({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-lora",
+  display: "swap",
+  weight: ["600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "Onyx — складская система",
@@ -28,7 +48,7 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang="ru">
+    <html lang="ru" className={`${montserrat.variable} ${lora.variable}`}>
       <body className="antialiased">
         <Nav caps={caps} />
         {/* pb-20 на мобиле — контент не прячется за нижним таб-баром. */}

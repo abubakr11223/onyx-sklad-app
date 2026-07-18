@@ -1,17 +1,122 @@
 // Главная — роль-фильтрованные разделы (аудит: MANAGER видел «Приёмку» и
 // упирался в «Нет доступа»). Тот же капабилити-фильтр, что и у навигации.
-// Тяжёлые запросы НЕ грузим (дашборд-счётчики отложены в C2 как рискованные).
+// Плитки-KPI над разделами: ТОЛЬКО дешёвые count()-агрегаты (без выборки строк),
+// один Promise.all, роль-фильтр по Capabilities. Отложенный C-риск снят: строки
+// не грузим, только счётчики.
 
 import Link from "next/link";
-import { getCapabilities } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
+import type { Capabilities } from "@/lib/permissions";
+import { db } from "@/lib/db";
 import { visibleNavItems, type NavItem } from "@/components/nav-items";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
 import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
 
 export const dynamic = "force-dynamic";
 
+/** Роль-фильтрованные KPI. null = плитка скрыта для этой роли (или сбой count). */
+type Stats = {
+  batches: number | null;
+  needsCheck: number | null;
+  photosPending: number | null;
+  reservations: number | null;
+};
+
+/**
+ * Дешёвые счётчики для «кокпита». Только count() — никаких строк/связей.
+ * Все запросы в одном Promise.all; не запрошенные роли отдают Promise.resolve(null).
+ * Любой сбой агрегата → все плитки скрыты (главная не падает; разделы остаются).
+ */
+async function loadStats(
+  caps: Capabilities,
+  managerId: string | null,
+): Promise<Stats> {
+  const wantBatches = caps.canSeeExactRemainder; // OWNER/MANAGER/WAREHOUSE
+  const wantNeedsCheck = caps.canManageWarehouse; // OWNER/WAREHOUSE
+  const wantPhotos = caps.canRequestPhoto || caps.canManageWarehouse; // OWNER/MANAGER/WAREHOUSE
+  // Брони: OWNER — все; MANAGER — только свои (нужен managerId, иначе скрываем,
+  // чтобы не показать чужие). PARTNER/WAREHOUSE — нет.
+  const wantReservations =
+    caps.canReserve && (caps.canSeeAllReservations || managerId != null);
+
+  try {
+    const [batches, nBatch, nSlab, nPiece, photosPending, reservations] =
+      await Promise.all([
+        wantBatches ? db.batch.count() : Promise.resolve(null),
+        wantNeedsCheck
+          ? db.batch.count({ where: { needsCheck: true } })
+          : Promise.resolve(null),
+        wantNeedsCheck
+          ? db.slab.count({ where: { needsCheck: true } })
+          : Promise.resolve(null),
+        wantNeedsCheck
+          ? db.piece.count({ where: { needsCheck: true } })
+          : Promise.resolve(null),
+        wantPhotos
+          ? db.photoRequest.count({ where: { status: "PENDING" } })
+          : Promise.resolve(null),
+        wantReservations
+          ? db.reservation.count({
+              where: {
+                status: "ACTIVE",
+                ...(caps.canSeeAllReservations ? {} : { managerId: managerId! }),
+              },
+            })
+          : Promise.resolve(null),
+      ]);
+
+    return {
+      batches,
+      needsCheck: wantNeedsCheck
+        ? (nBatch ?? 0) + (nSlab ?? 0) + (nPiece ?? 0)
+        : null,
+      photosPending,
+      reservations,
+    };
+  } catch {
+    return { batches: null, needsCheck: null, photosPending: null, reservations: null };
+  }
+}
+
+type Tile = {
+  key: string;
+  value: number;
+  label: string;
+  href: string;
+  warning?: boolean;
+};
+
 export default async function Home() {
-  const caps = await getCapabilities();
+  const [caps, user] = await Promise.all([getCapabilities(), getCurrentUser()]);
   const sections = visibleNavItems(caps);
+  const stats = await loadStats(caps, user?.id ?? null);
+
+  const tiles: Tile[] = [];
+  if (stats.batches != null)
+    tiles.push({ key: "batches", value: stats.batches, label: "Партии", href: "/poisk" });
+  if (stats.needsCheck != null)
+    tiles.push({
+      key: "needsCheck",
+      value: stats.needsCheck,
+      label: "Требует проверки",
+      href: "/poisk",
+      warning: true,
+    });
+  if (stats.photosPending != null)
+    tiles.push({
+      key: "photos",
+      value: stats.photosPending,
+      label: "Фото в очереди",
+      href: "/fotozapros",
+    });
+  if (stats.reservations != null)
+    tiles.push({
+      key: "reservations",
+      value: stats.reservations,
+      label: "Активные брони",
+      href: "/bron",
+    });
 
   const cardClass =
     "group flex items-start gap-3 rounded-card border border-ink/10 bg-paper-2/50 p-5 " +
@@ -50,6 +155,40 @@ export default async function Home() {
           Учёт натурального камня: партии, плиты, остатки, брони.
         </p>
       </header>
+
+      {tiles.length > 0 && (
+        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {tiles.map((t) => (
+            <Link
+              key={t.key}
+              href={t.href}
+              className="rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+            >
+              <Card
+                className={
+                  "h-full transition hover:border-gold " +
+                  (t.warning ? "border-warning/30" : "")
+                }
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span
+                    className={
+                      "font-serif text-3xl font-bold tabular-nums " +
+                      (t.warning ? "text-warning" : "text-ink")
+                    }
+                  >
+                    {t.value}
+                  </span>
+                  {t.warning && t.value > 0 ? (
+                    <Badge variant="warning">проверить</Badge>
+                  ) : null}
+                </div>
+                <span className="mt-1 block text-sm text-ink/60">{t.label}</span>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sections.map((section) =>

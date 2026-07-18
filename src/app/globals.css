@@ -30,13 +30,14 @@
   --radius-field: 0.625rem; /* 10px — inputs, buttons, badges */
   --radius-card: 1rem; /* 16px — cards, panels */
 
-  /* Type roles. Fonts self-hosted через next/font недоступны в этом
-     оффлайн-сэндбоксе (нет сети), поэтому — системный стек с теми же ролями:
-     sans = роль Montserrat (UI), serif = роль Lora (заголовки страниц).
-     На Vercel (есть сеть) это меняется на next/font без правок разметки. */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  /* Type roles. Фирменные шрифты подключены через next/font (layout.tsx):
+     sans = Montserrat (UI), serif = Lora (заголовки страниц) — оба с
+     cyrillic-сабсетом. Токены потребляют переменные next/font, а системный
+     стек остаётся fallback'ом (пока шрифт грузится / если не подтянулся). */
+  --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: var(--font-lora), ui-serif, Georgia, Cambria, "Times New Roman",
+    serif;
 
   /* Небольшая типо-шкала сверх дефолтной: заголовок страницы (Lora-роль). */
   --text-display: 2rem;
