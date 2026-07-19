@@ -87,12 +87,11 @@ export const NAV_ITEMS: NavItem[] = [
     Icon: CameraIcon,
   },
   {
-    href: "/karta",
+    href: "/karta-sklada",
     label: "Карта",
     short: "Карта",
-    description: "Готовность проекта",
+    description: "Где какой камень лежит",
     Icon: MapIcon,
-    external: true,
   },
 ];
 

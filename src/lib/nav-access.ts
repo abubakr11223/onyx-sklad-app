@@ -18,6 +18,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/razbit": "canManageWarehouse",
   "/fotozapros": "canRequestPhoto",
   "/karta": null,
+  // «Карта склада» — точные локации: OWNER/MANAGER/WAREHOUSE, но НЕ PARTNER (TZ §3).
+  "/karta-sklada": "canSeeExactRemainder",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

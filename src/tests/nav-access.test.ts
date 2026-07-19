@@ -41,6 +41,14 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     }
   });
 
+  it("Карта склада — OWNER/MANAGER/WAREHOUSE ko'radi, PARTNER yo'q (TZ §3)", () => {
+    // Точные локации — canSeeExactRemainder (PARTNER'dan boshqa hammasi).
+    expect(canAccessNav("/karta-sklada", caps("OWNER"))).toBe(true);
+    expect(canAccessNav("/karta-sklada", caps("MANAGER"))).toBe(true);
+    expect(canAccessNav("/karta-sklada", caps("WAREHOUSE"))).toBe(true);
+    expect(canAccessNav("/karta-sklada", caps("PARTNER"))).toBe(false);
+  });
+
   it("noma'lum yo'nalish — deny emas, ko'rsatiladi (nav kosmetik)", () => {
     expect(canAccessNav("/kakoy-to-put", caps("PARTNER"))).toBe(true);
   });
