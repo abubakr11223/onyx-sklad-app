@@ -36,6 +36,15 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
     lastTriggerRef.current?.focus();
   }, []);
 
+  // Навигация по фото внутри оверлея. Индекс зажат в [0, длина-1] — на краях
+  // ничего не делает (кнопки на краях к тому же не рендерятся).
+  const goPrev = useCallback(() => {
+    setOpenIndex((i) => (i === null ? i : Math.max(0, i - 1)));
+  }, []);
+  const goNext = useCallback(() => {
+    setOpenIndex((i) => (i === null ? i : Math.min(photos.length - 1, i + 1)));
+  }, [photos.length]);
+
   // Esc закрывает оверлей; Tab/Shift+Tab циклится ВНУТРИ диалога (ловушка
   // фокуса — не уходит на страницу под оверлеем). Слушатель — только когда открыт.
   useEffect(() => {
@@ -43,6 +52,15 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") {
         close();
+        return;
+      }
+      // ←/→ листают фото (на краях зажимаются — no-op). Esc/Tab не трогаем.
+      if (ev.key === "ArrowLeft") {
+        goPrev();
+        return;
+      }
+      if (ev.key === "ArrowRight") {
+        goNext();
         return;
       }
       if (ev.key !== "Tab") return;
@@ -70,7 +88,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openIndex, close]);
+  }, [openIndex, close, goPrev, goNext]);
 
   // При открытии — фокус на кнопку закрытия (клавиатурная навигация) и блокировка
   // прокрутки фона (body-scroll-lock); при закрытии/размонтаже — точный возврат
@@ -86,6 +104,10 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
   }, [openIndex]);
 
   const open = photos[openIndex ?? -1] ?? null;
+  // Показ навигации только когда есть что листать (> 1 фото).
+  const hasMultiple = photos.length > 1;
+  const atFirst = openIndex === 0;
+  const atLast = openIndex === photos.length - 1;
 
   return (
     <>
@@ -153,6 +175,76 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
+
+          {/* Навигация «предыдущее / следующее» — только при > 1 фото. Кнопки —
+              настоящие <button> внутри диалога, поэтому попадают в ловушку фокуса.
+              stopPropagation: клик по кнопке не всплывает к фону и не закрывает
+              оверлей. На краях кнопка не рендерится (нечего листать в ту сторону). */}
+          {hasMultiple && !atFirst && (
+            <button
+              type="button"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                goPrev();
+              }}
+              aria-label="Предыдущее фото"
+              className="absolute left-4 top-1/2 flex h-11 min-h-11 w-11 -translate-y-1/2
+                         items-center justify-center rounded-field bg-ink/40 text-paper
+                         transition hover:bg-ink/60 hover:text-gold
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width={24}
+                height={24}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+          )}
+          {hasMultiple && !atLast && (
+            <button
+              type="button"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                goNext();
+              }}
+              aria-label="Следующее фото"
+              className="absolute right-4 top-1/2 flex h-11 min-h-11 w-11 -translate-y-1/2
+                         items-center justify-center rounded-field bg-ink/40 text-paper
+                         transition hover:bg-ink/60 hover:text-gold
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width={24}
+                height={24}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          )}
+          {hasMultiple && (
+            <div
+              aria-live="polite"
+              className="absolute left-4 top-4 rounded-field bg-ink/40 px-2 py-1
+                         text-sm text-paper/70"
+            >
+              {(openIndex ?? 0) + 1} / {photos.length}
+            </div>
+          )}
 
           {/* Клик по самому фото не закрывает — стоп всплытия к фону. */}
           <figure
