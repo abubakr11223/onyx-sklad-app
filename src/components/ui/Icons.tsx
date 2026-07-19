@@ -111,6 +111,16 @@ export function MapIcon(props: IconProps) {
   );
 }
 
+/** Флажок — физический ориентир на складе (пронумерованный флаг, TZ §4.5). */
+export function FlagIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2 3.5L16 11H5" />
+    </Base>
+  );
+}
+
 /** Треугольник-предупреждение — состояния warning/ошибок. */
 export function AlertTriangleIcon(props: IconProps) {
   return (

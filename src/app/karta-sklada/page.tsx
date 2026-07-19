@@ -19,6 +19,7 @@ import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
+import { FlagIcon } from "@/components/ui/Icons";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,7 @@ export default async function KartaSkladaPage() {
     }));
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
       <header className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
           Onyx · склад
@@ -109,7 +110,8 @@ export default async function KartaSkladaPage() {
           Карта склада
         </h1>
         <p className="mt-1 text-sm text-ink/60">
-          Где какой камень лежит — по блокам и ориентирам.
+          Визуальная карта: блоки — как зоны, ориентиры — флажки. Видно, где какой
+          камень лежит.
         </p>
       </header>
 
@@ -120,17 +122,37 @@ export default async function KartaSkladaPage() {
           </p>
         </Card>
       ) : (
-        <div className="space-y-8">
+        // Карта склада: блоки как «участки» на плане — адаптивная сетка зон
+        // (1 колонка на телефоне → 2–3 на широких экранах).
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {blocks.map(({ block, landmarks }) => (
-            <section key={block}>
-              <h2 className="mb-3 text-lg font-bold text-ink">Блок {block}</h2>
+            <section
+              key={block}
+              className="relative overflow-hidden rounded-card border border-ink/10 bg-paper-2/60 p-5"
+            >
+              {/* Метка зоны — буква блока как подпись на карте. */}
+              <div className="mb-4 flex items-baseline gap-2">
+                <span className="font-serif text-3xl font-bold leading-none text-gold-deep">
+                  {block}
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/50">
+                  блок
+                </span>
+              </div>
+
+              {/* Ориентиры зоны — пронумерованные флажки. */}
               <div className="space-y-3">
                 {landmarks.map(({ landmark, stones }) => (
-                  <Card key={landmark}>
-                    <h3 className="text-base font-semibold text-ink">
-                      Ориентир {landmark}
-                    </h3>
-                    <ul className="mt-2 space-y-0.5">
+                  <div
+                    key={landmark}
+                    className="rounded-field border border-ink/8 bg-paper/50 p-3"
+                  >
+                    {/* Флаг-ориентир: гибкая метка (число или «1–2»). */}
+                    <div className="mb-2 inline-flex items-center gap-1.5 rounded-field bg-gold/15 px-2.5 py-1 text-sm font-bold text-gold-deep ring-1 ring-gold/25">
+                      <FlagIcon className="h-4 w-4" />
+                      <span>{landmark}</span>
+                    </div>
+                    <ul className="space-y-0.5">
                       {stones.map((s, i) => {
                         const qty: string[] = [];
                         if (s.slabsHere !== null) qty.push(`~${s.slabsHere} плит`);
@@ -151,7 +173,7 @@ export default async function KartaSkladaPage() {
                         );
                       })}
                     </ul>
-                  </Card>
+                  </div>
                 ))}
               </div>
             </section>
