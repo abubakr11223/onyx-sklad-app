@@ -10,6 +10,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
+import { formatTashkentDate } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import { decodeShapeDraft } from "@/lib/singan";
 import { renderChertyoj } from "@/lib/chertyoj";
@@ -26,7 +27,6 @@ export const metadata: Metadata = {
 // Partiya ro'yxati joriy DB holatini aks ettirsin.
 export const dynamic = "force-dynamic";
 
-const dateFmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" });
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 function first(v: string | string[] | undefined): string | undefined {
@@ -226,7 +226,7 @@ export default async function SinganPage({
                     .join(" / ");
                   return (
                     <option key={b.id} value={b.id}>
-                      {b.stoneType.name} — {dateFmt.format(b.arrivedAt)}
+                      {b.stoneType.name} — {formatTashkentDate(b.arrivedAt)}
                       {qty && ` (${qty})`}
                     </option>
                   );

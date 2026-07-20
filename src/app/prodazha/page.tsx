@@ -11,6 +11,7 @@ import {
   getBatchRemainders,
 } from "@/lib/batch-remainders";
 import { getCapabilities } from "@/lib/session";
+import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import SaleForm, { type StoneTypeGroup } from "./SaleForm";
@@ -23,11 +24,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
-const dateFmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" });
-const dateTimeFmt = new Intl.DateTimeFormat("ru-RU", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
 
 const PIECE_KIND_RU: Record<string, string> = {
   BROKEN: "бой",
@@ -202,7 +198,7 @@ export default async function ProdazhaPage({
           (free.areaFreeM2 !== null && free.areaFreeM2 > 0);
         return {
           id: b.id,
-          title: `Партия от ${dateFmt.format(b.arrivedAt)}`,
+          title: `Партия от ${formatTashkentDate(b.arrivedAt)}`,
           freeText: `свободно: ${freeParts || "нет данных"}`,
           needsCheck: b.needsCheck,
           hasFree,
@@ -276,7 +272,7 @@ export default async function ProdazhaPage({
                     {s.customerContact && <> ({s.customerContact})</>}
                   </div>
                   <div className="text-ink/60">
-                    {s.manager.name} · {dateTimeFmt.format(s.soldAt)}
+                    {s.manager.name} · {formatTashkentDateTime(s.soldAt)}
                   </div>
                 </li>
               );

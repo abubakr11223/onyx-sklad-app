@@ -5,6 +5,7 @@
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
+import { formatTashkentDate } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
@@ -16,7 +17,6 @@ export const metadata: Metadata = {
 // Списки плит/партий должны отражать текущее состояние БД.
 export const dynamic = "force-dynamic";
 
-const dateFmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" });
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 function first(v: string | string[] | undefined): string | undefined {
@@ -84,7 +84,7 @@ export default async function RazbitPage({
   const batches: BatchOption[] = batchRows.map((b) => ({
     id: b.id,
     stoneName: b.stoneType.name,
-    arrived: dateFmt.format(b.arrivedAt),
+    arrived: formatTashkentDate(b.arrivedAt),
     qty: [
       b.slabsTotal !== null && `${b.slabsTotal} плит`,
       b.areaTotalM2 !== null && `${m2Fmt.format(Number(b.areaTotalM2))} м²`,

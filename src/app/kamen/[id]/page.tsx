@@ -24,6 +24,7 @@ import {
   parsePhotoStaleMonthsConfig,
 } from "@/lib/photos";
 import { getCapabilities } from "@/lib/session";
+import { formatTashkentDate } from "@/lib/datetime";
 import { requestPhoto } from "@/app/poisk/actions";
 import {
   addLocation,
@@ -50,7 +51,6 @@ const priceFmt = new Intl.NumberFormat("ru-RU", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const dateFmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" });
 
 const PIECE_KIND_RU: Record<string, string> = {
   BROKEN: "бой",
@@ -476,7 +476,7 @@ export default async function KamenPage({
   // «Свежесть» (TG-C, §5.3) считается на сервере — как и раньше.
   const photoItems: LightboxPhoto[] = st.photos.map((p) => ({
     id: p.id,
-    caption: `Снято ${dateFmt.format(p.takenAt)}`,
+    caption: `Снято ${formatTashkentDate(p.takenAt)}`,
     stale: isPhotoStale(p.takenAt, now, photoStaleMonths),
   }));
 
@@ -705,7 +705,7 @@ export default async function KamenPage({
                 className="rounded-card border border-ink/10 bg-paper p-3 text-sm"
               >
                 <div className="font-semibold text-ink">
-                  Партия от {dateFmt.format(b.arrivedAt)}
+                  Партия от {formatTashkentDate(b.arrivedAt)}
                   {b.needsCheck && <NeedsCheckBadge />}
                   {/* SK-2: пометку «проверить» переключает только склад. */}
                   {caps.canManageWarehouse && (
@@ -829,7 +829,7 @@ export default async function KamenPage({
             {st.batches.map((b) => (
               <li key={b.id} className="text-sm">
                 <div className="text-ink/60">
-                  Партия от {dateFmt.format(b.arrivedAt)}
+                  Партия от {formatTashkentDate(b.arrivedAt)}
                 </div>
                 {b.locations.length === 0 ? (
                   <form action={requestPhoto} className="mt-1">

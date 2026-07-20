@@ -10,17 +10,13 @@ import Card from "@/components/ui/Card";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import Alert from "@/components/ui/Alert";
 import { CameraIcon } from "@/components/ui/Icons";
+import { formatTashkentDateTime } from "@/lib/datetime";
 
 export const metadata: Metadata = {
   title: "Запросы на фото — Onyx",
 };
 
 export const dynamic = "force-dynamic";
-
-const dateFmt = new Intl.DateTimeFormat("ru-RU", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
 
 const STATUS_RU: Record<string, string> = {
   PENDING: "ожидает",
@@ -142,7 +138,7 @@ export default async function FotozaprosPage() {
                     </p>
                   )}
                   <p className="mt-1 text-xs text-ink/50">
-                    {dateFmt.format(r.createdAt)}
+                    {formatTashkentDateTime(r.createdAt)}
                     {r.assignee ? ` · ${r.assignee.name}` : " · общая очередь"}
                   </p>
                   {r.photos.length > 0 && (

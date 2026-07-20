@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
+import { todayTashkentISO } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -47,7 +48,7 @@ export default async function PriemkaPage({
   const area = first(sp.area);
   const qty = [slabs && `${slabs} плит`, area && `${area} м²`].filter(Boolean).join(" / ");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayTashkentISO();
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">

@@ -16,6 +16,7 @@ import {
   parseReservationDaysConfig,
 } from "@/lib/reservations";
 import { getCapabilities } from "@/lib/session";
+import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -36,11 +37,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
-const dateFmt = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short" });
-const dateTimeFmt = new Intl.DateTimeFormat("ru-RU", {
-  dateStyle: "short",
-  timeStyle: "short",
-});
 
 const PIECE_KIND_RU: Record<string, string> = {
   BROKEN: "бой",
@@ -90,7 +86,7 @@ function stoneLabel(r: ReservationRow): string {
     if (r.qtySlabs !== null) qty.push(`${r.qtySlabs} плит`);
     const area = toNum(r.qtyAreaM2);
     if (area !== null) qty.push(`${m2Fmt.format(area)} м²`);
-    return `${r.batch.stoneType.name} — партия от ${dateFmt.format(r.batch.arrivedAt)}, объём: ${qty.join(" + ")}`;
+    return `${r.batch.stoneType.name} — партия от ${formatTashkentDate(r.batch.arrivedAt)}, объём: ${qty.join(" + ")}`;
   }
   return "—";
 }
@@ -246,7 +242,7 @@ export default async function BronPage({
             freeParts.push(`≈${m2Fmt.format(freeAreaM2)} м²`);
           return {
             value: `BATCH:${b.id}`,
-            label: `Партия от ${dateFmt.format(b.arrivedAt)} · свободно: ${freeParts.join(" · ")}`,
+            label: `Партия от ${formatTashkentDate(b.arrivedAt)} · свободно: ${freeParts.join(" · ")}`,
             freeSlabs,
             freeAreaM2,
           };
@@ -330,11 +326,11 @@ export default async function BronPage({
                     <div className="mt-1.5 text-sm">
                       {expiresToday ? (
                         <Badge variant="warning">
-                          до {dateTimeFmt.format(r.expiresAt)} — истекает сегодня
+                          до {formatTashkentDateTime(r.expiresAt)} — истекает сегодня
                         </Badge>
                       ) : (
                         <span className="text-ink/70">
-                          до {dateTimeFmt.format(r.expiresAt)}
+                          до {formatTashkentDateTime(r.expiresAt)}
                         </span>
                       )}
                     </div>
@@ -395,7 +391,7 @@ export default async function BronPage({
                 >
                   {HISTORY_STATUS_RU[r.status] ?? r.status}
                 </Badge>
-                {r.resolvedAt && <> {dateFmt.format(r.resolvedAt)}</>}
+                {r.resolvedAt && <> {formatTashkentDate(r.resolvedAt)}</>}
               </li>
             ))}
           </ul>
