@@ -89,6 +89,33 @@ export function parsePositiveInt(raw: string): number | null | undefined {
   return n;
 }
 
+/**
+ * Поле «количество» именно для ПРИЁМКИ (slabsTotal, areaTotalM2): ноль
+ * трактуется КАК ПУСТО («не заполнено») — TZ §5.1, правило «минимум одно из
+ * двух». Партия принимается, если задано хотя бы одно реальное положительное
+ * значение (плиты ИЛИ м²); ноль в любом из полей не мешает.
+ *
+ * ВАЖНО: отдельный хелпер, а НЕ правка parsePositiveInt/parsePositiveDecimal —
+ * те общие и используются в продаже/броне/разбить/singan/локациях, где 0 обязан
+ * оставаться ошибкой. Здесь же 0 == пусто только для двух полей приёмки.
+ *
+ * Возвращает:
+ *  - null      — пусто, пробелы ИЛИ ноль в любой записи («0», «00», «0,0», «0.0»);
+ *  - undefined — отрицательное, не число, дробь в целом поле или переполнение;
+ *  - number    — корректное положительное число (в пределах Int4 / Decimal(12,3)).
+ */
+export function parseQuantityField(
+  raw: string,
+  kind: "int" | "decimal",
+): number | null | undefined {
+  const s = raw.trim().replace(",", ".");
+  if (s === "") return null;
+  // Ноль в любой форме = не заполнено (0 ⇔ пусто).
+  if (/^\d+(\.\d+)?$/.test(s) && Number(s) === 0) return null;
+  // Ненулевое значение — обычные правила (целое/дробь, знак, предел).
+  return kind === "int" ? parsePositiveInt(raw) : parsePositiveDecimal(raw);
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function validateIntake(input: IntakeInput): IntakeResult {
@@ -112,8 +139,11 @@ export function validateIntake(input: IntakeInput): IntakeResult {
   }
 
   // ── Количество: плиты и/или площадь — минимум одно (ADR-002, CHECK в БД) ──
-  const slabsTotal = parsePositiveInt(input.slabsTotal);
-  const areaTotalM2 = parsePositiveDecimal(input.areaTotalM2);
+  // BUG-02: для приёмки 0 == пусто (parseQuantityField). Отрицательное/текст
+  // по-прежнему ошибка поля; правило «минимум одно» срабатывает, когда ОБА
+  // пусты-или-ноль.
+  const slabsTotal = parseQuantityField(input.slabsTotal, "int");
+  const areaTotalM2 = parseQuantityField(input.areaTotalM2, "decimal");
   if (slabsTotal === undefined) {
     errors.slabsTotal = "Число плит — целое положительное число";
   }

@@ -7,6 +7,7 @@ import {
   MAX_INT_FIELD,
   parsePositiveDecimal,
   parsePositiveInt,
+  parseQuantityField,
   validateIntake,
   type IntakeInput,
 } from "@/lib/validators/intake";
@@ -82,6 +83,45 @@ describe("parsePositiveInt", () => {
     expect(parsePositiveInt("1000001")).toBeUndefined();
     expect(parsePositiveInt("2147483648")).toBeUndefined();
     expect(parsePositiveInt("9007199254740992")).toBeUndefined();
+  });
+});
+
+describe("parseQuantityField (BUG-02 — 0 == пусто только для приёмки)", () => {
+  it("пусто/пробелы → null", () => {
+    expect(parseQuantityField("", "int")).toBeNull();
+    expect(parseQuantityField("   ", "decimal")).toBeNull();
+  });
+
+  it("ноль в любой записи → null (не заполнено)", () => {
+    expect(parseQuantityField("0", "int")).toBeNull();
+    expect(parseQuantityField("00", "int")).toBeNull();
+    expect(parseQuantityField("0", "decimal")).toBeNull();
+    expect(parseQuantityField("0,0", "decimal")).toBeNull();
+    expect(parseQuantityField("0.0", "decimal")).toBeNull();
+    expect(parseQuantityField(" 0 ", "int")).toBeNull();
+  });
+
+  it("положительное число проходит (int/decimal)", () => {
+    expect(parseQuantityField("40", "int")).toBe(40);
+    expect(parseQuantityField("220", "decimal")).toBe(220);
+    expect(parseQuantityField("12,5", "decimal")).toBe(12.5);
+  });
+
+  // Крайний случай (обнаружен ревью): дробь < 1 НЕ должна проглатываться как ноль.
+  it("дробь меньше 1 не превращается в null (0,5 / 0.5 / .5)", () => {
+    expect(parseQuantityField("0,5", "decimal")).toBe(0.5);
+    expect(parseQuantityField("0.5", "decimal")).toBe(0.5);
+    expect(parseQuantityField("0,05", "decimal")).toBe(0.05);
+  });
+
+  it("отрицательное, текст, дробь в целом, переполнение → undefined", () => {
+    expect(parseQuantityField("-5", "decimal")).toBeUndefined();
+    expect(parseQuantityField("-3", "int")).toBeUndefined();
+    expect(parseQuantityField("abc", "decimal")).toBeUndefined();
+    expect(parseQuantityField("12,5", "int")).toBeUndefined();
+    expect(parseQuantityField("1000001", "int")).toBeUndefined();
+    // Переполнение и по десятичному полю тоже → undefined (не null, не число).
+    expect(parseQuantityField(String(MAX_DECIMAL_FIELD + 1), "decimal")).toBeUndefined();
   });
 });
 
@@ -167,12 +207,59 @@ describe("validateIntake — количество (минимум одно из 
     }
   });
 
-  it("отклоняет ноль и отрицательные количества", () => {
-    const r = validateIntake(baseInput({ slabsTotal: "0", areaTotalM2: "-5" }));
+  // BUG-02: 0 трактуется КАК ПУСТО для полей приёмки — не ошибка поля.
+  it("плиты = 0, площадь = 220 → OK (ноль == не заполнено)", () => {
+    const r = validateIntake(baseInput({ slabsTotal: "0", areaTotalM2: "220" }));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.slabsTotal).toBeNull();
+      expect(r.data.areaTotalM2).toBe(220);
+    }
+  });
+
+  it("плиты = 40, площадь = 0 → OK (ноль == не заполнено)", () => {
+    const r = validateIntake(baseInput({ slabsTotal: "40", areaTotalM2: "0" }));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.slabsTotal).toBe(40);
+      expect(r.data.areaTotalM2).toBeNull();
+    }
+  });
+
+  it("оба поля = 0 → отклонён с errors.quantity (как и оба пустых)", () => {
+    const r = validateIntake(baseInput({ slabsTotal: "0", areaTotalM2: "0,0" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors.quantity).toMatch(/минимум одно/);
+      expect(r.errors.slabsTotal).toBeUndefined();
+      expect(r.errors.areaTotalM2).toBeUndefined();
+    }
+  });
+
+  it("отрицательное/текст по-прежнему ошибка поля (без падения)", () => {
+    const r = validateIntake(baseInput({ slabsTotal: "-5", areaTotalM2: "abc" }));
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.errors.slabsTotal).toBeTruthy();
       expect(r.errors.areaTotalM2).toBeTruthy();
+      // Оба невалидны (undefined), поэтому правило «минимум одно» не срабатывает.
+      expect(r.errors.quantity).toBeUndefined();
+    }
+  });
+
+  it("десятичная площадь «12,5» принимается", () => {
+    const r = validateIntake(baseInput({ slabsTotal: "", areaTotalM2: "12,5" }));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.areaTotalM2).toBe(12.5);
+  });
+
+  // Мусор в одном поле — ошибка поля (не проглатывается), даже если второе валидно.
+  it("плиты = «abc», площадь = 220 → ошибка поля плит (мусор не тонет)", () => {
+    const r = validateIntake(baseInput({ slabsTotal: "abc", areaTotalM2: "220" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors.slabsTotal).toBeTruthy();
+      expect(r.errors.quantity).toBeUndefined();
     }
   });
 
