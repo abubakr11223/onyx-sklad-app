@@ -16,7 +16,11 @@ import {
   parseReservationDaysConfig,
 } from "@/lib/reservations";
 import { getCapabilities } from "@/lib/session";
-import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
+import {
+  endOfTashkentDay,
+  formatTashkentDate,
+  formatTashkentDateTime,
+} from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -264,9 +268,9 @@ export default async function BronPage({
     })
     .filter((g) => g.slabs.length + g.pieces.length + g.batches.length > 0);
 
-  // «истекает сегодня»: expiresAt bugungi kun oxirigacha (server vaqti).
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+  // «истекает сегодня»: expiresAt до конца ТАШКЕНТСКОГО дня (UTC+5), а не
+  // UTC-дня сервера — иначе около полуночи бронь помечается неверно (BUG-05).
+  const endOfToday = endOfTashkentDay();
 
   const ok = firstParam(params.ok) === "1";
   const cancelled = firstParam(params.cancelled) === "1";

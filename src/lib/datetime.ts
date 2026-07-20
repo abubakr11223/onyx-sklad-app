@@ -23,11 +23,23 @@ export const formatTashkentDate = (d: Date) => dateOnly.format(d);
 /** Дата и время в Ташкенте: «21.07.2026, 17:03». */
 export const formatTashkentDateTime = (d: Date) => dateTime.format(d);
 
+const isoDateFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: APP_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /** «Сегодня» в Ташкенте как ISO-дата YYYY-MM-DD (для <input type="date">). */
-export const todayTashkentISO = () =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+export const todayTashkentISO = (now: Date = new Date()) => isoDateFmt.format(now);
+
+/**
+ * Конец ТАШКЕНТСКОГО календарного дня как мгновение (UTC-инстант).
+ * ПОЧЕМУ: сравнения «истекает сегодня» должны идти по дню пользователя
+ * (UTC+5), а не по UTC-дню сервера — иначе около полуночи бронь помечается
+ * неверно. Границу берём из ташкентской даты `now` и фиксируем 23:59:59.999
+ * при смещении +05:00 (у Asia/Tashkent нет DST — стабильный UTC+5).
+ * UZ: taqqoslash Toshkent kuni bo'yicha, server UTC kuni bo'yicha emas.
+ */
+export const endOfTashkentDay = (now: Date = new Date()): Date =>
+  new Date(`${todayTashkentISO(now)}T23:59:59.999+05:00`);
