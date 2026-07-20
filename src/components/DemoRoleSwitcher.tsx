@@ -11,6 +11,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { setDemoRole } from "@/app/actions/demo-role";
+import { roleLabel } from "@/lib/role-labels";
 
 // Cookie nomi session.ts'dagi DEMO_ROLE_COOKIE bilan bir xil bo'lishi shart;
 // bu server-only modulni klientga import qilmaslik uchun literal takrorlangan.
@@ -57,7 +58,7 @@ export default function DemoRoleSwitcher() {
       >
         {ROLES.map((r) => (
           <option key={r} value={r}>
-            {r}
+            {roleLabel(r)}
           </option>
         ))}
       </select>
