@@ -7,6 +7,7 @@
 
 import type {
   SendMessageOptions,
+  SendResult,
   TgReplyKeyboardMarkup,
   TgUpdate,
 } from "@/lib/telegram";
@@ -85,11 +86,14 @@ export interface WebhookDeps {
       }): Promise<unknown>;
     };
   };
+  // BUG-04: sendMessage endi SendResult qaytaradi (yetkazildi/xato). Webhook
+  // oqimi natijani ISHLATMAYDI, shuning uchun void | SendResult — real klient
+  // (SendResult) ham, testlar mock'i (undefined) ham mos keladi.
   sendMessage(
     chatId: number | string,
     text: string,
     opts?: SendMessageOptions,
-  ): Promise<void>;
+  ): Promise<void | SendResult>;
   // SK-4b: Telegram magic-link login. Handler'ni hermetik saqlash uchun
   // imzolovchi va bazaviy URL inyeksiya qilinadi (route real, testlar mock).
   // signMagicLinkToken — auth.ts'dagi sof HMAC imzolovchisi (DB YO'Q).

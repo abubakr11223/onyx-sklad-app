@@ -86,47 +86,75 @@ function getToken(): string | undefined {
   return t && t.length > 0 ? t : undefined;
 }
 
+/**
+ * BUG-04 — apiPost endi xatoni YUTMAYDI. Ilgari token yo'q / non-2xx / ok!==true
+ * holatlarida faqat console.warn qilib `null` qaytarardi, shuning uchun
+ * chaqiruvchi (masalan Promise.allSettled) HECH QACHON yetkazilmaslikni
+ * ko'rmasdi — dispatchedTo yolg'on chiqardi. Endi diskriminatsiyalangan natija
+ * qaytadi: chaqiruvchi yetkazilmaganini aniqlab, yozib va qayta urinishi mumkin.
+ * console.warn saqlanadi (operator loglari uchun).
+ */
+export type ApiResult<T> =
+  | { ok: true; result: T | null }
+  | { ok: false; error: string };
+
 /** POST helper — JSON body bilan Bot API metodini chaqiradi. */
 async function apiPost<T = unknown>(
   method: string,
   body: Record<string, unknown>,
-): Promise<T | null> {
+): Promise<ApiResult<T>> {
   const token = getToken();
   if (!token) {
     console.warn(`[telegram] TELEGRAM_BOT_TOKEN o'rnatilmagan — ${method} o'tkazib yuborildi.`);
-    return null;
+    return { ok: false, error: "no_token" };
   }
-  const res = await fetch(`${API_ROOT}/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_ROOT}/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    // §8: aloqa uzilishi — throw QILMAYMIZ, natijaga o'raymiz (qayta urinish uchun).
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[telegram] ${method} tarmoq xatosi: ${msg}`);
+    return { ok: false, error: `network: ${msg}` };
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     console.warn(`[telegram] ${method} muvaffaqiyatsiz (${res.status}): ${text}`);
-    return null;
+    return { ok: false, error: `http_${res.status}: ${text}`.slice(0, 500) };
   }
   const json = (await res.json().catch(() => null)) as { ok?: boolean; result?: T } | null;
   if (!json || json.ok !== true) {
     console.warn(`[telegram] ${method} javobi ok emas:`, json);
-    return null;
+    return { ok: false, error: "api_not_ok" };
   }
-  return json.result ?? null;
+  return { ok: true, result: json.result ?? null };
 }
 
-/** Xabar yuboradi. opts.reply_markup — kontakt so'rovi klaviaturasi uchun. */
+/** sendMessage natijasi — yetkazildi (ok) yoki xato (error sababi bilan). */
+export type SendResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Xabar yuboradi. opts.reply_markup — kontakt so'rovi klaviaturasi uchun.
+ * BUG-04: endi `void` emas, `SendResult` qaytaradi — chaqiruvchi yetkazilishni
+ * (SENT/FAILED) yozishi va yetkazilmaganda menejerni ogohlantirishi uchun.
+ */
 export async function sendMessage(
   chatId: number | string,
   text: string,
   opts?: SendMessageOptions,
-): Promise<void> {
-  await apiPost("sendMessage", {
+): Promise<SendResult> {
+  const r = await apiPost("sendMessage", {
     chat_id: chatId,
     text,
     ...(opts?.parse_mode ? { parse_mode: opts.parse_mode } : {}),
     ...(opts?.disable_notification ? { disable_notification: true } : {}),
     ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {}),
   });
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
 
 // ───────────────────────── Fayl (TG-B uchun tayyor) ─────────────────────────
@@ -140,7 +168,8 @@ export interface TgFile {
 
 /** getFile — file_id bo'yicha file_path oladi (keyin downloadFile). */
 export async function getFile(fileId: string): Promise<TgFile | null> {
-  return apiPost<TgFile>("getFile", { file_id: fileId });
+  const r = await apiPost<TgFile>("getFile", { file_id: fileId });
+  return r.ok ? r.result : null;
 }
 
 /** Fayl baytlarini yuklab oladi. filePath — getFile natijasidagi file_path. */

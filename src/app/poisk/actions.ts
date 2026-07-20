@@ -58,11 +58,15 @@ export async function requestPhoto(formData: FormData): Promise<void> {
     );
   }
 
+  // BUG-04: yaratish OK bo'lsa ham, hech kimga yetmasligi mumkin (telegramId'li
+  // skladchi yo'q yoki hammasiga send FAILED). Bu holni menejerga ko'rsatamiz.
+  let noDelivery = false;
   try {
-    await createAndDispatchPhotoRequest(
+    const result = await createAndDispatchPhotoRequest(
       { managerId, batchId, batchLocationId, comment },
       { db, sendMessage },
     );
+    noDelivery = result.noWorkers || result.dispatchedTo === 0;
   } catch (e) {
     if (e instanceof PhotoRequestError) {
       redirect(`${next}?photoErr=${encodeURIComponent(e.message)}`);
@@ -70,5 +74,6 @@ export async function requestPhoto(formData: FormData): Promise<void> {
     throw e;
   }
 
-  redirect(`${next}?photo=ok`);
+  // So'rov yaratildi va saqlandi; yetkazilish alohida bayroq bilan.
+  redirect(`${next}?photo=${noDelivery ? "nodelivery" : "ok"}`);
 }

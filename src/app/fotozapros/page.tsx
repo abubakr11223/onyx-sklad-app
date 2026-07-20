@@ -2,6 +2,8 @@
 // Server component. Сами фото приходят в TG-B2 — здесь пока только статус.
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
+import { sendMessage } from "@/lib/telegram";
+import { redispatchPendingPhotoRequests } from "@/lib/photo-requests";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -32,6 +34,30 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
   CANCELLED: "neutral",
 };
 
+// BUG-04 — доставка в Telegram (по записям PhotoDispatch). SENT есть → доставлено;
+// иначе если есть FAILED → ошибка; ничего → ещё не отправлено (ждёт re-dispatch).
+type DeliveryState = "delivered" | "failed" | "waiting";
+
+function deliveryOf(
+  dispatches: { status: string }[],
+): DeliveryState {
+  if (dispatches.some((d) => d.status === "SENT")) return "delivered";
+  if (dispatches.some((d) => d.status === "FAILED")) return "failed";
+  return "waiting";
+}
+
+const DELIVERY_RU: Record<DeliveryState, string> = {
+  delivered: "доставлено",
+  failed: "ошибка доставки",
+  waiting: "не доставлено",
+};
+
+const DELIVERY_VARIANT: Record<DeliveryState, BadgeVariant> = {
+  delivered: "success",
+  failed: "danger",
+  waiting: "neutral",
+};
+
 export default async function FotozaprosPage() {
   // R2 — rol gate: фотозапросы у OWNER/MANAGER (canRequestPhoto). Складчик — <NoAccess/>.
   const caps = await getCapabilities();
@@ -43,6 +69,16 @@ export default async function FotozaprosPage() {
     );
   }
 
+  // BUG-04 — lazy sweep (как /bron вызывает expireOverdueReservations на рендере):
+  // недоставленные недавние PENDING-запросы до-отправляются (в т.ч. складчику,
+  // который привязал Telegram уже ПОСЛЕ запроса). Cron не нужен. Сбой sweep не
+  // должен ронять страницу — она информационная.
+  try {
+    await redispatchPendingPhotoRequests({ db, sendMessage });
+  } catch (e) {
+    console.warn("[fotozapros] re-dispatch sweep xatosi (sahifa ochilaveradi):", e);
+  }
+
   const requests = await db.photoRequest.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -51,6 +87,8 @@ export default async function FotozaprosPage() {
       batchLocation: true,
       assignee: true,
       photos: { select: { id: true }, orderBy: { createdAt: "asc" } },
+      // BUG-04: статус доставки в Telegram (per-складчик записи).
+      dispatches: { select: { status: true } },
     },
   });
 
@@ -78,14 +116,24 @@ export default async function FotozaprosPage() {
             const loc = r.batchLocation
               ? `Блок ${r.batchLocation.block}, ориентир ${r.batchLocation.landmark}`
               : "локация не указана";
+            // BUG-04: статус доставки показываем только для активных (PENDING)
+            // запросов — по завершённым/отменённым он уже не важен.
+            const delivery = deliveryOf(r.dispatches);
             return (
               <li key={r.id}>
                 <Card>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-2">
                     <h3 className="text-base font-bold text-ink">{stoneName}</h3>
-                    <Badge variant={STATUS_VARIANT[r.status] ?? "neutral"}>
-                      {STATUS_RU[r.status] ?? r.status}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {r.status === "PENDING" && (
+                        <Badge variant={DELIVERY_VARIANT[delivery]}>
+                          {DELIVERY_RU[delivery]}
+                        </Badge>
+                      )}
+                      <Badge variant={STATUS_VARIANT[r.status] ?? "neutral"}>
+                        {STATUS_RU[r.status] ?? r.status}
+                      </Badge>
+                    </div>
                   </div>
                   <p className="mt-1 text-sm text-ink/70">{loc}</p>
                   {r.comment && (

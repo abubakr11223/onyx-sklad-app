@@ -64,6 +64,14 @@ enum PhotoRequestStatus {
   CANCELLED
 }
 
+/// BUG-04 — fotozapros Telegram yetkazilishi holati (per-skladchik).
+/// SENT = yuborildi, FAILED = xato (lastError'da sabab). PENDING statusi yo'q:
+/// yozuv faqat urinish bo'lgach yaratiladi (yozuv yo'q = hali yuborilmagan).
+enum PhotoDispatchStatus {
+  SENT
+  FAILED
+}
+
 /// data-model.md §1.9.
 enum PhotoKind {
   SLAB
@@ -321,10 +329,35 @@ model PhotoRequest {
   slab           Slab?          @relation("PhotoRequestReshootSlab", fields: [slabId], references: [id], onDelete: Restrict)
   photos         Photo[]
   separatedSlabs Slab[]         @relation("SlabSeparatedByRequest")
+  dispatches     PhotoDispatch[]
 
   @@index([status, createdAt]) // navbat + rahbar paneli
   @@index([assigneeId, status])
   @@index([managerId])
+}
+
+/// BUG-04 — Telegram yetkazilish yozuvi (per-skladchik, per-fotozapros). §8 История:
+/// har urinish natijasi (SENT/FAILED, lastError, attempts) shu yerda ko'rinadi.
+/// Bitta (fotozapros, chatId) juftligiga bitta yozuv — qayta urinish o'sha
+/// yozuvni yangilaydi (upsert), attempts oshadi. Yozuv YO'Q = o'sha skladchiga
+/// hali umuman yuborilmagan (masalan, u keyinroq ro'yxatdan o'tgan) →
+/// redispatchPendingPhotoRequests uni tutib yuboradi.
+model PhotoDispatch {
+  id             String              @id @default(cuid())
+  photoRequestId String
+  chatId         String // skladchining telegramId'si (yuborilgan chat)
+  status         PhotoDispatchStatus
+  attempts       Int                 @default(0)
+  lastError      String? // FAILED sababi (BUG-04 diagnostikasi uchun)
+  deliveredAt    DateTime? // SENT bo'lgan payt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  photoRequest PhotoRequest @relation(fields: [photoRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([photoRequestId, chatId]) // bitta skladchiga bitta yozuv (upsert kaliti)
+  @@index([status])
+  @@index([photoRequestId])
 }
 
 /// §1.9 — foto. Abadiy saqlanadi, DELETE yo'q.
