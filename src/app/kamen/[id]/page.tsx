@@ -13,8 +13,10 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import {
   EMPTY_AGGREGATE,
+  EMPTY_HOLD,
   freeRemainderFromAggregate,
   getBatchRemainders,
+  getBatchReservationHolds,
 } from "@/lib/batch-remainders";
 import {
   PHOTO_STALE_MONTHS_KEY,
@@ -275,6 +277,9 @@ export default async function KamenPage({
   const sp = await searchParams;
   // Результат фотозапроса (redirect'дан қайтган байроқлар, как в /poisk).
   const photoOk = firstParam(sp.photo) === "ok";
+  // BUG-04: запрос создан, но НИ ОДИН складчик не получил (нет привязанного
+  // Telegram или отправка не удалась) — предупреждаем менеджера, не молчим.
+  const photoNoDelivery = firstParam(sp.photo) === "nodelivery";
   const photoErr = firstParam(sp.photoErr);
   // SK-1: результат правки локации (redirect'дан қайтган байроқлар, §5.7).
   const locOk = firstParam(sp.locOk) === "1";
@@ -386,10 +391,17 @@ export default async function KamenPage({
   // суммирование (null'ы — честно вне суммы, показываем «+»). Числа те же, но
   // входы — SQL-агрегат (плиты любого статуса + куски originSlabId IS NULL),
   // а не row-fetch (par.: src/tests/batch-remainders.test.ts).
-  const remainders = await getBatchRemainders(
-    db,
-    st.batches.map((b) => b.id),
-  );
+  // BUG-03: как и в /poisk, §3 остаток вычитает только РАЗДЕЛЁННЫЕ плиты/бой —
+  // объёмная бронь (BATCH_VOLUME) статуса единиц не трогает, поэтому вычитается
+  // ОТДЕЛЬНО (getBatchReservationHolds). Иначе карточка показывала бы «свободно 10»
+  // там, где /poisk (на клик раньше) уже показал «свободно 8».
+  // Единый `now` — и для бронь-фильтра, и для «свежести» фото (TZ §5.3).
+  const now = new Date();
+  const batchIds = st.batches.map((b) => b.id);
+  const [remainders, holds] = await Promise.all([
+    getBatchRemainders(db, batchIds),
+    getBatchReservationHolds(db, batchIds, now),
+  ]);
   const batches = st.batches.map((b) => {
     const free = freeRemainderFromAggregate(
       {
@@ -410,36 +422,56 @@ export default async function KamenPage({
   // Отдельные бой/остатки в наличии (st.pieces уже AVAILABLE в запросе).
   const availablePieces = st.pieces;
 
-  let slabsFreeSum = 0;
+  // BUG-03: slabsTotalSum/areaTotalSum = сумма §3 остатков (до вычета брони);
+  // reserved* = сумма активных BATCH_VOLUME-бронь; свободно = max(0, всего − бронь)
+  // (АЙНАН как в /poisk, чтобы обе страницы показывали одно и то же число).
+  let slabsTotalSum = 0;
+  let reservedSlabsSum = 0;
   let slabsKnown = false;
   let slabsUnknown = false;
-  let areaFreeSum = 0;
+  let areaTotalSum = 0;
+  let reservedAreaSum = 0;
   let areaKnown = false;
   let areaUnknown = false;
-  for (const { free } of batches) {
+  for (const { batch, free } of batches) {
+    const hold = holds.get(batch.id) ?? EMPTY_HOLD;
     if (free.slabsFree === null) slabsUnknown = true;
     else {
       slabsKnown = true;
-      slabsFreeSum += free.slabsFree;
+      slabsTotalSum += free.slabsFree;
+      reservedSlabsSum += hold.reservedSlabs;
     }
     if (free.areaFreeM2 === null) areaUnknown = true;
     else {
       areaKnown = true;
-      areaFreeSum += free.areaFreeM2;
+      areaTotalSum += free.areaFreeM2;
+      reservedAreaSum += hold.reservedAreaM2;
     }
   }
 
+  // Свободно = max(0, всего − бронь) — инвариант не даёт уйти в минус.
+  const slabsFreeSum = Math.max(0, slabsTotalSum - reservedSlabsSum);
+  const areaFreeSum = Math.max(0, areaTotalSum - reservedAreaSum);
+
+  // BUG-03: есть бронь — показываем всего/свободно/в брони (как в /poisk);
+  // брони нет — прежний единственный показатель (свободно = всего).
   const totalParts: string[] = [];
   if (slabsKnown)
-    totalParts.push(`плит ~${slabsFreeSum}${slabsUnknown ? "+" : ""}`);
+    totalParts.push(
+      reservedSlabsSum > 0
+        ? `плит: всего ~${slabsTotalSum}${slabsUnknown ? "+" : ""}, свободно ${slabsFreeSum}, в брони ${reservedSlabsSum}`
+        : `плит ~${slabsFreeSum}${slabsUnknown ? "+" : ""}`,
+    );
   if (areaKnown)
-    totalParts.push(`≈${m2Fmt.format(areaFreeSum)} м²${areaUnknown ? "+" : ""}`);
+    totalParts.push(
+      reservedAreaSum > 0
+        ? `≈${m2Fmt.format(areaTotalSum)} м² всего${areaUnknown ? "+" : ""}, свободно ${m2Fmt.format(areaFreeSum)}, в брони ${m2Fmt.format(reservedAreaSum)}`
+        : `≈${m2Fmt.format(areaFreeSum)} м²${areaUnknown ? "+" : ""}`,
+    );
 
   const basePrice = toNum(st.basePrice);
   const propRows = propertyRows(st.properties);
-  // Bitta `now` — barcha fotolarning «eskirgan»ligini bir xil nuqtaga nisbatan
-  // baholaymiz (TZ §5.3).
-  const now = new Date();
+  // `now` определён выше (общий для бронь-фильтра и «свежести» фото, TZ §5.3).
   // Фото → сериализуемые пропсы для клиентского лайтбокса (id/caption/stale).
   // «Свежесть» (TG-C, §5.3) считается на сервере — как и раньше.
   const photoItems: LightboxPhoto[] = st.photos.map((p) => ({
@@ -474,6 +506,13 @@ export default async function KamenPage({
       {photoOk && (
         <Alert variant="success" className="mt-4">
           Запрос на фото отправлен складчикам.
+        </Alert>
+      )}
+      {photoNoDelivery && (
+        <Alert variant="warning" className="mt-4">
+          Запрос сохранён, но пока не доставлен: ни один складчик не подключён к
+          Telegram-боту. Он придёт автоматически, как только складчик привяжет
+          Telegram (/start у бота).
         </Alert>
       )}
       {photoErr && (

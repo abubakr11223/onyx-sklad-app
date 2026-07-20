@@ -11,8 +11,10 @@ import { db } from "@/lib/db";
 import { CUTTING_MARGIN_MM } from "@/lib/inventory";
 import {
   EMPTY_AGGREGATE,
+  EMPTY_HOLD,
   freeRemainderFromAggregate,
   getBatchRemainders,
+  getBatchReservationHolds,
 } from "@/lib/batch-remainders";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -131,10 +133,13 @@ export default async function PoiskPage({
   const typeIds = pageTypes.map((t) => t.id);
   const batchIds = pageTypes.flatMap((t) => t.batches.map((b) => b.id));
 
-  // Partiya qoldiqlari (agregat) + «отдельных плит / боя и остатков» sonlari
-  // (AVAILABLE, needsCheck emas — TZ §7.4) bitta round-trip guruhida.
-  const [remainders, slabCounts, pieceCounts] = await Promise.all([
+  // Partiya qoldiqlari (agregat) + BATCH_VOLUME band bronlari (BUG-03) +
+  // «отдельных плит / боя и остатков» sonlari (AVAILABLE, needsCheck emas —
+  // TZ §7.4) bitta round-trip guruhida.
+  const now = new Date();
+  const [remainders, holds, slabCounts, pieceCounts] = await Promise.all([
     getBatchRemainders(db, batchIds),
+    getBatchReservationHolds(db, batchIds, now),
     typeIds.length > 0
       ? db.slab.groupBy({
           by: ["stoneTypeId"],
@@ -167,15 +172,22 @@ export default async function PoiskPage({
   );
 
   const types = pageTypes.map((st) => {
-    // Vid bo'yicha jami: partiyalar erkin qoldig'i (null'lar halol — yig'indidan tashqarida).
-    let slabsFreeSum = 0;
+    // Vid bo'yicha jami: partiyalar §3 qoldig'i (null'lar halol — yig'indidan
+    // tashqarida). BUG-03: §3 qoldiq faqat AJRATILGAN plita/boyni minus qiladi —
+    // BATCH_VOLUME bronlar birlik statusiga tegmaydi, shuning uchun ALOHIDA
+    // ayiriladi. slabsTotalSum/areaTotalSum = bronlardan OLDINgi jami; erkin
+    // qoldiq = jami − faol bron (pastda).
+    let slabsTotalSum = 0;
+    let reservedSlabsSum = 0;
     let slabsKnown = false;
     let slabsUnknown = false;
-    let areaFreeSum = 0;
+    let areaTotalSum = 0;
+    let reservedAreaSum = 0;
     let areaKnown = false;
     let areaUnknown = false;
     for (const b of st.batches) {
       const agg = remainders.get(b.id) ?? EMPTY_AGGREGATE;
+      const hold = holds.get(b.id) ?? EMPTY_HOLD;
       const free = freeRemainderFromAggregate(
         {
           slabsTotal: b.slabsTotal,
@@ -190,28 +202,44 @@ export default async function PoiskPage({
       if (free.slabsFree === null) slabsUnknown = true;
       else {
         slabsKnown = true;
-        slabsFreeSum += free.slabsFree;
+        slabsTotalSum += free.slabsFree;
+        reservedSlabsSum += hold.reservedSlabs;
       }
       if (free.areaFreeM2 === null) areaUnknown = true;
       else {
         areaKnown = true;
-        areaFreeSum += free.areaFreeM2;
+        areaTotalSum += free.areaFreeM2;
+        reservedAreaSum += hold.reservedAreaM2;
       }
     }
+
+    // Erkin = max(0, jami − band) — invariant buzilsa ham manfiy ko'rsatilmaydi.
+    const slabsFreeSum = Math.max(0, slabsTotalSum - reservedSlabsSum);
+    const areaFreeSum = Math.max(0, areaTotalSum - reservedAreaSum);
 
     // needsCheck birliklari sonlarga KIRMAYDI (TZ §7.4), lekin naliche summasida.
     const countedSlabs = slabCountMap.get(st.id) ?? 0;
     const countedPieces = pieceCountMap.get(st.id) ?? 0;
 
+    // «в наличии» — bronlardan OLDINgi jami yoki alohida birliklar bo'yicha
+    // (ko'rinadigan vidlar to'plami BUG-03 tuzatishдан OLDINGIDEK qoladi; faqat
+    // ichki raqamlar endi bo'sh/бронь ga ajratiladi).
     const hasAvailability =
-      slabsFreeSum > 0 || areaFreeSum > 0 || countedSlabs > 0 || countedPieces > 0;
+      slabsTotalSum > 0 ||
+      areaTotalSum > 0 ||
+      countedSlabs > 0 ||
+      countedPieces > 0;
 
     return {
       st,
+      slabsTotalSum,
       slabsFreeSum,
+      reservedSlabsSum,
       slabsKnown,
       slabsUnknown,
+      areaTotalSum,
       areaFreeSum,
+      reservedAreaSum,
       areaKnown,
       areaUnknown,
       countedSlabs,
@@ -408,14 +436,20 @@ export default async function PoiskPage({
         ) : (
           <ul className="mt-3 space-y-4">
             {visibleTypes.map((t) => {
+              // BUG-03: bron bo'lsa — всего/свободно/бронь ajratib ko'rsatiladi;
+              // bronsiz — oldingidek bitta son (свободно = всего).
               const totalParts: string[] = [];
               if (t.slabsKnown)
                 totalParts.push(
-                  `плит ~${t.slabsFreeSum}${t.slabsUnknown ? "+" : ""}`,
+                  t.reservedSlabsSum > 0
+                    ? `плит: всего ~${t.slabsTotalSum}${t.slabsUnknown ? "+" : ""}, свободно ${t.slabsFreeSum}, в брони ${t.reservedSlabsSum}`
+                    : `плит ~${t.slabsFreeSum}${t.slabsUnknown ? "+" : ""}`,
                 );
               if (t.areaKnown)
                 totalParts.push(
-                  `≈${m2Fmt.format(t.areaFreeSum)} м²${t.areaUnknown ? "+" : ""}`,
+                  t.reservedAreaSum > 0
+                    ? `≈${m2Fmt.format(t.areaTotalSum)} м² всего${t.areaUnknown ? "+" : ""}, свободно ${m2Fmt.format(t.areaFreeSum)}, в брони ${m2Fmt.format(t.reservedAreaSum)}`
+                    : `≈${m2Fmt.format(t.areaFreeSum)} м²${t.areaUnknown ? "+" : ""}`,
                 );
               return (
                 <li

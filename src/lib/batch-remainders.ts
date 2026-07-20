@@ -167,3 +167,86 @@ export async function getBatchRemainders(
 
   return result;
 }
+
+// ─────────────── BUG-03: BATCH_VOLUME bronlarning band qoldig'i ───────────────
+// §3 formula (freeRemainderFromAggregate) faqat AJRATILGAN plita/boyni minus qiladi —
+// hajm broni (BATCH_VOLUME) hech qanday birlik statusiga tegmaydi, shuning uchun
+// qoldiqdan ALOHIDA ayirilishi kerak. /bron buni qiladi, /poisk esa qilmasdi
+// («jami 10, bronda 2» bo'lsa ham «bo'sh 10» ko'rsatardi). Bu yerdagi helper o'sha
+// bo'shliqni to'ldiradi. (Par.: reservations.sumActiveVolumeHolds — bitta partiya
+// varianti; bu yerda partiyalar bo'yicha map.)
+
+/** Bitta partiya bo'yicha faol volume-bronlarning band yig'indisi. */
+export interface BatchReservationHold {
+  reservedSlabs: number;
+  reservedAreaM2: number;
+}
+
+/** Faol volume-broni yo'q partiya (map'da yo'q partiya uchun default). */
+export const EMPTY_HOLD: BatchReservationHold = {
+  reservedSlabs: 0,
+  reservedAreaM2: 0,
+};
+
+/**
+ * Sof funksiya: faol BATCH_VOLUME bron qatorlari → partiya bo'yicha band qoldiq map.
+ * Muddati o'tganlar (expiresAt <= now) CHIQARILADI — sweep hali yopmagan bo'lsa ham
+ * ular aslida bo'sh va yangi/ko'rsatiladigan qoldiqni kesmasligi kerak (aks holda
+ * hold «osilib» qoladi, kimdir /bron ochib sweep ishga tushirmaguncha).
+ * qtySlabs/qtyAreaM2 null → 0 (o'sha o'lchov bron qilinmagan). Test uchun DB-siz.
+ */
+export function reservationHoldsFromRows(
+  rows: readonly {
+    batchId: string | null;
+    qtySlabs: number | null;
+    qtyAreaM2: number | null;
+    expiresAt: Date;
+  }[],
+  now: Date,
+): Map<string, BatchReservationHold> {
+  const result = new Map<string, BatchReservationHold>();
+  for (const r of rows) {
+    if (r.batchId === null) continue;
+    if (r.expiresAt.getTime() <= now.getTime()) continue; // muddati o'tgan — bo'sh
+    const cur = result.get(r.batchId) ?? { reservedSlabs: 0, reservedAreaM2: 0 };
+    cur.reservedSlabs += r.qtySlabs ?? 0;
+    cur.reservedAreaM2 += r.qtyAreaM2 ?? 0;
+    result.set(r.batchId, cur);
+  }
+  return result;
+}
+
+/**
+ * DB: partiyalar bo'yicha faol BATCH_VOLUME bronlarning band qoldig'i
+ * (batchId → {reservedSlabs, reservedAreaM2}). Filtr SQL'da: status ACTIVE,
+ * targetType BATCH_VOLUME, expiresAt > now (getBatchRemainders uslubida). Qolgan
+ * qatorlar sof reducerdan o'tadi (expiry filtri u yerda ham qayta qo'llanadi —
+ * arzon himoya). Map'da bo'lmagan partiya = faol volume-bron yo'q (EMPTY_HOLD).
+ */
+export async function getBatchReservationHolds(
+  db: PrismaClient,
+  batchIds: string[],
+  now: Date = new Date(),
+): Promise<Map<string, BatchReservationHold>> {
+  if (batchIds.length === 0) return new Map();
+
+  const rows = await db.reservation.findMany({
+    where: {
+      status: "ACTIVE",
+      targetType: "BATCH_VOLUME",
+      batchId: { in: batchIds },
+      expiresAt: { gt: now },
+    },
+    select: { batchId: true, qtySlabs: true, qtyAreaM2: true, expiresAt: true },
+  });
+
+  return reservationHoldsFromRows(
+    rows.map((r) => ({
+      batchId: r.batchId,
+      qtySlabs: r.qtySlabs,
+      qtyAreaM2: decToNum(r.qtyAreaM2), // Decimal | null → number (null → 0)
+      expiresAt: r.expiresAt,
+    })),
+    now,
+  );
+}
