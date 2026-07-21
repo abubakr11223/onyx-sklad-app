@@ -14,10 +14,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
+import { logoutSession } from "@/app/login/actions";
 import { visibleNavItems, type NavItem } from "@/components/nav-items";
 import type { Capabilities } from "@/lib/permissions";
 
-export default function Nav({ caps }: { caps: Capabilities }) {
+export default function Nav({
+  caps,
+  isLoggedIn = false,
+}: {
+  caps: Capabilities;
+  isLoggedIn?: boolean;
+}) {
   const pathname = usePathname();
   const links = visibleNavItems(caps);
 
@@ -82,6 +89,19 @@ export default function Nav({ caps }: { caps: Capabilities }) {
 
         {/* R1: DEMO-переключатель роли (временно, убирается в R6). */}
         <DemoRoleSwitcher />
+
+        {/* OWN-03: выход из реальной сессии (виден только при активном входе).
+            Демо-роль остаётся — это разные механизмы. */}
+        {isLoggedIn && (
+          <form action={logoutSession} className="shrink-0">
+            <button
+              type="submit"
+              className="inline-flex min-h-11 items-center rounded-full px-3 text-xs font-semibold text-ink/60 ring-1 ring-ink/15 transition hover:text-ink hover:ring-ink/30"
+            >
+              Выйти
+            </button>
+          </form>
+        )}
       </div>
     </header>
   );

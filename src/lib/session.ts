@@ -28,6 +28,41 @@ export interface CurrentUser {
   canSeePurchasePrice: boolean;
 }
 
+/** Faqat haqiqiy sessiya foydalanuvchisi (demo-shim'siz). */
+export interface RealSessionUser {
+  id: string;
+  name: string;
+  role: Role;
+}
+
+/**
+ * ⚠️ XAVFSIZLIK GATE'i (OWN-03): FAQAT haqiqiy `onyx_session` cookie'sini o'qiydi,
+ * imzosini `verifySessionToken` bilan tekshiradi va DB'dan faol foydalanuvchini
+ * yuklaydi. `onyx_demo_role` cookie'siga HECH QACHON qaramaydi — shu tufayli
+ * anonim tashrifchi `onyx_demo_role=OWNER` qo'yib akkaunt boshqaruviga o'ta olmaydi.
+ *
+ * Bu — getCurrentUser'ning session-tarmog'i, ammo demo fallback'ga TUSHMAYDIGAN
+ * qilib ajratilgan. Faqat /accounts sahifasi + uning action'lari shuni ishlatadi;
+ * saytning qolgan «kodsiz demo» xatti-harakati o'zgarishsiz qoladi.
+ * Sessiya yo'q / imzo yaroqsiz / user nofaol yoki topilmadi → null.
+ */
+export async function getRealSessionUser(): Promise<RealSessionUser | null> {
+  const store = await cookies();
+  const sessionCookie = store.get(SESSION_COOKIE)?.value;
+  if (!sessionCookie) return null;
+
+  const userId = await verifySessionToken(sessionCookie);
+  if (!userId) return null;
+
+  const real = await db.user.findFirst({
+    where: { id: userId, isActive: true },
+    select: { id: true, name: true, role: true },
+  });
+  if (!real) return null;
+
+  return { id: real.id, name: real.name, role: real.role as Role };
+}
+
 /** String'ni Role union'iga xavfsiz keltirish; noto'g'ri → default MANAGER. */
 function parseDemoRole(raw: string | undefined): Role {
   return VALID_ROLES.includes(raw as Role) ? (raw as Role) : DEFAULT_DEMO_ROLE;

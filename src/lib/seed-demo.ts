@@ -2,6 +2,15 @@
 // uchun (prod Neon bazasi bo'sh). IDEMPOTENT: qayta chaqirsa dublikat yaratmaydi.
 // BU REAL OMBOR MA'LUMOTI EMAS — test uchun. Endpoint testdan keyin o'chiriladi.
 import type { PrismaClient } from "@prisma/client";
+import { hashUserPassword } from "@/lib/password";
+
+// OWN-03: root-владелец должен уметь войти по логину, чтобы затем создать
+// остальные аккаунты (/accounts). Дефолтные креды документированы здесь —
+// ПОСЛЕ первого входа владелец обязан сменить пароль на странице «Сотрудники».
+//   Логин:  owner@onyx.local
+//   Пароль: owner123
+export const OWNER_EMAIL = "owner@onyx.local";
+export const OWNER_DEFAULT_PASSWORD = "owner123"; // ⚠️ сменить после первого входа
 
 export interface SeedDemoResult {
   ownerId: string;
@@ -29,7 +38,21 @@ export async function seedDemoData(
         name: "Владелец (демо)",
         role: "OWNER",
         phone: "+998900000000",
+        // OWN-03: сразу с логином/паролем, чтобы владелец мог войти.
+        email: OWNER_EMAIL,
+        passwordHash: await hashUserPassword(OWNER_DEFAULT_PASSWORD),
         isActive: true,
+      },
+    });
+  } else if (!owner.passwordHash || !owner.email) {
+    // OWN-03: существующий владелец (напр. из Faza A) без логина/пароля —
+    // дозаполняем ТОЛЬКО пустые поля (идемпотентно, пароль не перехешируем).
+    await db.user.update({
+      where: { id: owner.id },
+      data: {
+        email: owner.email ?? OWNER_EMAIL,
+        passwordHash:
+          owner.passwordHash ?? (await hashUserPassword(OWNER_DEFAULT_PASSWORD)),
       },
     });
   }

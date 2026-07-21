@@ -49,6 +49,33 @@ function HistoryIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
+// «Сотрудники» — управление аккаунтами (OWN-03). Локальная иконка (люди):
+// в Icons.tsx нет иконки пользователей, а трогать чужой файл ради декоративной
+// иконки незачем. Те же соглашения, что и в Icons.tsx (viewBox 24, currentColor).
+function UsersIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={20}
+      height={20}
+      aria-hidden="true"
+      className={className}
+      {...props}
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
 export type NavItem = {
   href: string;
   label: string;
@@ -126,6 +153,13 @@ export const NAV_ITEMS: NavItem[] = [
     short: "История",
     description: "Кто что делал: приёмка, продажи, брони",
     Icon: HistoryIcon,
+  },
+  {
+    href: "/accounts",
+    label: "Сотрудники",
+    short: "Люди",
+    description: "Аккаунты: логины, роли, доступ",
+    Icon: UsersIcon,
   },
 ];
 

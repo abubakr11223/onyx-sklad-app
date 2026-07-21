@@ -17,6 +17,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllReservations: true,
     requestsRouteToManager: false,
     canSeeHistory: true,
+    canManageAccounts: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -29,6 +30,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllReservations: false,
     requestsRouteToManager: false,
     canSeeHistory: false,
+    canManageAccounts: false,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -41,6 +43,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllReservations: false,
     requestsRouteToManager: false,
     canSeeHistory: false,
+    canManageAccounts: false,
   },
   PARTNER: {
     canSeePrices: false,
@@ -53,6 +56,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllReservations: false,
     requestsRouteToManager: true,
     canSeeHistory: false,
+    canManageAccounts: false,
   },
 };
 
@@ -149,6 +153,22 @@ describe("Union'dan tashqari rol — deny-by-default (xavfsiz default)", () => {
     expect(caps.canSeeAllReservations).toBe(false);
     expect(caps.requestsRouteToManager).toBe(false);
     expect(caps.canSeeHistory).toBe(false);
+    expect(caps.canManageAccounts).toBe(false);
+  });
+});
+
+describe("canManageAccounts — управление аккаунтами (OWN-03): только OWNER", () => {
+  it("OWNER → true", () => {
+    expect(
+      capabilitiesFor("OWNER", { canSeePurchasePrice: false }).canManageAccounts,
+    ).toBe(true);
+  });
+  it("MANAGER/WAREHOUSE/PARTNER → false (повышение прав закрыто)", () => {
+    for (const role of ["MANAGER", "WAREHOUSE", "PARTNER"] as Role[]) {
+      expect(
+        capabilitiesFor(role, { canSeePurchasePrice: true }).canManageAccounts,
+      ).toBe(false);
+    }
   });
 });
 

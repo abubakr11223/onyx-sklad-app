@@ -1,4 +1,4 @@
-import { login } from "./actions";
+import { login, loginWithPassword } from "./actions";
 import { buttonClass } from "@/components/ui/Button";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -18,6 +18,7 @@ export default async function LoginPage({
   const next = typeof sp.next === "string" ? sp.next : "/";
   const hasError = sp.error === "1";
   const magicError = sp.error === "magic"; // SK-4b: magic-link yaroqsiz/eskirgan.
+  const loginError = sp.error === "login"; // OWN-03: email/parol noto'g'ri (generic).
 
   // SK-4b: bot username (server yoki public env). Bo'lsa — deep-link tugmasi,
   // bo'lmasa — matnli ko'rsatma (crash yo'q, graceful degrade).
@@ -45,12 +46,51 @@ export default async function LoginPage({
               Неверный пароль. Попробуйте снова.
             </Alert>
           )}
+          {loginError && (
+            <Alert variant="danger" className="mb-4">
+              Неверный логин или пароль.
+            </Alert>
+          )}
           {magicError && (
             <Alert variant="danger" className="mb-4">
               Ссылка для входа недействительна или устарела. Запросите новую в
               Telegram.
             </Alert>
           )}
+
+          {/* OWN-03: вход по логину (email + пароль) — реальная учётная запись. */}
+          <form action={loginWithPassword} className="mb-6 flex flex-col gap-4">
+            <input type="hidden" name="next" value={next} />
+            <Field
+              id="email"
+              name="email"
+              type="email"
+              label="Логин (email)"
+              placeholder="you@example.com"
+              autoComplete="username"
+              required
+              aria-invalid={loginError ? true : undefined}
+            />
+            <Field
+              id="login-password"
+              name="password"
+              type="password"
+              label="Пароль"
+              placeholder="Пароль"
+              autoComplete="current-password"
+              required
+              aria-invalid={loginError ? true : undefined}
+            />
+            <Button type="submit" className="w-full">
+              Войти по логину
+            </Button>
+          </form>
+
+          <div className="mb-6 flex items-center gap-3 text-xs text-ink/50">
+            <span className="h-px flex-1 bg-ink/10" />
+            общий доступ
+            <span className="h-px flex-1 bg-ink/10" />
+          </div>
 
           <form action={login} className="flex flex-col gap-4">
             <input type="hidden" name="next" value={next} />
@@ -59,9 +99,8 @@ export default async function LoginPage({
               id="password"
               name="password"
               type="password"
-              label="Пароль"
+              label="Общий пароль"
               placeholder="Пароль"
-              autoFocus
               required
               aria-invalid={hasError ? true : undefined}
             />

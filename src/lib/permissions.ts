@@ -44,6 +44,12 @@ export interface Capabilities {
    * всех действий (чужие продажи/клиенты) не даём. Свой скоуп — кандидат в v2.
    */
   canSeeHistory: boolean;
+  /**
+   * Akkauntlarni boshqarish (OWN-03): xodim akkauntlarini yaratish/o'chirish
+   * (soft), rol va parolni o'zgartirish. FAQAT OWNER — root/egasi. Menejer ham,
+   * boshqalar ham akkaunt yarata olmaydi (ruxsatlarni oshirib yuborish xavfi).
+   */
+  canManageAccounts: boolean;
 }
 
 /**
@@ -61,6 +67,7 @@ export interface Capabilities {
  * | canSeeAllReservations    | true  | false            | false     | false   |
  * | requestsRouteToManager   | false | false            | false     | true    |
  * | canSeeHistory            | true  | false            | false     | false   |
+ * | canManageAccounts        | true  | false            | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -83,6 +90,7 @@ const DENY_ALL: Capabilities = {
   canSeeAllReservations: false,
   requestsRouteToManager: false,
   canSeeHistory: false,
+  canManageAccounts: false,
 };
 
 export function capabilitiesFor(
@@ -102,6 +110,7 @@ export function capabilitiesFor(
         canSeeAllReservations: true,
         requestsRouteToManager: false,
         canSeeHistory: true,
+        canManageAccounts: true, // OWN-03: только Владелец управляет аккаунтами
       };
     case "MANAGER":
       return {
@@ -117,6 +126,7 @@ export function capabilitiesFor(
         // §3: «действия сотрудников» видит только Владелец; менеджеру журнал
         // всех действий не даём (чужие продажи/клиенты). Свой скоуп — кандидат в v2.
         canSeeHistory: false,
+        canManageAccounts: false,
       };
     case "WAREHOUSE":
       return {
@@ -130,6 +140,7 @@ export function capabilitiesFor(
         canSeeAllReservations: false,
         requestsRouteToManager: false,
         canSeeHistory: false,
+        canManageAccounts: false,
       };
     case "PARTNER":
       return {
@@ -143,6 +154,7 @@ export function capabilitiesFor(
         canSeeAllReservations: false,
         requestsRouteToManager: true,
         canSeeHistory: false,
+        canManageAccounts: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

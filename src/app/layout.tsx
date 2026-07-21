@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Montserrat, Lora } from "next/font/google";
 import "./globals.css";
+import { cookies } from "next/headers";
 import Nav from "@/components/Nav";
 import BottomTabBar from "@/components/BottomTabBar";
 import { getCapabilities } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 // Фирменная типографика бренда «Графит + золото» (см. public/karta.html):
 // Montserrat = UI/sans, Lora = заголовки/serif. Оба грузятся через next/font
@@ -47,10 +49,21 @@ export default async function RootLayout({
     capabilitiesFor("PARTNER", { canSeePurchasePrice: false }),
   );
 
+  // OWN-03: реальная сессия активна? (только для показа кнопки «Выйти»).
+  // Проверяем лишь подпись session-cookie — БД не трогаем (быстро, fail-safe).
+  const isLoggedIn = await (async () => {
+    try {
+      const token = (await cookies()).get(SESSION_COOKIE)?.value;
+      return token ? !!(await verifySessionToken(token)) : false;
+    } catch {
+      return false;
+    }
+  })();
+
   return (
     <html lang="ru" className={`${montserrat.variable} ${lora.variable}`}>
       <body className="antialiased">
-        <Nav caps={caps} />
+        <Nav caps={caps} isLoggedIn={isLoggedIn} />
         {/* pb-20 на мобиле — контент не прячется за нижним таб-баром. */}
         <div className="min-h-screen pb-20 md:pb-0">{children}</div>
         <BottomTabBar caps={caps} />

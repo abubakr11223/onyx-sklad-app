@@ -22,6 +22,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/karta-sklada": "canSeeExactRemainder",
   // «История» — журнал действий (AuditLog): только OWNER (TZ §3 «действия сотрудников»).
   "/istoriya": "canSeeHistory",
+  // «Сотрудники» — управление аккаунтами (OWN-03): только OWNER.
+  "/accounts": "canManageAccounts",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */
