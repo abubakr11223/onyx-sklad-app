@@ -38,6 +38,12 @@ export interface Capabilities {
   canSeeAllReservations: boolean;
   /** So'rovlari menejerga yo'naltiriladimi (PARTNER oqimi). TZ §3: faqat PARTNER. */
   requestsRouteToManager: boolean;
+  /**
+   * Harakatlar tarixini (AuditLog: кто/что/когда) ko'rish. TZ §8 + §3 —
+   * Владелец «видит … действия сотрудников». FAQAT OWNER; менеджеру журнал
+   * всех действий (чужие продажи/клиенты) не даём. Свой скоуп — кандидат в v2.
+   */
+  canSeeHistory: boolean;
 }
 
 /**
@@ -54,6 +60,7 @@ export interface Capabilities {
  * | canSeeExactRemainder     | true  | true             | true      | false   |
  * | canSeeAllReservations    | true  | false            | false     | false   |
  * | requestsRouteToManager   | false | false            | false     | true    |
+ * | canSeeHistory            | true  | false            | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -75,6 +82,7 @@ const DENY_ALL: Capabilities = {
   canSeeExactRemainder: false,
   canSeeAllReservations: false,
   requestsRouteToManager: false,
+  canSeeHistory: false,
 };
 
 export function capabilitiesFor(
@@ -93,6 +101,7 @@ export function capabilitiesFor(
         canSeeExactRemainder: true,
         canSeeAllReservations: true,
         requestsRouteToManager: false,
+        canSeeHistory: true,
       };
     case "MANAGER":
       return {
@@ -105,6 +114,9 @@ export function capabilitiesFor(
         canSeeExactRemainder: true,
         canSeeAllReservations: false,
         requestsRouteToManager: false,
+        // §3: «действия сотрудников» видит только Владелец; менеджеру журнал
+        // всех действий не даём (чужие продажи/клиенты). Свой скоуп — кандидат в v2.
+        canSeeHistory: false,
       };
     case "WAREHOUSE":
       return {
@@ -117,6 +129,7 @@ export function capabilitiesFor(
         canSeeExactRemainder: true,
         canSeeAllReservations: false,
         requestsRouteToManager: false,
+        canSeeHistory: false,
       };
     case "PARTNER":
       return {
@@ -129,6 +142,7 @@ export function capabilitiesFor(
         canSeeExactRemainder: false,
         canSeeAllReservations: false,
         requestsRouteToManager: true,
+        canSeeHistory: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

@@ -49,6 +49,14 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     expect(canAccessNav("/karta-sklada", caps("PARTNER"))).toBe(false);
   });
 
+  it("История — только OWNER (§3: «действия сотрудников»), остальные нет", () => {
+    // Журнал действий — canSeeHistory: только Владелец.
+    expect(canAccessNav("/istoriya", caps("OWNER"))).toBe(true);
+    expect(canAccessNav("/istoriya", caps("MANAGER"))).toBe(false);
+    expect(canAccessNav("/istoriya", caps("WAREHOUSE"))).toBe(false);
+    expect(canAccessNav("/istoriya", caps("PARTNER"))).toBe(false);
+  });
+
   it("noma'lum yo'nalish — deny emas, ko'rsatiladi (nav kosmetik)", () => {
     expect(canAccessNav("/kakoy-to-put", caps("PARTNER"))).toBe(true);
   });

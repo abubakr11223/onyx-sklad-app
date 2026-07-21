@@ -20,6 +20,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/karta": null,
   // «Карта склада» — точные локации: OWNER/MANAGER/WAREHOUSE, но НЕ PARTNER (TZ §3).
   "/karta-sklada": "canSeeExactRemainder",
+  // «История» — журнал действий (AuditLog): только OWNER (TZ §3 «действия сотрудников»).
+  "/istoriya": "canSeeHistory",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

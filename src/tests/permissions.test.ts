@@ -16,6 +16,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeExactRemainder: true,
     canSeeAllReservations: true,
     requestsRouteToManager: false,
+    canSeeHistory: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -27,6 +28,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeExactRemainder: true,
     canSeeAllReservations: false,
     requestsRouteToManager: false,
+    canSeeHistory: false,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -38,6 +40,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeExactRemainder: true,
     canSeeAllReservations: false,
     requestsRouteToManager: false,
+    canSeeHistory: false,
   },
   PARTNER: {
     canSeePrices: false,
@@ -49,6 +52,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeExactRemainder: false,
     canSeeAllReservations: false,
     requestsRouteToManager: true,
+    canSeeHistory: false,
   },
 };
 
@@ -144,6 +148,24 @@ describe("Union'dan tashqari rol — deny-by-default (xavfsiz default)", () => {
     expect(caps.canSeeExactRemainder).toBe(false);
     expect(caps.canSeeAllReservations).toBe(false);
     expect(caps.requestsRouteToManager).toBe(false);
+    expect(caps.canSeeHistory).toBe(false);
+  });
+});
+
+describe("canSeeHistory — журнал действий (TZ §8/§3)", () => {
+  it("OWNER — true (видит действия сотрудников, §3)", () => {
+    for (const role of ["OWNER"] as Role[]) {
+      expect(
+        capabilitiesFor(role, { canSeePurchasePrice: false }).canSeeHistory,
+      ).toBe(true);
+    }
+  });
+  it("MANAGER/WAREHOUSE/PARTNER — false (журнал всех действий только Владельцу)", () => {
+    for (const role of ["MANAGER", "WAREHOUSE", "PARTNER"] as Role[]) {
+      expect(
+        capabilitiesFor(role, { canSeePurchasePrice: false }).canSeeHistory,
+      ).toBe(false);
+    }
   });
 });
 

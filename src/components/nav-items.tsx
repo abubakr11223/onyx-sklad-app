@@ -22,6 +22,33 @@ import {
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
+// «История» — журнал действий. Локальная иконка (часы со стрелкой назад):
+// в наборе Icons.tsx нет истории, а добавлять зависимость/трогать чужой файл
+// незачем — иконка декоративна и используется только здесь. Те же соглашения,
+// что и в Icons.tsx (viewBox 24, currentColor, 20px по умолчанию).
+function HistoryIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={20}
+      height={20}
+      aria-hidden="true"
+      className={className}
+      {...props}
+    >
+      <path d="M3 3v5h5" />
+      <path d="M3.05 13a9 9 0 1 0 2.13-5.66L3 8" />
+      <path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
 export type NavItem = {
   href: string;
   label: string;
@@ -92,6 +119,13 @@ export const NAV_ITEMS: NavItem[] = [
     short: "Карта",
     description: "Где какой камень лежит",
     Icon: MapIcon,
+  },
+  {
+    href: "/istoriya",
+    label: "История",
+    short: "История",
+    description: "Кто что делал: приёмка, продажи, брони",
+    Icon: HistoryIcon,
   },
 ];
 
