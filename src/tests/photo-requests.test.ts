@@ -104,8 +104,8 @@ describe("createAndDispatchPhotoRequest", () => {
     expect(sendMessage.mock.calls[1][0]).toBe("222");
     // Текст содержит имя камня и выбранную локацию.
     expect(sendMessage.mock.calls[0][1]).toContain("Травертин");
-    expect(sendMessage.mock.calls[0][1]).toContain("Blok А");
-    expect(sendMessage.mock.calls[0][1]).toContain("orientir 2");
+    expect(sendMessage.mock.calls[0][1]).toContain("Блок А");
+    expect(sendMessage.mock.calls[0][1]).toContain("ориентир 2");
 
     // BUG-04: каждая доставка записана SENT + AuditLog.
     expect(photoDispatchUpsert).toHaveBeenCalledTimes(2);
@@ -278,7 +278,7 @@ describe("createAndDispatchPhotoRequest", () => {
       makeDeps(),
     );
     expect(photoRequestCreate.mock.calls[0][0].data.batchLocationId).toBe("loc2");
-    expect(sendMessage.mock.calls[0][1]).toContain("Blok Б");
+    expect(sendMessage.mock.calls[0][1]).toContain("Блок Б");
   });
 
   it("локация не выбрана, у партии одна локация → она берётся в текст", async () => {
@@ -292,7 +292,7 @@ describe("createAndDispatchPhotoRequest", () => {
       makeDeps(),
     );
     expect(photoRequestCreate.mock.calls[0][0].data.batchLocationId).toBeNull();
-    expect(sendMessage.mock.calls[0][1]).toContain("Blok В");
+    expect(sendMessage.mock.calls[0][1]).toContain("Блок В");
   });
 });
 
@@ -413,16 +413,16 @@ describe("buildTaskText", () => {
   it("включает камень, блок, ориентир и комментарий", () => {
     const t = buildTaskText("Травертин", { block: "А", landmark: "2" }, "срочно");
     expect(t).toContain("Травертин");
-    expect(t).toContain("Blok А");
-    expect(t).toContain("orientir 2");
+    expect(t).toContain("Блок А");
+    expect(t).toContain("ориентир 2");
     expect(t).toContain("срочно");
-    expect(t).toContain("Rasmni");
+    expect(t).toContain("reply");
   });
 
-  it("без локации → «Lokatsiya ko'rsatilmagan», без комментария", () => {
+  it("без локации → «Локация не указана», без комментария", () => {
     const t = buildTaskText("Мрамор", null, null);
     expect(t).toContain("Мрамор");
-    expect(t).toContain("Lokatsiya ko'rsatilmagan");
-    expect(t).not.toContain("Izoh");
+    expect(t).toContain("Локация не указана");
+    expect(t).not.toContain("Комментарий");
   });
 });

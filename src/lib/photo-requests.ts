@@ -215,17 +215,17 @@ export function buildTaskText(
   comment: string | null,
 ): string {
   const where = location
-    ? `Blok ${location.block}, orientir ${location.landmark}.`
-    : "Lokatsiya ko'rsatilmagan.";
+    ? `Блок ${location.block}, ориентир ${location.landmark}.`
+    : "Локация не указана.";
   const lines = [
-    `📷 Vazifa: ${stoneTypeName} toshini suratga oling. ${where}`,
+    `📷 Задача: сфотографируйте камень ${stoneTypeName}. ${where}`,
   ];
   const c = comment?.trim();
-  if (c) lines.push(`Izoh: ${c}`);
+  if (c) lines.push(`Комментарий: ${c}`);
   // §5.3 — skladchi qaysi toshni suratga olganini adashtirmasligi uchun: aynan
   // SHU xabarga reply qilib yuborishni so'raymiz (bir nechta ochiq vazifa bo'lsa
   // ham foto to'g'ri fotozaprosga bog'lanadi).
-  lines.push("Rasmni SHU xabarga javob (reply) qilib yuboring.");
+  lines.push("Отправьте фото ответом (reply) на это сообщение.");
   return lines.join("\n");
 }
 
@@ -370,7 +370,7 @@ export async function createAndDispatchPhotoRequest(
 
   // (4) vazifa matni. Lokatsiya berilmagan bo'lsa — partiyaning yagona bloki
   // (bittadan ortiq bo'lsa — «локация не указана»).
-  const stoneName = batch.stoneType?.name ?? "tosh";
+  const stoneName = batch.stoneType?.name ?? "камень";
   const locForText =
     chosen ?? (batch.locations.length === 1 ? batch.locations[0] : null);
   const text = buildTaskText(stoneName, locForText, comment);
@@ -436,7 +436,7 @@ export async function redispatchPendingPhotoRequests(
   let delivered = 0;
 
   for (const req of pending) {
-    const stoneName = req.batch.stoneType?.name ?? "tosh";
+    const stoneName = req.batch.stoneType?.name ?? "камень";
     const locForText =
       req.batchLocation ??
       (req.batch.locations.length === 1 ? req.batch.locations[0] : null);

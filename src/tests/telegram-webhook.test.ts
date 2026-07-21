@@ -212,7 +212,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
 
     expect(update).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("topilmadi");
+    expect(sendMessage.mock.calls[0][1]).toContain("не найден");
   });
 
   it("forward qilingan kontakt (contact.user_id !== from.id) → bog'lanmaydi", async () => {
@@ -232,7 +232,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(update).not.toHaveBeenCalled();
     expect(findMany).not.toHaveBeenCalled(); // guard oldin ishlaydi
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("topilmadi");
+    expect(sendMessage.mock.calls[0][1]).toContain("не найден");
   });
 
   it("contact.user_id yo'q (user_id undefined) → bog'lanmaydi", async () => {
@@ -254,7 +254,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     );
     expect(update).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("bir nechta");
+    expect(sendMessage.mock.calls[0][1]).toContain("несколько");
   });
 
   it("telegramId @unique to'qnashuvi (P2002) → soqov emas, xabar beriladi", async () => {
@@ -268,7 +268,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     );
     expect(update).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("allaqachon");
+    expect(sendMessage.mock.calls[0][1]).toContain("уже");
   });
 
   it("faol bo'lmagan userlar findMany where'da filtrlanadi (isActive: true)", async () => {
@@ -364,7 +364,7 @@ describe("получение фото (TG-B2)", () => {
     // Skladchiga «сохранено» + menejerga bildirishnoma (2 ta sendMessage).
     expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(sendMessage.mock.calls[0][0]).toBe(999);
-    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
     expect(sendMessage.mock.calls[1][0]).toBe("12345");
     expect(sendMessage.mock.calls[1][1]).toContain("Оникс");
   });
@@ -377,7 +377,7 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).not.toHaveBeenCalled();
     expect(prFindFirst).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
+    expect(sendMessage.mock.calls[0][1]).toContain("нет в списке");
   });
 
   it("D3 — MANAGER (bog'langan, faol) → «faqat sklad», zapros egallanmaydi", async () => {
@@ -391,7 +391,7 @@ describe("получение фото (TG-B2)", () => {
     expect(prUpdateMany).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+    expect(sendMessage.mock.calls[0][1]).toContain("складчик");
   });
 
   it("D3 — PARTNER (bog'langan, faol) → «faqat sklad», zapros egallanmaydi", async () => {
@@ -404,7 +404,7 @@ describe("получение фото (TG-B2)", () => {
     expect(prUpdateMany).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+    expect(sendMessage.mock.calls[0][1]).toContain("складчик");
   });
 
   it("D3 — noma'lum/buzuq rol → deny-by-default, zapros egallanmaydi", async () => {
@@ -417,7 +417,7 @@ describe("получение фото (TG-B2)", () => {
     expect(prUpdateMany).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+    expect(sendMessage.mock.calls[0][1]).toContain("складчик");
   });
 
   it("D3 — OWNER ham sklad huquqli → foto qabul qilinadi (happy path)", async () => {
@@ -429,7 +429,7 @@ describe("получение фото (TG-B2)", () => {
 
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(prUpdateMany).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 
   it("PENDING zapros yo'q (findFirst → null) → Photo YO'Q, «faol foto-so'rov yo'q»", async () => {
@@ -441,7 +441,7 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).not.toHaveBeenCalled();
     expect(prUpdateMany).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("faol foto-so'rov yo'q");
+    expect(sendMessage.mock.calls[0][1]).toContain("нет активного фото-запроса");
   });
 
   it("poyga: birinchi zaprosni boshqa skladchi egalladi (count=0) → keyingisiga o'tadi", async () => {
@@ -461,7 +461,7 @@ describe("получение фото (TG-B2)", () => {
     // Foto AYNAN req2 ga biriktirildi (req1 emas — poyga to'g'ri yopildi).
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req2");
-    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 
   // ── §5.3 — reply-to bilan aniq fotozaprosga bog'lash (FIFO'dan ustun) ──
@@ -510,7 +510,7 @@ describe("получение фото (TG-B2)", () => {
       id: "req_reply",
       status: "PENDING",
     });
-    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 
   it("reply-to bo'lmagan bare foto → FIFO fallback (eski oqim o'zgarmaydi), pdFindFirst chaqirilmaydi", async () => {
@@ -563,7 +563,7 @@ describe("получение фото (TG-B2)", () => {
     expect(prUpdateMany).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("faol foto-so'rov yo'q");
+    expect(sendMessage.mock.calls[0][1]).toContain("нет активного фото-запроса");
   });
 
   it("menejerni xabardor qilish yiqilsa → throw QILMAYDI, skladchi baribir saqlandi+javob oldi", async () => {
@@ -583,7 +583,7 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(prUpdateMany).toHaveBeenCalledTimes(1);
     // Skladchi tasdiqni oldi.
-    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 });
 
@@ -611,7 +611,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1);
     const text = sendMessage.mock.calls[0][1] as string;
     expect(text).toContain("https://onyx.test/singan?d=");
-    expect(text).toContain("4 tomon");
+    expect(text).toContain("4 стороны");
     const encoded = text.split("/singan?d=")[1].trim();
     expect(decodeShapeDraft(encoded)).toEqual({
       vertices: QUAD,
@@ -654,7 +654,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
 
     expect(analyzeShape).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("yuklab olib bo'lmadi");
+    expect(sendMessage.mock.calls[0][1]).toContain("Не удалось загрузить");
   });
 
   it("ro'yxatda yo'q yuboruvchi → «ro'yxatda yo'q», yuklab olish YO'Q", async () => {
@@ -664,7 +664,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
 
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
     expect(analyzeShape).not.toHaveBeenCalled();
-    expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
+    expect(sendMessage.mock.calls[0][1]).toContain("нет в списке");
   });
 
   it("D3 — MANAGER (sklad emas) → «faqat sklad», yuklab olish/AI YO'Q", async () => {
@@ -675,7 +675,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
     expect(analyzeShape).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+    expect(sendMessage.mock.calls[0][1]).toContain("складчик");
     expect(sendMessage.mock.calls[0][1]).not.toContain("?d=");
   });
 
@@ -686,7 +686,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
 
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
     expect(analyzeShape).not.toHaveBeenCalled();
-    expect(sendMessage.mock.calls[0][1]).toContain("faqat sklad");
+    expect(sendMessage.mock.calls[0][1]).toContain("складчик");
   });
 
   it("appBaseUrl bo'sh → buzuq havola O'RNIGA aniq xabar, AI ham chaqirilmaydi", async () => {
@@ -700,7 +700,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
     expect(analyzeShape).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).not.toContain("?d=");
-    expect(sendMessage.mock.calls[0][1]).toContain("havola tayyorlab bo'lmadi");
+    expect(sendMessage.mock.calls[0][1]).toContain("не удалось подготовить ссылку");
   });
 
   it("izohsiz rasm → ESKI PhotoRequest oqimi o'zgarishsiz (AI tegmaydi)", async () => {
@@ -713,7 +713,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
     expect(analyzeShape).not.toHaveBeenCalled();
     expect(photoCreate).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 
   it("boshqa izohli rasm («chiroyli tosh») ham eski oqimda qoladi", async () => {
@@ -734,7 +734,7 @@ describe("singan tosh oqimi (§5.5b)", () => {
     await handleUpdate(loginUpdate(999, "/singan"), makeDeps());
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("singan");
+    expect(sendMessage.mock.calls[0][1]).toContain("бой");
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
   });
 
@@ -801,7 +801,7 @@ describe("/login — magic-link (SK-4b)", () => {
 
     expect(signMagicLinkToken).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("ro'yxatda yo'q");
+    expect(sendMessage.mock.calls[0][1]).toContain("нет в списке");
     expect(sendMessage.mock.calls[0][1]).not.toContain("token=");
   });
 
@@ -814,7 +814,7 @@ describe("/login — magic-link (SK-4b)", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1);
     // Buzuq «/login/tg?token=» yuborilmaydi; o'rniga tushunarli xabar.
     expect(sendMessage.mock.calls[0][1]).not.toContain("token=");
-    expect(sendMessage.mock.calls[0][1]).toContain("Hozircha kirib bo'lmadi");
+    expect(sendMessage.mock.calls[0][1]).toContain("войти не удалось");
   });
 
   it("/loginfoo (yopishgan) → login deb qabul QILINMAYDI", async () => {

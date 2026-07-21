@@ -128,56 +128,65 @@ export interface WebhookDeps {
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
 
 const MSG_ASK_CONTACT =
-  "Onyx bot. Ro'yxatdan o'tish uchun telefon raqamingizni ulashing.";
+  "Onyx bot. Для регистрации поделитесь своим номером телефона.";
 const MSG_NOT_FOUND =
-  "Telefon raqamingiz ro'yxatda topilmadi. Menejeringizga murojaat qiling.";
+  "Ваш номер телефона не найден в списке. Обратитесь к вашему менеджеру.";
 const MSG_AMBIGUOUS =
-  "Raqamingiz bo'yicha bir nechta yozuv topildi. Menejeringizga murojaat qiling.";
+  "По вашему номеру найдено несколько записей. Обратитесь к вашему менеджеру.";
 const MSG_ALREADY_LINKED =
-  "Bu Telegram akkaunt allaqachon boshqa foydalanuvchiga bog'langan. Menejeringizga murojaat qiling.";
-const MSG_TRY_LATER = "Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.";
+  "Этот Telegram-аккаунт уже привязан к другому пользователю. Обратитесь к вашему менеджеру.";
+const MSG_TRY_LATER = "Произошла ошибка. Попробуйте ещё раз чуть позже.";
 const successMessage = (name: string) =>
-  `Ro'yxatdan o'tdingiz, ${name}. Endi fotozaproslar shu yerga keladi.`;
+  `Вы зарегистрированы, ${name}. Теперь фотозапросы будут приходить сюда.`;
 
 // Foto oqimi (TG-B2) matnlari — skladchi/menejer ruscha ko'radi.
 const MSG_PHOTO_NOT_REGISTERED =
-  "Siz ro'yxatda yo'qsiz. /start yuboring.";
+  "Вас нет в списке. Отправьте /start.";
 // D3 — foto qabul / singan oqimlari FAQAT sklad xodimlari uchun (TZ §3:
 // canManageWarehouse — OWNER/WAREHOUSE). MANAGER/PARTNER va noma'lum rol
 // bu funksiyalarni ishga tushira olmaydi (zapros egallamaydi, AI chaqirmaydi).
 const MSG_PHOTO_NOT_WAREHOUSE =
-  "Bu funksiya faqat sklad xodimlari uchun.";
-const MSG_PHOTO_NO_REQUEST = "Hozircha faol foto-so'rov yo'q.";
-const MSG_PHOTO_SAVED = "✅ Rasm saqlandi, rahmat!";
+  "Эта функция доступна только складчикам.";
+const MSG_PHOTO_NO_REQUEST = "Пока нет активного фото-запроса.";
+const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
 const managerNotifyMessage = (stoneTypeName: string) =>
-  `📷 Rasm tayyor: ${stoneTypeName}.`;
+  `📷 Фото готово: ${stoneTypeName}.`;
 
 // SK-4b login matnlari (o'zbekcha — skladchi ko'radi).
 const MSG_LOGIN_NOT_REGISTERED =
-  "Siz ro'yxatda yo'qsiz. Telefon raqamingizni bog'lash uchun /start yuboring.";
+  "Вас нет в списке. Отправьте /start, чтобы привязать номер телефона.";
 const loginLinkMessage = (url: string) =>
-  `Kirish havolasi (2 daqiqa amal qiladi):\n${url}\nHavolani hech kimga yubormang.`;
+  `Ссылка для входа (действует 2 минуты):\n${url}\nНикому не пересылайте эту ссылку.`;
 // Sozlama yetishmasa (AUTH_COOKIE_SECRET yoki APP_BASE_URL yo'q) — buzuq havola
 // o'rniga shu xabar. Skladchini chalg'itmaydi; sabab log'da qoladi.
 const MSG_LOGIN_UNAVAILABLE =
-  "Hozircha kirib bo'lmadi. Birozdan so'ng qayta urinib ko'ring yoki menejeringizga murojaat qiling.";
+  "Сейчас войти не удалось. Попробуйте чуть позже или обратитесь к вашему менеджеру.";
 
 // §5.5b — singan tosh (AI-shakl) matnlari (o'zbekcha — skladchi ko'radi).
 const MSG_SINGAN_INSTRUCTION =
-  "Singan tosh: rasm yuboring va izohiga (caption) «singan» deb yozing — AI shaklni chizadi, keyin o'lchovlarni saytda kiritasiz.";
+  "Битый камень: отправьте фото и в подписи (caption) напишите «бой» — ИИ обведёт форму, затем размеры вы введёте на сайте.";
 const MSG_SINGAN_DOWNLOAD_FAILED =
-  "Rasmni yuklab olib bo'lmadi. Birozdan so'ng qayta yuborib ko'ring.";
+  "Не удалось загрузить фото. Попробуйте отправить ещё раз чуть позже.";
 const MSG_SINGAN_AI_FAILED =
-  "AI hozircha ishlamadi — /razbit sahifasi orqali qo'lda kiriting yoki keyinroq qayta urinib ko'ring.";
+  "ИИ сейчас недоступен — введите вручную через страницу /razbit или попробуйте позже.";
 // APP_BASE_URL sozlanmagan — buzuq havola yubormaymiz (MSG_LOGIN_UNAVAILABLE uslubi).
 const MSG_SINGAN_UNAVAILABLE =
-  "Hozircha havola tayyorlab bo'lmadi. Birozdan so'ng qayta urinib ko'ring yoki menejeringizga murojaat qiling.";
+  "Сейчас не удалось подготовить ссылку. Попробуйте позже или обратитесь к вашему менеджеру.";
+// Русское согласование числительного: 1 сторона · 2–4 стороны · 5+ сторон.
+const pluralSides = (n: number): string => {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return "сторон";
+  if (mod10 === 1) return "сторона";
+  if (mod10 >= 2 && mod10 <= 4) return "стороны";
+  return "сторон";
+};
 const singanLinkMessage = (sides: number, url: string) =>
-  `Shakl topildi: ${sides} tomon. O'lchovlarni kiritish uchun havolani oching:\n${url}`;
+  `Форма определена: ${sides} ${pluralSides(sides)}. Откройте ссылку, чтобы ввести размеры:\n${url}`;
 
 // request_contact klaviaturasi — telefonni bir tugma bilan ulashish.
 const CONTACT_KEYBOARD: TgReplyKeyboardMarkup = {
-  keyboard: [[{ text: "📱 Telefonni ulashish", request_contact: true }]],
+  keyboard: [[{ text: "📱 Поделиться номером", request_contact: true }]],
   one_time_keyboard: true,
   resize_keyboard: true,
 };
@@ -608,7 +617,7 @@ async function handlePhoto(
       select: { telegramId: true },
     });
     if (manager?.telegramId) {
-      const stoneName = claimed.batch.stoneType?.name ?? "tosh";
+      const stoneName = claimed.batch.stoneType?.name ?? "камень";
       await deps.sendMessage(
         manager.telegramId,
         managerNotifyMessage(stoneName),
