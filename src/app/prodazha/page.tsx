@@ -14,7 +14,10 @@ import { getCapabilities } from "@/lib/session";
 import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import SaleForm, { type StoneTypeGroup } from "./SaleForm";
+import { confirmReturnAction, returnSaleAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -59,6 +62,8 @@ export default async function ProdazhaPage({
   const ok = first(sp.ok) === "1";
   const what = first(sp.what);
   const customer = first(sp.customer);
+  const retOk = first(sp.retOk);
+  const retErr = first(sp.retErr);
 
   const [stoneTypesRaw, recentSales] = await Promise.all([
     // BATCH-B (perf): весь склад больше не тянется. Для формулы §3 берём только
@@ -126,8 +131,12 @@ export default async function ProdazhaPage({
       take: 20,
       include: {
         manager: { select: { name: true } },
-        slab: { select: { label: true, stoneType: { select: { name: true } } } },
-        piece: { select: { kind: true, stoneType: { select: { name: true } } } },
+        slab: {
+          select: { id: true, label: true, status: true, stoneType: { select: { name: true } } },
+        },
+        piece: {
+          select: { id: true, kind: true, status: true, stoneType: { select: { name: true } } },
+        },
         batch: { select: { stoneType: { select: { name: true } } } },
       },
     }),
@@ -234,6 +243,17 @@ export default async function ProdazhaPage({
         </Alert>
       )}
 
+      {retOk && (
+        <Alert variant="success" title="Возврат" className="mb-6">
+          {retOk}
+        </Alert>
+      )}
+      {retErr && (
+        <Alert variant="danger" title="Возврат не прошёл" className="mb-6">
+          {retErr}
+        </Alert>
+      )}
+
       <SaleForm stoneTypes={stoneTypes} />
 
       <section className="mt-8">
@@ -258,14 +278,40 @@ export default async function ProdazhaPage({
                     .filter(Boolean)
                     .join(" / ") || null;
               }
+              const returned = s.returnedAt !== null;
+              // Единицу, вернувшуюся от клиента, можно подтвердить «в наличии»
+              // только пока она в статусе RETURNED (нужна проверка, TZ §4.3).
+              const unitStatus = s.slab?.status ?? s.piece?.status ?? null;
+              const awaitingCheck = returned && unitStatus === "RETURNED";
+              const confirmTarget = s.slab
+                ? { type: "SLAB" as const, id: s.slab.id }
+                : s.piece
+                  ? { type: "PIECE" as const, id: s.piece.id }
+                  : null;
+              // Возврат доступен, только если продажу реально можно откатить:
+              // объёмная продажа (без slab/piece) ЛИБО единица ещё в статусе SOLD.
+              // Продажу из «разбить» (slab уже BROKEN_OFFCUT) вернуть нельзя —
+              // кнопку не показываем (иначе клик → CANNOT_RETURN).
+              const returnable =
+                !returned &&
+                ((!s.slab && !s.piece) || unitStatus === "SOLD");
               return (
                 <li
                   key={s.id}
-                  className="rounded-card border border-ink/10 bg-paper-2/60 p-3 text-sm"
+                  className={`rounded-card border p-3 text-sm ${
+                    returned
+                      ? "border-danger/30 bg-danger/5"
+                      : "border-ink/10 bg-paper-2/60"
+                  }`}
                 >
                   <div className="font-semibold text-ink">
                     {title}
                     {qty && <span className="font-normal text-ink/70"> · {qty}</span>}
+                    {returned && (
+                      <Badge variant="danger" className="ml-2 align-middle">
+                        возврат
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-ink/70">
                     Клиент: {s.customerName}
@@ -274,6 +320,30 @@ export default async function ProdazhaPage({
                   <div className="text-ink/60">
                     {s.manager.name} · {formatTashkentDateTime(s.soldAt)}
                   </div>
+                  {returned && s.returnedAt && (
+                    <div className="mt-1 text-danger/80">
+                      Возврат оформлен: {formatTashkentDateTime(s.returnedAt)}
+                    </div>
+                  )}
+
+                  {returnable && (
+                    <form action={returnSaleAction} className="mt-2">
+                      <input type="hidden" name="saleRecordId" value={s.id} />
+                      <Button type="submit" variant="ghost" size="sm">
+                        Оформить возврат
+                      </Button>
+                    </form>
+                  )}
+
+                  {awaitingCheck && confirmTarget && (
+                    <form action={confirmReturnAction} className="mt-2">
+                      <input type="hidden" name="targetType" value={confirmTarget.type} />
+                      <input type="hidden" name="unitId" value={confirmTarget.id} />
+                      <Button type="submit" variant="secondary" size="sm">
+                        Проверено — вернуть в наличие
+                      </Button>
+                    </form>
+                  )}
                 </li>
               );
             })}

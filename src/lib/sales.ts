@@ -24,7 +24,10 @@ export type SaleErrorCode =
   | "INVALID_STATUS" // BROKEN_OFFCUT / RETURNED — продавать нельзя
   | "INVALID_INPUT" // пустой клиент, некорректные количества/цена
   | "INSUFFICIENT_REMAINDER" // §3: остатка не хватает (с учётом чужих volume-броней)
-  | "CONFLICT"; // параллельное изменение — оптимистическая проверка не прошла
+  | "CONFLICT" // параллельное изменение — оптимистическая проверка не прошла
+  | "ALREADY_RETURNED" // TZ §4.3: возврат уже оформлен (идемпотентность)
+  | "CANNOT_RETURN" // TZ §4.3: единица не в статусе «продан» — реверс невозможен
+  | "NOT_RETURNED"; // TZ §4.3: подтверждать «в наличии» можно только из «возврата»
 
 export interface SaleError {
   code: SaleErrorCode;
@@ -230,6 +233,44 @@ export function computeWholeBatchSale(
     return fail("INSUFFICIENT_REMAINDER", "Свободного остатка в партии нет — продавать нечего");
   }
   return { ok: true, qtySlabs, qtyAreaM2 };
+}
+
+// ─────────────────── ВОЗВРАТ от клиента (TZ §4.3) — чистые решения ───────────────────
+
+/**
+ * Можно ли оформить возврат по продаже (TZ §4.3). Возврат реверсирует продажу,
+ * поэтому право то же, что и на продажу (OWNER/MANAGER). Идемпотентность:
+ * повторный возврат уже возвращённой продажи запрещён (returnedAt заполнён).
+ */
+export function decideReturn(input: {
+  actingRole: ActorRole;
+  alreadyReturned: boolean;
+}): { ok: true } | SaleFail {
+  if (!roleCanSell(input.actingRole)) {
+    return fail("FORBIDDEN_ROLE", "Возврат оформляет менеджер или владелец");
+  }
+  if (input.alreadyReturned) {
+    return fail("ALREADY_RETURNED", "По этой продаже возврат уже оформлен");
+  }
+  return { ok: true };
+}
+
+/**
+ * Можно ли подтвердить «проверено → в наличии» для вернувшейся единицы
+ * (TZ §4.3: «требует проверки перед возвратом в наличие»). Разрешено только из
+ * статуса RETURNED — иначе AVAILABLE достигается в обход обязательной проверки.
+ */
+export function decideConfirmReturn(input: {
+  actingRole: ActorRole;
+  unitStatus: SellableUnitStatus;
+}): { ok: true } | SaleFail {
+  if (!roleCanSell(input.actingRole)) {
+    return fail("FORBIDDEN_ROLE", "Проверку подтверждает менеджер или владелец");
+  }
+  if (input.unitStatus !== "RETURNED") {
+    return fail("NOT_RETURNED", "Камень не в статусе «возврат» — подтверждать нечего");
+  }
+  return { ok: true };
 }
 
 // ─────────────── A2/A3: истечение и погашение volume-броней (чистое) ───────────────
@@ -857,6 +898,245 @@ export async function sellWholeBatch(
         wholeBatch: true,
         now,
       });
+    });
+  } catch (e) {
+    if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };
+    throw e;
+  }
+}
+
+// ─────────────────── ВОЗВРАТ от клиента (TZ §4.3) — транзакции ───────────────────
+
+export interface ReturnSaleInput {
+  saleRecordId: string;
+  managerId: string;
+}
+
+export interface ReturnSaleOk {
+  ok: true;
+  saleId: string;
+  targetType: "SLAB" | "PIECE" | "BATCH_VOLUME";
+  /** Возвращённая единица (для SLAB/PIECE) — её нужно «проверить» → в наличие. */
+  slabId: string | null;
+  pieceId: string | null;
+  batchId: string | null;
+}
+
+/**
+ * Возврат от клиента (TZ §4.3) — ОДНА транзакция, реверс продажи:
+ *  • SLAB/PIECE: условный UPDATE SOLD → RETURNED + needsCheck=true (единица
+ *    требует проверки перед возвратом в наличие; §3-остаток пересчитается сам
+ *    по статусу). 0 строк ⇒ единица уже не «продан» (разбита/возвращена) —
+ *    CANNOT_RETURN.
+ *  • BATCH_VOLUME: замок партии, ДЕКРЕМЕНТ slabsSoldDirect/areaSoldDirectM2 на
+ *    записанные в продаже количества (реверс инкремента продажи — доступный
+ *    остаток возвращается) + needsCheck=true на партии.
+ * Идемпотентность: returnedAt на SaleRecord ставится условно (WHERE returnedAt
+ * IS NULL); 0 строк ⇒ параллельный/повторный возврат — ALREADY_RETURNED.
+ * Пишет AuditLog(RETURN) той же транзакцией (§1.10).
+ */
+export async function returnSale(
+  input: ReturnSaleInput,
+): Promise<ReturnSaleOk | SaleFail> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const actor = await loadActor(tx, input.managerId);
+
+      const sale = await tx.saleRecord.findUnique({
+        where: { id: input.saleRecordId },
+        select: {
+          id: true,
+          targetType: true,
+          slabId: true,
+          pieceId: true,
+          batchId: true,
+          qtySlabs: true,
+          qtyAreaM2: true,
+          returnedAt: true,
+        },
+      });
+      if (!sale) {
+        throw new SaleLogicError({ code: "NOT_FOUND", message: "Продажа не найдена" });
+      }
+
+      const decision = decideReturn({
+        actingRole: actor.role,
+        alreadyReturned: sale.returnedAt !== null,
+      });
+      if (!decision.ok) throw new SaleLogicError(decision.error);
+
+      // Идемпотентность: условная пометка returnedAt (гонка/повтор → 0 строк).
+      const marked = await tx.saleRecord.updateMany({
+        where: { id: sale.id, returnedAt: null },
+        data: { returnedAt: new Date() },
+      });
+      if (marked.count === 0) {
+        throw new SaleLogicError({
+          code: "ALREADY_RETURNED",
+          message: "Возврат уже оформлен параллельно — обновите страницу",
+        });
+      }
+
+      if (sale.targetType === "SLAB" || sale.targetType === "PIECE") {
+        const unitId = sale.targetType === "SLAB" ? sale.slabId : sale.pieceId;
+        if (!unitId) {
+          // CHECK-constraint гарантирует наличие FK; защита от рассинхрона.
+          throw new SaleLogicError({ code: "NOT_FOUND", message: "Камень продажи не найден" });
+        }
+        // Условный реверс SOLD → RETURNED (§2, обратный переход). 0 строк ⇒
+        // единица уже не «продан» (разбита/возвращена) — реверс невозможен.
+        const where = { id: unitId, status: "SOLD" as const };
+        const data = { status: "RETURNED" as const, needsCheck: true };
+        const reversed =
+          sale.targetType === "SLAB"
+            ? await tx.slab.updateMany({ where, data })
+            : await tx.piece.updateMany({ where, data });
+        if (reversed.count === 0) {
+          throw new SaleLogicError({
+            code: "CANNOT_RETURN",
+            message:
+              "Камень не в статусе «продан» (возможно, разбит или уже возвращён) — возврат невозможен",
+          });
+        }
+      } else {
+        // BATCH_VOLUME: замок партии ДО декремента — сериализует с параллельной
+        // объёмной продажей/боем (иначе их guard прочитает устаревший остаток).
+        if (!sale.batchId) {
+          throw new SaleLogicError({ code: "NOT_FOUND", message: "Партия продажи не найдена" });
+        }
+        await lockBatchForUpdate(tx, sale.batchId);
+        await tx.batch.update({
+          where: { id: sale.batchId },
+          data: {
+            ...(sale.qtySlabs !== null
+              ? { slabsSoldDirect: { decrement: sale.qtySlabs } }
+              : {}),
+            ...(sale.qtyAreaM2 !== null
+              ? { areaSoldDirectM2: { decrement: sale.qtyAreaM2 } }
+              : {}),
+            needsCheck: true,
+          },
+        });
+      }
+
+      const entityType =
+        sale.targetType === "SLAB"
+          ? "Slab"
+          : sale.targetType === "PIECE"
+            ? "Piece"
+            : "Batch";
+      const entityId =
+        sale.targetType === "SLAB"
+          ? sale.slabId!
+          : sale.targetType === "PIECE"
+            ? sale.pieceId!
+            : sale.batchId!;
+
+      await tx.auditLog.create({
+        data: {
+          userId: actor.id,
+          action: "RETURN",
+          entityType,
+          entityId,
+          payload: {
+            saleId: sale.id,
+            targetType: sale.targetType,
+            qtySlabs: sale.qtySlabs,
+            qtyAreaM2: sale.qtyAreaM2 === null ? null : Number(sale.qtyAreaM2.toString()),
+            needsCheck: true,
+          },
+        },
+      });
+
+      return {
+        ok: true as const,
+        saleId: sale.id,
+        targetType: sale.targetType,
+        slabId: sale.slabId,
+        pieceId: sale.pieceId,
+        batchId: sale.batchId,
+      };
+    });
+  } catch (e) {
+    if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };
+    throw e;
+  }
+}
+
+export interface ConfirmReturnedUnitInput {
+  targetType: "SLAB" | "PIECE";
+  unitId: string;
+  managerId: string;
+}
+
+export interface ConfirmReturnedUnitOk {
+  ok: true;
+  unitId: string;
+  targetType: "SLAB" | "PIECE";
+}
+
+/**
+ * «Проверено → в наличии» (TZ §4.3): вернувшаяся единица прошла проверку —
+ * RETURNED + needsCheck снимаются, единица снова AVAILABLE. Условный UPDATE
+ * WHERE status = RETURNED (0 строк ⇒ уже не в возврате — NOT_RETURNED). Прямой
+ * путь RETURNED → AVAILABLE существует ТОЛЬКО здесь (в обход проверки нельзя).
+ */
+export async function confirmReturnedUnit(
+  input: ConfirmReturnedUnitInput,
+): Promise<ConfirmReturnedUnitOk | SaleFail> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const actor = await loadActor(tx, input.managerId);
+
+      const unit =
+        input.targetType === "SLAB"
+          ? await tx.slab.findUnique({
+              where: { id: input.unitId },
+              select: { id: true, status: true },
+            })
+          : await tx.piece.findUnique({
+              where: { id: input.unitId },
+              select: { id: true, status: true },
+            });
+      if (!unit) {
+        throw new SaleLogicError({ code: "NOT_FOUND", message: "Камень не найден" });
+      }
+
+      const decision = decideConfirmReturn({
+        actingRole: actor.role,
+        unitStatus: unit.status,
+      });
+      if (!decision.ok) throw new SaleLogicError(decision.error);
+
+      const where = { id: unit.id, status: "RETURNED" as const };
+      const data = { status: "AVAILABLE" as const, needsCheck: false };
+      const updated =
+        input.targetType === "SLAB"
+          ? await tx.slab.updateMany({ where, data })
+          : await tx.piece.updateMany({ where, data });
+      if (updated.count === 0) {
+        throw new SaleLogicError({
+          code: "NOT_RETURNED",
+          message: "Камень уже не в статусе «возврат» — обновите страницу",
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId: actor.id,
+          action: "STATUS_CHANGE",
+          entityType: input.targetType === "SLAB" ? "Slab" : "Piece",
+          entityId: unit.id,
+          payload: {
+            from: "RETURNED",
+            to: "AVAILABLE",
+            needsCheck: false,
+            checked: true, // проверка после возврата подтверждена
+          },
+        },
+      });
+
+      return { ok: true as const, unitId: unit.id, targetType: input.targetType };
     });
   } catch (e) {
     if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };

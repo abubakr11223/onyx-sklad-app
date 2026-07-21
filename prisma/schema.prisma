@@ -441,6 +441,9 @@ model SaleRecord {
   qtyAreaM2       Decimal?   @db.Decimal(12, 3) // faqat BATCH_VOLUME
   price           Decimal?   @db.Decimal(12, 2)
   soldAt          DateTime
+  /// TZ §4.3 — «Возврат от клиента». null = продажа активна; заполнено =
+  /// продажа отменена возвратом (идемпотентность: повторный возврат запрещён).
+  returnedAt      DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

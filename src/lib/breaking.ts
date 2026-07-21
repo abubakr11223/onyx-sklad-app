@@ -433,8 +433,10 @@ export interface SplitSoldPart {
 
 export interface SplitSlabParams {
   slabId: string;
-  /** Часть ушла клиенту/в изделие. Фиксируется ТОЛЬКО в payload SPLIT —
-   *  SaleRecord оформляет модуль продаж (/prodazha), не мы. */
+  /** Часть ушла клиенту/в изделие (TZ §5.6/§8): фиксируется в payload SPLIT И
+   *  создаёт SaleRecord (targetType=SLAB) той же транзакцией, чтобы проданная
+   *  часть была видна в «Последних продажах». Остаток инвентаря НЕ трогается —
+   *  плита уже списана распилом (SaleRecord history-only, см. ниже). */
   soldPart?: SplitSoldPart;
   remainderPieces: PieceInput[];
   byUserId: string;
@@ -442,12 +444,21 @@ export interface SplitSlabParams {
 
 export interface SplitSlabResult extends BreakSlabResult {
   soldPart: SplitSoldPart | null;
+  /** id созданного SaleRecord для проданной части, иначе null. */
+  soldSaleId: string | null;
 }
 
 /**
  * Распил (TZ §6.4 случай Б): плита → BROKEN_OFFCUT, остатки — Piece с
- * originSlabId. Проданная часть попадает в payload AuditLog(SPLIT) как факт
- * для менеджера; SaleRecord здесь НЕ создаётся — граница модулей (ADR-006).
+ * originSlabId. Проданная часть (soldPart) записывается в payload AuditLog(SPLIT)
+ * И оформляется как SaleRecord(targetType=SLAB, slabId=плита) той же транзакцией
+ * (TZ §5.6/§8), чтобы попасть в историю продаж «кому ушло».
+ *
+ * ВАЖНО (нет двойного списания): SaleRecord НЕ входит в формулу свободного
+ * остатка §3 (inventory.computeFreeRemainder оперирует счётчиками партии,
+ * плитами и прямыми кусками — SaleRecord там нет). Плита уже вычтена из остатка
+ * самим распилом (переход в BROKEN_OFFCUT + originSlabId-куски вне формулы), а
+ * SaleRecord здесь — только история/выручка, поэтому остаток он не двигает.
  */
 export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResult> {
   if (params.remainderPieces.length === 0) {
@@ -470,6 +481,27 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
       params.byUserId,
     );
 
+    // TZ §5.6/§8: проданная часть → SaleRecord (history-only, остаток не двигает —
+    // см. док-комментарий функции). targetType=SLAB, slabId=распиленная плита
+    // (соответствует CHECK-constraint SaleRecord: SLAB ⇒ только slabId).
+    let soldSaleId: string | null = null;
+    if (soldPart) {
+      const customerName = soldPart.customerName.trim();
+      const sale = await tx.saleRecord.create({
+        data: {
+          managerId: params.byUserId,
+          customerName,
+          customerContact: null,
+          targetType: "SLAB",
+          slabId: slab.id,
+          price: soldPart.price === null ? null : soldPart.price.toFixed(2),
+          soldAt: new Date(),
+        },
+        select: { id: true },
+      });
+      soldSaleId = sale.id;
+    }
+
     await tx.auditLog.create({
       data: {
         userId: params.byUserId,
@@ -479,10 +511,11 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
         payload: {
           slabLabel: slab.label,
           previousStatus,
-          // {customerName, price} | null — SaleRecord оформит модуль продаж
+          // {customerName, price} | null — также оформлено в SaleRecord (§5.6/§8)
           soldPart: soldPart
             ? { customerName: soldPart.customerName, price: soldPart.price }
             : null,
+          soldSaleId,
           pieceCount: pieceIds.length,
           pieceIds,
           pieces: piecesPayload(params.remainderPieces),
@@ -498,6 +531,7 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
       pieceIds,
       cancelledReservationId,
       soldPart,
+      soldSaleId,
     };
   });
 }

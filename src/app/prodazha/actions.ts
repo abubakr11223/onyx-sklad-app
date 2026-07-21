@@ -9,6 +9,8 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCapabilities, getCurrentUser } from "@/lib/session";
 import {
+  confirmReturnedUnit,
+  returnSale,
   sellBatchVolume,
   sellUnit,
   sellWholeBatch,
@@ -161,4 +163,75 @@ export async function submitSale(
     customer: customerName,
   });
   redirect(`/prodazha?${params.toString()}`);
+}
+
+// ─────────────────────── ВОЗВРАТ от клиента (TZ §4.3) ───────────────────────
+// Флоу из истории продаж: «Оформить возврат» реверсирует продажу (returnSale),
+// затем вернувшаяся единица «требует проверки» → «Подтвердить: в наличии»
+// (confirmReturnedUnit). Обе — form-actions с redirect (?retOk/?retErr), как
+// setNeedsCheck/updateLocation. Вся доменная логика — в src/lib/sales.ts.
+
+/**
+ * «Оформить возврат» по продаже (TZ §4.3). Defense-in-depth: возврат — как
+ * продажа, только canSell (OWNER/MANAGER); сайт открыт («kodsiz»), поэтому
+ * прямой POST блокируется на сервере, а не только скрытием кнопки.
+ */
+export async function returnSaleAction(formData: FormData): Promise<void> {
+  if (!(await getCapabilities()).canSell) {
+    redirect(`/prodazha?retErr=${encodeURIComponent("Нет доступа: возврат оформляет менеджер")}`);
+  }
+
+  const saleRecordId = String(formData.get("saleRecordId") ?? "").trim();
+  if (!saleRecordId) {
+    redirect(`/prodazha?retErr=${encodeURIComponent("Продажа не указана")}`);
+  }
+
+  const managerId = await getActingManagerId();
+  if (!managerId) {
+    redirect(`/prodazha?retErr=${encodeURIComponent("В системе нет активного менеджера")}`);
+  }
+
+  const result = await returnSale({ saleRecordId, managerId: managerId! });
+  if (!result.ok) {
+    redirect(`/prodazha?retErr=${encodeURIComponent(result.error.message)}`);
+  }
+
+  const isUnit = result.targetType === "SLAB" || result.targetType === "PIECE";
+  const note = isUnit
+    ? "Возврат оформлен — камень требует проверки перед возвратом в наличие"
+    : "Возврат оформлен — объём возвращён в остаток, партия помечена «проверить»";
+  redirect(`/prodazha?retOk=${encodeURIComponent(note)}`);
+}
+
+/**
+ * «Проверено → в наличии» (TZ §4.3): подтверждает проверку вернувшейся единицы
+ * (RETURNED → AVAILABLE). Только canSell (см. returnSaleAction).
+ */
+export async function confirmReturnAction(formData: FormData): Promise<void> {
+  if (!(await getCapabilities()).canSell) {
+    redirect(`/prodazha?retErr=${encodeURIComponent("Нет доступа: проверку подтверждает менеджер")}`);
+  }
+
+  const targetTypeRaw = String(formData.get("targetType") ?? "").trim();
+  if (targetTypeRaw !== "SLAB" && targetTypeRaw !== "PIECE") {
+    redirect(`/prodazha?retErr=${encodeURIComponent("Неизвестный тип камня")}`);
+  }
+  const targetType = targetTypeRaw as "SLAB" | "PIECE";
+
+  const unitId = String(formData.get("unitId") ?? "").trim();
+  if (!unitId) {
+    redirect(`/prodazha?retErr=${encodeURIComponent("Камень не указан")}`);
+  }
+
+  const managerId = await getActingManagerId();
+  if (!managerId) {
+    redirect(`/prodazha?retErr=${encodeURIComponent("В системе нет активного менеджера")}`);
+  }
+
+  const result = await confirmReturnedUnit({ targetType, unitId, managerId: managerId! });
+  if (!result.ok) {
+    redirect(`/prodazha?retErr=${encodeURIComponent(result.error.message)}`);
+  }
+
+  redirect(`/prodazha?retOk=${encodeURIComponent("Камень возвращён в наличие")}`);
 }
