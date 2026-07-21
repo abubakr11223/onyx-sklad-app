@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { CUTTING_MARGIN_MM } from "@/lib/inventory";
+import { materialWhere, piecesWhere } from "@/lib/poisk-search";
 import {
   EMPTY_AGGREGATE,
   EMPTY_HOLD,
@@ -93,15 +94,9 @@ export default async function PoiskPage({
   const fetched = await db.stoneType.findMany({
     where: {
       isArchived: false,
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { rockType: { contains: q, mode: "insensitive" } },
-              { color: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      // Material (вид/тип/цвет) filtri — boy so'rovi bilan BIR XIL manba
+      // (materialWhere), shuning uchun ikkisi doim sinxron (BUG-FIX §5.2/§6.5).
+      ...(materialWhere(q) ?? {}),
       ...(after ? { name: { gt: after } } : {}),
     },
     orderBy: { name: "asc" },
@@ -271,20 +266,11 @@ export default async function PoiskPage({
   const needMin = hasDims ? Math.min(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
   const fittingPieces = hasDims
     ? await db.piece.findMany({
-        where: {
-          status: "AVAILABLE",
-          stoneType: { isArchived: false },
-          OR: [
-            {
-              boundingLengthMm: { gte: needMax },
-              boundingWidthMm: { gte: needMin },
-            },
-            {
-              boundingLengthMm: { gte: needMin },
-              boundingWidthMm: { gte: needMax },
-            },
-          ],
-        },
+        // §5.2/§6.5: gabarit + MATERIAL filtri. `q` bo'sh bo'lsa material filtri
+        // qo'llanmaydi (barcha mos qoldiq); `q` bo'lsa — piece.stoneType relatsiyasi
+        // orqali name/rockType/color mos kelgan vid qoldiqlarigina (butun plita
+        // ro'yxati bilan AYNI filtr → boshqa vid boyi «предложить первыми»da chiqmaydi).
+        where: piecesWhere(q, needMax, needMin),
         select: {
           id: true,
           kind: true,
