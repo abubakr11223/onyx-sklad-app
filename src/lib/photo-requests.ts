@@ -95,6 +95,10 @@ export interface PendingPhotoRequestRow {
   };
   batchLocation: { block: string; landmark: string } | null;
   dispatches: PhotoDispatchRow[];
+  // §6.1 — zapros endi birinchi fotoda YOPILMAYDI (N plita to'plash uchun PENDING
+  // qoladi), shuning uchun «javob berilgan»likni foto bor-yo'qligi bilan aniqlaymiz:
+  // kamida bitta foto tushgan bo'lsa — skladchi(lar) vazifani oldi, qayta nag YO'Q.
+  photos: Array<{ id: string }>;
 }
 
 /** PhotoDispatch upsert argumenti (Prisma @@unique([photoRequestId, chatId])). */
@@ -160,6 +164,7 @@ export interface PhotoRequestDeps {
           batch: { include: { stoneType: true; locations: true } };
           batchLocation: true;
           dispatches: true;
+          photos: { select: { id: true }; take: 1 };
         };
         take: number;
       }): Promise<PendingPhotoRequestRow[]>;
@@ -421,6 +426,8 @@ export async function redispatchPendingPhotoRequests(
       batch: { include: { stoneType: true, locations: true } },
       batchLocation: true,
       dispatches: true,
+      // §6.1 — javob berilganini aniqlash uchun (bitta foto yetarli).
+      photos: { select: { id: true }, take: 1 },
     },
     take: REDISPATCH_BATCH_LIMIT,
   });
@@ -436,6 +443,11 @@ export async function redispatchPendingPhotoRequests(
   let delivered = 0;
 
   for (const req of pending) {
+    // §6.1 — zapros endi birinchi fotoda DONE bo'lmaydi (PENDING qolib N plita
+    // to'playdi). Foto tushgan bo'lsa — skladchi vazifani oldi va bajarmoqda:
+    // uni qayta nag QILMAYMIZ (aks holda javob berilgan so'rov cheksiz uriladi).
+    if (req.photos.length > 0) continue;
+
     const stoneName = req.batch.stoneType?.name ?? "камень";
     const locForText =
       req.batchLocation ??

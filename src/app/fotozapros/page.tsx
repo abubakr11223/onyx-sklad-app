@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { sendMessage } from "@/lib/telegram";
 import { redispatchPendingPhotoRequests } from "@/lib/photo-requests";
+import { closePhotoRequest } from "./actions";
 import { getCapabilities } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -154,6 +155,19 @@ export default async function FotozaprosPage() {
                         />
                       ))}
                     </div>
+                  )}
+                  {/* §6.1 — запрос копит несколько плит (PENDING), пока менеджер
+                      не закроет его вручную. «Готово» → PENDING → DONE. */}
+                  {r.status === "PENDING" && (
+                    <form action={closePhotoRequest} className="mt-3">
+                      <input type="hidden" name="id" value={r.id} />
+                      <button
+                        type="submit"
+                        className="rounded-field border border-ink/15 bg-ink/[0.03] px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-ink/[0.06]"
+                      >
+                        Готово
+                      </button>
+                    </form>
                   )}
                 </Card>
               </li>

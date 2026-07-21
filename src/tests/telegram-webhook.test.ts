@@ -17,8 +17,10 @@ const sendMessage = vi.fn();
 const userFindFirst = vi.fn();
 const userFindUnique = vi.fn();
 const prFindFirst = vi.fn();
-const prUpdateMany = vi.fn();
 const photoCreate = vi.fn();
+// §4.1 L3 / §6.1 — ajratilgan Slab yaratish mock'lari.
+const slabCount = vi.fn();
+const slabCreate = vi.fn();
 // §5.3 — reply-to bo'yicha PhotoDispatch qidirish mock'i.
 const pdFindFirst = vi.fn();
 // SK-4b: magic-link imzolovchisi mock'i.
@@ -38,13 +40,16 @@ function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
       },
       photoRequest: {
         findFirst: (...a: unknown[]) => prFindFirst(...a),
-        updateMany: (...a: unknown[]) => prUpdateMany(...a),
       },
       photoDispatch: {
         findFirst: (...a: unknown[]) => pdFindFirst(...a),
       },
       photo: {
         create: (...a: unknown[]) => photoCreate(...a),
+      },
+      slab: {
+        count: (...a: unknown[]) => slabCount(...a),
+        create: (...a: unknown[]) => slabCreate(...a),
       },
     },
     sendMessage: (...a: unknown[]) => sendMessage(...a),
@@ -63,8 +68,9 @@ beforeEach(() => {
   userFindFirst.mockReset();
   userFindUnique.mockReset();
   prFindFirst.mockReset();
-  prUpdateMany.mockReset();
   photoCreate.mockReset();
+  slabCount.mockReset();
+  slabCreate.mockReset();
   pdFindFirst.mockReset();
   findMany.mockResolvedValue([]);
   update.mockResolvedValue({});
@@ -72,8 +78,9 @@ beforeEach(() => {
   userFindFirst.mockResolvedValue(null);
   userFindUnique.mockResolvedValue(null);
   prFindFirst.mockResolvedValue(null);
-  prUpdateMany.mockResolvedValue({ count: 1 });
   photoCreate.mockResolvedValue({});
+  slabCount.mockResolvedValue(0);
+  slabCreate.mockResolvedValue({ id: "slab1" });
   pdFindFirst.mockResolvedValue(null);
   signMagicLinkToken.mockReset();
   signMagicLinkToken.mockResolvedValue("SIGNED_TOKEN");
@@ -324,15 +331,20 @@ function photoUpdate(opts?: {
 
 const PENDING_REQUEST = {
   id: "req1",
+  status: "PENDING",
   managerId: "mgr1",
+  batchId: "b1",
   slabId: null,
   batch: { stoneTypeId: "st1", stoneType: { name: "Оникс" } },
+  batchLocation: { block: "А", landmark: "2" },
 };
 
 describe("получение фото (TG-B2)", () => {
-  it("bog'langan skladchi + PENDING zapros → Photo yaratiladi, DONE, skladchi+menejer xabardor", async () => {
+  it("§4.1 L3 / §6.1 — bog'langan skladchi + PENDING zapros → 1 ta Slab «Плита №1» + Photo unga bog'lanadi; zapros PENDING QOLADI", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    slabCount.mockResolvedValue(0); // partiyada hali slab yo'q → №1
+    slabCreate.mockResolvedValue({ id: "slabNew" });
     userFindUnique.mockResolvedValue({ telegramId: "12345" });
 
     await handleUpdate(
@@ -340,7 +352,21 @@ describe("получение фото (TG-B2)", () => {
       makeDeps(),
     );
 
-    // Photo — eng KATTA (oxirgi) file_id bilan, zaprosga va stoneType'ga bog'liq.
+    // Ajratilgan Slab: to'g'ri batch/stoneType/separatedBy/photoRequest/label +
+    // lokatsiya zaprosdan (needsCheck=false — darhol sotiladigan).
+    expect(slabCreate).toHaveBeenCalledTimes(1);
+    expect(slabCreate.mock.calls[0][0].data).toMatchObject({
+      batchId: "b1",
+      stoneTypeId: "st1",
+      label: "Плита №1",
+      block: "А",
+      landmark: "2",
+      needsCheck: false,
+      photoRequestId: "req1",
+      separatedById: "w1",
+    });
+
+    // Photo — eng KATTA (oxirgi) file_id bilan, YANGI slab id'ga bog'liq.
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate.mock.calls[0][0]).toMatchObject({
       data: {
@@ -348,18 +374,13 @@ describe("получение фото (TG-B2)", () => {
         kind: "SLAB",
         takenById: "w1",
         stoneTypeId: "st1",
-        slabId: null,
+        slabId: "slabNew",
         photoRequestId: "req1",
       },
     });
 
-    // Zapros ATOMIK egallandi: guarded updateMany (id + status:PENDING → DONE).
-    expect(prUpdateMany).toHaveBeenCalledTimes(1);
-    expect(prUpdateMany.mock.calls[0][0]).toMatchObject({
-      where: { id: "req1", status: "PENDING" },
-      data: { status: "DONE" },
-    });
-    expect(prUpdateMany.mock.calls[0][0].data.completedAt).toBeInstanceOf(Date);
+    // §6.1 — zapros BIRINCHI fotoda YOPILMAYDI (N plita to'plash uchun ochiq qoladi).
+    // Yopishni menejer «Готово» hal qiladi — bu yerda status yangilanmaydi.
 
     // Skladchiga «сохранено» + menejerga bildirishnoma (2 ta sendMessage).
     expect(sendMessage).toHaveBeenCalledTimes(2);
@@ -369,12 +390,76 @@ describe("получение фото (TG-B2)", () => {
     expect(sendMessage.mock.calls[1][1]).toContain("Оникс");
   });
 
-  it("noma'lum telegramId (findFirst → null) → Photo YO'Q, «ro'yxatda yo'q»", async () => {
+  it("§6.1 — o'sha zaprosga IKKINCHI foto → IKKINCHI slab «Плита №2» (N plita per zapros)", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    // Birinchi slab yaratilgach partiyada 1 ta slab bor → keyingisi №2.
+    slabCount.mockResolvedValue(1);
+    slabCreate.mockResolvedValue({ id: "slab2" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(slabCreate).toHaveBeenCalledTimes(1);
+    expect(slabCreate.mock.calls[0][0].data.label).toBe("Плита №2");
+    expect(photoCreate.mock.calls[0][0].data.slabId).toBe("slab2");
+  });
+
+  it("§4.1 L3 — QAYTA suratga olish (slabId to'la) → YANGI slab YO'Q, foto mavjud plitaga bog'lanadi", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue({ ...PENDING_REQUEST, slabId: "existingSlab" });
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    // Reshoot: slab.count/create umuman chaqirilmaydi.
+    expect(slabCount).not.toHaveBeenCalled();
+    expect(slabCreate).not.toHaveBeenCalled();
+    expect(photoCreate.mock.calls[0][0].data.slabId).toBe("existingSlab");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+  });
+
+  it("§4.1 L3 — label to'qnashuvi (P2002) → N qayta hisoblanadi va urinish muvaffaqiyatli", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    // 1-urinish: count=0 → «Плита №1» yaratishda P2002 (konkurent ajratish).
+    // 2-urinish: count=1 → «Плита №2» muvaffaqiyatli.
+    slabCount.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    slabCreate
+      .mockRejectedValueOnce(Object.assign(new Error("unique"), { code: "P2002" }))
+      .mockResolvedValueOnce({ id: "slabRetry" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(slabCreate).toHaveBeenCalledTimes(2);
+    expect(slabCreate.mock.calls[0][0].data.label).toBe("Плита №1");
+    expect(slabCreate.mock.calls[1][0].data.label).toBe("Плита №2");
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    expect(photoCreate.mock.calls[0][0].data.slabId).toBe("slabRetry");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+  });
+
+  it("§5.3 — batchLocation YO'Q → slab «?» placeholder + needsCheck=true (keyin joyni skladchi kiritadi)", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue({ ...PENDING_REQUEST, batchLocation: null });
+    slabCreate.mockResolvedValue({ id: "slabNoLoc" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    expect(slabCreate.mock.calls[0][0].data).toMatchObject({
+      block: "?",
+      landmark: "?",
+      needsCheck: true,
+    });
+    expect(photoCreate.mock.calls[0][0].data.slabId).toBe("slabNoLoc");
+  });
+
+  it("noma'lum telegramId (findFirst → null) → Photo/Slab YO'Q, «ro'yxatda yo'q»", async () => {
     userFindFirst.mockResolvedValue(null);
 
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
 
     expect(photoCreate).not.toHaveBeenCalled();
+    expect(slabCreate).not.toHaveBeenCalled();
     expect(prFindFirst).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("нет в списке");
@@ -386,9 +471,9 @@ describe("получение фото (TG-B2)", () => {
 
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
 
-    // Hech qanday zapros topilmaydi/egallanmaydi, foto saqlanmaydi.
+    // Hech qanday zapros topilmaydi, slab/foto saqlanmaydi.
     expect(prFindFirst).not.toHaveBeenCalled();
-    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(slabCreate).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("складчик");
@@ -401,7 +486,7 @@ describe("получение фото (TG-B2)", () => {
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
 
     expect(prFindFirst).not.toHaveBeenCalled();
-    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(slabCreate).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("складчик");
@@ -414,7 +499,7 @@ describe("получение фото (TG-B2)", () => {
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
 
     expect(prFindFirst).not.toHaveBeenCalled();
-    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(slabCreate).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("складчик");
@@ -427,49 +512,32 @@ describe("получение фото (TG-B2)", () => {
 
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
 
+    expect(slabCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate).toHaveBeenCalledTimes(1);
-    expect(prUpdateMany).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 
-  it("PENDING zapros yo'q (findFirst → null) → Photo YO'Q, «faol foto-so'rov yo'q»", async () => {
+  it("PENDING zapros yo'q (findFirst → null) → Slab/Photo YO'Q, «faol foto-so'rov yo'q»", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     prFindFirst.mockResolvedValue(null);
 
     await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
 
+    expect(slabCreate).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
-    expect(prUpdateMany).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("нет активного фото-запроса");
-  });
-
-  it("poyga: birinchi zaprosni boshqa skladchi egalladi (count=0) → keyingisiga o'tadi", async () => {
-    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
-    // 1-urinish: req1 topiladi, ammo egallash count=0 (boshqa ulgurdi).
-    // 2-urinish: req2 topiladi, egallash count=1.
-    prFindFirst
-      .mockResolvedValueOnce({ ...PENDING_REQUEST, id: "req1" })
-      .mockResolvedValueOnce({ ...PENDING_REQUEST, id: "req2" });
-    prUpdateMany
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 1 });
-
-    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
-
-    expect(prUpdateMany).toHaveBeenCalledTimes(2);
-    // Foto AYNAN req2 ga biriktirildi (req1 emas — poyga to'g'ri yopildi).
-    expect(photoCreate).toHaveBeenCalledTimes(1);
-    expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req2");
-    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
 
   // ── §5.3 — reply-to bilan aniq fotozaprosga bog'lash (FIFO'dan ustun) ──
   const REPLY_REQUEST = {
     id: "req_reply",
+    status: "PENDING",
     managerId: "mgr2",
+    batchId: "b_reply",
     slabId: null,
     batch: { stoneTypeId: "st_reply", stoneType: { name: "Гранит" } },
+    batchLocation: { block: "Б", landmark: "5" },
   };
 
   it("reply-to aniq vazifaga tushsa → foto AYNAN o'sha zaprosga (eski PENDING boshqa tosh bo'lsa ham)", async () => {
@@ -490,25 +558,23 @@ describe("получение фото (TG-B2)", () => {
       where: { chatId: "999", messageId: 4242 },
     });
 
-    // PhotoRequest FIFO OR-navbat bilan EMAS, aniq id + PENDING bilan olindi
-    // (reply-to FIFO'dan ustun — bu buggning tuzatilishi).
+    // PhotoRequest FIFO OR-navbat bilan EMAS, aniq id bilan olindi (status
+    // e'tiborga OLINMAYDI — §6.1: reply har doim o'z zaprosiga bog'lanadi).
     expect(prFindFirst).toHaveBeenCalledTimes(1);
-    expect(prFindFirst.mock.calls[0][0].where).toMatchObject({
-      id: "req_reply",
-      status: "PENDING",
-    });
+    expect(prFindFirst.mock.calls[0][0].where).toMatchObject({ id: "req_reply" });
     expect(prFindFirst.mock.calls[0][0].where.OR).toBeUndefined();
+    expect(prFindFirst.mock.calls[0][0].where.status).toBeUndefined();
 
-    // Foto AYNAN reply qilingan zaprosga (va uning toshiga) biriktirildi.
+    // Foto AYNAN reply qilingan zaprosga (va uning yangi slab'iga) biriktirildi.
+    expect(slabCreate.mock.calls[0][0].data).toMatchObject({
+      batchId: "b_reply",
+      stoneTypeId: "st_reply",
+      photoRequestId: "req_reply",
+    });
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate.mock.calls[0][0].data).toMatchObject({
       photoRequestId: "req_reply",
       stoneTypeId: "st_reply",
-    });
-    // O'sha zapros ATOMIK DONE qilindi.
-    expect(prUpdateMany.mock.calls[0][0].where).toMatchObject({
-      id: "req_reply",
-      status: "PENDING",
     });
     expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });
@@ -546,21 +612,41 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req1");
   });
 
-  it("reply-to tanish vazifa, lekin zapros allaqachon DONE → FIFO'ga TUSHMAYDI, «so'rov yo'q»", async () => {
+  it("§6.1 — reply-to tanish vazifaga, zapros allaqachon DONE bo'lsa → RAD (Slab/Photo YO'Q), «zapros yopilgan» xabari", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     pdFindFirst.mockResolvedValue({ photoRequestId: "req_reply" });
-    // reply-to lookup: id+PENDING topilmadi (zapros allaqachon bajarilgan).
-    prFindFirst.mockResolvedValue(null);
+    // reply-to lookup by-id (status'siz) → yopilgan (DONE) zapros ham topiladi.
+    prFindFirst.mockResolvedValue({ ...REPLY_REQUEST, status: "DONE" });
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
 
     await handleUpdate(
       photoUpdate({ chatId: 999, replyToMessageId: 4242 }),
       makeDeps(),
     );
 
-    // FIFO fallback ISHLAMAYDI (boshqa toshga noto'g'ri biriktirmaslik uchun):
-    // faqat bitta prFindFirst (reply-to), keyin to'xtaydi.
+    // Faqat bitta prFindFirst (reply-to by-id), FIFO fallback ishlamaydi.
     expect(prFindFirst).toHaveBeenCalledTimes(1);
-    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(prFindFirst.mock.calls[0][0].where).toMatchObject({ id: "req_reply" });
+    // Yopilgan zaprosga javob → yangi plita AJRATILMAYDI (inventar drift'i yo'q).
+    expect(slabCreate).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    // Skladchiga zapros yopilgani aytiladi.
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("закрыт");
+  });
+
+  it("reply-to tanish vazifa, lekin zapros o'chirilgan (by-id null) → FIFO'ga TUSHMAYDI, «so'rov yo'q»", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    pdFindFirst.mockResolvedValue({ photoRequestId: "req_reply" });
+    prFindFirst.mockResolvedValue(null); // by-id lookup — zapros yo'q.
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, replyToMessageId: 4242 }),
+      makeDeps(),
+    );
+
+    expect(prFindFirst).toHaveBeenCalledTimes(1);
+    expect(slabCreate).not.toHaveBeenCalled();
     expect(photoCreate).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("нет активного фото-запроса");
@@ -579,9 +665,9 @@ describe("получение фото (TG-B2)", () => {
       handleUpdate(photoUpdate({ chatId: 999 }), makeDeps()),
     ).resolves.toBeUndefined();
 
-    // Saqlash + DONE baribir bo'lgan.
+    // Slab + foto baribir saqlangan.
+    expect(slabCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate).toHaveBeenCalledTimes(1);
-    expect(prUpdateMany).toHaveBeenCalledTimes(1);
     // Skladchi tasdiqni oldi.
     expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
   });

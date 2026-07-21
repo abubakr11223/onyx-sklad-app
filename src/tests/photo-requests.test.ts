@@ -309,6 +309,8 @@ function pendingRow(overrides: Record<string, unknown> = {}) {
     },
     batchLocation: { block: "А", landmark: "2" },
     dispatches: [],
+    // §6.1 — запрос теперь остаётся PENDING и после фото; «отвечен» = есть фото.
+    photos: [],
     ...overrides,
   };
 }
@@ -360,6 +362,21 @@ describe("redispatchPendingPhotoRequests", () => {
       increment: 1,
     });
     expect(res).toEqual({ retried: 1, delivered: 1 });
+  });
+
+  it("§6.1 — запрос уже с фото (отвечен) → пропуск, складчиков НЕ дёргаем повторно", async () => {
+    // Запрос PENDING (не закрывается на первом фото), но фото уже пришло →
+    // складчик получил задачу и отвечает. Ни одной новой отправки быть не должно,
+    // даже если у складчика нет записи о доставке.
+    photoRequestFindMany.mockResolvedValue([
+      pendingRow({ dispatches: [], photos: [{ id: "ph1" }] }),
+    ]);
+    userFindMany.mockResolvedValue([{ id: "w1", telegramId: "111" }]);
+
+    const res = await redispatchPendingPhotoRequests(makeDeps());
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(res).toEqual({ retried: 0, delivered: 0 });
   });
 
   it("уже SENT → пропуск (не шлём повторно)", async () => {

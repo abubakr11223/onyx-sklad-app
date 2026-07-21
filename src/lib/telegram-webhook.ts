@@ -19,11 +19,20 @@ import { capabilitiesFor, type Role } from "@/lib/permissions";
 // db'dan bizga faqat User bo'yicha 2 amal kerak. Prisma'ning to'liq tipini
 // talab qilmaymiz — testlar oson mock qilishi uchun minimal shakl.
 // Foto qabul qilish uchun kerakli PhotoRequest yozuvining minimal shakli.
+// §4.1 L3 / §6.1 — ajratilgan Slab yaratish uchun batchId + batchLocation ham kerak.
 interface PendingPhotoRequest {
   id: string;
+  // §6.1 — zapros holati. Prisma `include` bilan birga barcha skalyar maydonlarni
+  // (shu jumladan `status`) qaytaradi. Reply-to yopilgan (DONE/CANCELLED) zaprosga
+  // tushganda yangi Slab yaratmaslik uchun kerak (aks holda cheksiz inventar drift).
+  status: "PENDING" | "DONE" | "CANCELLED";
   managerId: string;
-  slabId: string | null;
+  batchId: string;
+  slabId: string | null; // null = yangi ajratish; to'la = mavjud plitani QAYTA suratga olish
   batch: { stoneTypeId: string; stoneType: { name: string } | null };
+  // Tanlangan lokatsiya (bo'lsa) → yangi Slab shu blok/orientirni oladi va darhol
+  // sotiladigan bo'ladi (needsCheck=false). Yo'q bo'lsa — «?» placeholder + needsCheck.
+  batchLocation: { block: string; landmark: string } | null;
 }
 
 export interface WebhookDeps {
@@ -49,8 +58,9 @@ export interface WebhookDeps {
       }): Promise<{ telegramId: string | null } | null>;
     };
     photoRequest: {
-      // Skladchining eng eski PENDING zaprosini (umumiy navbat yoki o'ziga) —
-      // FIFO fallback; YOKI §5.3 reply-to bo'yicha aniq zaprosni (id + PENDING).
+      // Skladchining eng eski ochiq (PENDING) zaprosini (umumiy navbat yoki o'ziga)
+      // — FIFO fallback; YOKI §5.3 reply-to bo'yicha AYNAN o'sha zaprosni (id — status
+      // e'tiborga OLINMAYDI: §6.1 bo'yicha bir zapros N plita to'playdi, foto yo'qolmasin).
       // where union: ikkala chaqiruv ham shu imzoga mos (orderBy ixtiyoriy).
       findFirst(args: {
         where:
@@ -58,7 +68,7 @@ export interface WebhookDeps {
               status: "PENDING";
               OR: Array<{ assigneeId: null } | { assigneeId: string }>;
             }
-          | { id: string; status: "PENDING" };
+          | { id: string };
         orderBy?: { createdAt: "asc" };
         include: {
           batch: {
@@ -67,14 +77,27 @@ export interface WebhookDeps {
               stoneType: { select: { name: true } };
             };
           };
+          batchLocation: { select: { block: true; landmark: true } };
         };
       }): Promise<PendingPhotoRequest | null>;
-      // ATOMIK «egallash» (S2-conc uslubi): faqat hali PENDING bo'lsa DONE qiladi.
-      // count===1 → biz egalladik; count===0 → boshqa skladchi ulgurdi.
-      updateMany(args: {
-        where: { id: string; status: "PENDING" };
-        data: { status: "DONE"; completedAt: Date };
-      }): Promise<{ count: number }>;
+    };
+    // §4.1 L3 / §6.1 — ajratilgan Plita (Slab). Yozuv faqat ajratish paytida
+    // (skladchi fotolaganda) tug'iladi (ADR-004). label = «Плита №N» bo'yicha
+    // @@unique([batchId,label]) — konkurentlikda P2002 tutilib qayta hisoblanadi.
+    slab: {
+      count(args: { where: { batchId: string } }): Promise<number>;
+      create(args: {
+        data: {
+          batchId: string;
+          stoneTypeId: string;
+          label: string;
+          block: string;
+          landmark: string;
+          needsCheck: boolean;
+          photoRequestId: string;
+          separatedById: string;
+        };
+      }): Promise<{ id: string }>;
     };
     // §5.3 — reply-to bo'yicha fotozaprosni topish: skladchi bot yuborgan vazifa
     // xabariga reply qilgan foto o'sha xabarning message_id'sini olib keladi.
@@ -148,6 +171,10 @@ const MSG_PHOTO_NOT_REGISTERED =
 const MSG_PHOTO_NOT_WAREHOUSE =
   "Эта функция доступна только складчикам.";
 const MSG_PHOTO_NO_REQUEST = "Пока нет активного фото-запроса.";
+// §6.1 — reply yopilgan (DONE/CANCELLED) zaprosga tushdi: yangi plita AJRATMAYMIZ
+// (menejer «Готово» bosgach, eski vazifaga javob berilgan foto inventarni buzmasin).
+const MSG_PHOTO_REQUEST_CLOSED =
+  "Этот запрос уже закрыт. Обратитесь к вашему менеджеру для нового запроса.";
 const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
 const managerNotifyMessage = (stoneTypeName: string) =>
   `📷 Фото готово: ${stoneTypeName}.`;
@@ -519,16 +546,24 @@ async function handlePhoto(
   const photos = message.photo!;
   const largest = photos[photos.length - 1];
 
-  const batchSelect = {
+  const requestInclude = {
     batch: {
       select: { stoneTypeId: true, stoneType: { select: { name: true } } },
     },
+    batchLocation: { select: { block: true, landmark: true } },
   } as const;
 
   // (3) §5.3 — REPLY-TO ustunligi. Skladchi bot yuborgan aniq vazifa xabariga
   // reply qilib foto yuborgan bo'lsa (≥2 ochiq so'rovda toshni adashtirmaslik
   // uchun), o'sha xabar bo'yicha PhotoDispatch topamiz va foto AYNAN shu
   // fotozaprosga biriktiriladi — FIFO fallback'dan OLDIN, undan ustun.
+  //
+  // §6.1 — LIFECYCLE: bir zapros N plita to'playdi (skladchi 3 plitani fotolab
+  // yuboradi → 3 alohida Slab). Shuning uchun zaprosni BIRINCHI fotoda YOPMAYMIZ.
+  // Zaprosni menejer «Готово» tugmasi bilan DONE qiladi (/fotozapros). Reply-to
+  // AYNAN o'z zaprosiga bog'lanadi, LEKIN zapros allaqachon YOPILGAN (DONE/CANCELLED)
+  // bo'lsa — RAD etamiz (yangi Slab yaratmaymiz): menejer «Готово» bosgach eski
+  // vazifaga javob berilgan foto cheksiz inventar drift qilmasin (mahsulot qарори).
   let claimed: PendingPhotoRequest | null = null;
   let replyToResolved = false; // reply aynan bizning vazifa xabarimizga tushdimi
 
@@ -540,60 +575,59 @@ async function handlePhoto(
     });
     if (dispatch) {
       replyToResolved = true; // shu skladchiga yuborilgan tanish vazifa xabari.
-      const request = await deps.db.photoRequest.findFirst({
-        where: { id: dispatch.photoRequestId, status: "PENDING" },
-        include: batchSelect,
+      claimed = await deps.db.photoRequest.findFirst({
+        where: { id: dispatch.photoRequestId },
+        include: requestInclude,
       });
-      if (request) {
-        // ATOMIK egallash (FIFO'dagi bilan bir xil guard).
-        const res = await deps.db.photoRequest.updateMany({
-          where: { id: request.id, status: "PENDING" },
-          data: { status: "DONE", completedAt: new Date() },
-        });
-        if (res.count === 1) claimed = request;
-      }
     }
   }
 
+  // (3b) §6.1 — reply AYNAN tanish zaprosga tushdi-yu, lekin u allaqachon YOPILGAN
+  // (menejer «Готово» → DONE, yoki CANCELLED): RAD etamiz — yangi Slab/Photo YO'Q,
+  // skladchiga zapros yopilganini aytamiz (aks holda yopilgandan keyingi har bir
+  // javob yangi plita ajratib inventarni cheksiz shishirar edi).
+  if (replyToResolved && claimed && claimed.status !== "PENDING") {
+    await deps.sendMessage(chatId, MSG_PHOTO_REQUEST_CLOSED);
+    return;
+  }
+
   // (4) FIFO fallback — FAQAT tanish vazifaga reply BO'LMAGANDA (rasm bare yoki
-  // begona xabarga reply). Reply aynan vazifaga tushgan-u, lekin zapros allaqachon
-  // DONE/egallangan bo'lsa — FIFO'ga TUSHMAYMIZ (boshqa toshga noto'g'ri
-  // biriktirib qo'ymaslik uchun): pastda MSG_PHOTO_NO_REQUEST beriladi.
+  // begona xabarga reply). Reply aynan vazifaga tushgan-u, lekin zapros topilmasa
+  // (o'chirilgan) — FIFO'ga TUSHMAYMIZ (boshqa toshga noto'g'ri biriktirmaslik
+  // uchun): pastda MSG_PHOTO_NO_REQUEST beriladi.
+  //
+  // Eng eski OCHIQ (PENDING) zaprosni olamiz. Zapros ochiq qoladi (N plita
+  // to'plash uchun) — ATOMIK «egallash» endi YO'Q: bir zaprosga bir nechta foto
+  // tushishi §6.1 bo'yicha kutilgan. Yopishni menejer «Готово» hal qiladi.
   if (!claimed && !replyToResolved) {
-    // PENDING zaprosni ATOMIK egallaymiz (S2-conc uslubi, ADR-007 ruhida).
-    // Eng eski PENDING'ni topib, guarded updateMany bilan (id + status:PENDING → DONE)
-    // egallaymiz. count===1 → biz oldik; count===0 → boshqa skladchi o'sha oniyda
-    // egalladi, keyingi PENDING'ga o'tamiz. Bound: 5 urinish (cheksiz sikl bo'lmasin).
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const request = await deps.db.photoRequest.findFirst({
-        where: {
-          status: "PENDING",
-          OR: [{ assigneeId: null }, { assigneeId: user.id }],
-        },
-        orderBy: { createdAt: "asc" },
-        include: batchSelect,
-      });
-      if (!request) break; // PENDING qolmadi.
-      const res = await deps.db.photoRequest.updateMany({
-        where: { id: request.id, status: "PENDING" },
-        data: { status: "DONE", completedAt: new Date() },
-      });
-      if (res.count === 1) {
-        claimed = request;
-        break;
-      }
-      // count===0 — boshqa skladchi egalladi, keyingi PENDING'ni izlaymiz.
-    }
+    claimed = await deps.db.photoRequest.findFirst({
+      where: {
+        status: "PENDING",
+        OR: [{ assigneeId: null }, { assigneeId: user.id }],
+      },
+      orderBy: { createdAt: "asc" },
+      include: requestInclude,
+    });
   }
   if (!claimed) {
     await deps.sendMessage(chatId, MSG_PHOTO_NO_REQUEST);
     return;
   }
 
-  // (4) Photo yozuvi — storageKey = Telegram file_id (Blob yo'q). Zapros allaqachon
-  // biz tomondan DONE qilingan; bu foto aynan shu zaprosga tegishli.
-  // (Kamdan-kam qisman-xato: create yiqilsa, zapros DONE bo'lib foto yo'q qoladi —
-  //  outer try/catch tutadi, skladchi javob olmaydi. Nadir; TG-C follow-up.)
+  // (5) §4.1 L3 / §6.1 — ajratilgan Slab. Yangi ajratishda (slabId==null) HAR foto
+  // bitta alohida «Плита №N» tug'diradi → klient «плиту №2»ni alohida sotib oladi.
+  // QAYTA suratga olishda (slabId to'la) YANGI slab YO'Q — mavjud plitaga bog'lanadi.
+  //
+  // ATOMIKLIK: webhook'da $transaction inyeksiya qilinmagan (deps minimal, testlar
+  // oson mock qilsin). Shuning uchun avval Slab, keyin Photo yaratamiz — Photo
+  // yiqilsa (nadir) faqat «yetim» slab qoladi (foto yo'q), teskarisi emas. To'la
+  // atomik tranzaksiya — TG-C follow-up (§9 — hozircha sodda saqlaymiz).
+  const slabId =
+    claimed.slabId == null
+      ? await separateSlab(claimed, user.id, deps)
+      : claimed.slabId;
+
+  // (6) Photo yozuvi — storageKey = Telegram file_id (Blob yo'q).
   await deps.db.photo.create({
     data: {
       storageKey: largest.file_id,
@@ -601,7 +635,7 @@ async function handlePhoto(
       takenAt: new Date(),
       takenById: user.id,
       stoneTypeId: claimed.batch.stoneTypeId,
-      slabId: claimed.slabId ?? null,
+      slabId,
       photoRequestId: claimed.id,
     },
   });
@@ -626,4 +660,60 @@ async function handlePhoto(
   } catch (err) {
     console.error("[telegram-webhook] menejerni xabardor qilish xatosi:", err);
   }
+}
+
+/**
+ * §4.1 L3 / §6.1 — bitta ajratilgan «Плита №N» yaratadi va id'sini qaytaradi.
+ *
+ * label = «Плита №N», N = (partiyadagi mavjud slab soni) + 1. @@unique([batchId,
+ * label]) — bir partiyaga bir vaqtda ikki foto tushsa ikkisi ham bir xil N ni
+ * hisoblab P2002 berishi mumkin; buni tutamiz va N ni qayta hisoblab urinamiz
+ * (FIFO-egallash uslubidagi bound-loop: ko'pi bilan 5 marta).
+ *
+ * Lokatsiya: zaprosda tanlangan blok/orientir bo'lsa — slab shuni oladi va darhol
+ * sotiladigan/ko'rinadigan bo'ladi (needsCheck=false). Bo'lmasa — «?» placeholder +
+ * needsCheck=true: skladchi keyin real lokatsiyani SlabLocationForm orqali kiritadi
+ * (bu holat poisk hisobidan chiqaradi va lokatsiya to'lgunча sotuvni bloklaydi — bu
+ * ataylab, noma'lum joyli plita «sotilib ketmasin»).
+ */
+async function separateSlab(
+  request: PendingPhotoRequest,
+  separatedById: string,
+  deps: WebhookDeps,
+): Promise<string> {
+  const loc = request.batchLocation;
+  const block = loc?.block ?? "?";
+  const landmark = loc?.landmark ?? "?";
+  const needsCheck = loc == null;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const existing = await deps.db.slab.count({
+      where: { batchId: request.batchId },
+    });
+    try {
+      const slab = await deps.db.slab.create({
+        data: {
+          batchId: request.batchId,
+          stoneTypeId: request.batch.stoneTypeId,
+          label: `Плита №${existing + 1}`,
+          block,
+          landmark,
+          needsCheck,
+          photoRequestId: request.id,
+          separatedById,
+        },
+      });
+      return slab.id;
+    } catch (err) {
+      // P2002 — @@unique([batchId,label]) to'qnashuvi (konkurent ajratish): N ni
+      // qayta hisoblab yana urinamiz. Boshqa xato — yuqoriga (outer catch tutadi).
+      if ((err as { code?: string })?.code === "P2002") continue;
+      throw err;
+    }
+  }
+  // Bound tugadi (juda kam ehtimol) — throw: outer try/catch loglaydi, foto
+  // yaratilmaydi (yetim slab qolmaydi), skladchi qayta yuboradi.
+  throw new Error(
+    `[telegram-webhook] slab label to'qnashuvi: ${request.batchId} uchun 5 urinish tugadi`,
+  );
 }
