@@ -350,6 +350,10 @@ model PhotoDispatch {
   attempts       Int                 @default(0)
   lastError      String? // FAILED sababi (BUG-04 diagnostikasi uchun)
   deliveredAt    DateTime? // SENT bo'lgan payt
+  messageId      Int? // §5.3 — yuborilgan vazifa xabarining Telegram message_id'si.
+  //                    Skladchi shu xabarga reply qilib foto yuborsa, foto AYNAN
+  //                    shu fotozaprosga bog'lanadi (FIFO'dan ustun). null = xabar
+  //                    yuborilmagan yoki message_id qaytmagan.
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -358,6 +362,7 @@ model PhotoDispatch {
   @@unique([photoRequestId, chatId]) // bitta skladchiga bitta yozuv (upsert kaliti)
   @@index([status])
   @@index([photoRequestId])
+  @@index([chatId, messageId]) // §5.3 — reply-to bo'yicha fotozaprosni topish
 }
 
 /// §1.9 — foto. Abadiy saqlanadi, DELETE yo'q.

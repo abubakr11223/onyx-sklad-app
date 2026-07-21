@@ -19,6 +19,8 @@ const userFindUnique = vi.fn();
 const prFindFirst = vi.fn();
 const prUpdateMany = vi.fn();
 const photoCreate = vi.fn();
+// §5.3 — reply-to bo'yicha PhotoDispatch qidirish mock'i.
+const pdFindFirst = vi.fn();
 // SK-4b: magic-link imzolovchisi mock'i.
 const signMagicLinkToken = vi.fn();
 // §5.5b (singan tosh) mock'lari.
@@ -37,6 +39,9 @@ function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
       photoRequest: {
         findFirst: (...a: unknown[]) => prFindFirst(...a),
         updateMany: (...a: unknown[]) => prUpdateMany(...a),
+      },
+      photoDispatch: {
+        findFirst: (...a: unknown[]) => pdFindFirst(...a),
       },
       photo: {
         create: (...a: unknown[]) => photoCreate(...a),
@@ -60,6 +65,7 @@ beforeEach(() => {
   prFindFirst.mockReset();
   prUpdateMany.mockReset();
   photoCreate.mockReset();
+  pdFindFirst.mockReset();
   findMany.mockResolvedValue([]);
   update.mockResolvedValue({});
   sendMessage.mockResolvedValue(undefined);
@@ -68,6 +74,7 @@ beforeEach(() => {
   prFindFirst.mockResolvedValue(null);
   prUpdateMany.mockResolvedValue({ count: 1 });
   photoCreate.mockResolvedValue({});
+  pdFindFirst.mockResolvedValue(null);
   signMagicLinkToken.mockReset();
   signMagicLinkToken.mockResolvedValue("SIGNED_TOKEN");
   downloadPhotoBase64.mockReset();
@@ -284,6 +291,7 @@ function photoUpdate(opts?: {
   chatId?: number;
   fileIds?: string[];
   caption?: string;
+  replyToMessageId?: number;
 }): TgUpdate {
   const chatId = opts?.chatId ?? 555;
   const fileIds = opts?.fileIds ?? ["small_id", "large_id"];
@@ -301,6 +309,15 @@ function photoUpdate(opts?: {
         height: 100 * (i + 1),
       })),
       ...(opts?.caption !== undefined ? { caption: opts.caption } : {}),
+      // §5.3 — skladchi bot yuborgan vazifa xabariga reply qilgan bo'lsa.
+      ...(opts?.replyToMessageId !== undefined
+        ? {
+            reply_to_message: {
+              message_id: opts.replyToMessageId,
+              chat: { id: chatId },
+            },
+          }
+        : {}),
     },
   };
 }
@@ -445,6 +462,108 @@ describe("получение фото (TG-B2)", () => {
     expect(photoCreate).toHaveBeenCalledTimes(1);
     expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req2");
     expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+  });
+
+  // ── §5.3 — reply-to bilan aniq fotozaprosga bog'lash (FIFO'dan ustun) ──
+  const REPLY_REQUEST = {
+    id: "req_reply",
+    managerId: "mgr2",
+    slabId: null,
+    batch: { stoneTypeId: "st_reply", stoneType: { name: "Гранит" } },
+  };
+
+  it("reply-to aniq vazifaga tushsa → foto AYNAN o'sha zaprosga (eski PENDING boshqa tosh bo'lsa ham)", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    // reply qilingan xabar → PhotoDispatch → boshqa (yangiroq) zapros.
+    pdFindFirst.mockResolvedValue({ photoRequestId: "req_reply" });
+    prFindFirst.mockResolvedValue(REPLY_REQUEST);
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, replyToMessageId: 4242 }),
+      makeDeps(),
+    );
+
+    // PhotoDispatch aynan (chatId, reply message_id) bo'yicha qidirildi.
+    expect(pdFindFirst).toHaveBeenCalledTimes(1);
+    expect(pdFindFirst.mock.calls[0][0]).toMatchObject({
+      where: { chatId: "999", messageId: 4242 },
+    });
+
+    // PhotoRequest FIFO OR-navbat bilan EMAS, aniq id + PENDING bilan olindi
+    // (reply-to FIFO'dan ustun — bu buggning tuzatilishi).
+    expect(prFindFirst).toHaveBeenCalledTimes(1);
+    expect(prFindFirst.mock.calls[0][0].where).toMatchObject({
+      id: "req_reply",
+      status: "PENDING",
+    });
+    expect(prFindFirst.mock.calls[0][0].where.OR).toBeUndefined();
+
+    // Foto AYNAN reply qilingan zaprosga (va uning toshiga) biriktirildi.
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    expect(photoCreate.mock.calls[0][0].data).toMatchObject({
+      photoRequestId: "req_reply",
+      stoneTypeId: "st_reply",
+    });
+    // O'sha zapros ATOMIK DONE qilindi.
+    expect(prUpdateMany.mock.calls[0][0].where).toMatchObject({
+      id: "req_reply",
+      status: "PENDING",
+    });
+    expect(sendMessage.mock.calls[0][1]).toContain("saqlandi");
+  });
+
+  it("reply-to bo'lmagan bare foto → FIFO fallback (eski oqim o'zgarmaydi), pdFindFirst chaqirilmaydi", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    // reply yo'q → PhotoDispatch qidirilmaydi, FIFO OR-navbat ishlaydi.
+    expect(pdFindFirst).not.toHaveBeenCalled();
+    expect(prFindFirst.mock.calls[0][0].where).toMatchObject({
+      status: "PENDING",
+    });
+    expect(prFindFirst.mock.calls[0][0].where.OR).toBeDefined();
+    expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req1");
+  });
+
+  it("reply-to begona xabarga (PhotoDispatch topilmadi) → FIFO fallback", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    pdFindFirst.mockResolvedValue(null); // reply tanish vazifa xabari EMAS.
+    prFindFirst.mockResolvedValue(PENDING_REQUEST);
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, replyToMessageId: 999999 }),
+      makeDeps(),
+    );
+
+    expect(pdFindFirst).toHaveBeenCalledTimes(1);
+    // Tanish vazifa emas → FIFO navbat ishlaydi (bare foto kabi).
+    expect(prFindFirst.mock.calls[0][0].where.OR).toBeDefined();
+    expect(photoCreate.mock.calls[0][0].data.photoRequestId).toBe("req1");
+  });
+
+  it("reply-to tanish vazifa, lekin zapros allaqachon DONE → FIFO'ga TUSHMAYDI, «so'rov yo'q»", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    pdFindFirst.mockResolvedValue({ photoRequestId: "req_reply" });
+    // reply-to lookup: id+PENDING topilmadi (zapros allaqachon bajarilgan).
+    prFindFirst.mockResolvedValue(null);
+
+    await handleUpdate(
+      photoUpdate({ chatId: 999, replyToMessageId: 4242 }),
+      makeDeps(),
+    );
+
+    // FIFO fallback ISHLAMAYDI (boshqa toshga noto'g'ri biriktirmaslik uchun):
+    // faqat bitta prFindFirst (reply-to), keyin to'xtaydi.
+    expect(prFindFirst).toHaveBeenCalledTimes(1);
+    expect(prUpdateMany).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("faol foto-so'rov yo'q");
   });
 
   it("menejerni xabardor qilish yiqilsa → throw QILMAYDI, skladchi baribir saqlandi+javob oldi", async () => {

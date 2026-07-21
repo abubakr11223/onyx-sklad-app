@@ -107,12 +107,14 @@ interface PhotoDispatchUpsertArgs {
     attempts: number;
     lastError: string | null;
     deliveredAt: Date | null;
+    messageId: number | null;
   };
   update: {
     status: "SENT" | "FAILED";
     attempts: { increment: number };
     lastError: string | null;
     deliveredAt: Date | null;
+    messageId: number | null;
   };
 }
 
@@ -220,7 +222,10 @@ export function buildTaskText(
   ];
   const c = comment?.trim();
   if (c) lines.push(`Izoh: ${c}`);
-  lines.push("Rasmni shu yerga javob qilib yuboring.");
+  // §5.3 — skladchi qaysi toshni suratga olganini adashtirmasligi uchun: aynan
+  // SHU xabarga reply qilib yuborishni so'raymiz (bir nechta ochiq vazifa bo'lsa
+  // ham foto to'g'ri fotozaprosga bog'lanadi).
+  lines.push("Rasmni SHU xabarga javob (reply) qilib yuboring.");
   return lines.join("\n");
 }
 
@@ -242,6 +247,10 @@ async function dispatchAndRecord(
   const { db, sendMessage } = deps;
   const res = await sendMessage(chatId, text);
   const now = new Date();
+  // §5.3 — SENT bo'lsa Telegram qaytargan message_id'ni saqlaymiz (reply-to
+  // bog'lash uchun). FAILED'da xabar yo'q → null. Qayta yuborishda (update) yangi
+  // xabar yangi message_id oladi — skladchi eng oxirgi xabarga reply qiladi.
+  const messageId = res.ok ? res.messageId : null;
 
   await db.photoDispatch.upsert({
     where: { photoRequestId_chatId: { photoRequestId, chatId } },
@@ -252,12 +261,14 @@ async function dispatchAndRecord(
       attempts: 1,
       lastError: res.ok ? null : res.error,
       deliveredAt: res.ok ? now : null,
+      messageId,
     },
     update: {
       status: res.ok ? "SENT" : "FAILED",
       attempts: { increment: 1 },
       lastError: res.ok ? null : res.error,
       deliveredAt: res.ok ? now : null,
+      messageId,
     },
   });
 

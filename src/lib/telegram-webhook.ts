@@ -49,13 +49,17 @@ export interface WebhookDeps {
       }): Promise<{ telegramId: string | null } | null>;
     };
     photoRequest: {
-      // Skladchining eng eski PENDING zaprosini (umumiy navbat yoki o'ziga).
+      // Skladchining eng eski PENDING zaprosini (umumiy navbat yoki o'ziga) —
+      // FIFO fallback; YOKI §5.3 reply-to bo'yicha aniq zaprosni (id + PENDING).
+      // where union: ikkala chaqiruv ham shu imzoga mos (orderBy ixtiyoriy).
       findFirst(args: {
-        where: {
-          status: "PENDING";
-          OR: Array<{ assigneeId: null } | { assigneeId: string }>;
-        };
-        orderBy: { createdAt: "asc" };
+        where:
+          | {
+              status: "PENDING";
+              OR: Array<{ assigneeId: null } | { assigneeId: string }>;
+            }
+          | { id: string; status: "PENDING" };
+        orderBy?: { createdAt: "asc" };
         include: {
           batch: {
             select: {
@@ -71,6 +75,14 @@ export interface WebhookDeps {
         where: { id: string; status: "PENDING" };
         data: { status: "DONE"; completedAt: Date };
       }): Promise<{ count: number }>;
+    };
+    // §5.3 — reply-to bo'yicha fotozaprosni topish: skladchi bot yuborgan vazifa
+    // xabariga reply qilgan foto o'sha xabarning message_id'sini olib keladi.
+    photoDispatch: {
+      findFirst(args: {
+        where: { chatId: string; messageId: number };
+        select: { photoRequestId: true };
+      }): Promise<{ photoRequestId: string } | null>;
     };
     photo: {
       create(args: {
@@ -498,35 +510,71 @@ async function handlePhoto(
   const photos = message.photo!;
   const largest = photos[photos.length - 1];
 
-  // (3) PENDING zaprosni ATOMIK egallaymiz (S2-conc uslubi, ADR-007 ruhida).
-  // Eng eski PENDING'ni topib, guarded updateMany bilan (id + status:PENDING → DONE)
-  // egallaymiz. count===1 → biz oldik; count===0 → boshqa skladchi o'sha oniyda
-  // egalladi, keyingi PENDING'ga o'tamiz. Shu bilan ikki skladchi bitta zaprosga
-  // biriktirmaydi (poyga yopildi). Bound: 5 urinish (cheksiz sikl bo'lmasin).
+  const batchSelect = {
+    batch: {
+      select: { stoneTypeId: true, stoneType: { select: { name: true } } },
+    },
+  } as const;
+
+  // (3) §5.3 — REPLY-TO ustunligi. Skladchi bot yuborgan aniq vazifa xabariga
+  // reply qilib foto yuborgan bo'lsa (≥2 ochiq so'rovda toshni adashtirmaslik
+  // uchun), o'sha xabar bo'yicha PhotoDispatch topamiz va foto AYNAN shu
+  // fotozaprosga biriktiriladi — FIFO fallback'dan OLDIN, undan ustun.
   let claimed: PendingPhotoRequest | null = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const request = await deps.db.photoRequest.findFirst({
-      where: {
-        status: "PENDING",
-        OR: [{ assigneeId: null }, { assigneeId: user.id }],
-      },
-      orderBy: { createdAt: "asc" },
-      include: {
-        batch: {
-          select: { stoneTypeId: true, stoneType: { select: { name: true } } },
-        },
-      },
+  let replyToResolved = false; // reply aynan bizning vazifa xabarimizga tushdimi
+
+  const replyToMessageId = message.reply_to_message?.message_id;
+  if (typeof replyToMessageId === "number") {
+    const dispatch = await deps.db.photoDispatch.findFirst({
+      where: { chatId: String(chatId), messageId: replyToMessageId },
+      select: { photoRequestId: true },
     });
-    if (!request) break; // PENDING qolmadi.
-    const res = await deps.db.photoRequest.updateMany({
-      where: { id: request.id, status: "PENDING" },
-      data: { status: "DONE", completedAt: new Date() },
-    });
-    if (res.count === 1) {
-      claimed = request;
-      break;
+    if (dispatch) {
+      replyToResolved = true; // shu skladchiga yuborilgan tanish vazifa xabari.
+      const request = await deps.db.photoRequest.findFirst({
+        where: { id: dispatch.photoRequestId, status: "PENDING" },
+        include: batchSelect,
+      });
+      if (request) {
+        // ATOMIK egallash (FIFO'dagi bilan bir xil guard).
+        const res = await deps.db.photoRequest.updateMany({
+          where: { id: request.id, status: "PENDING" },
+          data: { status: "DONE", completedAt: new Date() },
+        });
+        if (res.count === 1) claimed = request;
+      }
     }
-    // count===0 — boshqa skladchi egalladi, keyingi PENDING'ni izlaymiz.
+  }
+
+  // (4) FIFO fallback — FAQAT tanish vazifaga reply BO'LMAGANDA (rasm bare yoki
+  // begona xabarga reply). Reply aynan vazifaga tushgan-u, lekin zapros allaqachon
+  // DONE/egallangan bo'lsa — FIFO'ga TUSHMAYMIZ (boshqa toshga noto'g'ri
+  // biriktirib qo'ymaslik uchun): pastda MSG_PHOTO_NO_REQUEST beriladi.
+  if (!claimed && !replyToResolved) {
+    // PENDING zaprosni ATOMIK egallaymiz (S2-conc uslubi, ADR-007 ruhida).
+    // Eng eski PENDING'ni topib, guarded updateMany bilan (id + status:PENDING → DONE)
+    // egallaymiz. count===1 → biz oldik; count===0 → boshqa skladchi o'sha oniyda
+    // egalladi, keyingi PENDING'ga o'tamiz. Bound: 5 urinish (cheksiz sikl bo'lmasin).
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const request = await deps.db.photoRequest.findFirst({
+        where: {
+          status: "PENDING",
+          OR: [{ assigneeId: null }, { assigneeId: user.id }],
+        },
+        orderBy: { createdAt: "asc" },
+        include: batchSelect,
+      });
+      if (!request) break; // PENDING qolmadi.
+      const res = await deps.db.photoRequest.updateMany({
+        where: { id: request.id, status: "PENDING" },
+        data: { status: "DONE", completedAt: new Date() },
+      });
+      if (res.count === 1) {
+        claimed = request;
+        break;
+      }
+      // count===0 — boshqa skladchi egalladi, keyingi PENDING'ni izlaymiz.
+    }
   }
   if (!claimed) {
     await deps.sendMessage(chatId, MSG_PHOTO_NO_REQUEST);

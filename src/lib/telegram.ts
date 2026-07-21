@@ -49,6 +49,12 @@ export interface TgMessage {
   photo?: TgPhotoSize[];
   /** Rasm/hujjat ostidagi izoh (§5.5b: «singan» marshrutlash shu orqali). */
   caption?: string;
+  /**
+   * §5.3 — skladchi qaysi vazifaga JAVOB (reply) berayotgani. Bot yuborgan
+   * vazifa xabariga reply qilingan foto shu xabarning message_id'sini olib
+   * keladi → aynan o'sha fotozaprosga biriktiriladi (FIFO'dan ustun turadi).
+   */
+  reply_to_message?: TgMessage;
 }
 
 export interface TgUpdate {
@@ -134,27 +140,37 @@ async function apiPost<T = unknown>(
   return { ok: true, result: json.result ?? null };
 }
 
-/** sendMessage natijasi — yetkazildi (ok) yoki xato (error sababi bilan). */
-export type SendResult = { ok: true } | { ok: false; error: string };
+/**
+ * sendMessage natijasi — yetkazildi (ok) yoki xato (error sababi bilan).
+ * §5.3: muvaffaqiyatda Telegram qaytargan `message_id` ham beriladi — chaqiruvchi
+ * uni PhotoDispatch'ga saqlaydi, keyin skladchi shu xabarga reply qilgan fotoni
+ * aynan shu fotozaprosga bog'lash uchun ishlatiladi. API message_id bermasa null.
+ */
+export type SendResult =
+  | { ok: true; messageId: number | null }
+  | { ok: false; error: string };
 
 /**
  * Xabar yuboradi. opts.reply_markup — kontakt so'rovi klaviaturasi uchun.
  * BUG-04: endi `void` emas, `SendResult` qaytaradi — chaqiruvchi yetkazilishni
  * (SENT/FAILED) yozishi va yetkazilmaganda menejerni ogohlantirishi uchun.
+ * §5.3: natijada yuborilgan xabarning message_id'si ham qaytadi (reply-to bog'lash).
  */
 export async function sendMessage(
   chatId: number | string,
   text: string,
   opts?: SendMessageOptions,
 ): Promise<SendResult> {
-  const r = await apiPost("sendMessage", {
+  const r = await apiPost<TgMessage>("sendMessage", {
     chat_id: chatId,
     text,
     ...(opts?.parse_mode ? { parse_mode: opts.parse_mode } : {}),
     ...(opts?.disable_notification ? { disable_notification: true } : {}),
     ...(opts?.reply_markup ? { reply_markup: opts.reply_markup } : {}),
   });
-  return r.ok ? { ok: true } : { ok: false, error: r.error };
+  return r.ok
+    ? { ok: true, messageId: r.result?.message_id ?? null }
+    : { ok: false, error: r.error };
 }
 
 // ───────────────────────── Fayl (TG-B uchun tayyor) ─────────────────────────

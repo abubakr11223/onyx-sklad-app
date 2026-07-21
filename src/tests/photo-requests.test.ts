@@ -65,7 +65,8 @@ beforeEach(() => {
   photoDispatchUpsert.mockResolvedValue(undefined);
   auditLogCreate.mockResolvedValue(undefined);
   // BUG-04: sendMessage endi SendResult qaytaradi (void emas).
-  sendMessage.mockResolvedValue({ ok: true });
+  // §5.3: SendResult SENT'da message_id ham beradi (reply-to bog'lash uchun).
+  sendMessage.mockResolvedValue({ ok: true, messageId: 7001 });
 });
 
 describe("createAndDispatchPhotoRequest", () => {
@@ -124,6 +125,43 @@ describe("createAndDispatchPhotoRequest", () => {
     expect(res.request.assigneeId).toBeNull();
     expect(res.dispatchedTo).toBe(2);
     expect(res.noWorkers).toBe(false);
+  });
+
+  it("§5.3: message_id из отправки сохраняется в PhotoDispatch (для reply-to привязки)", async () => {
+    sendMessage
+      .mockResolvedValueOnce({ ok: true, messageId: 4242 })
+      .mockResolvedValueOnce({ ok: true, messageId: 4243 });
+
+    await createAndDispatchPhotoRequest(
+      { managerId: "m1", batchId: "b1", batchLocationId: "loc1" },
+      makeDeps(),
+    );
+
+    // Каждый складчик получает свой message_id → он ложится в свою запись.
+    expect(photoDispatchUpsert.mock.calls[0][0].create).toMatchObject({
+      chatId: "111",
+      status: "SENT",
+      messageId: 4242,
+    });
+    expect(photoDispatchUpsert.mock.calls[1][0].create).toMatchObject({
+      chatId: "222",
+      status: "SENT",
+      messageId: 4243,
+    });
+  });
+
+  it("§5.3: FAILED (нет доставки) → messageId=null в PhotoDispatch", async () => {
+    sendMessage.mockResolvedValue({ ok: false, error: "http_403: blocked" });
+
+    await createAndDispatchPhotoRequest(
+      { managerId: "m1", batchId: "b1", batchLocationId: "loc1" },
+      makeDeps(),
+    );
+
+    expect(photoDispatchUpsert.mock.calls[0][0].create).toMatchObject({
+      status: "FAILED",
+      messageId: null,
+    });
   });
 
   it("комментарий пробрасывается в запрос и в текст задачи", async () => {
