@@ -17,12 +17,14 @@
     "lint": "eslint .",
     "test": "vitest run",
     "seed:demo": "tsx prisma/seed-demo-cli.ts",
+    "seed:owner": "tsx prisma/seed-owner-cli.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
     "@prisma/client": "^6.19.3",
     "next": "^16.2.10",
+    "node-cron": "^4.6.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
