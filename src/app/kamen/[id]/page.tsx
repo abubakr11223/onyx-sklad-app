@@ -304,6 +304,9 @@ export default async function KamenPage({
         rockType: true,
         color: true,
         basePrice: true,
+        // §5.8: закупочная цена — видна только canSeePurchasePrice (OWNER;
+        // менеджер — по явному разрешению). Тянем всегда, показываем по caps ниже.
+        purchasePrice: true,
         description: true,
         properties: true,
         batches: {
@@ -490,6 +493,14 @@ export default async function KamenPage({
     availablePieces.length > 0;
 
   const basePrice = toNum(st.basePrice);
+  // §5.8: закупочная цена + маржа — только для canSeePurchasePrice (OWNER;
+  // менеджер — лишь если явно разрешено User.canSeePurchasePrice). Маржа =
+  // продажная − закупочная, считается только когда известны ОБЕ цены.
+  const purchasePrice = toNum(st.purchasePrice);
+  const margin =
+    basePrice !== null && purchasePrice !== null
+      ? basePrice - purchasePrice
+      : null;
   const propRows = propertyRows(st.properties);
   // `now` определён выше (общий для бронь-фильтра и «свежести» фото, TZ §5.3).
   // Фото → сериализуемые пропсы для клиентского лайтбокса (id/caption/stale).
@@ -734,14 +745,38 @@ export default async function KamenPage({
         )}
       </Card>
 
-      {/* 3. Цена (только basePrice — purchasePrice не показываем) */}
-      {/* R2: цену видят только роли с canSeePrices (OWNER/MANAGER), не склад. */}
-      {caps.canSeePrices && basePrice !== null && (
+      {/* 3. Цена */}
+      {/* R2: продажную цену видят роли с canSeePrices (OWNER/MANAGER), не склад.
+          §5.8: закупочную цену и маржу — только canSeePurchasePrice (OWNER;
+          менеджер лишь по явному разрешению). Карточка показывается, если есть
+          хотя бы одна доступная пользователю цена. */}
+      {((caps.canSeePrices && basePrice !== null) ||
+        (caps.canSeePurchasePrice && purchasePrice !== null)) && (
         <Card className="mt-4">
           <h2 className="text-lg font-semibold text-ink">Цена</h2>
-          <p className="mt-1 text-sm text-ink/70">
-            {priceFmt.format(basePrice)} за м²
-          </p>
+          {caps.canSeePrices && basePrice !== null && (
+            <p className="mt-1 text-sm text-ink/70">
+              <span className="text-ink/55">Продажная:</span>{" "}
+              {priceFmt.format(basePrice)} за м²
+            </p>
+          )}
+          {/* §5.8: закупочная + маржа — строго под canSeePurchasePrice, поэтому
+              менеджер без разрешения (canSeePurchasePrice=false) их НЕ видит. */}
+          {caps.canSeePurchasePrice && purchasePrice !== null && (
+            <p className="mt-1 text-sm text-ink/70">
+              <span className="text-ink/55">Закупочная:</span>{" "}
+              {priceFmt.format(purchasePrice)} за м²
+            </p>
+          )}
+          {/* Маржа = продажная − закупочная → раскрывает продажную. Поэтому
+              строго под ОБОИМИ флагами (defense-in-depth): без canSeePrices
+              маржа не должна утечь базовую цену. */}
+          {caps.canSeePrices && caps.canSeePurchasePrice && margin !== null && (
+            <p className="mt-1 text-sm text-ink/70">
+              <span className="text-ink/55">Маржа:</span>{" "}
+              {priceFmt.format(margin)} за м²
+            </p>
+          )}
         </Card>
       )}
 

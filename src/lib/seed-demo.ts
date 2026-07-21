@@ -4,6 +4,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 export interface SeedDemoResult {
+  ownerId: string;
   managerId: string;
   warehouseId: string;
   warehouseTelegramId: string | null;
@@ -16,6 +17,22 @@ export async function seedDemoData(
   opts: { warehouseTelegramId?: string | null },
 ): Promise<SeedDemoResult> {
   const tgId = opts.warehouseTelegramId?.trim() || null;
+
+  // ── 0) Владелец (OWNER) — root-akkaunt (bo'lmasa yaratamiz) ──
+  // TZ №2 Faza A / OWN-01: bazada OWNER user bo'lmasa, demo-role=OWNER →
+  // getCurrentUser null → PARTNER fallback → panel bo'sh. Shu yerda OWNER
+  // yozuvini kafolatlaymiz (idempotent), shunda «Владелец» to'liq huquqli kiradi.
+  let owner = await db.user.findFirst({ where: { role: "OWNER" } });
+  if (!owner) {
+    owner = await db.user.create({
+      data: {
+        name: "Владелец (демо)",
+        role: "OWNER",
+        phone: "+998900000000",
+        isActive: true,
+      },
+    });
+  }
 
   // ── 1) Menejer (bo'lmasa yaratamiz) ──
   let manager = await db.user.findFirst({ where: { role: "MANAGER" } });
@@ -56,6 +73,7 @@ export async function seedDemoData(
         rockType: "травертин",
         color: "бежевый",
         basePrice: "95.00",
+        purchasePrice: "60.00", // §5.8: маржа видна только OWNER (демо-данные)
         qrSlug: "demo-travertin",
         batches: {
           create: [
@@ -81,6 +99,7 @@ export async function seedDemoData(
         rockType: "оникс",
         color: "медовый",
         basePrice: "310.00",
+        purchasePrice: "210.00", // §5.8: маржа видна только OWNER (демо-данные)
         qrSlug: "demo-onyx",
         batches: {
           create: [
@@ -99,6 +118,7 @@ export async function seedDemoData(
   }
 
   return {
+    ownerId: owner.id,
     managerId: manager.id,
     warehouseId: warehouse.id,
     warehouseTelegramId: warehouse.telegramId,
