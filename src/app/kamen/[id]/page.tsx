@@ -332,6 +332,14 @@ export default async function KamenPage({
                 block: true,
                 landmark: true,
                 needsCheck: true,
+                // On-demand separation (§6.1): у выделенной плиты — своё фото
+                // (Photo.slabId). Показываем миниатюры под ярлыком, чтобы менеджер/
+                // клиент видел «Плита №N + её фото». take:4 — не тянем весь хвост.
+                photos: {
+                  select: { id: true },
+                  orderBy: { createdAt: "desc" },
+                  take: 4,
+                },
               },
             },
           },
@@ -616,6 +624,18 @@ export default async function KamenPage({
                     )}{" "}
                     · Блок {s.block}, ориентир {s.landmark}
                     {s.needsCheck && <NeedsCheckBadge />}
+                    {/* §6.1: клиент выбрал плиту №N → «Купить» ведёт на продажу.
+                        Только продаваемым (canSell) и только для плит без пометки
+                        «проверить» (needsCheck). Плиты здесь уже AVAILABLE (фильтр
+                        запроса). Флоу продажи не трогаем — это ссылка на /prodazha. */}
+                    {caps.canSell && !s.needsCheck && (
+                      <Link
+                        href="/prodazha"
+                        className="ml-2 inline-block align-middle text-sm font-medium text-gold-deep hover:underline"
+                      >
+                        Купить ({s.label})
+                      </Link>
+                    )}
                     {/* SK-2: пометку «проверить» переключает только склад. */}
                     {caps.canManageWarehouse && (
                       <NeedsCheckToggle
@@ -624,6 +644,34 @@ export default async function KamenPage({
                         needsCheck={s.needsCheck}
                         backTo={"/kamen/" + id}
                       />
+                    )}
+                    {/* §6.1: фото выделенной плиты (Photo.slabId) — миниатюры под
+                        ярлыком. Прокси /api/photo/[id] (тот же, что у галереи).
+                        Клик открывает полный размер в новой вкладке. Нет фото —
+                        subtle «без фото» (частая ситуация до первой съёмки). */}
+                    {s.photos.length > 0 ? (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.photos.map((ph) => (
+                          <a
+                            key={ph.id}
+                            href={"/api/photo/" + ph.id}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block h-16 w-16 overflow-hidden rounded-field border border-ink/10"
+                          >
+                            <img
+                              src={"/api/photo/" + ph.id}
+                              alt={"Фото — " + s.label}
+                              loading="lazy"
+                              className="h-full w-full object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="ml-2 align-middle text-xs text-ink/40">
+                        без фото
+                      </span>
                     )}
                     {/* SK-1b (3): локацию плиты (block/landmark) правит склад. */}
                     {caps.canManageWarehouse && (
