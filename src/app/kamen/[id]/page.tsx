@@ -469,6 +469,18 @@ export default async function KamenPage({
         : `≈${m2Fmt.format(areaFreeSum)} м²${areaUnknown ? "+" : ""}`,
     );
 
+  // §6.7: клиент/партнёр (без canSeeExactRemainder) НЕ видит точных остатков,
+  // ярлыков плит и локаций — только нейтральный признак «в наличии / нет».
+  // Наличие есть, если СВОБОДНЫЙ §3-объём > 0 ЛИБО остались отдельные плиты/бой
+  // (партия может быть полностью разобрана — объём 0, но отдельные единицы есть).
+  // Опираемся на СВОБОДНЫЙ остаток (не на «известность» тотала), чтобы полностью
+  // проданный камень показывался как «нет в наличии» — паритет с /poisk.
+  const hasStock =
+    slabsFreeSum > 0 ||
+    areaFreeSum > 0 ||
+    batches.some((x) => x.availableSlabs.length > 0) ||
+    availablePieces.length > 0;
+
   const basePrice = toNum(st.basePrice);
   const propRows = propertyRows(st.properties);
   // `now` определён выше (общий для бронь-фильтра и «свежести» фото, TZ §5.3).
@@ -546,8 +558,21 @@ export default async function KamenPage({
       )}
 
       {/* 2. Наличие */}
+      {/* §6.7: точные остатки/ярлыки плит/локации видят только роли с
+          canSeeExactRemainder (OWNER/MANAGER/WAREHOUSE). Партнёр/клиент видит
+          лишь нейтральный признак «в наличии», без чисел и без локаций. */}
       <Card className="mt-6">
         <h2 className="text-lg font-semibold text-ink">Наличие</h2>
+        {!caps.canSeeExactRemainder ? (
+          <p className="mt-1 text-sm text-ink/70">
+            {hasStock ? (
+              <span className="font-semibold text-success">В наличии</span>
+            ) : (
+              <span className="text-ink/50">Нет в наличии</span>
+            )}
+          </p>
+        ) : (
+        <>
         <p className="mt-1 text-sm text-ink/70">
           {totalParts.length > 0 ? (
             <>
@@ -657,6 +682,8 @@ export default async function KamenPage({
             </ul>
           </div>
         )}
+        </>
+        )}
       </Card>
 
       {/* 3. Цена (только basePrice — purchasePrice не показываем) */}
@@ -693,6 +720,9 @@ export default async function KamenPage({
       )}
 
       {/* 5. Локации */}
+      {/* §6.7: физические локации (блок/ориентир) — складская информация;
+          скрыта от партнёра/клиента (без canSeeExactRemainder). */}
+      {caps.canSeeExactRemainder && (
       <Card className="mt-4">
         <h2 className="text-lg font-semibold text-ink">Локации</h2>
         {st.batches.length === 0 ? (
@@ -802,6 +832,7 @@ export default async function KamenPage({
           </ul>
         )}
       </Card>
+      )}
 
       {/* 6. Фото — вечное хранение + дата съёмки и «свежесть» (TZ §5.3) */}
       <Card className="mt-4">
