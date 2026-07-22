@@ -15,16 +15,28 @@ export type ButtonSize = "md" | "sm";
 
 const BASE =
   "inline-flex items-center justify-center gap-2 rounded-field font-semibold " +
-  "transition select-none disabled:opacity-50 disabled:pointer-events-none " +
+  "transition-[transform,box-shadow,background-color,border-color,color] duration-150 " +
+  "ease-out select-none will-change-transform active:translate-y-0 active:scale-[.99] " +
+  "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0 " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold " +
   "focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
 
+// Единый стиль на всё приложение (утв. макет): золото-градиент = основное,
+// светлая панель+контур = второстепенное, «призрак» = третьестепенное,
+// красный контур = деструктивное (красным не кричим — лишь контур).
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-ink text-paper hover:bg-ink-2 active:bg-ink-2",
+  primary:
+    "text-on-gold bg-[linear-gradient(180deg,var(--color-gold-hi),var(--color-gold))] " +
+    "shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_6px_16px_-7px_rgb(169_131_47/0.7)] " +
+    "hover:-translate-y-px " +
+    "hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_12px_24px_-8px_rgb(169_131_47/0.9)]",
   secondary:
-    "border border-ink/20 bg-transparent text-ink hover:border-gold hover:text-gold-deep",
-  ghost: "bg-transparent text-ink hover:bg-ink/5",
-  danger: "bg-danger text-paper hover:bg-danger/90 active:bg-danger/90",
+    "border border-line bg-paper-2 text-ink " +
+    "hover:-translate-y-px hover:border-gold hover:text-gold-deep hover:shadow-card",
+  ghost: "bg-transparent text-ink/70 hover:bg-ink/5 hover:text-ink",
+  danger:
+    "border border-danger/35 bg-transparent text-danger " +
+    "hover:-translate-y-px hover:border-danger hover:bg-danger/8",
 };
 
 // min-h-11 = 44px — минимальная зона касания (мобиль-first).

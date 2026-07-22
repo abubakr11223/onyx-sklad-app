@@ -8,9 +8,9 @@ import type { InputHTMLAttributes, ReactNode } from "react";
 
 /** Классы нативного поля/селекта — держат стиль ввода в одном месте. */
 export const inputClass =
-  "min-h-11 w-full rounded-field border border-ink/20 bg-paper px-3 text-base " +
-  "text-ink placeholder:text-ink/40 transition " +
-  "focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/40 " +
+  "min-h-11 w-full rounded-field border border-line bg-paper px-3 text-base " +
+  "text-ink placeholder:text-ink/40 transition-[border-color,box-shadow] " +
+  "focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30 " +
   "disabled:opacity-50 aria-[invalid=true]:border-danger";
 
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & {

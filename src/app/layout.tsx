@@ -63,9 +63,12 @@ export default async function RootLayout({
   return (
     <html lang="ru" className={`${montserrat.variable} ${lora.variable}`}>
       <body className="antialiased">
+        {/* Десктоп: фиксированная боковая панель слева (w-64). */}
         <Nav caps={caps} isLoggedIn={isLoggedIn} />
-        {/* pb-20 на мобиле — контент не прячется за нижним таб-баром. */}
-        <div className="min-h-screen pb-20 md:pb-0">{children}</div>
+        {/* Контент сдвинут вправо на ширину панели (md:pl-64); на мобиле —
+            во всю ширину, pb-20 чтобы не прятался за нижним таб-баром. */}
+        <div className="min-h-screen pb-20 md:pb-0 md:pl-64">{children}</div>
+        {/* Мобиль: нижний таб-бар (панель скрыта). */}
         <BottomTabBar caps={caps} />
       </body>
     </html>

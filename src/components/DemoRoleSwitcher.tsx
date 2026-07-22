@@ -39,7 +39,7 @@ export default function DemoRoleSwitcher() {
 
   return (
     <label
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-paper-2 px-3 py-1.5 text-xs text-ink/60 ring-1 ring-ink/15"
+      className="flex w-full items-center gap-2 rounded-[10px] bg-side-2 px-3 py-1.5 text-xs text-side-muted ring-1 ring-white/10"
       title="Демо-режим: переключение роли (временно, будет убрано при входе по логину)"
     >
       <span className="whitespace-nowrap">Демо-роль</span>
@@ -54,7 +54,7 @@ export default function DemoRoleSwitcher() {
             void setDemoRole(next);
           });
         }}
-        className="min-h-11 cursor-pointer bg-transparent font-semibold text-ink outline-none disabled:opacity-50"
+        className="min-h-11 flex-1 cursor-pointer bg-transparent font-semibold text-side-ink outline-none disabled:opacity-50 [&>option]:text-ink"
       >
         {ROLES.map((r) => (
           <option key={r} value={r}>
