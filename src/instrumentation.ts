@@ -40,29 +40,16 @@ export function shouldScheduleSweep(
 export const SWEEP_CRON_EXPRESSION = "*/15 * * * *";
 
 export async function register(): Promise<void> {
-  if (!shouldScheduleSweep()) return;
+  // ⚠️ EDGE-BUNDLE HIMOYASI: node-cron (→ node:crypto) edge funksiyaga
+  // TORTILMASLIGI shart, aks holda Vercel edge-build "unsupported module
+  // node:crypto" bilan yiqiladi. LITERAL `=== "edge"` tekshiruvi edge bundle'da
+  // "edge"==="edge" → erta return; quyidagi dinamik import esa O'LIK-KOD sifatida
+  // butunlay olib tashlanadi (funksiya-guard `shouldScheduleSweep()` buni qila
+  // olmasdi — bundler uni statik hisoblay olmaydi). Standalone `node server.js`
+  // (repo prod yo'li) da NEXT_RUNTIME UNDEFINED — u "edge" emas, demak cron
+  // ISHLAYDI; klaster/instance himoyasi esa reservation-cron ichida.
+  if (process.env.NEXT_RUNTIME === "edge") return;
 
-  // node-cron faqat nodejs runtime'da lozim — edge bundle'iga tortmaslik uchun
-  // dinamik import. DB kodini (@/lib/reservations) ham callback ICHIDA lazy
-  // import qilamiz: edge bundling'ga Prisma tortilmasin.
-  const cron = await import("node-cron");
-
-  cron.schedule(SWEEP_CRON_EXPRESSION, () => {
-    void (async () => {
-      // Import ham callback ichida — reject bo'lsa unhandledRejection jarayonni
-      // yiqitmasin (Node ≥15 default). runReservationSweep o'zi throw qilmaydi,
-      // lekin dinamik import xatosini ham shu yerda yutamiz.
-      try {
-        const { expireOverdueReservations } = await import("@/lib/reservations");
-        const { runReservationSweep } = await import("@/lib/reservation-sweep");
-        await runReservationSweep({ expire: expireOverdueReservations });
-      } catch (err) {
-        console.error("[instrumentation] sweep cron callback error:", err);
-      }
-    })();
-  });
-
-  console.info(
-    `[instrumentation] reservation sweep cron scheduled ("${SWEEP_CRON_EXPRESSION}")`,
-  );
+  const { scheduleReservationSweep } = await import("./reservation-cron");
+  scheduleReservationSweep();
 }
