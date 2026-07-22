@@ -420,7 +420,7 @@ export default async function PoiskPage({
         {visibleTypes.length === 0 ? (
           <p className="mt-3 text-ink/70">Ничего не найдено.</p>
         ) : (
-          <ul className="mt-3 space-y-4">
+          <ul className="mt-3 space-y-2.5">
             {visibleTypes.map((t) => {
               // BUG-03: bron bo'lsa — всего/свободно/бронь ajratib ko'rsatiladi;
               // bronsiz — oldingidek bitta son (свободно = всего).
@@ -437,49 +437,72 @@ export default async function PoiskPage({
                     ? `≈${m2Fmt.format(t.areaTotalSum)} м² всего${t.areaUnknown ? "+" : ""}, свободно ${m2Fmt.format(t.areaFreeSum)}, в брони ${m2Fmt.format(t.reservedAreaSum)}`
                     : `≈${m2Fmt.format(t.areaFreeSum)} м²${t.areaUnknown ? "+" : ""}`,
                 );
+              // Монограмма по породе (мрамор→М, гранит→Г…) — визуальный якорь
+              // без выдуманного цвета (в БД нет hex). Fallback — первая буква вида.
+              const monogram = (t.st.rockType || t.st.name)
+                .trim()
+                .charAt(0)
+                .toUpperCase();
               return (
-                <li
-                  key={t.st.id}
-                  className="rounded-card border border-ink/10 bg-paper-2/60 p-4"
-                >
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <h3 className="text-base font-bold text-ink">
-                      <Link
-                        href={"/kamen/" + t.st.id}
-                        className="hover:text-gold-deep hover:underline"
-                      >
-                        {t.st.name}
-                      </Link>
-                    </h3>
-                    <span className="text-sm text-ink/60">
-                      {t.st.rockType}
-                      {t.st.color && <> · {t.st.color}</>}
+                <li key={t.st.id}>
+                  {/* Вся карточка — ссылка на /kamen/[id] (крупная зона касания,
+                      hover-lift). Внутри нет других интерактивных элементов. */}
+                  <Link
+                    href={"/kamen/" + t.st.id}
+                    className="group flex items-start gap-3.5 rounded-card border border-line bg-paper-2 p-4 shadow-card transition hover:-translate-y-0.5 hover:border-gold/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper sm:gap-4"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold/12 font-serif text-lg font-bold text-gold-deep sm:h-12 sm:w-12"
+                    >
+                      {monogram}
                     </span>
-                  </div>
-                  <p className="mt-2 text-sm text-ink/70">
-                    {t.hasAvailability ? (
-                      <>
-                        <Badge variant="success" className="align-middle">
-                          В наличии
-                        </Badge>{" "}
-                        {totalParts.length > 0
-                          ? totalParts.join(" · ")
-                          : "данных по объёму нет"}
-                        {t.countedSlabs > 0 && (
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <h3 className="font-bold text-ink transition group-hover:text-gold-deep">
+                          {t.st.name}
+                        </h3>
+                        <span className="text-sm text-ink/55">
+                          {t.st.rockType}
+                          {t.st.color && <> · {t.st.color}</>}
+                        </span>
+                      </div>
+                      <p className="tnum mt-1.5 text-sm text-ink/70">
+                        {t.hasAvailability
+                          ? totalParts.length > 0
+                            ? totalParts.join(" · ")
+                            : "данных по объёму нет"
+                          : "Нет в наличии"}
+                        {t.hasAvailability && t.countedSlabs > 0 && (
                           <> · отдельных плит: {t.countedSlabs}</>
                         )}
-                        {t.countedPieces > 0 && (
+                        {t.hasAvailability && t.countedPieces > 0 && (
                           <> · боя и остатков: {t.countedPieces}</>
                         )}
-                      </>
-                    ) : (
-                      <Badge variant="neutral" className="align-middle">
-                        Нет в наличии
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1.5 self-center">
+                      <Badge variant={t.hasAvailability ? "success" : "neutral"}>
+                        {t.hasAvailability ? "В наличии" : "Нет"}
                       </Badge>
-                    )}
-                  </p>
-                  {/* Партии/локации/плиты — на карточке камня (/kamen/[id]),
-                      в списке поиска только сводка + ссылка. */}
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        className="hidden text-ink/25 transition group-hover:translate-x-0.5 group-hover:text-gold-deep sm:block"
+                      >
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </div>
+                  </Link>
                 </li>
               );
             })}

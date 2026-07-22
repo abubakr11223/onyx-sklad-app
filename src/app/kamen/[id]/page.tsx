@@ -531,13 +531,25 @@ export default async function KamenPage({
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
           Onyx · камень
         </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
-          {st.name}
-        </h1>
-        <p className="mt-1 text-sm text-ink/60">
-          {st.rockType}
-          {st.color && <> · {st.color}</>}
-        </p>
+        <div className="mt-2 flex items-center gap-4">
+          {/* Монограмма по породе — тот же якорь, что в карточках поиска
+              (визуально связывает список → деталь). */}
+          <span
+            aria-hidden="true"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gold/12 font-serif text-2xl font-bold text-gold-deep"
+          >
+            {(st.rockType || st.name).trim().charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <h1 className="font-serif text-display font-bold tracking-tight text-ink">
+              {st.name}
+            </h1>
+            <p className="mt-1 text-sm text-ink/60">
+              {st.rockType}
+              {st.color && <> · {st.color}</>}
+            </p>
+          </div>
+        </div>
         {/* A1 (§6.8): файл-текстура вида — скачивание доступно всем (партнёр
             подбирает камень по текстуре). Показываем только когда файл задан. */}
         {st.textureFileUrl && (
