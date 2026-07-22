@@ -65,8 +65,9 @@ const initialState: SaleFormState = { errors: {}, conflict: null };
 // Крупная кликабельная карточка выбора (плита / кусок / вид камня) — не обычная
 // Button: левое выравнивание, две строки. Стиль ввода/касания — бренд-токены.
 const cardBtnCls =
-  "w-full rounded-card border border-ink/10 bg-paper p-3 text-left transition " +
-  "hover:border-gold active:bg-ink/5 disabled:opacity-50 disabled:pointer-events-none";
+  "w-full rounded-card border border-line bg-paper-2 p-3 text-left shadow-card " +
+  "transition hover:-translate-y-0.5 hover:border-gold active:translate-y-0 " +
+  "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0";
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
@@ -127,11 +128,21 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
               return (
                 <li key={st.id}>
                   <button type="button" className={cardBtnCls} onClick={() => setStone(st)}>
-                    <span className="block text-base font-semibold text-ink">
-                      {st.name}{" "}
-                      <span className="font-normal text-ink/60">({st.rockType})</span>
+                    <span className="flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gold/12 font-serif text-base font-bold text-gold-deep"
+                      >
+                        {(st.rockType || st.name).trim().charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-base font-semibold text-ink">
+                          {st.name}{" "}
+                          <span className="font-normal text-ink/60">({st.rockType})</span>
+                        </span>
+                        <span className="block text-sm text-ink/70">{parts}</span>
+                      </span>
                     </span>
-                    <span className="block text-sm text-ink/70">{parts}</span>
                   </button>
                 </li>
               );
