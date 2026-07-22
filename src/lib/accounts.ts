@@ -7,18 +7,33 @@ import type { Role } from "@/lib/permissions";
 
 /**
  * Bu forma orqali YARATILISHI/O'ZGARTIRILISHI mumkin bo'lgan rollar.
- * OWNER — root/seed akkaunti (bu yerdan yaratilmaydi). PARTNER — alohida oqim
- * (Telegram), akkaunt-forma undan foydalanmaydi. Faqat MANAGER / WAREHOUSE.
+ * OWNER — root/seed akkaunti (bu yerdan yaratilmaydi — ruxsat oshirish xavfi).
+ * A1 (TZ §6.8): PARTNER (дизайнер-партнёр) endi shu forma orqali yaratiladi —
+ * egasi partnyorga login/parol beradi. PARTNER — eng kam huquqli rol, shuning
+ * uchun uni yaratish xavfsiz. MANAGER / WAREHOUSE — avvalgidek.
  */
-export const CREATABLE_ROLES = ["MANAGER", "WAREHOUSE"] as const;
+export const CREATABLE_ROLES = ["MANAGER", "WAREHOUSE", "PARTNER"] as const;
 export type CreatableRole = (typeof CREATABLE_ROLES)[number];
 
 /** Parolning minimal uzunligi (OWN-03 xavfsizlik talabi). */
 export const MIN_PASSWORD_LENGTH = 8;
 
-/** Rol shu forma orqali yaratsa/o'zgartirsa bo'ladimi (OWNER/PARTNER — yo'q). */
+/** Rol shu forma orqali yaratsa bo'ladimi (OWNER — yo'q). */
 export function isCreatableRole(role: string): role is CreatableRole {
   return (CREATABLE_ROLES as readonly string[]).includes(role);
+}
+
+/**
+ * Rolni bu forma orqali BOSHQA rolga almashtirish mumkin bo'lganlar — FAQAT
+ * MANAGER ↔ WAREHOUSE. PARTNER yaratiladi (CREATABLE), lekin ko'tarilmaydi:
+ * partnyorni menejerga ko'tarish = ruxsat oshirish xavfi (taqiqlanadi). OWNER —
+ * hech qachon. Bu to'plam createAccount uchun emas, faqat changeRole gate'i uchun
+ * (UI'dagi isRoleToggleable bilan bir xil shartnoma).
+ */
+export const TOGGLEABLE_ROLES = ["MANAGER", "WAREHOUSE"] as const;
+export type ToggleableRole = (typeof TOGGLEABLE_ROLES)[number];
+export function isToggleableRole(role: string): role is ToggleableRole {
+  return (TOGGLEABLE_ROLES as readonly string[]).includes(role);
 }
 
 /** Email'ni normallashtirish: trim + lowercase (unique solishtiruvi barqaror bo'lsin). */
@@ -64,7 +79,7 @@ export function validateNewAccount(
   const name = input.name.trim();
   if (!name) return { ok: false, error: "name" };
 
-  // Rol allowlist: OWNER/PARTNER va noma'lum qiymatlar rad etiladi (xavfsizlik).
+  // Rol allowlist: OWNER va noma'lum qiymatlar rad etiladi (xavfsizlik).
   if (!isCreatableRole(input.role)) return { ok: false, error: "role" };
 
   const email = normalizeEmail(input.email);

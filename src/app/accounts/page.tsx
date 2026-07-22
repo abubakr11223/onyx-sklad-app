@@ -161,8 +161,13 @@ export default async function AccountsPage({
         {users.map((u) => {
           const isOwner = u.role === "OWNER";
           const isSelf = u.id === me?.id;
-          const isCreatable =
+          // Смена роли — только бинарный тумблер MANAGER↔WAREHOUSE (PARTNER в него
+          // не входит: у него отдельный флоу заявок, а не складско-менеджерский).
+          const isRoleToggleable =
             u.role === "MANAGER" || u.role === "WAREHOUSE";
+          // Деактивация / сброс пароля — для любого НЕ-владельца (вкл. PARTNER,
+          // A1): владелец должен уметь управлять созданными им партнёр-аккаунтами.
+          const isManageable = !isOwner;
           const otherRole = u.role === "MANAGER" ? "WAREHOUSE" : "MANAGER";
 
           return (
@@ -194,10 +199,10 @@ export default async function AccountsPage({
 
                 {/* Действия доступны для активных не-владельцев (кроме сброса
                     своего пароля владельцем). */}
-                {u.isActive && (isCreatable || (isOwner && isSelf)) && (
+                {u.isActive && (isManageable || (isOwner && isSelf)) && (
                   <div className="mt-4 flex flex-col gap-3 border-t border-ink/10 pt-4">
                     {/* Смена роли — только MANAGER↔WAREHOUSE. */}
-                    {isCreatable && (
+                    {isRoleToggleable && (
                       <form
                         action={changeRole}
                         className="flex flex-wrap items-end gap-2"
@@ -232,7 +237,7 @@ export default async function AccountsPage({
                     </form>
 
                     {/* Деактивация — только для не-владельцев и не себя. */}
-                    {isCreatable && !isSelf && (
+                    {isManageable && !isSelf && (
                       <form action={deleteAccount}>
                         <input type="hidden" name="userId" value={u.id} />
                         <Button type="submit" variant="danger" size="sm">

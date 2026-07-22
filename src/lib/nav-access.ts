@@ -24,6 +24,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/istoriya": "canSeeHistory",
   // «Сотрудники» — управление аккаунтами (OWN-03): только OWNER.
   "/accounts": "canManageAccounts",
+  // «Заявки» — лиды дизайнера/партнёра (A1, TZ §6.8): OWNER/MANAGER.
+  "/zayavki": "canSeeLeads",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

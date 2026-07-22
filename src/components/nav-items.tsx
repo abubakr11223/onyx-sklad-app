@@ -76,6 +76,31 @@ function UsersIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
+// «Заявки» — лиды дизайнера/партнёра (A1, §6.8). Локальная иконка (входящий
+// лоток): в Icons.tsx подходящей нет, а трогать чужой файл ради декоративной
+// иконки незачем. Те же соглашения, что в Icons.tsx (viewBox 24, currentColor).
+function LeadsIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={20}
+      height={20}
+      aria-hidden="true"
+      className={className}
+      {...props}
+    >
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </svg>
+  );
+}
+
 export type NavItem = {
   href: string;
   label: string;
@@ -139,6 +164,13 @@ export const NAV_ITEMS: NavItem[] = [
     short: "Фото",
     description: "Запросы фото складчикам",
     Icon: CameraIcon,
+  },
+  {
+    href: "/zayavki",
+    label: "Заявки",
+    short: "Заявки",
+    description: "Запросы дизайнеров-партнёров",
+    Icon: LeadsIcon,
   },
   {
     href: "/karta-sklada",

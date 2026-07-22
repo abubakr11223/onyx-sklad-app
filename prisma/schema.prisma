@@ -106,6 +106,14 @@ enum SaleTarget {
   BATCH_VOLUME
 }
 
+/// A1 (TZ §6.8) — статус лида (заявки дизайнера/партнёра). Простой прямой поток:
+/// NEW → CONTACTED → CLOSED. IN_PROGRESS ataylab yo'q (TZ §9, как у PhotoRequest).
+enum LeadStatus {
+  NEW // заявка принята, ждёт менеджера
+  CONTACTED // менеджер связался
+  CLOSED // обработана / закрыта
+}
+
 // ──────────────────────── Modellar ────────────────────────
 
 /// §1.1 — Вид (sort) камня. Katalog darajasi (L1).
@@ -128,6 +136,7 @@ model StoneType {
   slabs   Slab[]
   pieces  Piece[]
   photos  Photo[]
+  leads   Lead[]
 
   @@index([rockType])
   @@index([color])
@@ -306,6 +315,8 @@ model User {
   photosTaken           Photo[]
   auditLogs             AuditLog[]
   sales                 SaleRecord[]
+  leadsCreated          Lead[]         @relation("LeadCreatedBy")
+  leadsAssigned         Lead[]         @relation("LeadAssignedManager")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -457,4 +468,32 @@ model SaleRecord {
   @@index([batchId])
   @@index([slabId])
   @@index([pieceId])
+}
+
+/// A1 (TZ §6.8) — Лид: входящий интерес дизайнера/партнёра. Партнёр смотрит
+/// камень, запрашивает объём → КАЖДЫЙ запрос становится Lead(NEW) и попадает к
+/// менеджеру («ни один интерес не теряется», §6.8.5). Это НЕ бронь и НЕ продажа
+/// (те требуют единиц/менеджера) — а сырой запрос, который менеджер обрабатывает
+/// вручную. requestedSlabs/requestedAreaM2 — что просил партнёр (оба опциональны:
+/// интерес может быть без точного объёма). assignedManager — кто взял заявку.
+model Lead {
+  id                String     @id @default(cuid())
+  createdById       String // партнёр/дизайнер, создавший запрос
+  stoneTypeId       String? // интересующий вид (может быть null)
+  requestedSlabs    Int?
+  requestedAreaM2   Decimal?   @db.Decimal(12, 3)
+  contact           String? // контакт партнёра/его клиента (свободный текст)
+  note              String?
+  status            LeadStatus @default(NEW)
+  assignedManagerId String? // менеджер, взявший заявку в работу
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  createdBy       User       @relation("LeadCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  stoneType       StoneType? @relation(fields: [stoneTypeId], references: [id], onDelete: Restrict)
+  assignedManager User?      @relation("LeadAssignedManager", fields: [assignedManagerId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt]) // очередь менеджера: новые сверху
+  @@index([createdById])
+  @@index([assignedManagerId])
 }

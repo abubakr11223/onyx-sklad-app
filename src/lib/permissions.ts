@@ -50,6 +50,13 @@ export interface Capabilities {
    * boshqalar ham akkaunt yarata olmaydi (ruxsatlarni oshirib yuborish xavfi).
    */
   canManageAccounts: boolean;
+  /**
+   * Заявки дизайнера/партнёра (A1, TZ §6.8) — очередь лидов /zayavki. Их
+   * обрабатывает менеджер («заявка принята, менеджер свяжется»), поэтому видят
+   * OWNER/MANAGER. WAREHOUSE — нет (не продаёт). PARTNER — нет (он их СОЗДАЁТ,
+   * но чужих не видит).
+   */
+  canSeeLeads: boolean;
 }
 
 /**
@@ -68,6 +75,7 @@ export interface Capabilities {
  * | requestsRouteToManager   | false | false            | false     | true    |
  * | canSeeHistory            | true  | false            | false     | false   |
  * | canManageAccounts        | true  | false            | false     | false   |
+ * | canSeeLeads              | true  | true             | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -91,6 +99,7 @@ const DENY_ALL: Capabilities = {
   requestsRouteToManager: false,
   canSeeHistory: false,
   canManageAccounts: false,
+  canSeeLeads: false,
 };
 
 export function capabilitiesFor(
@@ -111,6 +120,7 @@ export function capabilitiesFor(
         requestsRouteToManager: false,
         canSeeHistory: true,
         canManageAccounts: true, // OWN-03: только Владелец управляет аккаунтами
+        canSeeLeads: true, // A1: владелец видит заявки партнёров
       };
     case "MANAGER":
       return {
@@ -127,6 +137,7 @@ export function capabilitiesFor(
         // всех действий не даём (чужие продажи/клиенты). Свой скоуп — кандидат в v2.
         canSeeHistory: false,
         canManageAccounts: false,
+        canSeeLeads: true, // A1: менеджер обрабатывает заявки партнёров
       };
     case "WAREHOUSE":
       return {
@@ -141,6 +152,7 @@ export function capabilitiesFor(
         requestsRouteToManager: false,
         canSeeHistory: false,
         canManageAccounts: false,
+        canSeeLeads: false, // склад не работает с заявками партнёров
       };
     case "PARTNER":
       return {
@@ -155,6 +167,7 @@ export function capabilitiesFor(
         requestsRouteToManager: true,
         canSeeHistory: false,
         canManageAccounts: false,
+        canSeeLeads: false, // партнёр СОЗДАЁТ заявки, но чужих не видит
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

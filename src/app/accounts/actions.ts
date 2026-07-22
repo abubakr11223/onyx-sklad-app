@@ -22,6 +22,7 @@ import { getRealSessionUser } from "@/lib/session";
 import { hashUserPassword } from "@/lib/password";
 import {
   isCreatableRole,
+  isToggleableRole,
   isValidPassword,
   validateNewAccount,
 } from "@/lib/accounts";
@@ -138,7 +139,9 @@ export async function changeRole(formData: FormData): Promise<void> {
   const userId = String(formData.get("userId") ?? "");
   const role = String(formData.get("role") ?? "");
   if (!userId) redirect("/accounts?error=notfound");
-  if (!isCreatableRole(role)) redirect("/accounts?error=role");
+  // N2: faqat MANAGER↔WAREHOUSE. PARTNER endi CREATABLE (A1), lekin uni bu yerda
+  // ko'tarib/tushirib bo'lmasligi kerak (partnyor→menejer = ruxsat oshirish).
+  if (!isToggleableRole(role)) redirect("/accounts?error=role");
 
   const target = await db.user.findUnique({
     where: { id: userId },
@@ -146,7 +149,7 @@ export async function changeRole(formData: FormData): Promise<void> {
   });
   if (!target) redirect("/accounts?error=notfound");
   // OWNER/PARTNER'ni bu UI orqali o'zgartirib bo'lmaydi.
-  if (!isCreatableRole(target.role)) redirect("/accounts?error=owner_protected");
+  if (!isToggleableRole(target.role)) redirect("/accounts?error=owner_protected");
   if (target.role === role) redirect("/accounts?ok=role"); // no-op
 
   await db.$transaction(async (tx) => {

@@ -18,6 +18,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     requestsRouteToManager: false,
     canSeeHistory: true,
     canManageAccounts: true,
+    canSeeLeads: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -31,6 +32,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     requestsRouteToManager: false,
     canSeeHistory: false,
     canManageAccounts: false,
+    canSeeLeads: true,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -44,6 +46,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     requestsRouteToManager: false,
     canSeeHistory: false,
     canManageAccounts: false,
+    canSeeLeads: false,
   },
   PARTNER: {
     canSeePrices: false,
@@ -57,6 +60,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     requestsRouteToManager: true,
     canSeeHistory: false,
     canManageAccounts: false,
+    canSeeLeads: false,
   },
 };
 
@@ -154,6 +158,24 @@ describe("Union'dan tashqari rol — deny-by-default (xavfsiz default)", () => {
     expect(caps.requestsRouteToManager).toBe(false);
     expect(caps.canSeeHistory).toBe(false);
     expect(caps.canManageAccounts).toBe(false);
+    expect(caps.canSeeLeads).toBe(false);
+  });
+});
+
+describe("canSeeLeads — заявки партнёров (A1, TZ §6.8)", () => {
+  it("OWNER/MANAGER → true (обрабатывают лиды)", () => {
+    for (const role of ["OWNER", "MANAGER"] as Role[]) {
+      expect(
+        capabilitiesFor(role, { canSeePurchasePrice: false }).canSeeLeads,
+      ).toBe(true);
+    }
+  });
+  it("WAREHOUSE/PARTNER → false (склад не продаёт; партнёр лишь создаёт)", () => {
+    for (const role of ["WAREHOUSE", "PARTNER"] as Role[]) {
+      expect(
+        capabilitiesFor(role, { canSeePurchasePrice: false }).canSeeLeads,
+      ).toBe(false);
+    }
   });
 });
 

@@ -3,30 +3,54 @@ import { describe, expect, it } from "vitest";
 import {
   CREATABLE_ROLES,
   MIN_PASSWORD_LENGTH,
+  TOGGLEABLE_ROLES,
   isCreatableRole,
+  isToggleableRole,
   isValidEmail,
   isValidPassword,
   normalizeEmail,
   validateNewAccount,
 } from "@/lib/accounts";
 
-describe("isCreatableRole — faqat MANAGER/WAREHOUSE (OWN-03 xavfsizlik)", () => {
-  it("MANAGER va WAREHOUSE → true", () => {
+describe("isCreatableRole — MANAGER/WAREHOUSE/PARTNER, но НЕ OWNER (OWN-03 + A1)", () => {
+  it("MANAGER, WAREHOUSE va PARTNER → true", () => {
     expect(isCreatableRole("MANAGER")).toBe(true);
     expect(isCreatableRole("WAREHOUSE")).toBe(true);
+    // A1 (§6.8): дизайнер-партнёр теперь заводится владельцем через эту форму.
+    expect(isCreatableRole("PARTNER")).toBe(true);
   });
-  it("OWNER va PARTNER → false (bu forma orqali yaratilmaydi)", () => {
+  it("OWNER → false (bu forma orqali yaratilmaydi — ruxsat oshirish xavfi)", () => {
     expect(isCreatableRole("OWNER")).toBe(false);
-    expect(isCreatableRole("PARTNER")).toBe(false);
   });
   it("noma'lum/bo'sh → false", () => {
     expect(isCreatableRole("")).toBe(false);
     expect(isCreatableRole("SUPERADMIN")).toBe(false);
     expect(isCreatableRole("manager")).toBe(false); // katta-kichik farqi
   });
-  it("CREATABLE_ROLES ro'yxati OWNER/PARTNER'ni o'z ichiga olmaydi", () => {
+  it("CREATABLE_ROLES OWNER'ni o'z ichiga olmaydi, ammo PARTNER'ni oladi", () => {
     expect(CREATABLE_ROLES).not.toContain("OWNER");
-    expect(CREATABLE_ROLES).not.toContain("PARTNER");
+    expect(CREATABLE_ROLES).toContain("PARTNER");
+  });
+});
+
+describe("isToggleableRole — changeRole FAQAT MANAGER↔WAREHOUSE (N2)", () => {
+  it("MANAGER va WAREHOUSE → true", () => {
+    expect(isToggleableRole("MANAGER")).toBe(true);
+    expect(isToggleableRole("WAREHOUSE")).toBe(true);
+  });
+  it("PARTNER → false (ko'tarib bo'lmaydi — ruxsat oshirish xavfi)", () => {
+    // A1: PARTNER yaratiladi (CREATABLE), lekin changeRole orqali ko'tarilmaydi.
+    expect(isCreatableRole("PARTNER")).toBe(true);
+    expect(isToggleableRole("PARTNER")).toBe(false);
+  });
+  it("OWNER va noma'lum → false", () => {
+    expect(isToggleableRole("OWNER")).toBe(false);
+    expect(isToggleableRole("")).toBe(false);
+    expect(isToggleableRole("SUPERADMIN")).toBe(false);
+  });
+  it("TOGGLEABLE_ROLES — PARTNER/OWNER yo'q", () => {
+    expect(TOGGLEABLE_ROLES).not.toContain("PARTNER");
+    expect(TOGGLEABLE_ROLES).not.toContain("OWNER");
   });
 });
 
@@ -78,9 +102,10 @@ describe("validateNewAccount — to'liq oqim", () => {
     expect(res).toEqual({ ok: false, error: "role" });
   });
 
-  it("PARTNER roli → rad (error: role)", () => {
+  it("yaroqli PARTNER → ok (A1 §6.8: egasi partnyor akkauntini yaratadi)", () => {
     const res = validateNewAccount({ ...base, role: "PARTNER" });
-    expect(res).toEqual({ ok: false, error: "role" });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.role).toBe("PARTNER");
   });
 
   it("bo'sh ism → error: name", () => {

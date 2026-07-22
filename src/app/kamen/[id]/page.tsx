@@ -26,6 +26,7 @@ import {
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
 import { requestPhoto } from "@/app/poisk/actions";
+import { requestLead } from "./lead-actions";
 import {
   addLocation,
   moveQty,
@@ -287,6 +288,9 @@ export default async function KamenPage({
   // SK-2: результат ручной пометки «проверить» (пересорт, STATUS_CHANGE).
   const checkOk = firstParam(sp.checkOk) === "1";
   const checkErr = firstParam(sp.checkErr);
+  // A1 (§6.8): результат запроса объёма партнёром (лид создан / ошибка поля).
+  const leadOk = firstParam(sp.lead) === "ok";
+  const leadErr = firstParam(sp.leadErr);
 
   // R2 — rol gate: наличие/фото/локации видит и склад, а вот цену (canSeePrices)
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
@@ -307,6 +311,8 @@ export default async function KamenPage({
         // §5.8: закупочная цена — видна только canSeePurchasePrice (OWNER;
         // менеджер — по явному разрешению). Тянем всегда, показываем по caps ниже.
         purchasePrice: true,
+        // A1 (§6.8): файл-текстура вида — партнёр/дизайнер её скачивает.
+        textureFileUrl: true,
         description: true,
         properties: true,
         batches: {
@@ -532,6 +538,19 @@ export default async function KamenPage({
           {st.rockType}
           {st.color && <> · {st.color}</>}
         </p>
+        {/* A1 (§6.8): файл-текстура вида — скачивание доступно всем (партнёр
+            подбирает камень по текстуре). Показываем только когда файл задан. */}
+        {st.textureFileUrl && (
+          <a
+            href={st.textureFileUrl}
+            target="_blank"
+            rel="noreferrer"
+            download
+            className="mt-2 inline-block text-sm font-medium text-gold-deep hover:underline"
+          >
+            Скачать файл (текстура)
+          </a>
+        )}
       </header>
 
       {photoOk && (
@@ -573,6 +592,18 @@ export default async function KamenPage({
       {checkErr && (
         <Alert variant="danger" className="mt-4">
           {checkErr}
+        </Alert>
+      )}
+
+      {/* A1 (§6.8): результат запроса объёма партнёром. */}
+      {leadOk && (
+        <Alert variant="success" className="mt-4">
+          Заявка принята — менеджер свяжется с вами.
+        </Alert>
+      )}
+      {leadErr && (
+        <Alert variant="danger" className="mt-4">
+          {leadErr}
         </Alert>
       )}
 
@@ -984,6 +1015,52 @@ export default async function KamenPage({
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {/* 8. Запросить объём (A1, TZ §6.8) — партнёрский флоу. Только PARTNER
+          (requestsRouteToManager): OWNER/MANAGER продают напрямую. Каждый запрос
+          → Lead(NEW) для менеджера, «ни один интерес не теряется» (§6.8.5). */}
+      {caps.requestsRouteToManager && (
+        <Card className="mt-4">
+          <h2 className="text-lg font-semibold text-ink">Запросить объём</h2>
+          <p className="mt-1 text-sm text-ink/60">
+            Оставьте запрос — менеджер свяжется с вами и подберёт камень под проект.
+          </p>
+          <form action={requestLead} className="mt-3 flex flex-col gap-3">
+            <input type="hidden" name="stoneTypeId" value={st.id} />
+            <input type="hidden" name="next" value={"/kamen/" + id} />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-sm text-ink/55">Плиты</label>
+              <input
+                name="requestedSlabs"
+                inputMode="numeric"
+                placeholder="напр. 10"
+                className={inlineInput + " w-24"}
+              />
+              <label className="text-sm text-ink/55">м²</label>
+              <input
+                name="requestedAreaM2"
+                inputMode="decimal"
+                placeholder="напр. 12,5"
+                className={inlineInput + " w-24"}
+              />
+            </div>
+            <input
+              name="contact"
+              placeholder="Ваш контакт (телефон / Telegram)"
+              className={inlineInput + " w-full sm:max-w-sm"}
+            />
+            <textarea
+              name="note"
+              placeholder="Комментарий (проект, сроки, пожелания)"
+              rows={2}
+              className={inlineInput + " w-full sm:max-w-sm"}
+            />
+            <Button type="submit" variant="secondary" size="sm" className="w-full sm:w-auto">
+              Отправить запрос
+            </Button>
+          </form>
         </Card>
       )}
     </main>
