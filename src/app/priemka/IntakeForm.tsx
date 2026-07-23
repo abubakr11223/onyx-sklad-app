@@ -46,6 +46,20 @@ const emptyLoc = (): LocValues => ({
   areaHereM2: "",
 });
 
+/** ТЗ №3 — значения одной узор-подгруппы (контролируемые поля строки). */
+interface PatValues {
+  description: string;
+  thicknessMm: string;
+  slabs: string;
+  areaM2: string;
+}
+const emptyPat = (): PatValues => ({
+  description: "",
+  thicknessMm: "",
+  slabs: "",
+  areaM2: "",
+});
+
 // Ошибка-ключ локации → id DOM-элемента строки (для перевода фокуса).
 const LOC_FIELD_ID: Record<keyof LocValues, (i: number) => string> = {
   block: (i) => `locBlock-${i}`,
@@ -90,6 +104,12 @@ export default function IntakeForm({
   });
   const [locs, setLocs] = useState<Record<number, LocValues>>({ 0: emptyLoc() });
 
+  // ── ТЗ №3 — узоры в партии (подгруппы) ──
+  const [patternsEnabled, setPatternsEnabled] = useState(false);
+  const [patRowIds, setPatRowIds] = useState<number[]>([0]);
+  const nextPatId = useRef(1);
+  const [pats, setPats] = useState<Record<number, PatValues>>({ 0: emptyPat() });
+
   // Ошибки клиентской валидации; null = клиент не блокировал, показываем серверные.
   const [clientErrors, setClientErrors] = useState<IntakeErrors | null>(null);
   const e = clientErrors ?? state.errors;
@@ -119,6 +139,40 @@ export default function IntakeForm({
     });
   };
 
+  // ── Узор-подгруппы: контроль строк (как локации) ──
+  const setPat =
+    (id: number, key: keyof PatValues) =>
+    (ev: React.ChangeEvent<HTMLInputElement>) =>
+      setPats((m) => ({ ...m, [id]: { ...m[id], [key]: ev.target.value } }));
+  const addPat = () => {
+    const id = nextPatId.current++;
+    setPatRowIds((ids) => [...ids, id]);
+    setPats((m) => ({ ...m, [id]: emptyPat() }));
+  };
+  const removePat = (id: number) => {
+    if (patRowIds.length <= 1) return;
+    setPatRowIds((ids) => ids.filter((x) => x !== id));
+    setPats((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+  };
+
+  // Живой ИТОГО по узорам (подсказка; строгая проверка — в validateIntake).
+  const patTotals = patRowIds.reduce(
+    (acc, id) => {
+      const p = pats[id] ?? emptyPat();
+      const s = Number.parseInt(p.slabs, 10);
+      const a = Number.parseFloat(p.areaM2.replace(",", "."));
+      return {
+        slabs: acc.slabs + (Number.isFinite(s) ? s : 0),
+        area: acc.area + (Number.isFinite(a) ? a : 0),
+      };
+    },
+    { slabs: 0, area: 0 },
+  );
+
   // Собираем вход валидатора из контролируемого state (порядок локаций = rowIds).
   const buildInput = (): IntakeInput => ({
     stoneTypeId: values.stoneTypeId,
@@ -131,6 +185,8 @@ export default function IntakeForm({
     supplierNote: values.supplierNote,
     arrivedAt: values.arrivedAt,
     locations: rowIds.map((id) => locs[id] ?? emptyLoc()),
+    patternsEnabled,
+    patterns: patternsEnabled ? patRowIds.map((id) => pats[id] ?? emptyPat()) : [],
   });
 
   // Первое проблемное поле (в порядке формы) → id DOM-элемента для фокуса.
@@ -142,6 +198,14 @@ export default function IntakeForm({
       for (const s of ["block", "landmark", "slabsHere", "areaHereM2"] as const) {
         if (errs[`loc-${i}-${s}`]) return LOC_FIELD_ID[s](i);
       }
+    }
+    // ТЗ №3 — узоры.
+    if (errs.patternsTotals || errs.patterns || errs.patternsSum) return "slabsTotal";
+    for (let i = 0; i < patRowIds.length; i++) {
+      if (errs[`pattern-${i}-description`]) return `patDescription-${i}`;
+      if (errs[`pattern-${i}-thickness`]) return `patThickness-${i}`;
+      if (errs[`pattern-${i}-slabs`]) return `patSlabs-${i}`;
+      if (errs[`pattern-${i}-area`]) return `patArea-${i}`;
     }
     if (errs.arrivedAt) return "arrivedAt";
     return null;
@@ -284,6 +348,105 @@ export default function IntakeForm({
         <div className="mt-1.5">
           <CrossError msg={e.quantity} />
         </div>
+      </Card>
+
+      {/* ── Узоры в партии (ТЗ №3) ── */}
+      <Card>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={patternsEnabled}
+            onChange={(ev) => setPatternsEnabled(ev.target.checked)}
+            className="h-4 w-4 accent-gold"
+          />
+          <span className="text-lg font-semibold text-ink">
+            В партии несколько узоров / толщин
+          </span>
+        </label>
+
+        {!patternsEnabled ? (
+          <p className="mt-2 text-sm text-ink/55">
+            Однородная партия — оставьте выключенным (быстрый путь). Если узоров
+            несколько — отметьте, заполните таблицу; фото каждого узора запросим у
+            складчика в Telegram.
+          </p>
+        ) : (
+          <div className="mt-4 flex flex-col gap-4">
+            <input type="hidden" name="patternsEnabled" value="1" />
+            <CrossError msg={e.patternsTotals} />
+            <CrossError msg={e.patterns} />
+
+            {patRowIds.map((id, idx) => {
+              const p = pats[id] ?? emptyPat();
+              return (
+                <div key={id} className="rounded-card border border-line bg-paper p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-base font-semibold text-ink">Узор {idx + 1}</span>
+                    {patRowIds.length > 1 && (
+                      <Button variant="ghost" size="sm" onClick={() => removePat(id)}>
+                        Убрать
+                      </Button>
+                    )}
+                  </div>
+                  <Field
+                    id={`patDescription-${idx}`}
+                    name="patDescription"
+                    label={<>Описание узора <Req /></>}
+                    placeholder="светлый с прожилками"
+                    value={p.description}
+                    onChange={setPat(id, "description")}
+                    error={e[`pattern-${idx}-description`]}
+                  />
+                  <div className="mt-3 grid grid-cols-3 gap-3">
+                    <Field
+                      id={`patThickness-${idx}`}
+                      name="patThickness"
+                      inputMode="numeric"
+                      label="Толщина, мм"
+                      placeholder="20"
+                      value={p.thicknessMm}
+                      onChange={setPat(id, "thicknessMm")}
+                      error={e[`pattern-${idx}-thickness`]}
+                    />
+                    <Field
+                      id={`patSlabs-${idx}`}
+                      name="patSlabs"
+                      inputMode="numeric"
+                      label={<>Плит <Req /></>}
+                      placeholder="50"
+                      value={p.slabs}
+                      onChange={setPat(id, "slabs")}
+                      error={e[`pattern-${idx}-slabs`]}
+                    />
+                    <Field
+                      id={`patArea-${idx}`}
+                      name="patArea"
+                      inputMode="decimal"
+                      label={<>м² <Req /></>}
+                      placeholder="30"
+                      value={p.areaM2}
+                      onChange={setPat(id, "areaM2")}
+                      error={e[`pattern-${idx}-area`]}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+
+            <Button variant="secondary" size="sm" onClick={addPat} className="self-start">
+              + Добавить узор
+            </Button>
+
+            {/* Живой ИТОГО — должен сойтись с блоком «Количество». */}
+            <div className="flex items-center justify-between rounded-card bg-ink/[0.03] px-3 py-2 text-sm">
+              <span className="font-semibold text-ink">ИТОГО по узорам</span>
+              <span className="tnum text-ink/70">
+                {patTotals.slabs} плит · {patTotals.area.toFixed(1)} м²
+              </span>
+            </div>
+            <CrossError msg={e.patternsSum} />
+          </div>
+        )}
       </Card>
 
       {/* ── Локации ── */}

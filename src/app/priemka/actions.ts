@@ -59,6 +59,11 @@ function readInput(formData: FormData): IntakeInput {
   const landmarks = all("locLandmark");
   const slabs = all("locSlabsHere");
   const areas = all("locAreaHereM2");
+  // ТЗ №3 — узор-подгруппы (параллельные массивы).
+  const patDesc = all("patDescription");
+  const patThick = all("patThickness");
+  const patSlabs = all("patSlabs");
+  const patArea = all("patArea");
   return {
     stoneTypeId: str("stoneTypeId"),
     newStoneType: formData.get("newStoneType") === "1",
@@ -74,6 +79,13 @@ function readInput(formData: FormData): IntakeInput {
       landmark: landmarks[i] ?? "",
       slabsHere: slabs[i] ?? "",
       areaHereM2: areas[i] ?? "",
+    })),
+    patternsEnabled: formData.get("patternsEnabled") === "1",
+    patterns: patDesc.map((description, i) => ({
+      description,
+      thicknessMm: patThick[i] ?? "",
+      slabs: patSlabs[i] ?? "",
+      areaM2: patArea[i] ?? "",
     })),
   };
 }
@@ -157,6 +169,19 @@ export async function submitIntake(
               areaHereM2: loc.areaHereM2 === null ? null : String(loc.areaHereM2),
             })),
           },
+          // ТЗ №3 — узор-подгруппы (если заведены). Пусто → однородная партия.
+          ...(data.patterns.length > 0
+            ? {
+                patterns: {
+                  create: data.patterns.map((p) => ({
+                    description: p.description,
+                    thicknessMm: p.thicknessMm,
+                    slabsCount: p.slabs,
+                    areaM2: String(p.areaM2),
+                  })),
+                },
+              }
+            : {}),
         },
         select: { id: true },
       });
@@ -180,6 +205,12 @@ export async function submitIntake(
               landmark: loc.landmark,
               slabsHere: loc.slabsHere,
               areaHereM2: loc.areaHereM2,
+            })),
+            patterns: data.patterns.map((p) => ({
+              description: p.description,
+              thicknessMm: p.thicknessMm,
+              slabs: p.slabs,
+              areaM2: p.areaM2,
             })),
           },
         },

@@ -24,6 +24,8 @@ function baseInput(overrides: Partial<IntakeInput> = {}): IntakeInput {
     supplierNote: "",
     arrivedAt: "2026-07-03",
     locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
+    patternsEnabled: false,
+    patterns: [],
     ...overrides,
   };
 }
@@ -385,5 +387,100 @@ describe("validateIntake — прочее", () => {
         ["locations", "quantity", "stoneTypeId"].sort(),
       );
     }
+  });
+});
+
+describe("validateIntake — узоры в партии (ТЗ №3)", () => {
+  const withPatterns = (patterns: {
+    description: string;
+    thicknessMm: string;
+    slabs: string;
+    areaM2: string;
+  }[]) =>
+    baseInput({ slabsTotal: "100", areaTotalM2: "60", patternsEnabled: true, patterns });
+
+  it("галочка снята → узоры игнорируются, patterns=[]", () => {
+    const r = validateIntake(
+      baseInput({
+        patternsEnabled: false,
+        patterns: [{ description: "x", thicknessMm: "20", slabs: "50", areaM2: "30" }],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.patterns).toEqual([]);
+  });
+
+  it("суммы сходятся (плиты И м²) → ok, узоры разобраны", () => {
+    const r = validateIntake(
+      withPatterns([
+        { description: "светлый", thicknessMm: "20", slabs: "50", areaM2: "30" },
+        { description: "тёмный", thicknessMm: "30", slabs: "30", areaM2: "18" },
+        { description: "серый", thicknessMm: "20", slabs: "20", areaM2: "12" },
+      ]),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.patterns).toHaveLength(3);
+      expect(r.data.patterns[0]).toEqual({
+        description: "светлый",
+        thicknessMm: 20,
+        slabs: 50,
+        areaM2: 30,
+      });
+    }
+  });
+
+  it("сумма плит НЕ сходится → patternsSum", () => {
+    const r = validateIntake(
+      withPatterns([
+        { description: "a", thicknessMm: "20", slabs: "50", areaM2: "30" },
+        { description: "b", thicknessMm: "20", slabs: "40", areaM2: "30" }, // 90 ≠ 100
+      ]),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.patternsSum).toBeDefined();
+  });
+
+  it("сумма м² НЕ сходится → patternsSum", () => {
+    const r = validateIntake(
+      withPatterns([
+        { description: "a", thicknessMm: "20", slabs: "50", areaM2: "30" },
+        { description: "b", thicknessMm: "20", slabs: "50", areaM2: "25" }, // 55 ≠ 60
+      ]),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.patternsSum).toBeDefined();
+  });
+
+  it("пустое описание узора → pattern-0-description", () => {
+    const r = validateIntake(
+      withPatterns([
+        { description: "  ", thicknessMm: "20", slabs: "50", areaM2: "30" },
+        { description: "b", thicknessMm: "20", slabs: "50", areaM2: "30" },
+      ]),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors["pattern-0-description"]).toBeDefined();
+  });
+
+  it("узоры без тотала м² партии → patternsTotals", () => {
+    const r = validateIntake(
+      baseInput({
+        slabsTotal: "100",
+        areaTotalM2: "",
+        patternsEnabled: true,
+        patterns: [{ description: "a", thicknessMm: "20", slabs: "100", areaM2: "60" }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.patternsTotals).toBeDefined();
+  });
+
+  it("галочка стоит, но узоров нет → patterns", () => {
+    const r = validateIntake(
+      baseInput({ slabsTotal: "100", areaTotalM2: "60", patternsEnabled: true, patterns: [] }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.patterns).toBeDefined();
   });
 });

@@ -9,6 +9,14 @@ export interface IntakeLocationInput {
   areaHereM2: string;
 }
 
+/** ТЗ №3 — узор-подгруппа: описание + толщина + плиты + м² (сырые строки). */
+export interface IntakePatternInput {
+  description: string;
+  thicknessMm: string;
+  slabs: string;
+  areaM2: string;
+}
+
 export interface IntakeInput {
   /** id существующего вида; игнорируется при newStoneType = true */
   stoneTypeId: string;
@@ -25,6 +33,9 @@ export interface IntakeInput {
   /** «ГГГГ-ММ-ДД»; пусто = сегодня */
   arrivedAt: string;
   locations: IntakeLocationInput[];
+  /** ТЗ №3 — «в партии несколько узоров/толщин». Снят → однородная партия. */
+  patternsEnabled: boolean;
+  patterns: IntakePatternInput[];
 }
 
 export interface ValidIntakeLocation {
@@ -32,6 +43,14 @@ export interface ValidIntakeLocation {
   landmark: string;
   slabsHere: number | null;
   areaHereM2: number | null;
+}
+
+/** Проверенная узор-подгруппа: плиты И м² обязательны (ТЗ №3, §6). */
+export interface ValidIntakePattern {
+  description: string;
+  thicknessMm: number | null;
+  slabs: number;
+  areaM2: number;
 }
 
 export interface ValidIntake {
@@ -43,6 +62,8 @@ export interface ValidIntake {
   supplierNote: string | null;
   arrivedAt: Date;
   locations: ValidIntakeLocation[];
+  /** Узоры партии (пусто, если однородная / галочка снята). */
+  patterns: ValidIntakePattern[];
 }
 
 /** Ключ — имя поля («slabsTotal», «loc-0-block»…), значение — русское сообщение. */
@@ -189,6 +210,60 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     }
   });
 
+  // ── Узоры в партии (подгруппы) — опционально (ТЗ №3) ──
+  // Галочка снята → пропускаем (быстрый путь для однородной партии).
+  const patterns: ValidIntakePattern[] = [];
+  if (input.patternsEnabled) {
+    if (input.patterns.length === 0) {
+      errors.patterns = "Добавьте хотя бы один узор или снимите галочку";
+    }
+    // Суммы сходятся И по плитам, И по м² → нужны ОБА тотала партии.
+    if (slabsTotal === null || areaTotalM2 === null) {
+      errors.patternsTotals =
+        "Для узоров укажите в «Количестве» и плиты, и площадь партии";
+    }
+    let sumSlabs = 0;
+    let sumArea = 0;
+    input.patterns.forEach((p, i) => {
+      const description = p.description.trim();
+      if (!description) errors[`pattern-${i}-description`] = "Опишите узор";
+      const slabs = parsePositiveInt(p.slabs);
+      if (typeof slabs !== "number") {
+        errors[`pattern-${i}-slabs`] = "Плиты — целое положительное число";
+      }
+      const area = parsePositiveDecimal(p.areaM2);
+      if (typeof area !== "number") {
+        errors[`pattern-${i}-area`] = "Площадь — положительное число, например 12,5";
+      }
+      const thickness =
+        p.thicknessMm.trim() === "" ? null : parsePositiveInt(p.thicknessMm);
+      if (thickness === undefined) {
+        errors[`pattern-${i}-thickness`] = "Толщина — целое число (мм)";
+      }
+      if (
+        description &&
+        typeof slabs === "number" &&
+        typeof area === "number" &&
+        thickness !== undefined
+      ) {
+        sumSlabs += slabs;
+        sumArea += area;
+        patterns.push({ description, thicknessMm: thickness, slabs, areaM2: area });
+      }
+    });
+    // Сходимость сумм — только когда ВСЕ строки валидны и тоталы заданы
+    // (иначе сначала правим поля, а не пугаем «не сходится»).
+    const allValid =
+      input.patterns.length > 0 && patterns.length === input.patterns.length;
+    if (allValid && typeof slabsTotal === "number" && typeof areaTotalM2 === "number") {
+      if (sumSlabs !== slabsTotal) {
+        errors.patternsSum = `Сумма плит по узорам (${sumSlabs}) не сходится с количеством партии (${slabsTotal})`;
+      } else if (Math.abs(sumArea - areaTotalM2) > 0.001) {
+        errors.patternsSum = `Сумма м² по узорам (${sumArea.toFixed(1)}) не сходится с площадью партии (${areaTotalM2})`;
+      }
+    }
+  }
+
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   return {
@@ -200,6 +275,7 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       supplierNote: input.supplierNote.trim() || null,
       arrivedAt,
       locations,
+      patterns,
     },
   };
 }
