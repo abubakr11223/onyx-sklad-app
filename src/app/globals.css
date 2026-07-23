@@ -89,4 +89,127 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
+  /* Хост для ripple: любая кнопка/ссылка-кнопка с этим классом получает волну
+     при нажатии (глобальный слушатель — components/ui/Ripple.tsx). */
+  .onyx-btn {
+    position: relative;
+    overflow: hidden;
+  }
+}
+
+/* ── Micro-interactions ─────────────────────────────────────────────────── */
+
+/* Ripple — волна из точки нажатия. Цвет = currentColor (тёмный на золоте,
+   светлый на графите) с низкой прозрачностью, читается на любом фоне. */
+.onyx-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  transform: scale(0);
+  pointer-events: none;
+  background: currentColor;
+  opacity: 0.22;
+  animation: onyx-ripple 0.6s ease-out forwards;
+}
+@keyframes onyx-ripple {
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* Toast — стек снизу по центру, авто-скрытие. */
+.onyx-toaster {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  padding: 0 12px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+}
+.onyx-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border-radius: var(--radius-field);
+  background: var(--color-side);
+  color: #f3ecdd;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: var(--shadow-pop);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: onyx-toast-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.onyx-toast[data-leaving="true"] {
+  animation: onyx-toast-out 0.24s ease-in forwards;
+}
+.onyx-toast svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+.onyx-toast-success svg {
+  color: #7bd1a0;
+}
+.onyx-toast-danger svg {
+  color: #e79a90;
+}
+.onyx-toast-info svg {
+  color: var(--color-gold-soft);
+}
+@keyframes onyx-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+}
+@keyframes onyx-toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+/* Modal — затемнение + всплывающая карточка. */
+.onyx-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(20, 16, 8, 0.45);
+  backdrop-filter: blur(3px);
+  animation: onyx-fade 0.2s ease-out;
+}
+.onyx-modal {
+  width: 420px;
+  max-width: 100%;
+  background: var(--color-panel, var(--color-paper-2));
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+  padding: 22px;
+  animation: onyx-pop 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes onyx-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes onyx-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
 }

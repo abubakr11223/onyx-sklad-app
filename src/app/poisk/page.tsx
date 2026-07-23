@@ -19,7 +19,6 @@ import {
 } from "@/lib/batch-remainders";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import Alert from "@/components/ui/Alert";
 import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { SearchIcon } from "@/components/ui/Icons";
@@ -85,9 +84,8 @@ export default async function PoiskPage({
   const widMm = parseMm(params.w);
   const hasDims = lenMm !== null && widMm !== null;
   const after = firstParam(params.after);
-  // TG-B1: fotozapros natijasi (redirect'dan qaytgan bayroqlar).
-  const photoOk = firstParam(params.photo) === "ok";
-  const photoErr = firstParam(params.photoErr);
+  // TG-B1: fotozapros natijasi — redirect'dan qaytgan ?photo=ok/?photoErr
+  // bayroqlarini FlashToaster (layout) toast qilib ko'rsatadi va URL'dan tozalaydi.
 
   // ── Vidlar: chegaralangan sahifa (take PAGE_SIZE + 1 → keyingi sahifa bor-yo'qligi).
   // Partiyalarning FAQAT hisoblagichlari olinadi — plita/boy qatorlari EMAS.
@@ -356,17 +354,6 @@ export default async function PoiskPage({
           </Button>
         </form>
       </Card>
-
-      {photoOk && (
-        <Alert variant="success" className="mt-4">
-          Запрос на фото отправлен складчикам.
-        </Alert>
-      )}
-      {photoErr && (
-        <Alert variant="danger" className="mt-4">
-          {photoErr}
-        </Alert>
-      )}
 
       {hasDims && (
         <section className="mt-6 rounded-card border border-warning/40 bg-warning/10 p-4">

@@ -24,7 +24,7 @@ import {
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import CancelReservationButton from "./CancelReservationButton";
 import Card from "@/components/ui/Card";
 import { cancelReservationAction } from "./actions";
 import ReserveForm, {
@@ -338,24 +338,12 @@ export default async function BronPage({
                         </span>
                       )}
                     </div>
-                    {/* Ikki bosqichli snятие: details ochiladi → tasdiq tugmasi. */}
-                    <details className="mt-3">
-                      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-field border border-danger/30 px-4 text-base font-medium text-danger">
-                        Снять бронь…
-                      </summary>
-                      <form
-                        action={cancelReservationAction}
-                        className="mt-2 flex flex-wrap items-center gap-3 rounded-card border border-danger/30 bg-danger/10 p-3"
-                      >
-                        <input type="hidden" name="reservationId" value={r.id} />
-                        <span className="text-sm text-danger">
-                          Камень вернётся «В наличии». Точно снять?
-                        </span>
-                        <Button variant="danger" type="submit">
-                          Да, снять бронь
-                        </Button>
-                      </form>
-                    </details>
+                    {/* Снятие брони — модал-подтверждение (client + toast). */}
+                    <CancelReservationButton
+                      reservationId={r.id}
+                      label={stoneLabel(r)}
+                      action={cancelReservationAction}
+                    />
                   </Card>
                 </li>
               );

@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Montserrat, Lora } from "next/font/google";
 import "./globals.css";
 import { cookies } from "next/headers";
 import Nav from "@/components/Nav";
 import BottomTabBar from "@/components/BottomTabBar";
+import Ripple from "@/components/ui/Ripple";
+import Toaster from "@/components/ui/toast";
+import FlashToaster from "@/components/FlashToaster";
 import { getCapabilities } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
@@ -70,6 +74,13 @@ export default async function RootLayout({
         <div className="min-h-screen pb-20 md:pb-0 md:pl-64">{children}</div>
         {/* Мобиль: нижний таб-бар (панель скрыта). */}
         <BottomTabBar caps={caps} />
+
+        {/* Micro-interactions: ripple на кнопках, тосты, мост флеш→тост. */}
+        <Ripple />
+        <Toaster />
+        <Suspense fallback={null}>
+          <FlashToaster />
+        </Suspense>
       </body>
     </html>
   );

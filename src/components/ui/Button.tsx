@@ -14,7 +14,7 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "md" | "sm";
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-field font-semibold " +
+  "onyx-btn inline-flex items-center justify-center gap-2 rounded-field font-semibold " +
   "transition-[transform,box-shadow,background-color,border-color,color] duration-150 " +
   "ease-out select-none will-change-transform active:translate-y-0 active:scale-[.99] " +
   "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0 " +
