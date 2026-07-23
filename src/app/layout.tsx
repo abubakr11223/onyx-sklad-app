@@ -2,15 +2,13 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Montserrat, Lora } from "next/font/google";
 import "./globals.css";
-import { cookies } from "next/headers";
 import Nav from "@/components/Nav";
 import BottomTabBar from "@/components/BottomTabBar";
 import Ripple from "@/components/ui/Ripple";
 import Toaster from "@/components/ui/toast";
 import FlashToaster from "@/components/FlashToaster";
-import { getCapabilities } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 // Фирменная типографика бренда «Графит + золото» (см. public/karta.html):
 // Montserrat = UI/sans, Lora = заголовки/serif. Оба грузятся через next/font
@@ -49,31 +47,31 @@ export default async function RootLayout({
   // в deny-all (самый безопасный) shell навигации; сама страница-ребёнок всё
   // ещё вызовет getCapabilities() и её throw поймает error.tsx (дружелюбный
   // русский экран). global-error.tsx — дополнительный рубеж.
-  const caps = await getCapabilities().catch(() =>
-    capabilitiesFor("PARTNER", { canSeePurchasePrice: false }),
-  );
-
-  // OWN-03: реальная сессия активна? (только для показа кнопки «Выйти»).
-  // Проверяем лишь подпись session-cookie — БД не трогаем (быстро, fail-safe).
-  const isLoggedIn = await (async () => {
-    try {
-      const token = (await cookies()).get(SESSION_COOKIE)?.value;
-      return token ? !!(await verifySessionToken(token)) : false;
-    } catch {
-      return false;
-    }
-  })();
+  // R6: реальный пользователь из сессии (демо-shim удалён). БД моргнула → null
+  // (deny-all shell), сама страница-ребёнок повторит и её throw поймает error.tsx.
+  const user = await getCurrentUser().catch(() => null);
+  const caps = user
+    ? capabilitiesFor(user.role, { canSeePurchasePrice: user.canSeePurchasePrice })
+    : capabilitiesFor("PARTNER", { canSeePurchasePrice: false });
 
   return (
     <html lang="ru" className={`${montserrat.variable} ${lora.variable}`}>
       <body className="antialiased">
-        {/* Десктоп: фиксированная боковая панель слева (w-64). */}
-        <Nav caps={caps} isLoggedIn={isLoggedIn} />
-        {/* Контент сдвинут вправо на ширину панели (md:pl-64); на мобиле —
-            во всю ширину, pb-20 чтобы не прятался за нижним таб-баром. */}
-        <div className="min-h-screen pb-20 md:pb-0 md:pl-64">{children}</div>
-        {/* Мобиль: нижний таб-бар (панель скрыта). */}
-        <BottomTabBar caps={caps} />
+        {/* R6: навигация — только для вошедших. Без сессии (страница /login,
+            куда gate перенаправляет) — чистый экран без панели/таб-бара. */}
+        {user ? (
+          <>
+            {/* Десктоп: фиксированная боковая панель слева (w-64). */}
+            <Nav caps={caps} user={{ name: user.name, role: user.role }} />
+            {/* Контент сдвинут вправо на ширину панели (md:pl-64); на мобиле —
+                во всю ширину, pb-20 чтобы не прятался за нижним таб-баром. */}
+            <div className="min-h-screen pb-20 md:pb-0 md:pl-64">{children}</div>
+            {/* Мобиль: нижний таб-бар (панель скрыта). */}
+            <BottomTabBar caps={caps} />
+          </>
+        ) : (
+          <div className="min-h-screen">{children}</div>
+        )}
 
         {/* Micro-interactions: ripple на кнопках, тосты, мост флеш→тост. */}
         <Ripple />

@@ -11,7 +11,6 @@ import { db } from "@/lib/db";
 import { visibleNavItems, type NavItem } from "@/components/nav-items";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
 
 export const dynamic = "force-dynamic";
 
@@ -204,11 +203,6 @@ export default async function Home() {
         )}
       </div>
 
-      {/* DEMO-переключатель роли доступен и на мобиле (в топ-навигации он скрыт
-          под md). Приглушён — временный демо-контроль (убирается в R6). */}
-      <footer className="mt-12 flex justify-center md:hidden">
-        <DemoRoleSwitcher />
-      </footer>
     </main>
   );
 }

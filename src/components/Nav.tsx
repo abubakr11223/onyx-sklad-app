@@ -5,7 +5,7 @@
 // метка активного раздела, две группы (Работа / Управление).
 //
 // ⚠️ R2 — навигация КОСМЕТИЧНА: скрывает ссылки, недоступные текущей роли.
-// Реальная защита — гейты страниц + server-action'ов (сайт «kodsiz» открыт).
+// Реальная защита — login-gate (middleware) + гейты страниц/server-action'ов.
 //
 // Capabilities приходят пропом с СЕРВЕРА (layout → getCapabilities): первый же
 // рендер правильный — ни рассинхрона гидратации, ни мигания ссылок. usePathname
@@ -13,20 +13,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import DemoRoleSwitcher from "@/components/DemoRoleSwitcher";
 import { logoutSession } from "@/app/login/actions";
 import { visibleNavItems, type NavItem } from "@/components/nav-items";
-import type { Capabilities } from "@/lib/permissions";
+import { roleLabel } from "@/lib/role-labels";
+import type { Capabilities, Role } from "@/lib/permissions";
 
 // Раздел «Работа» (ежедневные операции) vs «Управление» (обзор/настройки).
 const WORK = new Set(["/poisk", "/priemka", "/bron", "/prodazha", "/razbit"]);
 
+// Инициалы для аватара пользователя в подвале.
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const chars = parts.slice(0, 2).map((p) => p[0]);
+  return (chars.join("") || "?").toUpperCase();
+}
+
 export default function Nav({
   caps,
-  isLoggedIn = false,
+  user = null,
 }: {
   caps: Capabilities;
-  isLoggedIn?: boolean;
+  user?: { name: string; role: Role } | null;
 }) {
   const pathname = usePathname();
   const links = visibleNavItems(caps);
@@ -126,18 +133,42 @@ export default function Nav({
         )}
       </nav>
 
-      {/* Подвал: демо-роль + выход */}
-      <div className="space-y-2 border-t border-white/5 p-3">
-        <DemoRoleSwitcher />
-        {isLoggedIn && (
-          <form action={logoutSession}>
-            <button
-              type="submit"
-              className="flex min-h-11 w-full items-center justify-center rounded-[10px] text-xs font-semibold text-side-muted ring-1 ring-white/10 transition hover:text-side-ink hover:ring-white/25"
-            >
-              Выйти
-            </button>
-          </form>
+      {/* Подвал: текущий пользователь + выход (R6 — реальная сессия). */}
+      <div className="border-t border-white/5 p-3">
+        {user ? (
+          <>
+            <div className="flex items-center gap-3 rounded-[12px] bg-side-2 px-3 py-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-gold-hi),#6b5222)] text-sm font-bold text-on-gold">
+                {initials(user.name)}
+              </span>
+              <span className="min-w-0 leading-tight">
+                <span className="block truncate text-sm font-semibold text-[#f0e9da]">
+                  {user.name}
+                </span>
+                <span className="block text-[11px] text-side-muted">
+                  {roleLabel(user.role)}
+                </span>
+              </span>
+            </div>
+            <form action={logoutSession} className="mt-2">
+              <button
+                type="submit"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-[10px] text-xs font-semibold text-side-muted ring-1 ring-white/10 transition hover:text-side-ink hover:ring-white/25"
+              >
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                </svg>
+                Выйти
+              </button>
+            </form>
+          </>
+        ) : (
+          <Link
+            href="/login"
+            className="flex min-h-11 w-full items-center justify-center rounded-[10px] text-xs font-semibold text-side-muted ring-1 ring-white/10 transition hover:text-side-ink hover:ring-white/25"
+          >
+            Войти
+          </Link>
         )}
       </div>
     </aside>

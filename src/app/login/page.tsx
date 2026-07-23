@@ -1,27 +1,34 @@
-import { login, loginWithPassword } from "./actions";
+import { redirect } from "next/navigation";
+import { loginWithPassword } from "./actions";
 import { buttonClass } from "@/components/ui/Button";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
+import { getRealSessionUser } from "@/lib/session";
 
-// Minimal parol-darvozasi sahifasi. `next` — muvaffaqiyatdan keyingi manzil.
-// `?error=1` bo'lsa — xato xabari ko'rsatiladi.
-// C-pilot: разметка переведена на бренд-дизайн-систему (Field/Card/Button/Alert).
-// Поведение, server-action (login), имена полей (name=) и редиректы НЕ менялись.
+// Страница входа (R6 — login-gate). Способы: email + пароль (владелец / менеджер /
+// партнёр) ИЛИ Telegram magic-link (складчик, без пароля). `next` — куда вернуться
+// после входа. Уже вошедшего сразу пропускаем внутрь.
+function safeNext(raw: string): string {
+  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const sp = await searchParams;
-  const next = typeof sp.next === "string" ? sp.next : "/";
-  const hasError = sp.error === "1";
-  const magicError = sp.error === "magic"; // SK-4b: magic-link yaroqsiz/eskirgan.
-  const loginError = sp.error === "login"; // OWN-03: email/parol noto'g'ri (generic).
+  const next = safeNext(typeof sp.next === "string" ? sp.next : "/");
+  const magicError = sp.error === "magic"; // magic-link yaroqsiz/eskirgan.
+  const loginError = sp.error === "login"; // email/parol noto'g'ri (generic).
 
-  // SK-4b: bot username (server yoki public env). Bo'lsa — deep-link tugmasi,
-  // bo'lmasa — matnli ko'rsatma (crash yo'q, graceful degrade).
+  // Уже вошёл → внутрь (логин авторизованному не показываем).
+  const me = await getRealSessionUser();
+  if (me) redirect(next);
+
+  // Bot username (server yoki public env). Bo'lsa — deep-link, aks holda matn.
   const botUsername =
     process.env.TELEGRAM_BOT_USERNAME ??
     process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ??
@@ -37,15 +44,10 @@ export default async function LoginPage({
           <h1 className="font-serif text-display font-bold tracking-tight text-ink">
             Onyx
           </h1>
-          <p className="mt-2 text-base text-ink/70">Введите пароль для доступа</p>
+          <p className="mt-2 text-base text-ink/70">Войдите в систему</p>
         </header>
 
         <Card>
-          {hasError && (
-            <Alert variant="danger" className="mb-4">
-              Неверный пароль. Попробуйте снова.
-            </Alert>
-          )}
           {loginError && (
             <Alert variant="danger" className="mb-4">
               Неверный логин или пароль.
@@ -58,8 +60,8 @@ export default async function LoginPage({
             </Alert>
           )}
 
-          {/* OWN-03: вход по логину (email + пароль) — реальная учётная запись. */}
-          <form action={loginWithPassword} className="mb-6 flex flex-col gap-4">
+          {/* Вход по логину (email + пароль) — владелец / менеджер / партнёр. */}
+          <form action={loginWithPassword} className="flex flex-col gap-4">
             <input type="hidden" name="next" value={next} />
             <Field
               id="email"
@@ -82,39 +84,15 @@ export default async function LoginPage({
               aria-invalid={loginError ? true : undefined}
             />
             <Button type="submit" className="w-full">
-              Войти по логину
-            </Button>
-          </form>
-
-          <div className="mb-6 flex items-center gap-3 text-xs text-ink/50">
-            <span className="h-px flex-1 bg-ink/10" />
-            общий доступ
-            <span className="h-px flex-1 bg-ink/10" />
-          </div>
-
-          <form action={login} className="flex flex-col gap-4">
-            <input type="hidden" name="next" value={next} />
-
-            <Field
-              id="password"
-              name="password"
-              type="password"
-              label="Общий пароль"
-              placeholder="Пароль"
-              required
-              aria-invalid={hasError ? true : undefined}
-            />
-
-            <Button type="submit" className="w-full">
               Войти
             </Button>
           </form>
 
-          {/* SK-4b: Telegram magic-link login (parolsiz, o'zi sifatida). */}
+          {/* Telegram magic-link — для складчика (без пароля). */}
           <div className="mt-5 flex flex-col items-center gap-3">
             <div className="flex items-center gap-3 self-stretch text-xs text-ink/50">
               <span className="h-px flex-1 bg-ink/10" />
-              или
+              складчик — через Telegram
               <span className="h-px flex-1 bg-ink/10" />
             </div>
             {tgDeepLink ? (

@@ -2,24 +2,15 @@
 // permissions.ts SOF dvigatel bo'lsa, bu modul DB va cookie bilan ishlaydi —
 // shuning uchun uni faqat server component / server action chaqiradi.
 //
-// ⚠️ DEMO-SHIM (R1): amaldagi rol `onyx_demo_role` cookie'sidan olinadi va
-// shu roldagi BIRINCHI faol foydalanuvchi seed'dan yuklanadi. Bu sayt «kodsiz»
-// ochiq turganda har bir rolni demo qilish uchun. R6'da bu butunlay
-// almashtiriladi: haqiqiy login cookie'sidan imzolangan userId o'qiladi va
-// `onyx_demo_role` cookie'si go-live'da OLIB TASHLANADI.
+// ✅ R6 (login-gate): amaldagi foydalanuvchi FAQAT haqiqiy `onyx_session`
+// cookie'sidan (imzolangan userId → DB) aniqlanadi. Eski `onyx_demo_role`
+// DEMO-SHIM butunlay OLIB TASHLANDI — endi sessiyasiz foydalanuvchi yo'q
+// (login-gate middleware sessiyasizni /login'ga yo'naltiradi).
 
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { capabilitiesFor, type Capabilities, type Role } from "@/lib/permissions";
-
-/** DEMO cookie nomi — R6'da olib tashlanadi (demo-role.ts ham shuni yozadi). */
-export const DEMO_ROLE_COOKIE = "onyx_demo_role";
-
-/** Cookie yo'q/buzuq bo'lsa — MANAGER (mavjud oqimlar aynan shu holatda ishlaydi). */
-const DEFAULT_DEMO_ROLE: Role = "MANAGER";
-
-const VALID_ROLES: readonly Role[] = ["OWNER", "MANAGER", "WAREHOUSE", "PARTNER"];
 
 export interface CurrentUser {
   id: string;
@@ -63,10 +54,6 @@ export async function getRealSessionUser(): Promise<RealSessionUser | null> {
   return { id: real.id, name: real.name, role: real.role as Role };
 }
 
-/** String'ni Role union'iga xavfsiz keltirish; noto'g'ri → default MANAGER. */
-function parseDemoRole(raw: string | undefined): Role {
-  return VALID_ROLES.includes(raw as Role) ? (raw as Role) : DEFAULT_DEMO_ROLE;
-}
 
 /**
  * Amaldagi foydalanuvchi. Ustuvorlik (SK-4b):
@@ -99,26 +86,15 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
           canSeePurchasePrice: real.canSeePurchasePrice,
         };
       }
-      // Token yaroqli, ammo user o'chirilgan/nofaol → demo fallback'ga tushamiz.
+      // Token yaroqli, ammo user o'chirilgan/nofaol → kirish yo'q.
     }
   }
 
-  // (2) DEMO fallback (ochiq sayt shim'i) — o'zgarishsiz.
-  const role = parseDemoRole(store.get(DEMO_ROLE_COOKIE)?.value);
-
-  const user = await db.user.findFirst({
-    where: { role, isActive: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, role: true, canSeePurchasePrice: true },
-  });
-  if (!user) return null;
-
-  return {
-    id: user.id,
-    name: user.name,
-    role: user.role as Role,
-    canSeePurchasePrice: user.canSeePurchasePrice,
-  };
+  // R6: DEMO-fallback OLIB TASHLANDI. Haqiqiy sessiya bo'lmasa — foydalanuvchi
+  // yo'q. Login-gate (middleware) sessiyasizni /login'ga yo'naltiradi; sahifalar
+  // va action'lar ham getCapabilities → deny-all (PARTNER) default bilan
+  // himoyalanadi.
+  return null;
 }
 
 /**
