@@ -156,7 +156,7 @@ export default async function IstoriyaPage() {
             return (
               <li
                 key={e.id}
-                className="rounded-card border border-ink/10 bg-paper-2/60 p-3 text-sm text-ink/80"
+                className="rounded-card border border-line bg-paper p-3 text-sm text-ink/80"
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <Badge variant={ACTION_VARIANT[e.action] ?? "neutral"}>

@@ -365,7 +365,7 @@ export default async function BronPage({
       </section>
 
       {/* ── Yangi bron ── */}
-      <section className="mt-8 rounded-card border border-ink/10 bg-paper-2/60 p-4">
+      <section className="mt-8 rounded-card border border-line bg-paper-2 p-4 shadow-card">
         <h2 className="mb-3 text-lg font-semibold text-ink">Новая бронь</h2>
         <ReserveForm stones={stones} defaultDays={defaultDays} />
       </section>
@@ -380,7 +380,7 @@ export default async function BronPage({
             {history.map((r) => (
               <li
                 key={r.id}
-                className="rounded-card border border-ink/10 bg-paper-2/60 p-3 text-sm text-ink/80"
+                className="rounded-card border border-line bg-paper-2 p-3 text-sm text-ink/80"
               >
                 <span className="font-medium text-ink">{stoneLabel(r)}</span> ·
                 клиент {r.customerName} · менеджер {r.manager.name} ·{" "}

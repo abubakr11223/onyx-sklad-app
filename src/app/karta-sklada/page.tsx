@@ -128,7 +128,7 @@ export default async function KartaSkladaPage() {
           {blocks.map(({ block, landmarks }) => (
             <section
               key={block}
-              className="relative overflow-hidden rounded-card border border-ink/10 bg-paper-2/60 p-5"
+              className="relative overflow-hidden rounded-card border border-line bg-paper-2 p-5 shadow-card"
             >
               {/* Метка зоны — буква блока как подпись на карте. */}
               <div className="mb-4 flex items-baseline gap-2">
