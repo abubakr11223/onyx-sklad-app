@@ -328,6 +328,23 @@ export default async function KamenPage({
             slabsSoldDirect: true,
             areaSoldDirectM2: true,
             locations: { orderBy: { createdAt: "asc" } },
+            // ТЗ №3 — узор-подгруппы партии + их фото (образец узора, kind SAMPLE).
+            // Для B2C: менеджер показывает клиенту конкретный узор с готовым фото.
+            patterns: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                description: true,
+                thicknessMm: true,
+                slabsCount: true,
+                areaM2: true,
+                photos: {
+                  select: { id: true },
+                  orderBy: { createdAt: "desc" },
+                  take: 4,
+                },
+              },
+            },
             // Показываем только плиты «в наличии» (SOLD/RESERVED не рендерим).
             slabs: {
               where: { status: "AVAILABLE" },
@@ -952,6 +969,49 @@ export default async function KamenPage({
                 {/* SK-1b (1): добавить новую локацию к партии — только склад. */}
                 {caps.canManageWarehouse && (
                   <AddLocationForm batchId={b.id} backTo={"/kamen/" + id} />
+                )}
+
+                {/* ТЗ №3 — узоры партии с фото (B2C: предложить клиенту узор). */}
+                {b.patterns.length > 0 && (
+                  <div className="mt-3 border-t border-line pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
+                      Узоры в партии
+                    </p>
+                    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {b.patterns.map((pat) => (
+                        <li
+                          key={pat.id}
+                          className="rounded-card border border-line bg-paper-2 p-2"
+                        >
+                          {pat.photos.length > 0 ? (
+                            <a
+                              href={"/api/photo/" + pat.photos[0].id}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={"/api/photo/" + pat.photos[0].id}
+                                alt={"Узор: " + pat.description}
+                                loading="lazy"
+                                className="mb-1.5 aspect-square w-full rounded-lg object-cover"
+                              />
+                            </a>
+                          ) : (
+                            <div className="mb-1.5 flex aspect-square w-full items-center justify-center rounded-lg bg-ink/[0.04] text-center text-xs text-ink/40">
+                              фото ожидается
+                            </div>
+                          )}
+                          <p className="font-semibold text-ink">{pat.description}</p>
+                          <p className="tnum text-xs text-ink/60">
+                            {pat.thicknessMm !== null && <>{pat.thicknessMm} мм · </>}
+                            {pat.slabsCount} плит · {m2Fmt.format(Number(pat.areaM2))} м²
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </li>
             ))}
