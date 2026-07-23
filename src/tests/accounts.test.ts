@@ -4,11 +4,14 @@ import {
   CREATABLE_ROLES,
   MIN_PASSWORD_LENGTH,
   TOGGLEABLE_ROLES,
+  canonicalPhone,
   isCreatableRole,
   isToggleableRole,
   isValidEmail,
   isValidPassword,
+  isValidPhone,
   normalizeEmail,
+  normalizePhone,
   validateNewAccount,
 } from "@/lib/accounts";
 
@@ -134,6 +137,59 @@ describe("validateNewAccount — to'liq oqim", () => {
     expect(validateNewAccount({ name: "X", email: "bad", password: "x", role: "OWNER" })).toEqual({
       ok: false,
       error: "role",
+    });
+  });
+});
+
+describe("telefon: normalizePhone / isValidPhone / canonicalPhone", () => {
+  it("normalizePhone — faqat raqamlar (telegram-webhook bilan BIR XIL)", () => {
+    expect(normalizePhone("+998 90 123-45-67")).toBe("998901234567");
+    expect(normalizePhone("998901234567")).toBe("998901234567");
+    expect(normalizePhone(null)).toBe("");
+    expect(normalizePhone("")).toBe("");
+  });
+  it("isValidPhone — 9–15 raqam", () => {
+    expect(isValidPhone("+998901234567")).toBe(true); // 12
+    expect(isValidPhone("901234567")).toBe(true); // 9
+    expect(isValidPhone("123")).toBe(false); // qisqa
+    expect(isValidPhone("1234567890123456")).toBe(false); // 16 — uzun
+    expect(isValidPhone("")).toBe(false);
+  });
+  it("canonicalPhone — +<raqamlar>", () => {
+    expect(canonicalPhone("+998 90 123 45 67")).toBe("+998901234567");
+    expect(canonicalPhone("998901234567")).toBe("+998901234567");
+    expect(canonicalPhone("")).toBe("");
+  });
+  it("MATCHING invariant: normalizePhone(canonical) === normalizePhone(raw)", () => {
+    // handleContact normalizePhone bo'yicha solishtiradi → panelдан kiritilgan
+    // kanonik shakl va Telegram (998…) mos kelishi SHART.
+    const raw = "+998 (90) 123-45-67";
+    expect(normalizePhone(canonicalPhone(raw))).toBe(normalizePhone(raw));
+    expect(normalizePhone(canonicalPhone(raw))).toBe("998901234567");
+  });
+});
+
+describe("validateNewAccount — telefon (skladchi Telegram bog'lanishi)", () => {
+  const base = {
+    name: "Дилшод",
+    email: "d@example.com",
+    password: "password1",
+    role: "WAREHOUSE",
+  };
+  it("telefonsiz → ok, phone=null (ixtiyoriy)", () => {
+    const res = validateNewAccount(base);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.phone).toBeNull();
+  });
+  it("yaroqli telefon → ok, kanonik +<raqamlar>", () => {
+    const res = validateNewAccount({ ...base, phone: "+998 90 123 45 67" });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.phone).toBe("+998901234567");
+  });
+  it("noto'g'ri telefon (qisqa) → error: phone", () => {
+    expect(validateNewAccount({ ...base, phone: "123" })).toEqual({
+      ok: false,
+      error: "phone",
     });
   });
 });

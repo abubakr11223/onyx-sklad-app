@@ -21,9 +21,11 @@ import { db } from "@/lib/db";
 import { getRealSessionUser } from "@/lib/session";
 import { hashUserPassword } from "@/lib/password";
 import {
+  canonicalPhone,
   isCreatableRole,
   isToggleableRole,
   isValidPassword,
+  isValidPhone,
   validateNewAccount,
 } from "@/lib/accounts";
 
@@ -73,16 +75,17 @@ export async function createAccount(formData: FormData): Promise<void> {
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
     role: String(formData.get("role") ?? ""),
+    phone: String(formData.get("phone") ?? ""),
   });
   if (!parsed.ok) redirect(`/accounts?error=${parsed.error}`);
 
-  const { name, email, password, role } = parsed.value;
+  const { name, email, password, role, phone } = parsed.value;
   const passwordHash = await hashUserPassword(password);
 
   try {
     await db.$transaction(async (tx) => {
       const created = await tx.user.create({
-        data: { name, role, email, passwordHash, isActive: true },
+        data: { name, role, email, passwordHash, isActive: true, phone },
         select: { id: true },
       });
       await logAccountAction(tx, actorId, created.id, {
@@ -90,11 +93,17 @@ export async function createAccount(formData: FormData): Promise<void> {
         name,
         email,
         role,
+        phone,
       });
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      redirect("/accounts?error=email_taken");
+      // email va phone — ikkalasi ham @unique; qaysi biri to'qnashganini ajratamiz.
+      const target = e.meta?.target;
+      const hitPhone = Array.isArray(target)
+        ? target.includes("phone")
+        : String(target ?? "").includes("phone");
+      redirect(`/accounts?error=${hitPhone ? "phone_taken" : "email_taken"}`);
     }
     throw e;
   }
@@ -194,4 +203,46 @@ export async function resetPassword(formData: FormData): Promise<void> {
 
   revalidatePath("/accounts");
   redirect("/accounts?ok=password");
+}
+
+/**
+ * Telefon o'rnatish/o'zgartirish (skladchi Telegram bog'lanishi uchun). Bo'sh
+ * yuborilsa — telefon TOZALANADI (null). Boshqa OWNER'niki emas. Kanonik
+ * `+<raqamlar>` shaklда saqlanadi (handleContact normalizePhone bilan mos).
+ */
+export async function changePhone(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const userId = String(formData.get("userId") ?? "");
+  const rawPhone = String(formData.get("phone") ?? "").trim();
+  if (!userId) redirect("/accounts?error=notfound");
+
+  let phone: string | null = null;
+  if (rawPhone) {
+    if (!isValidPhone(rawPhone)) redirect("/accounts?error=phone");
+    phone = canonicalPhone(rawPhone);
+  }
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
+  if (!target) redirect("/accounts?error=notfound");
+  if (target.role === "OWNER" && target.id !== actorId) {
+    redirect("/accounts?error=owner_protected");
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { phone } });
+      await logAccountAction(tx, actorId, userId, { kind: "account.phone", phone });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      redirect("/accounts?error=phone_taken");
+    }
+    throw e;
+  }
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=phone");
 }

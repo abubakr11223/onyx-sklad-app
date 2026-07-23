@@ -51,11 +51,35 @@ export function isValidPassword(password: string): boolean {
   return password.length >= MIN_PASSWORD_LENGTH;
 }
 
+// ── Telefon (skladchi Telegram bog'lanishi uchun) ───────────────────────────
+// ⚠️ MUHIM: normalizePhone telegram-webhook.ts'dagi bilan BIR XIL mantiqда
+// bo'lishi shart — handleContact skladchi ulashgan raqamni aynan shu shaklда
+// (faqat raqamlar) solishtiradi. Aks holda panelдан kiritilgan telefon Telegram
+// raqami bilan mos kelmaydi va bog'lanish ishlamaydi.
+export function normalizePhone(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.replace(/\D+/g, "");
+}
+
+/** Telefon maqbulmi: 9–15 ta raqam (xalqaro diapazon; UZ = 12: 998 + 9). */
+export function isValidPhone(s: string): boolean {
+  const d = normalizePhone(s);
+  return d.length >= 9 && d.length <= 15;
+}
+
+/** Saqlash uchun kanonik shakl: `+<raqamlar>` (unique barqaror bo'lsin). */
+export function canonicalPhone(s: string): string {
+  const d = normalizePhone(s);
+  return d ? "+" + d : "";
+}
+
 export interface NewAccountInput {
   name: string;
   email: string;
   password: string;
   role: string;
+  /** Telefon ixtiyoriy (skladchi uchun kerak — Telegram bog'lanishi). */
+  phone?: string;
 }
 
 export interface ValidNewAccount {
@@ -63,10 +87,12 @@ export interface ValidNewAccount {
   email: string;
   password: string;
   role: CreatableRole;
+  /** Kanonik `+<raqamlar>` yoki null (berilmagan bo'lsa). */
+  phone: string | null;
 }
 
 /** Qaysi maydon xato ekanini bildiruvchi kod (UI generic-ish xabar ko'rsatadi). */
-export type AccountFieldError = "name" | "email" | "password" | "role";
+export type AccountFieldError = "name" | "email" | "password" | "role" | "phone";
 
 /**
  * Yangi akkaunt kiritmasini tekshiradi va normallashtiradi. Muvaffaqiyatda —
@@ -88,7 +114,15 @@ export function validateNewAccount(
   const password = input.password;
   if (!isValidPassword(password)) return { ok: false, error: "password" };
 
-  return { ok: true, value: { name, email, password, role: input.role } };
+  // Telefon ixtiyoriy: berilsa — maqbul bo'lishi va kanonik shaklда saqlanishi.
+  const rawPhone = (input.phone ?? "").trim();
+  let phone: string | null = null;
+  if (rawPhone) {
+    if (!isValidPhone(rawPhone)) return { ok: false, error: "phone" };
+    phone = canonicalPhone(rawPhone);
+  }
+
+  return { ok: true, value: { name, email, password, role: input.role, phone } };
 }
 
 /** Rolni RU display uchun (roleLabel bilan bir xil, ammo bu yerda type-only). */

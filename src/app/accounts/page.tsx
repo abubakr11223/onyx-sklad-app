@@ -19,6 +19,7 @@ import {
   deleteAccount,
   changeRole,
   resetPassword,
+  changePhone,
 } from "./actions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -41,6 +42,8 @@ const ERROR_RU: Record<string, string> = {
   email_taken: "Такой логин уже занят.",
   password: `Пароль слишком короткий (минимум ${MIN_PASSWORD_LENGTH} символов).`,
   role: "Недопустимая роль.",
+  phone: "Некорректный телефон (9–15 цифр).",
+  phone_taken: "Этот телефон уже привязан к другому аккаунту.",
   notfound: "Аккаунт не найден.",
   owner_protected: "Этот аккаунт защищён (владелец).",
   self: "Нельзя деактивировать самого себя.",
@@ -51,6 +54,7 @@ const OK_RU: Record<string, string> = {
   deleted: "Аккаунт деактивирован.",
   role: "Роль обновлена.",
   password: "Пароль сброшен.",
+  phone: "Телефон обновлён.",
 };
 
 export default async function AccountsPage({
@@ -81,6 +85,7 @@ export default async function AccountsPage({
       email: true,
       role: true,
       isActive: true,
+      phone: true,
     },
   });
 
@@ -150,6 +155,16 @@ export default async function AccountsPage({
               ))}
             </select>
           </Field>
+          <Field
+            id="new-phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            label="Телефон"
+            placeholder="+998 90 123 45 67"
+            hint="Для складчика — по нему привязывается Telegram (/start). Необязательно."
+            autoComplete="off"
+          />
           <Button type="submit" className="w-full sm:w-auto">
             Создать аккаунт
           </Button>
@@ -185,6 +200,17 @@ export default async function AccountsPage({
                     </p>
                     <p className="text-sm text-ink/60">
                       {u.email ?? "— нет логина —"}
+                    </p>
+                    <p className="text-sm">
+                      {u.phone ? (
+                        <span className="tnum text-ink/60">📞 {u.phone}</span>
+                      ) : u.role === "WAREHOUSE" ? (
+                        <span className="text-warning">
+                          телефон не задан — Telegram не привяжется
+                        </span>
+                      ) : (
+                        <span className="text-ink/40">телефон не задан</span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -235,6 +261,30 @@ export default async function AccountsPage({
                         Сбросить пароль
                       </Button>
                     </form>
+
+                    {/* Телефон — по нему складчик привязывает Telegram (/start).
+                        Пусто + сохранить → телефон очищается. */}
+                    {isManageable && (
+                      <form
+                        action={changePhone}
+                        className="flex flex-wrap items-end gap-2"
+                      >
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input
+                          type="tel"
+                          name="phone"
+                          inputMode="tel"
+                          defaultValue={u.phone ?? ""}
+                          placeholder="+998 90 123 45 67"
+                          autoComplete="off"
+                          aria-label={`Телефон для ${u.name}`}
+                          className={`${inputClass} sm:max-w-xs`}
+                        />
+                        <Button type="submit" variant="secondary" size="sm">
+                          Сохранить телефон
+                        </Button>
+                      </form>
+                    )}
 
                     {/* Деактивация — только для не-владельцев и не себя. */}
                     {isManageable && !isSelf && (
