@@ -188,8 +188,9 @@ model BatchPattern {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  batch  Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  photos Photo[]
+  batch         Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  photos        Photo[]
+  photoRequests PhotoRequest[]
 
   @@index([batchId])
 }
@@ -347,6 +348,7 @@ model PhotoRequest {
   assigneeId      String? // null = umumiy navbat
   batchId         String
   batchLocationId String?
+  batchPatternId  String? // ТЗ №3 — фото узор-подгруппы (не плиты)
   slabId          String? // mavjud plitani QAYTA suratga olish
   comment         String?
   status          PhotoRequestStatus @default(PENDING)
@@ -356,16 +358,18 @@ model PhotoRequest {
 
   manager        User           @relation("PhotoRequestManager", fields: [managerId], references: [id], onDelete: Restrict)
   assignee       User?          @relation("PhotoRequestAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
-  batch          Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  batchLocation  BatchLocation? @relation(fields: [batchLocationId], references: [id], onDelete: Restrict)
-  slab           Slab?          @relation("PhotoRequestReshootSlab", fields: [slabId], references: [id], onDelete: Restrict)
+  batch          Batch           @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchLocation  BatchLocation?  @relation(fields: [batchLocationId], references: [id], onDelete: Restrict)
+  batchPattern   BatchPattern?   @relation(fields: [batchPatternId], references: [id], onDelete: Cascade)
+  slab           Slab?           @relation("PhotoRequestReshootSlab", fields: [slabId], references: [id], onDelete: Restrict)
   photos         Photo[]
-  separatedSlabs Slab[]         @relation("SlabSeparatedByRequest")
+  separatedSlabs Slab[]          @relation("SlabSeparatedByRequest")
   dispatches     PhotoDispatch[]
 
   @@index([status, createdAt]) // navbat + rahbar paneli
   @@index([assigneeId, status])
   @@index([managerId])
+  @@index([batchPatternId])
 }
 
 /// BUG-04 — Telegram yetkazilish yozuvi (per-skladchik, per-fotozapros). §8 История:

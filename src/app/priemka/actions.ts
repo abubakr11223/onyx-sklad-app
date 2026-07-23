@@ -8,6 +8,11 @@ import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { sendMessage } from "@/lib/telegram";
+import {
+  createAndDispatchPhotoRequest,
+  PhotoRequestError,
+} from "@/lib/photo-requests";
 import {
   validateIntake,
   type IntakeErrors,
@@ -110,7 +115,7 @@ export async function submitIntake(
   // менеджер — валидный User, FK-safe; ролевая проверка складчика придёт позже).
   const actorId = (await getCurrentUser())?.id ?? null;
 
-  let summary: { stoneName: string };
+  let summary: { stoneName: string; batchId: string };
   try {
     summary = await db.$transaction(async (tx) => {
       let stoneTypeId: string;
@@ -216,7 +221,7 @@ export async function submitIntake(
         },
       });
 
-      return { stoneName };
+      return { stoneName, batchId: batch.id };
     });
   } catch (e) {
     if (e instanceof IntakeFieldError) {
@@ -228,6 +233,34 @@ export async function submitIntake(
       };
     }
     throw e;
+  }
+
+  // ТЗ №3 — по каждому узору АВТОМАТИЧЕСКИ ставим фотозапрос складчику (Telegram).
+  // ВНЕ транзакции: партия уже сохранена, сбой доставки НЕ откатывает приёмку.
+  // Только когда есть actor (managerId — FK на User; в пустой базе actorId=null).
+  if (data.patterns.length > 0 && actorId) {
+    const created = await db.batchPattern.findMany({
+      where: { batchId: summary.batchId },
+      select: { id: true, description: true },
+    });
+    for (const pat of created) {
+      try {
+        await createAndDispatchPhotoRequest(
+          {
+            managerId: actorId,
+            batchId: summary.batchId,
+            batchPatternId: pat.id,
+            comment: `Узор: ${pat.description}`,
+          },
+          { db, sendMessage },
+        );
+      } catch (err) {
+        // Доставка не критична — партия сохранена. Логируем и продолжаем.
+        if (!(err instanceof PhotoRequestError)) {
+          console.error("[priemka] узор-фотозапрос ошибка:", err);
+        }
+      }
+    }
   }
 
   const params = new URLSearchParams({ ok: "1", stone: summary.stoneName });

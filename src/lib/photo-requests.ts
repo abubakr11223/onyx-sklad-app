@@ -149,6 +149,7 @@ export interface PhotoRequestDeps {
           managerId: string;
           batchId: string;
           batchLocationId: string | null;
+          batchPatternId: string | null;
           assigneeId: null;
           status: "PENDING";
           comment: string | null;
@@ -197,6 +198,8 @@ export interface CreatePhotoRequestInput {
   managerId: string;
   batchId: string;
   batchLocationId?: string | null;
+  /** ТЗ №3 — фото узор-подгруппы (вместо/в дополнение к локации). */
+  batchPatternId?: string | null;
   comment?: string | null;
 }
 
@@ -341,6 +344,7 @@ export async function createAndDispatchPhotoRequest(
       managerId: input.managerId,
       batchId: batch.id,
       batchLocationId: chosen?.id ?? null,
+      batchPatternId: input.batchPatternId?.trim() || null,
       assigneeId: null,
       status: "PENDING",
       comment,

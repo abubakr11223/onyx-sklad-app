@@ -17,6 +17,7 @@ const sendMessage = vi.fn();
 const userFindFirst = vi.fn();
 const userFindUnique = vi.fn();
 const prFindFirst = vi.fn();
+const prUpdate = vi.fn(); // ТЗ №3 — узор-запрос закрывается (DONE)
 const photoCreate = vi.fn();
 // §4.1 L3 / §6.1 — ajratilgan Slab yaratish mock'lari.
 const slabCount = vi.fn();
@@ -40,6 +41,7 @@ function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
       },
       photoRequest: {
         findFirst: (...a: unknown[]) => prFindFirst(...a),
+        update: (...a: unknown[]) => prUpdate(...a),
       },
       photoDispatch: {
         findFirst: (...a: unknown[]) => pdFindFirst(...a),
@@ -68,6 +70,7 @@ beforeEach(() => {
   userFindFirst.mockReset();
   userFindUnique.mockReset();
   prFindFirst.mockReset();
+  prUpdate.mockReset();
   photoCreate.mockReset();
   slabCount.mockReset();
   slabCreate.mockReset();
@@ -78,6 +81,7 @@ beforeEach(() => {
   userFindFirst.mockResolvedValue(null);
   userFindUnique.mockResolvedValue(null);
   prFindFirst.mockResolvedValue(null);
+  prUpdate.mockResolvedValue({});
   photoCreate.mockResolvedValue({});
   slabCount.mockResolvedValue(0);
   slabCreate.mockResolvedValue({ id: "slab1" });
@@ -340,6 +344,29 @@ const PENDING_REQUEST = {
 };
 
 describe("получение фото (TG-B2)", () => {
+  it("ТЗ №3 — фото УЗОР-запроса (batchPatternId) → Photo на узор (SAMPLE), плита НЕ создаётся, запрос DONE", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindFirst.mockResolvedValue({
+      ...PENDING_REQUEST,
+      batchPatternId: "pat1",
+      slabId: null,
+    });
+
+    await handleUpdate(photoUpdate({ chatId: 999 }), makeDeps());
+
+    // Плита НЕ создаётся (узор — не отдельная плита).
+    expect(slabCreate).not.toHaveBeenCalled();
+    // Photo привязано к узору: SAMPLE + batchPatternId, без slabId.
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    const data = photoCreate.mock.calls[0][0].data;
+    expect(data.kind).toBe("SAMPLE");
+    expect(data.batchPatternId).toBe("pat1");
+    expect(data.slabId).toBeNull();
+    // Запрос закрыт одним фото (DONE).
+    expect(prUpdate).toHaveBeenCalledTimes(1);
+    expect(prUpdate.mock.calls[0][0].data.status).toBe("DONE");
+  });
+
   it("§4.1 L3 / §6.1 — bog'langan skladchi + PENDING zapros → 1 ta Slab «Плита №1» + Photo unga bog'lanadi; zapros PENDING QOLADI", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     prFindFirst.mockResolvedValue(PENDING_REQUEST);

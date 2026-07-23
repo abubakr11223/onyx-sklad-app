@@ -29,6 +29,7 @@ interface PendingPhotoRequest {
   managerId: string;
   batchId: string;
   slabId: string | null; // null = yangi ajratish; to'la = mavjud plitani QAYTA suratga olish
+  batchPatternId: string | null; // ТЗ №3 — узор-подгруппа (не плита) uchun so'rov
   batch: { stoneTypeId: string; stoneType: { name: string } | null };
   // Tanlangan lokatsiya (bo'lsa) → yangi Slab shu blok/orientirni oladi va darhol
   // sotiladigan bo'ladi (needsCheck=false). Yo'q bo'lsa — «?» placeholder + needsCheck.
@@ -80,6 +81,11 @@ export interface WebhookDeps {
           batchLocation: { select: { block: true; landmark: true } };
         };
       }): Promise<PendingPhotoRequest | null>;
+      // ТЗ №3 — узор-запрос закрывается ОДНИМ фото (DONE).
+      update(args: {
+        where: { id: string };
+        data: { status: "DONE"; completedAt: Date };
+      }): Promise<unknown>;
     };
     // §4.1 L3 / §6.1 — ajratilgan Plita (Slab). Yozuv faqat ajratish paytida
     // (skladchi fotolaganda) tug'iladi (ADR-004). label = «Плита №N» bo'yicha
@@ -111,11 +117,12 @@ export interface WebhookDeps {
       create(args: {
         data: {
           storageKey: string;
-          kind: "SLAB";
+          kind: "SLAB" | "SAMPLE";
           takenAt: Date;
           takenById: string;
           stoneTypeId: string;
           slabId: string | null;
+          batchPatternId?: string | null;
           photoRequestId: string;
         };
       }): Promise<unknown>;
@@ -611,6 +618,43 @@ async function handlePhoto(
   }
   if (!claimed) {
     await deps.sendMessage(chatId, MSG_PHOTO_NO_REQUEST);
+    return;
+  }
+
+  // (4b) ТЗ №3 — УЗОР-подгруппа: фото привязывается к узору (Photo.batchPatternId),
+  // БЕЗ создания плиты (это не отдельная плита, а образец узора). Один снимок
+  // ЗАКРЫВАЕТ запрос (DONE) — в отличие от слэб-запроса, что копит N плит.
+  if (claimed.batchPatternId) {
+    await deps.db.photo.create({
+      data: {
+        storageKey: largest.file_id,
+        kind: "SAMPLE", // vid/узор namunasi (плита EMAS)
+        takenAt: new Date(),
+        takenById: user.id,
+        stoneTypeId: claimed.batch.stoneTypeId,
+        slabId: null,
+        batchPatternId: claimed.batchPatternId,
+        photoRequestId: claimed.id,
+      },
+    });
+    await deps.db.photoRequest.update({
+      where: { id: claimed.id },
+      data: { status: "DONE", completedAt: new Date() },
+    });
+    await deps.sendMessage(chatId, MSG_PHOTO_SAVED);
+    // Менежерни хабардор қиламиз (алоҳида try/catch — асосий оқим бузилмасин).
+    try {
+      const manager = await deps.db.user.findUnique({
+        where: { id: claimed.managerId },
+        select: { telegramId: true },
+      });
+      if (manager?.telegramId) {
+        const stoneName = claimed.batch.stoneType?.name ?? "камень";
+        await deps.sendMessage(manager.telegramId, managerNotifyMessage(stoneName));
+      }
+    } catch (err) {
+      console.error("[telegram-webhook] менежерни хабардор қилиш хатоси (узор):", err);
+    }
     return;
   }
 
