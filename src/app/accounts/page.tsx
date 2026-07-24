@@ -20,6 +20,7 @@ import {
   changeRole,
   resetPassword,
   changePhone,
+  changeEmail,
 } from "./actions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -55,6 +56,7 @@ const OK_RU: Record<string, string> = {
   role: "Роль обновлена.",
   password: "Пароль сброшен.",
   phone: "Телефон обновлён.",
+  email: "Логин (email) обновлён.",
 };
 
 export default async function AccountsPage({
@@ -88,6 +90,8 @@ export default async function AccountsPage({
       phone: true,
     },
   });
+  // Владелец сам есть в списке — его логин нужен для префилла блока «Мой аккаунт».
+  const meRow = users.find((u) => u.id === me.id);
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -114,6 +118,51 @@ export default async function AccountsPage({
           {errMsg}
         </Alert>
       )}
+
+      {/* ── Мой аккаунт: владелец сам меняет свой логин и пароль (без разработчика) ── */}
+      <Card className="mb-6">
+        <h2 className="mb-1 font-serif text-xl font-bold text-ink">
+          Мой аккаунт
+        </h2>
+        <p className="mb-4 text-sm text-ink/60">
+          Ваш логин и пароль для входа. Меняйте прямо здесь — терминал и
+          разработчик не нужны.
+        </p>
+        <div className="flex flex-col gap-3">
+          <form action={changeEmail} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="userId" value={me.id} />
+            <input
+              type="email"
+              name="email"
+              defaultValue={meRow?.email ?? ""}
+              placeholder="my@example.com"
+              autoComplete="off"
+              aria-label="Мой логин (email)"
+              className={`${inputClass} sm:max-w-xs`}
+              required
+            />
+            <Button type="submit" variant="secondary" size="sm">
+              Сохранить логин
+            </Button>
+          </form>
+          <form action={resetPassword} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="userId" value={me.id} />
+            <input
+              type="password"
+              name="password"
+              placeholder={`новый пароль (≥${MIN_PASSWORD_LENGTH})`}
+              autoComplete="new-password"
+              minLength={MIN_PASSWORD_LENGTH}
+              required
+              aria-label="Мой новый пароль"
+              className={`${inputClass} sm:max-w-xs`}
+            />
+            <Button type="submit" variant="secondary" size="sm">
+              Сменить пароль
+            </Button>
+          </form>
+        </div>
+      </Card>
 
       {/* ── Создать аккаунт ── */}
       <Card className="mb-6">
@@ -223,9 +272,9 @@ export default async function AccountsPage({
                   </div>
                 </div>
 
-                {/* Действия доступны для активных не-владельцев (кроме сброса
-                    своего пароля владельцем). */}
-                {u.isActive && (isManageable || (isOwner && isSelf)) && (
+                {/* Действия — только для активных не-владельцев. Свой аккаунт
+                    (владелец) управляется в блоке «Мой аккаунт» вверху. */}
+                {u.isActive && isManageable && (
                   <div className="mt-4 flex flex-col gap-3 border-t border-ink/10 pt-4">
                     {/* Смена роли — только MANAGER↔WAREHOUSE. */}
                     {isRoleToggleable && (
@@ -241,7 +290,28 @@ export default async function AccountsPage({
                       </form>
                     )}
 
-                    {/* Сброс пароля — для не-владельцев и для себя-владельца. */}
+                    {/* Логин (email) — владелец правит любой не-владельческий. */}
+                    <form
+                      action={changeEmail}
+                      className="flex flex-wrap items-end gap-2"
+                    >
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input
+                        type="email"
+                        name="email"
+                        defaultValue={u.email ?? ""}
+                        placeholder="dilshod@example.com"
+                        autoComplete="off"
+                        required
+                        aria-label={`Логин (email) для ${u.name}`}
+                        className={`${inputClass} sm:max-w-xs`}
+                      />
+                      <Button type="submit" variant="secondary" size="sm">
+                        Сохранить логин
+                      </Button>
+                    </form>
+
+                    {/* Сброс пароля сотрудника (если забыл). */}
                     <form
                       action={resetPassword}
                       className="flex flex-wrap items-end gap-2"

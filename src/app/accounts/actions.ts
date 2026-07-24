@@ -24,8 +24,10 @@ import {
   canonicalPhone,
   isCreatableRole,
   isToggleableRole,
+  isValidEmail,
   isValidPassword,
   isValidPhone,
+  normalizeEmail,
   validateNewAccount,
 } from "@/lib/accounts";
 
@@ -203,6 +205,47 @@ export async function resetPassword(formData: FormData): Promise<void> {
 
   revalidatePath("/accounts");
   redirect("/accounts?ok=password");
+}
+
+/**
+ * Login (email) o'zgartirish. Nishon — creatable rol YOKI o'z-o'zi (OWNER o'z
+ * gmailини almashtira oladi — topshirishдан keyin dasturchisiz). Boshqa OWNER'ga
+ * yo'q. Email band bo'lsa (P2002) → «логин занят». Normallashtirilib (trim+lower)
+ * saqlanadi — loginWithPassword ham normalizeEmail bilan solishtiradi (mos).
+ */
+export async function changeEmail(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) redirect("/accounts?error=notfound");
+
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
+  if (!isValidEmail(email)) redirect("/accounts?error=email");
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, email: true },
+  });
+  if (!target) redirect("/accounts?error=notfound");
+  // Boshqa OWNER'ning loginini o'zgartirib bo'lmaydi; o'ziniki mumkin.
+  if (target.role === "OWNER" && target.id !== actorId) {
+    redirect("/accounts?error=owner_protected");
+  }
+  if (target.email === email) redirect("/accounts?ok=email"); // no-op
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { email } });
+      await logAccountAction(tx, actorId, userId, { kind: "account.email", email });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      redirect("/accounts?error=email_taken");
+    }
+    throw e;
+  }
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=email");
 }
 
 /**
