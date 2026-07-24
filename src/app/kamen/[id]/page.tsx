@@ -37,6 +37,7 @@ import {
 import Card from "@/components/ui/Card";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
+import { patternStatus, PATTERN_STATUS_RU } from "@/lib/pattern-status";
 import Button from "@/components/ui/Button";
 import { CameraIcon } from "@/components/ui/Icons";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
@@ -1020,7 +1021,32 @@ export default async function KamenPage({
                               фото ожидается
                             </div>
                           )}
-                          <p className="font-semibold text-ink">{pat.description}</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-semibold text-ink">
+                              {pat.description}
+                            </p>
+                            {/* ТЗ №3 §2 — статус подгруппы (из остатка): узор
+                                может быть продан, пока в партии есть другие. */}
+                            {(() => {
+                              const st = patternStatus({
+                                slabsCount: pat.slabsCount,
+                                slabsSold: pat.slabsSold,
+                                areaM2: Number(pat.areaM2),
+                                areaSoldM2: Number(pat.areaSoldM2),
+                              });
+                              const variant =
+                                st === "AVAILABLE"
+                                  ? "success"
+                                  : st === "PARTIAL"
+                                    ? "warning"
+                                    : "neutral";
+                              return (
+                                <Badge variant={variant}>
+                                  {PATTERN_STATUS_RU[st]}
+                                </Badge>
+                              );
+                            })()}
+                          </div>
                           <p className="tnum text-xs text-ink/60">
                             {pat.thicknessMm !== null && <>{pat.thicknessMm} мм · </>}
                             осталось {pat.slabsCount - pat.slabsSold} плит ·{" "}
