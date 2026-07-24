@@ -5,7 +5,7 @@
 // C-batch: разметка переведена на бренд-дизайн-систему (Button/Field/Card/Alert).
 // Поведение, имена полей, порядок строк и контракт валидации НЕ менялись.
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { submitBreak, type BreakFormState } from "./actions";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -66,6 +66,13 @@ export default function BreakForm({
   const [rowIds, setRowIds] = useState<number[]>([0]);
   const nextRowId = useRef(1);
   const e = state.errors;
+
+  // CRIT-01 (ТЗ №4): при ошибке валидации ВЫХОДИМ из шага подтверждения, чтобы
+  // ошибки полей стали видны (иначе submit «молча не проходит» — ошибки висят на
+  // скрытых сверху полях, а форма застряла на «Подтвердить»).
+  useEffect(() => {
+    if (Object.keys(state.errors).length > 0) setConfirming(false);
+  }, [state]);
 
   const addRow = () => setRowIds((ids) => [...ids, nextRowId.current++]);
   const removeRow = (id: number) =>
@@ -167,8 +174,8 @@ export default function BreakForm({
       <Card>
         <h2 className="mb-1 text-lg font-semibold text-ink">Куски</h2>
         <p className="mb-3 text-sm text-ink/60">
-          Размеры каждой стороны в мм через запятую. Фото и AI-чертёж появятся в
-          следующем этапе — пока размеры вносятся вручную.
+          Обязательны длина и ширина (по ним ищут остаток). «Стороны» —
+          необязательно: заполните, если кусок непрямоугольный (для чертежа).
         </p>
         <div className="mb-3">
           <CrossError msg={e.pieces} />
@@ -207,8 +214,8 @@ export default function BreakForm({
                   id={`pSides-${idx}`}
                   name="pSides"
                   inputMode="numeric"
-                  label={<>Стороны, мм <Req /></>}
-                  placeholder="1180, 640, 950, 610"
+                  label="Стороны, мм (необязательно)"
+                  placeholder="если непрямоугольный: 1180, 640, 950"
                   error={e[`p-${idx}-sidesMm`]}
                 />
                 <div className="grid grid-cols-2 gap-3">

@@ -124,6 +124,38 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
     }
   });
 
+  it("BUG-01 (ТЗ №4): «Стороны» пусто → ok, стороны = прямоугольник [Д,Ш,Д,Ш]", () => {
+    const r = parsePieceRow({ ...validRow, sidesMm: "" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      // Длина 1180, ширина 640 → прямоугольник.
+      expect(r.data.sidesMm).toEqual([1180, 640, 1180, 640]);
+      expect(r.data.boundingLengthMm).toBe(1180);
+      expect(r.data.boundingWidthMm).toBe(640);
+    }
+  });
+
+  it("BUG-01: «Стороны» пусто, но габариты обязательны — без длины/ширины ошибка", () => {
+    const r = parsePieceRow({
+      ...validRow,
+      sidesMm: "",
+      boundingLengthMm: "",
+      boundingWidthMm: "",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errors.boundingLengthMm).toBeTruthy();
+      expect(r.errors.boundingWidthMm).toBeTruthy();
+      expect(r.errors.sidesMm).toBeUndefined(); // стороны пусты — это ок
+    }
+  });
+
+  it("«Стороны» заданы, но их меньше 3 → ошибка (это не многоугольник)", () => {
+    const r = parsePieceRow({ ...validRow, sidesMm: "1180, 640" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.sidesMm).toBeTruthy();
+  });
+
   it("ошибки адресованы полям: kind, стороны, габариты, локация", () => {
     const r = parsePieceRow({
       kind: "WHOLE",

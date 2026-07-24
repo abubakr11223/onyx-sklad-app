@@ -163,10 +163,18 @@ export function parsePieceRow(row: RawPieceRow): ParsePieceRowResult {
     row.kind === "BROKEN" || row.kind === "OFFCUT" ? row.kind : null;
   if (!kind) errors.kind = "Выберите: бой или остаток";
 
-  const sidesMm = parseSidesMm(row.sidesMm);
-  if (!sidesMm) {
-    errors.sidesMm =
-      "Стороны — минимум 3 целых числа в мм через запятую, например «1180, 640, 950»";
+  // BUG-01 (ТЗ №4): «Стороны» — НЕОБЯЗАТЕЛЬНЫ (деталь формы для чертежа/AI).
+  // Единственный обязательный источник размера — габариты (длина×ширина): по
+  // ним ищут остатки. Пусто → прямоугольник [Д, Ш, Д, Ш]. Если введены —
+  // минимум 3 стороны (иначе это не многоугольник).
+  const sidesRaw = row.sidesMm.trim();
+  let sidesMm: number[] | null = null;
+  if (sidesRaw !== "") {
+    sidesMm = parseSidesMm(row.sidesMm);
+    if (!sidesMm) {
+      errors.sidesMm =
+        "Стороны — либо пусто, либо минимум 3 целых числа через запятую, например «1180, 640, 950»";
+    }
   }
 
   const boundingLengthMm = parsePositiveInt(row.boundingLengthMm);
@@ -194,13 +202,16 @@ export function parsePieceRow(row: RawPieceRow): ParsePieceRowResult {
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
+  const len = boundingLengthMm as number;
+  const wid = boundingWidthMm as number;
   return {
     ok: true,
     data: {
       kind: kind as PieceKind,
-      sidesMm: sidesMm as number[],
-      boundingLengthMm: boundingLengthMm as number,
-      boundingWidthMm: boundingWidthMm as number,
+      // Пусто → прямоугольник из габаритов (валидный 4-угольник для чертежа).
+      sidesMm: sidesMm ?? [len, wid, len, wid],
+      boundingLengthMm: len,
+      boundingWidthMm: wid,
       thicknessMm: (thicknessMm ?? null) as number | null,
       areaM2: (areaM2 ?? null) as number | null,
       block,
