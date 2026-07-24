@@ -108,6 +108,58 @@ export default async function AccountsPage({
         </p>
       </header>
 
+      {/* ── Короткая инструкция для владельца (передача проекта) ── */}
+      <details className="mb-6 rounded-card border border-line bg-paper-2 p-4">
+        <summary className="cursor-pointer font-semibold text-ink">
+          Как это работает — коротко
+        </summary>
+        <div className="mt-3 flex flex-col gap-3 text-sm text-ink/70">
+          <p>
+            Здесь вы заводите аккаунты для входа. Каждый сотрудник входит по
+            своему <b>логину (email)</b> и <b>паролю</b>, которые задаёте вы.
+          </p>
+          <div>
+            <p className="mb-1 font-medium text-ink">Роли:</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <b>Менеджер</b> — продажи и поиск: видит камень, цены, брони,
+                продаёт.
+              </li>
+              <li>
+                <b>Складчик</b> — приёмка и разбивка на складе. Получает
+                фотозапросы в <b>Telegram</b> — поэтому укажите ему{" "}
+                <b>телефон</b> (по нему привязывается бот через /start).
+              </li>
+              <li>
+                <b>Партнёр</b> — дизайнер/B2B: только заявки, без цен и склада.
+              </li>
+            </ul>
+          </div>
+          <div>
+            <p className="mb-1 font-medium text-ink">Что можно делать:</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <b>Добавить сотрудника</b> — блок «Новый аккаунт»: имя, логин,
+                пароль (≥{MIN_PASSWORD_LENGTH} символов), роль, телефон.
+              </li>
+              <li>
+                <b>Забыл пароль</b> — «Сбросить пароль» в его карточке. Поменять
+                логин — «Сохранить логин».
+              </li>
+              <li>
+                <b>Уволился</b> — «Деактивировать»: вход закрыт, история цела.
+              </li>
+              <li>
+                <b>Свой логин и пароль</b> — блок «Мой аккаунт» вверху.
+              </li>
+            </ul>
+          </div>
+          <p className="text-ink/50">
+            Эту страницу видит только владелец. Сотрудники сюда не заходят.
+          </p>
+        </div>
+      </details>
+
       {okMsg && (
         <Alert variant="success" className="mb-4">
           {okMsg}
