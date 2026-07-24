@@ -612,11 +612,15 @@ export async function generateInteriors(formData: FormData): Promise<void> {
     .filter(Boolean)
     .join(", ");
 
-  const interiors = await genInteriors(
+  const { images: interiors, error: genErr } = await genInteriors(
     { bytes: refBytes, mediaType: refMime },
     desc,
   );
-  if (interiors.length === 0) redirect(`${back}?aiErr=failed`);
+  if (interiors.length === 0) {
+    // Точную причину (нет кредитов AI Gateway / ключа / модель) показываем в UI.
+    const reason = genErr ? `failed:${genErr.slice(0, 180)}` : "failed";
+    redirect(`${back}?aiErr=${encodeURIComponent(reason)}`);
+  }
 
   // Кладём в Blob + пересоздаём Photo(INTERIOR_AI): сперва удаляем старые интерьеры.
   const now = new Date();

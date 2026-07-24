@@ -44,11 +44,15 @@ function scenePrompt(sceneRu: string, stoneDesc: string): string {
  * Одна сцена: image-to-image по референс-фото камня. Возвращает картинку или
  * null (нет ключа / ошибка / модель не вернула изображение).
  */
+type OneResult =
+  | { ok: true; image: GeneratedInterior }
+  | { ok: false; error: string };
+
 async function generateOne(
   ref: RefImage,
   scene: { key: string; label: string; ru: string },
   stoneDesc: string,
-): Promise<GeneratedInterior | null> {
+): Promise<OneResult> {
   try {
     const result = await generateText({
       model: MODEL,
@@ -64,21 +68,25 @@ async function generateOne(
     });
     const img = result.files.find((f) => f.mediaType.startsWith("image/"));
     if (!img) {
-      console.warn(
-        `[interior-ai] сцена ${scene.key}: модель не вернула изображение.`,
-      );
-      return null;
+      return {
+        ok: false,
+        error: `модель не вернула изображение (${MODEL})`,
+      };
     }
     return {
-      scene: scene.key,
-      label: scene.label,
-      bytes: img.uint8Array,
-      mediaType: img.mediaType,
+      ok: true,
+      image: {
+        scene: scene.key,
+        label: scene.label,
+        bytes: img.uint8Array,
+        mediaType: img.mediaType,
+      },
     };
   } catch (err) {
-    // Fail-closed: нет AI_GATEWAY_API_KEY / сеть / отказ модели → null.
+    // Fail-closed: нет ключа AI Gateway / нет кредитов / сеть / отказ модели.
+    const msg = err instanceof Error ? err.message : String(err);
     console.error(`[interior-ai] сцена ${scene.key} — ошибка:`, err);
-    return null;
+    return { ok: false, error: msg };
   }
 }
 
@@ -90,9 +98,16 @@ async function generateOne(
 export async function generateInteriors(
   ref: RefImage,
   stoneDesc: string,
-): Promise<GeneratedInterior[]> {
+): Promise<{ images: GeneratedInterior[]; error?: string }> {
   const results = await Promise.all(
     INTERIOR_SCENES.map((s) => generateOne(ref, s, stoneDesc)),
   );
-  return results.filter((r): r is GeneratedInterior => r !== null);
+  const images = results
+    .filter((r): r is { ok: true; image: GeneratedInterior } => r.ok)
+    .map((r) => r.image);
+  // Первая ошибка (для диагностики: нет кредитов / ключа / модель недоступна).
+  const firstErr = results.find(
+    (r): r is { ok: false; error: string } => !r.ok,
+  );
+  return { images, error: firstErr?.error };
 }
