@@ -5,7 +5,13 @@
 // C-batch: разметка переведена на бренд-дизайн-систему (Button/Field/Card/Alert).
 // Поведение, имена полей, порядок строк и контракт валидации НЕ менялись.
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { submitBreak, type BreakFormState } from "./actions";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -29,6 +35,28 @@ export interface BatchOption {
 }
 
 const initialState: BreakFormState = { errors: {} };
+
+/** Значения одной строки-куска (CRIT-02: controlled, чтобы не слетали при ошибке). */
+interface PieceVals {
+  kind: string;
+  sides: string;
+  len: string;
+  width: string;
+  thickness: string;
+  area: string;
+  block: string;
+  landmark: string;
+}
+const emptyPiece = (): PieceVals => ({
+  kind: "BROKEN",
+  sides: "",
+  len: "",
+  width: "",
+  thickness: "",
+  area: "",
+  block: "",
+  landmark: "",
+});
 
 /** Звёздочка «обязательное поле». */
 function Req() {
@@ -67,6 +95,21 @@ export default function BreakForm({
   const nextRowId = useRef(1);
   const e = state.errors;
 
+  // CRIT-02 (ТЗ №4): все поля CONTROLLED (значения в state) — при ошибке
+  // валидации данные НЕ слетают (как в IntakeForm, паттерн ТЗ №2 BUG-01).
+  const [batchId, setBatchId] = useState("");
+  const [slabId, setSlabId] = useState("");
+  const [rows, setRows] = useState<Record<number, PieceVals>>({
+    0: emptyPiece(),
+  });
+  const setPiece =
+    (id: number, key: keyof PieceVals) =>
+    (ev: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setRows((m) => ({
+        ...m,
+        [id]: { ...(m[id] ?? emptyPiece()), [key]: ev.target.value },
+      }));
+
   // CRIT-01 (ТЗ №4): при ошибке валидации ВЫХОДИМ из шага подтверждения, чтобы
   // ошибки полей стали видны (иначе submit «молча не проходит» — ошибки висят на
   // скрытых сверху полях, а форма застряла на «Подтвердить»).
@@ -74,7 +117,11 @@ export default function BreakForm({
     if (Object.keys(state.errors).length > 0) setConfirming(false);
   }, [state]);
 
-  const addRow = () => setRowIds((ids) => [...ids, nextRowId.current++]);
+  const addRow = () => {
+    const id = nextRowId.current++;
+    setRowIds((ids) => [...ids, id]);
+    setRows((m) => ({ ...m, [id]: emptyPiece() }));
+  };
   const removeRow = (id: number) =>
     setRowIds((ids) => (ids.length > 1 ? ids.filter((x) => x !== id) : ids));
 
@@ -112,7 +159,8 @@ export default function BreakForm({
               id="slabId"
               name="slabId"
               className={inputClass}
-              defaultValue=""
+              value={slabId}
+              onChange={(ev) => setSlabId(ev.target.value)}
               aria-invalid={e.slabId ? true : undefined}
               aria-describedby={e.slabId ? "slabId-error" : undefined}
             >
@@ -138,7 +186,8 @@ export default function BreakForm({
                 id="batchId"
                 name="batchId"
                 className={inputClass}
-                defaultValue=""
+                value={batchId}
+                onChange={(ev) => setBatchId(ev.target.value)}
                 aria-invalid={e.batchId ? true : undefined}
                 aria-describedby={e.batchId ? "batchId-error" : undefined}
               >
@@ -202,7 +251,8 @@ export default function BreakForm({
                     id={`pKind-${idx}`}
                     name="pKind"
                     className={inputClass}
-                    defaultValue="BROKEN"
+                    value={rows[id]?.kind ?? "BROKEN"}
+                    onChange={setPiece(id, "kind")}
                     aria-invalid={e[`p-${idx}-kind`] ? true : undefined}
                     aria-describedby={e[`p-${idx}-kind`] ? `pKind-${idx}-error` : undefined}
                   >
@@ -216,6 +266,8 @@ export default function BreakForm({
                   inputMode="numeric"
                   label="Стороны, мм (необязательно)"
                   placeholder="если непрямоугольный: 1180, 640, 950"
+                  value={rows[id]?.sides ?? ""}
+                  onChange={setPiece(id, "sides")}
                   error={e[`p-${idx}-sidesMm`]}
                 />
                 <div className="grid grid-cols-2 gap-3">
@@ -225,6 +277,8 @@ export default function BreakForm({
                     inputMode="numeric"
                     label={<>Длина, мм <Req /></>}
                     placeholder="1180"
+                    value={rows[id]?.len ?? ""}
+                    onChange={setPiece(id, "len")}
                     error={e[`p-${idx}-boundingLengthMm`]}
                   />
                   <Field
@@ -233,6 +287,8 @@ export default function BreakForm({
                     inputMode="numeric"
                     label={<>Ширина, мм <Req /></>}
                     placeholder="640"
+                    value={rows[id]?.width ?? ""}
+                    onChange={setPiece(id, "width")}
                     error={e[`p-${idx}-boundingWidthMm`]}
                   />
                   <Field
@@ -241,6 +297,8 @@ export default function BreakForm({
                     inputMode="numeric"
                     label="Толщина, мм"
                     placeholder="20"
+                    value={rows[id]?.thickness ?? ""}
+                    onChange={setPiece(id, "thickness")}
                     error={e[`p-${idx}-thicknessMm`]}
                   />
                   <Field
@@ -249,6 +307,8 @@ export default function BreakForm({
                     inputMode="decimal"
                     label="Площадь, м²"
                     placeholder="0,6"
+                    value={rows[id]?.area ?? ""}
+                    onChange={setPiece(id, "area")}
                     error={e[`p-${idx}-areaM2`]}
                   />
                   <Field
@@ -256,6 +316,8 @@ export default function BreakForm({
                     name="pBlock"
                     label={<>Блок <Req /></>}
                     placeholder="А"
+                    value={rows[id]?.block ?? ""}
+                    onChange={setPiece(id, "block")}
                     error={e[`p-${idx}-block`]}
                   />
                   <Field
@@ -263,6 +325,8 @@ export default function BreakForm({
                     name="pLandmark"
                     label={<>Ориентир <Req /></>}
                     placeholder="2 или 1–2"
+                    value={rows[id]?.landmark ?? ""}
+                    onChange={setPiece(id, "landmark")}
                     error={e[`p-${idx}-landmark`]}
                   />
                 </div>

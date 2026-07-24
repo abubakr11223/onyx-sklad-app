@@ -373,6 +373,14 @@ export default function IntakeForm({
         ) : (
           <div className="mt-4 flex flex-col gap-4">
             <input type="hidden" name="patternsEnabled" value="1" />
+            {/* BUG-02 (ТЗ №4): фото узора не грузится здесь — после приёмки
+                система САМА отправит складчику фотозапрос по каждому узору в
+                Telegram, и фото привяжется к подгруппе (см. карточку камня). */}
+            <p className="rounded-card bg-gold/8 px-3 py-2 text-sm text-ink/70">
+              📷 Фото узоров грузить здесь не нужно: после приёмки система
+              автоматически запросит у складчика фото каждого узора в Telegram —
+              оно привяжется к подгруппе.
+            </p>
             <CrossError msg={e.patternsTotals} />
             <CrossError msg={e.patterns} />
 
@@ -437,13 +445,58 @@ export default function IntakeForm({
               + Добавить узор
             </Button>
 
-            {/* Живой ИТОГО — должен сойтись с блоком «Количество». */}
-            <div className="flex items-center justify-between rounded-card bg-ink/[0.03] px-3 py-2 text-sm">
-              <span className="font-semibold text-ink">ИТОГО по узорам</span>
-              <span className="tnum text-ink/70">
-                {patTotals.slabs} плит · {patTotals.area.toFixed(1)} м²
-              </span>
-            </div>
+            {/* BUG-03 (ТЗ №4): живой ИТОГО + цель партии + подсветка расхождения
+                ПРЯМО в форме (до сохранения), а не только на «Принять партию». */}
+            {(() => {
+              const tgtSlabs = Number.parseInt(values.slabsTotal, 10);
+              const tgtArea = Number.parseFloat(
+                values.areaTotalM2.replace(",", "."),
+              );
+              const hasSlabsTgt = Number.isFinite(tgtSlabs);
+              const hasAreaTgt = Number.isFinite(tgtArea);
+              const slabsOk = !hasSlabsTgt || patTotals.slabs === tgtSlabs;
+              const areaOk =
+                !hasAreaTgt || Math.abs(patTotals.area - tgtArea) < 0.001;
+              const converged = slabsOk && areaOk && (hasSlabsTgt || hasAreaTgt);
+              return (
+                <div
+                  className={`rounded-card px-3 py-2 text-sm ${
+                    converged
+                      ? "bg-success/10"
+                      : hasSlabsTgt || hasAreaTgt
+                        ? "bg-warning/12"
+                        : "bg-ink/[0.03]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-ink">ИТОГО по узорам</span>
+                    <span className="tnum text-ink/70">
+                      {patTotals.slabs} плит · {patTotals.area.toFixed(1)} м²
+                    </span>
+                  </div>
+                  {(hasSlabsTgt || hasAreaTgt) && (
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-ink/50">Партия (цель)</span>
+                      <span className="tnum text-ink/50">
+                        {hasSlabsTgt ? tgtSlabs : "—"} плит ·{" "}
+                        {hasAreaTgt ? tgtArea.toFixed(1) : "—"} м²
+                      </span>
+                    </div>
+                  )}
+                  {(hasSlabsTgt || hasAreaTgt) && (
+                    <p
+                      className={`mt-1 font-medium ${
+                        converged ? "text-success" : "text-warning"
+                      }`}
+                    >
+                      {converged
+                        ? "✓ сходится с партией"
+                        : "не сходится — сумма узоров должна равняться партии"}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <CrossError msg={e.patternsSum} />
           </div>
         )}
