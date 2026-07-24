@@ -728,7 +728,9 @@ interface PatternForSale {
   areaSoldM2: number;
 }
 
-async function executeVolumeSale(
+// eksport: узор-ветвь integratsion test'i (sales.test.ts §7.5) uchun — tx
+// mock bilan chaqiriladi (lock/loadActor/loadBatch mock qilinmaydi).
+export async function executeVolumeSale(
   tx: Prisma.TransactionClient,
   params: {
     actor: ActorRow;

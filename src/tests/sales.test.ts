@@ -1,12 +1,13 @@
 // S2-B — чистые решения продажи (без БД). Нормативная база:
 // docs/data-model.md §2 (переходы 2 и 4, запреты), §3 (охрана объёмной
 // продажи, оптовый выкуп TZ §7.6), TZ §7.1/§7.4/§7.5.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkPatternSaleGuard,
   checkVolumeSaleGuard,
   computeWholeBatchSale,
   decideUnitSale,
+  executeVolumeSale,
   isHoldEffective,
   roleCanSell,
   selectCoveredOwnHolds,
@@ -497,5 +498,111 @@ describe("checkPatternSaleGuard — продажа из узора не прев
     const r = checkPatternSaleGuard({ remainingSlabs: 25, remainingArea: 15, qtySlabs: 26, qtyAreaM2: null });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
+  });
+})
+
+// ─────────── executeVolumeSale — узор-ветвь (интеграция с мок-tx, ТЗ №3 §7.5) ───────────
+// Ядро продажи вызывается ВНУТРИ транзакции с уже загруженными actor/batch/free/pattern.
+// Здесь мокаем только сам tx (5 методов), чтобы проверить НОВУЮ узор-логику:
+// синхронный условный инкремент счётчиков узора + batch, SaleRecord.batchPatternId,
+// охрана остатка узора ДО записи и CONFLICT при параллельном изменении узора.
+describe("executeVolumeSale — продажа из узора (интеграция, ТЗ №3 §7.5)", () => {
+  // Возвращаем СЫРОЙ объект с vi.fn (для assert .mock.calls); в executeVolumeSale
+  // передаём его через cast — на узор-пути другие методы tx не вызываются.
+  // arg-param у vi.fn нужен, чтобы .mock.calls[0][0] был доступен (иначе TS
+  // выводит кортеж без аргументов). Значения не типизируем строго — это mock.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const makeTx = (opts?: { batchCount?: number; patternCount?: number }) => ({
+    batch: { updateMany: vi.fn(async (_a?: any) => ({ count: opts?.batchCount ?? 1 })) },
+    batchPattern: {
+      updateMany: vi.fn(async (_a?: any) => ({ count: opts?.patternCount ?? 1 })),
+    },
+    reservation: { updateMany: vi.fn(async (_a?: any) => ({ count: 0 })) },
+    saleRecord: { create: vi.fn(async (_a?: any) => ({ id: "sale-1" })) },
+    auditLog: { create: vi.fn(async (_a?: any) => ({})) },
+  });
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  type TxArg = Parameters<typeof executeVolumeSale>[0];
+
+  const actor = { id: "mgr-1", role: "MANAGER" as const };
+  const batch = {
+    id: "batch-1",
+    needsCheck: false,
+    slabsTotal: 100,
+    areaTotalM2: 60,
+    slabsAdjusted: 0,
+    areaAdjustedM2: 0,
+    slabsSoldDirect: 0,
+    areaSoldDirectM2: 0,
+    slabs: [],
+    pieces: [],
+    reservations: [],
+  };
+  const free = { slabsFree: 100, areaFreeM2: 60 };
+  const pattern = { id: "pat-1", slabsCount: 50, slabsSold: 0, areaM2: 30, areaSoldM2: 0 };
+  const common = {
+    actor,
+    batch,
+    free,
+    customerName: "Клиент",
+    customerContact: null,
+    price: null,
+    wholeBatch: false,
+    now: new Date("2026-07-24T00:00:00Z"),
+  };
+
+  it("в пределах остатка узора → инкремент И узора, И партии + SaleRecord.batchPatternId", async () => {
+    const tx = makeTx();
+    const res = await executeVolumeSale(tx as unknown as TxArg, {
+      ...common,
+      qtySlabs: 10,
+      qtyAreaM2: 6,
+      pattern,
+    });
+    expect(res.ok).toBe(true);
+    // партия уменьшена (условный UPDATE со счётчиками из чтения).
+    expect(tx.batch.updateMany).toHaveBeenCalledTimes(1);
+    // узор уменьшен синхронно.
+    expect(tx.batchPattern.updateMany).toHaveBeenCalledTimes(1);
+    const patArg = tx.batchPattern.updateMany.mock.calls[0][0];
+    expect(patArg.where).toMatchObject({ id: "pat-1", slabsSold: 0 });
+    expect(patArg.data.slabsSold).toEqual({ increment: 10 });
+    // SaleRecord несёт batchPatternId.
+    const saleArg = tx.saleRecord.create.mock.calls[0][0];
+    expect(saleArg.data.batchPatternId).toBe("pat-1");
+  });
+
+  it("продажа сверх остатка узора → INSUFFICIENT_REMAINDER ДО записи (партия не тронута)", async () => {
+    const tx = makeTx();
+    const almostSold = { ...pattern, slabsSold: 45 }; // осталось 5 плит
+    await expect(
+      executeVolumeSale(tx as unknown as TxArg, { ...common, qtySlabs: 6, qtyAreaM2: 3, pattern: almostSold }),
+    ).rejects.toThrow(/В узоре столько нет|остаток/i);
+    // охрана узора сработала ДО UPDATE — ни партия, ни узор не изменены.
+    expect(tx.batch.updateMany).not.toHaveBeenCalled();
+    expect(tx.batchPattern.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("узор изменили параллельно (0 строк) → CONFLICT", async () => {
+    const tx = makeTx({ patternCount: 0 });
+    await expect(
+      executeVolumeSale(tx as unknown as TxArg, { ...common, qtySlabs: 10, qtyAreaM2: 6, pattern }),
+    ).rejects.toThrow(/параллельно/);
+    // партия уже уменьшена, но узор дал 0 строк → вся транзакция откатится.
+    expect(tx.batchPattern.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("без узора (обычный batch-volume) → batchPattern не трогаем, batchPatternId = null", async () => {
+    const tx = makeTx();
+    const res = await executeVolumeSale(tx as unknown as TxArg, {
+      ...common,
+      qtySlabs: 10,
+      qtyAreaM2: 6,
+      pattern: null,
+    });
+    expect(res.ok).toBe(true);
+    expect(tx.batchPattern.updateMany).not.toHaveBeenCalled();
+    const saleArg = tx.saleRecord.create.mock.calls[0][0];
+    expect(saleArg.data.batchPatternId).toBeNull();
   });
 })

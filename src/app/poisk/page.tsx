@@ -114,6 +114,8 @@ export default async function PoiskPage({
           areaAdjustedM2: true,
           slabsSoldDirect: true,
           areaSoldDirectM2: true,
+          // ТЗ №3 / §4 — сколько узор-подгрупп в партии (индикатор «раскрыть»).
+          _count: { select: { patterns: true } },
         },
       },
     },
@@ -214,6 +216,12 @@ export default async function PoiskPage({
     const countedSlabs = slabCountMap.get(st.id) ?? 0;
     const countedPieces = pieceCountMap.get(st.id) ?? 0;
 
+    // ТЗ №3 / §4 — узор-подгрупп по всем партиям вида (B2C: «раскрыть узоры»).
+    const patternsCount = st.batches.reduce(
+      (sum, b) => sum + b._count.patterns,
+      0,
+    );
+
     // «в наличии» — bronlardan OLDINgi jami yoki alohida birliklar bo'yicha
     // (ko'rinadigan vidlar to'plami BUG-03 tuzatishдан OLDINGIDEK qoladi; faqat
     // ichki raqamlar endi bo'sh/бронь ga ajratiladi).
@@ -237,6 +245,7 @@ export default async function PoiskPage({
       areaUnknown,
       countedSlabs,
       countedPieces,
+      patternsCount,
       hasAvailability,
     };
   });
@@ -466,6 +475,9 @@ export default async function PoiskPage({
                         )}
                         {t.hasAvailability && t.countedPieces > 0 && (
                           <> · боя и остатков: {t.countedPieces}</>
+                        )}
+                        {t.patternsCount > 0 && (
+                          <> · узоров: {t.patternsCount}</>
                         )}
                       </p>
                     </div>

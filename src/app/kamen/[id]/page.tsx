@@ -341,7 +341,7 @@ export default async function KamenPage({
                 slabsSold: true,
                 areaSoldM2: true,
                 photos: {
-                  select: { id: true },
+                  select: { id: true, takenAt: true },
                   orderBy: { createdAt: "desc" },
                   take: 4,
                 },
@@ -986,20 +986,35 @@ export default async function KamenPage({
                           className="rounded-card border border-line bg-paper-2 p-2"
                         >
                           {pat.photos.length > 0 ? (
-                            <a
-                              href={"/api/photo/" + pat.photos[0].id}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={"/api/photo/" + pat.photos[0].id}
-                                alt={"Узор: " + pat.description}
-                                loading="lazy"
-                                className="mb-1.5 aspect-square w-full rounded-lg object-cover"
-                              />
-                            </a>
+                            <>
+                              <a
+                                href={"/api/photo/" + pat.photos[0].id}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={"/api/photo/" + pat.photos[0].id}
+                                  alt={"Узор: " + pat.description}
+                                  loading="lazy"
+                                  className="mb-1 aspect-square w-full rounded-lg object-cover"
+                                />
+                              </a>
+                              {/* TZ §5.3 — дата съёмки узора + «свежесть». */}
+                              <p className="mb-1.5 text-[11px] text-ink/45">
+                                Снято {formatTashkentDate(pat.photos[0].takenAt)}
+                              </p>
+                              {isPhotoStale(
+                                pat.photos[0].takenAt,
+                                now,
+                                photoStaleMonths,
+                              ) && (
+                                <p className="mb-1.5 text-[11px] font-medium text-gold-deep">
+                                  возможно, переснять
+                                </p>
+                              )}
+                            </>
                           ) : (
                             <div className="mb-1.5 flex aspect-square w-full items-center justify-center rounded-lg bg-ink/[0.04] text-center text-xs text-ink/40">
                               фото ожидается
