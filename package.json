@@ -18,7 +18,8 @@
     "test": "vitest run",
     "seed:demo": "tsx prisma/seed-demo-cli.ts",
     "seed:owner": "tsx prisma/seed-owner-cli.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "tg:menu": "tsx prisma/set-tg-menu-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
