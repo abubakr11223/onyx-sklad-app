@@ -338,6 +338,8 @@ export default async function KamenPage({
                 thicknessMm: true,
                 slabsCount: true,
                 areaM2: true,
+                slabsSold: true,
+                areaSoldM2: true,
                 photos: {
                   select: { id: true },
                   orderBy: { createdAt: "desc" },
@@ -1006,8 +1008,14 @@ export default async function KamenPage({
                           <p className="font-semibold text-ink">{pat.description}</p>
                           <p className="tnum text-xs text-ink/60">
                             {pat.thicknessMm !== null && <>{pat.thicknessMm} мм · </>}
-                            {pat.slabsCount} плит · {m2Fmt.format(Number(pat.areaM2))} м²
+                            осталось {pat.slabsCount - pat.slabsSold} плит ·{" "}
+                            {m2Fmt.format(Number(pat.areaM2) - Number(pat.areaSoldM2))} м²
                           </p>
+                          {pat.slabsSold > 0 && (
+                            <p className="tnum text-xs text-ink/40">
+                              продано {pat.slabsSold} из {pat.slabsCount}
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ul>

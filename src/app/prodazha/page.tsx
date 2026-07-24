@@ -109,6 +109,18 @@ export default async function ProdazhaPage({
                 },
               },
             },
+            // ТЗ №3 — узоры партии (для продажи из узора).
+            patterns: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                description: true,
+                slabsCount: true,
+                slabsSold: true,
+                areaM2: true,
+                areaSoldM2: true,
+              },
+            },
           },
         },
         pieces: {
@@ -205,12 +217,24 @@ export default async function ProdazhaPage({
         const hasFree =
           (free.slabsFree !== null && free.slabsFree > 0) ||
           (free.areaFreeM2 !== null && free.areaFreeM2 > 0);
+        // ТЗ №3 — узоры партии с остатком (count − sold).
+        const patterns = b.patterns.map((pat) => {
+          const remSlabs = pat.slabsCount - pat.slabsSold;
+          const remArea = Number(pat.areaM2) - Number(pat.areaSoldM2);
+          return {
+            id: pat.id,
+            description: pat.description,
+            remainText: `осталось: ${remSlabs} плит · ${m2Fmt.format(remArea)} м²`,
+            hasFree: remSlabs > 0 || remArea > 0.0005,
+          };
+        });
         return {
           id: b.id,
           title: `Партия от ${formatTashkentDate(b.arrivedAt)}`,
           freeText: `свободно: ${freeParts || "нет данных"}`,
           needsCheck: b.needsCheck,
           hasFree,
+          patterns,
         };
       });
 

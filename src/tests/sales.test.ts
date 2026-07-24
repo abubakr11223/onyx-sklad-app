@@ -3,6 +3,7 @@
 // продажи, оптовый выкуп TZ §7.6), TZ §7.1/§7.4/§7.5.
 import { describe, expect, it } from "vitest";
 import {
+  checkPatternSaleGuard,
   checkVolumeSaleGuard,
   computeWholeBatchSale,
   decideUnitSale,
@@ -459,3 +460,42 @@ describe("selectOwnHoldsToComplete — свои + не истёкшие + ста
     expect(selectOwnHoldsToComplete(holds, MANAGER_A, 4, null, NOW)).toEqual(["live"]);
   });
 });
+
+describe("checkPatternSaleGuard — продажа из узора не превышает остаток (ТЗ №3)", () => {
+  const base = { remainingSlabs: 50, remainingArea: 30 };
+
+  it("в пределах остатка → ok", () => {
+    expect(checkPatternSaleGuard({ ...base, qtySlabs: 20, qtyAreaM2: 12 }).ok).toBe(true);
+    expect(checkPatternSaleGuard({ ...base, qtySlabs: 50, qtyAreaM2: 30 }).ok).toBe(true);
+  });
+
+  it("плит больше остатка узора → INSUFFICIENT_REMAINDER", () => {
+    const r = checkPatternSaleGuard({ ...base, qtySlabs: 51, qtyAreaM2: null });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
+  });
+
+  it("м² больше остатка узора → INSUFFICIENT_REMAINDER", () => {
+    const r = checkPatternSaleGuard({ ...base, qtySlabs: null, qtyAreaM2: 30.5 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
+  });
+
+  it("двоичная погрешность м² не даёт ложный отказ (эпсилон)", () => {
+    // 0.1 + 0.2 > 0.3 в float — эпсилон гасит только шум, не реальный перебор.
+    expect(
+      checkPatternSaleGuard({
+        remainingSlabs: 10,
+        remainingArea: 0.3,
+        qtySlabs: null,
+        qtyAreaM2: 0.1 + 0.2,
+      }).ok,
+    ).toBe(true);
+  });
+
+  it("узор продан наполовину: остаток 25 плит, продажа 26 → отказ", () => {
+    const r = checkPatternSaleGuard({ remainingSlabs: 25, remainingArea: 15, qtySlabs: 26, qtyAreaM2: null });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
+  });
+})

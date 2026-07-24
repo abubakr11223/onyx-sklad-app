@@ -12,6 +12,7 @@ import {
   confirmReturnedUnit,
   returnSale,
   sellBatchVolume,
+  sellPatternVolume,
   sellUnit,
   sellWholeBatch,
   type SaleError,
@@ -21,7 +22,12 @@ import {
   parsePositiveInt,
 } from "@/lib/validators/intake";
 
-export type SaleMode = "SLAB" | "PIECE" | "BATCH_VOLUME" | "WHOLE_BATCH";
+export type SaleMode =
+  | "SLAB"
+  | "PIECE"
+  | "BATCH_VOLUME"
+  | "PATTERN_VOLUME" // ТЗ №3 — продажа из узор-подгруппы
+  | "WHOLE_BATCH";
 
 export interface SaleFormState {
   /** Полевые ошибки формы (ключ — имя поля). */
@@ -103,7 +109,7 @@ export async function submitSale(
   const mode = str("mode") as SaleMode;
   const errors: Record<string, string> = {};
 
-  if (!["SLAB", "PIECE", "BATCH_VOLUME", "WHOLE_BATCH"].includes(mode)) {
+  if (!["SLAB", "PIECE", "BATCH_VOLUME", "PATTERN_VOLUME", "WHOLE_BATCH"].includes(mode)) {
     return { errors: { form: "Неизвестный тип продажи — обновите страницу" }, conflict: null };
   }
 
@@ -114,9 +120,10 @@ export async function submitSale(
   const price = parsePositiveDecimal(str("price"));
   if (price === undefined) errors.price = "Цена — положительное число, например 1500";
 
+  const isVolume = mode === "BATCH_VOLUME" || mode === "PATTERN_VOLUME";
   let qtySlabs: number | null = null;
   let qtyAreaM2: number | null = null;
-  if (mode === "BATCH_VOLUME") {
+  if (isVolume) {
     const qs = parsePositiveInt(str("qtySlabs"));
     const qa = parsePositiveDecimal(str("qtyAreaM2"));
     if (qs === undefined) errors.qtySlabs = "Число плит — целое положительное число";
@@ -130,11 +137,15 @@ export async function submitSale(
 
   const unitId = str("unitId");
   const batchId = str("batchId");
+  const batchPatternId = str("batchPatternId");
   if ((mode === "SLAB" || mode === "PIECE") && !unitId) {
     errors.form = "Не выбран камень — вернитесь на шаг выбора";
   }
   if ((mode === "BATCH_VOLUME" || mode === "WHOLE_BATCH") && !batchId) {
     errors.form = "Не выбрана партия — вернитесь на шаг выбора";
+  }
+  if (mode === "PATTERN_VOLUME" && !batchPatternId) {
+    errors.form = "Не выбран узор — вернитесь на шаг выбора";
   }
 
   if (Object.keys(errors).length > 0) return { errors, conflict: null };
@@ -153,7 +164,9 @@ export async function submitSale(
       ? await sellUnit({ targetType: mode, unitId, ...common })
       : mode === "BATCH_VOLUME"
         ? await sellBatchVolume({ batchId, qtySlabs, qtyAreaM2, ...common })
-        : await sellWholeBatch({ batchId, ...common });
+        : mode === "PATTERN_VOLUME"
+          ? await sellPatternVolume({ batchPatternId, qtySlabs, qtyAreaM2, ...common })
+          : await sellWholeBatch({ batchId, ...common });
 
   if (!result.ok) return failState(result.error);
 

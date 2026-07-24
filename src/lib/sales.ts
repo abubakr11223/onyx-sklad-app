@@ -217,6 +217,31 @@ export function checkVolumeSaleGuard(
 }
 
 /**
+ * ТЗ №3 фаза 4 — охрана продажи ИЗ УЗОРА: продажа не может превысить остаток
+ * подгруппы (slabsCount − slabsSold / areaM2 − areaSoldM2). Batch-охрана
+ * (checkVolumeSaleGuard) применяется отдельно и дополнительно — узор-остаток
+ * всегда ≤ batch-остатка, но проверяем оба для точной ошибки.
+ */
+export function checkPatternSaleGuard(input: {
+  remainingSlabs: number;
+  remainingArea: number;
+  qtySlabs: number | null;
+  qtyAreaM2: number | null;
+}): { ok: true } | SaleFail {
+  if (input.qtySlabs !== null && input.qtySlabs > input.remainingSlabs) {
+    return fail(
+      "INSUFFICIENT_REMAINDER",
+      `В узоре столько нет: осталось ${input.remainingSlabs} плит`,
+    );
+  }
+  if (input.qtyAreaM2 !== null && input.qtyAreaM2 > input.remainingArea + AREA_EPS) {
+    const remTxt = input.remainingArea.toFixed(3).replace(/\.?0+$/, "");
+    return fail("INSUFFICIENT_REMAINDER", `В узоре столько нет: осталось ≈${remTxt} м²`);
+  }
+  return { ok: true };
+}
+
+/**
  * «Партию выкупили оптом целиком» (TZ §7.6): весь текущий свободный остаток
  * одним действием уходит в slabsSoldDirect/areaSoldDirectM2. Плиты НЕ создаются
  * (ADR-004). Возвращает количества для продажи; нечего продавать → ошибка.
@@ -694,6 +719,15 @@ function batchFreeRemainder(batch: BatchForVolume): FreeRemainder {
  * UPDATE счётчиков → погашение своих volume-броней → SaleRecord + AuditLog.
  * Вызывается ВНУТРИ транзакции.
  */
+/** ТЗ №3 фаза 4 — узор-подгруппа для продажи (остаток = count − sold). */
+interface PatternForSale {
+  id: string;
+  slabsCount: number;
+  slabsSold: number;
+  areaM2: number;
+  areaSoldM2: number;
+}
+
 async function executeVolumeSale(
   tx: Prisma.TransactionClient,
   params: {
@@ -707,6 +741,8 @@ async function executeVolumeSale(
     price: number | null;
     wholeBatch: boolean;
     now: Date;
+    // ТЗ №3 — продажа ИЗ УЗОРА (иначе null → обычная batch-volume продажа).
+    pattern?: PatternForSale | null;
   },
 ): Promise<SellVolumeOk> {
   const { actor, batch, free, qtySlabs, qtyAreaM2, now } = params;
@@ -732,6 +768,17 @@ async function executeVolumeSale(
   });
   if (!guard.ok) throw new SaleLogicError(guard.error);
 
+  // ТЗ №3 — узор-охрана: продажа не превышает остаток подгруппы (ДО записи).
+  if (params.pattern) {
+    const pg = checkPatternSaleGuard({
+      remainingSlabs: params.pattern.slabsCount - params.pattern.slabsSold,
+      remainingArea: params.pattern.areaM2 - params.pattern.areaSoldM2,
+      qtySlabs,
+      qtyAreaM2,
+    });
+    if (!pg.ok) throw new SaleLogicError(pg.error);
+  }
+
   // Условная запись (data-model §2 по духу, ADR-005): WHERE фиксирует
   // прочитанные счётчики — параллельная объёмная продажа даст 0 строк,
   // и охранная проверка не будет обойдена.
@@ -754,6 +801,30 @@ async function executeVolumeSale(
       code: "CONFLICT",
       message: "Партию только что изменили параллельно — обновите страницу и повторите",
     });
+  }
+
+  // ТЗ №3 — синхронно инкрементим счётчики УЗОРА (условно, как batch выше).
+  // Batch-остаток уже уменьшен; узор-остаток тоже, чтобы карточка сходилась.
+  if (params.pattern) {
+    const patUpdated = await tx.batchPattern.updateMany({
+      where: {
+        id: params.pattern.id,
+        slabsSold: params.pattern.slabsSold,
+        areaSoldM2: params.pattern.areaSoldM2.toFixed(3),
+      },
+      data: {
+        ...(qtySlabs !== null ? { slabsSold: { increment: qtySlabs } } : {}),
+        ...(qtyAreaM2 !== null
+          ? { areaSoldM2: { increment: qtyAreaM2.toFixed(3) } }
+          : {}),
+      },
+    });
+    if (patUpdated.count === 0) {
+      throw new SaleLogicError({
+        code: "CONFLICT",
+        message: "Узор только что изменили параллельно — обновите страницу и повторите",
+      });
+    }
   }
 
   // A3: гасим ТОЛЬКО те свои volume-брони, которые продажа реально покрыла
@@ -780,6 +851,7 @@ async function executeVolumeSale(
       customerContact: params.customerContact,
       targetType: "BATCH_VOLUME",
       batchId: batch.id,
+      batchPatternId: params.pattern?.id ?? null,
       qtySlabs,
       qtyAreaM2: qtyAreaM2 === null ? null : qtyAreaM2.toFixed(3),
       price: params.price === null ? null : params.price.toFixed(2),
@@ -802,6 +874,7 @@ async function executeVolumeSale(
         qtySlabs,
         qtyAreaM2,
         wholeBatch: params.wholeBatch,
+        batchPatternId: params.pattern?.id ?? null,
         freeBefore: { slabsFree: free.slabsFree, areaFreeM2: free.areaFreeM2 },
         completedReservationIds,
       },
@@ -850,6 +923,78 @@ export async function sellBatchVolume(
         price,
         wholeBatch: false,
         now,
+      });
+    });
+  } catch (e) {
+    if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };
+    throw e;
+  }
+}
+
+export interface SellPatternVolumeInput {
+  batchPatternId: string;
+  qtySlabs?: number | null;
+  qtyAreaM2?: number | null;
+  customerName: string;
+  customerContact?: string | null;
+  price?: number | null;
+  managerId: string;
+}
+
+/**
+ * ТЗ №3 фаза 4 — продажа объёма ИЗ УЗОР-подгруппы (B2C). Как sellBatchVolume, но
+ * дополнительно: проверяет остаток узора (checkPatternSaleGuard) и синхронно
+ * инкрементит счётчики узора вместе с batch.slabsSoldDirect (executeVolumeSale с
+ * pattern) — единый остаток. SaleRecord несёт batchPatternId.
+ */
+export async function sellPatternVolume(
+  input: SellPatternVolumeInput,
+): Promise<SellVolumeOk | SaleFail> {
+  try {
+    return await db.$transaction(async (tx) => {
+      // Узор грузим ПЕРВЫМ — узнаём его batchId, затем лочим партию (как batch-volume).
+      const pat = await tx.batchPattern.findUnique({
+        where: { id: input.batchPatternId },
+        select: {
+          id: true,
+          batchId: true,
+          slabsCount: true,
+          slabsSold: true,
+          areaM2: true,
+          areaSoldM2: true,
+        },
+      });
+      if (!pat) {
+        throw new SaleLogicError({
+          code: "NOT_FOUND",
+          message: "Узор не найден — обновите страницу и повторите",
+        });
+      }
+      await lockBatchForUpdate(tx, pat.batchId);
+      const now = new Date();
+      const actor = await loadActor(tx, input.managerId);
+      const customerName = validateCustomer(input.customerName);
+      const price = validatePrice(input.price);
+      const batch = await loadBatchForVolume(tx, pat.batchId);
+      const free = batchFreeRemainder(batch);
+      return executeVolumeSale(tx, {
+        actor,
+        batch,
+        free,
+        qtySlabs: input.qtySlabs ?? null,
+        qtyAreaM2: input.qtyAreaM2 ?? null,
+        customerName,
+        customerContact: input.customerContact?.trim() || null,
+        price,
+        wholeBatch: false,
+        now,
+        pattern: {
+          id: pat.id,
+          slabsCount: pat.slabsCount,
+          slabsSold: pat.slabsSold,
+          areaM2: toNum(pat.areaM2) ?? 0,
+          areaSoldM2: toNum(pat.areaSoldM2) ?? 0,
+        },
       });
     });
   } catch (e) {
@@ -950,6 +1095,7 @@ export async function returnSale(
           slabId: true,
           pieceId: true,
           batchId: true,
+          batchPatternId: true,
           qtySlabs: true,
           qtyAreaM2: true,
           returnedAt: true,
@@ -1017,6 +1163,21 @@ export async function returnSale(
             needsCheck: true,
           },
         });
+        // ТЗ №3 — если продажа была ИЗ УЗОРА, синхронно реверсим и его счётчики
+        // (иначе остаток узора «застрянет» проданным при возврате партии).
+        if (sale.batchPatternId) {
+          await tx.batchPattern.update({
+            where: { id: sale.batchPatternId },
+            data: {
+              ...(sale.qtySlabs !== null
+                ? { slabsSold: { decrement: sale.qtySlabs } }
+                : {}),
+              ...(sale.qtyAreaM2 !== null
+                ? { areaSoldM2: { decrement: sale.qtyAreaM2 } }
+                : {}),
+            },
+          });
+        }
       }
 
       const entityType =

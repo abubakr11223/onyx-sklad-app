@@ -183,14 +183,20 @@ model BatchPattern {
   batchId     String
   description String // «светлый с прожилками»
   thicknessMm Int? // толщина, мм (необязательно)
-  slabsCount  Int // плиты в подгруппе
-  areaM2      Decimal  @db.Decimal(12, 3) // площадь подгруппы, м²
+  slabsCount  Int // плиты в подгруппе (при приёмке)
+  areaM2      Decimal  @db.Decimal(12, 3) // площадь подгруппы, м² (при приёмке)
+  // ТЗ №3 фаза 4 — продано из подгруппы (как batch.slabsSoldDirect, но по узору).
+  // Остаток узора = slabsCount − slabsSold / areaM2 − areaSoldM2. Продажа из узора
+  // синхронно инкрементит И эти счётчики, И batch.slabsSoldDirect (единый остаток).
+  slabsSold   Int      @default(0)
+  areaSoldM2  Decimal  @default(0) @db.Decimal(12, 3)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   batch         Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
   photos        Photo[]
   photoRequests PhotoRequest[]
+  sales         SaleRecord[]
 
   @@index([batchId])
 }
@@ -476,6 +482,7 @@ model SaleRecord {
   slabId          String?
   pieceId         String?
   batchId         String? // BATCH_VOLUME uchun
+  batchPatternId  String? // ТЗ №3 — продажа из узор-подгруппы (BATCH_VOLUME + узор)
   qtySlabs        Int? // faqat BATCH_VOLUME
   qtyAreaM2       Decimal?   @db.Decimal(12, 3) // faqat BATCH_VOLUME
   price           Decimal?   @db.Decimal(12, 2)
@@ -486,16 +493,18 @@ model SaleRecord {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  manager User   @relation(fields: [managerId], references: [id], onDelete: Restrict)
-  slab    Slab?  @relation(fields: [slabId], references: [id], onDelete: Restrict)
-  piece   Piece? @relation(fields: [pieceId], references: [id], onDelete: Restrict)
-  batch   Batch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  manager      User          @relation(fields: [managerId], references: [id], onDelete: Restrict)
+  slab         Slab?         @relation(fields: [slabId], references: [id], onDelete: Restrict)
+  piece        Piece?        @relation(fields: [pieceId], references: [id], onDelete: Restrict)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern BatchPattern? @relation(fields: [batchPatternId], references: [id], onDelete: Restrict)
 
   @@index([managerId, soldAt])
   @@index([soldAt])
   @@index([batchId])
   @@index([slabId])
   @@index([pieceId])
+  @@index([batchPatternId])
 }
 
 /// A1 (TZ §6.8) — Лид: входящий интерес дизайнера/партнёра. Партнёр смотрит

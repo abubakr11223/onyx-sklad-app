@@ -35,6 +35,15 @@ export interface PieceOption {
   place: string;
 }
 
+/** ТЗ №3 — узор-подгруппа как цель продажи (B2C). */
+export interface PatternOption {
+  id: string;
+  description: string;
+  /** «осталось: 50 плит · 30 м²» — остаток узора (count − sold), с сервера. */
+  remainText: string;
+  hasFree: boolean;
+}
+
 export interface BatchOption {
   id: string;
   title: string;
@@ -42,6 +51,8 @@ export interface BatchOption {
   freeText: string;
   needsCheck: boolean;
   hasFree: boolean;
+  /** ТЗ №3 — узоры этой партии (если заведены). */
+  patterns: PatternOption[];
 }
 
 export interface StoneTypeGroup {
@@ -281,6 +292,40 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
                       Выкупить целиком
                     </Button>
                   </div>
+
+                  {/* ТЗ №3 — продажа из узора (B2C: клиент выбрал конкретный узор). */}
+                  {b.patterns.length > 0 && (
+                    <div className="mt-2 border-t border-line pt-2">
+                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-gold-deep">
+                        Продать узор
+                      </p>
+                      <ul className="flex flex-col gap-1.5">
+                        {b.patterns.map((pat) => (
+                          <li key={pat.id} className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 text-sm">
+                              <span className="font-medium text-ink">{pat.description}</span>
+                              <span className="tnum text-ink/60"> · {pat.remainText}</span>
+                            </span>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={b.needsCheck || !pat.hasFree}
+                              onClick={() =>
+                                pickTarget({
+                                  mode: "PATTERN_VOLUME",
+                                  id: pat.id,
+                                  title: `${stone.name} — узор «${pat.description}»`,
+                                  subtitle: `${b.title} · ${pat.remainText}`,
+                                })
+                              }
+                            >
+                              Продать
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -294,7 +339,8 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
     );
   }
 
-  const isVolume = target.mode === "BATCH_VOLUME";
+  const isVolume =
+    target.mode === "BATCH_VOLUME" || target.mode === "PATTERN_VOLUME";
   const qtyText = [
     qtySlabs.trim() && `${qtySlabs.trim()} плит`,
     qtyAreaM2.trim() && `${qtyAreaM2.trim()} м²`,
@@ -440,6 +486,8 @@ export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] 
         <input type="hidden" name="mode" value={target.mode} />
         {target.mode === "SLAB" || target.mode === "PIECE" ? (
           <input type="hidden" name="unitId" value={target.id} />
+        ) : target.mode === "PATTERN_VOLUME" ? (
+          <input type="hidden" name="batchPatternId" value={target.id} />
         ) : (
           <input type="hidden" name="batchId" value={target.id} />
         )}
