@@ -33,7 +33,7 @@ vi.mock("@/lib/db", () => ({
       update: (...a: unknown[]) => userUpdate(...a),
       create: (...a: unknown[]) => userCreate(...a),
     },
-    $transaction: (...a: unknown[]) => $transaction(...a),
+    $transaction: (fn: (tx: unknown) => unknown) => $transaction(fn),
   },
 }));
 
@@ -51,7 +51,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { SESSION_COOKIE, signSessionToken } from "@/lib/auth";
-import { DEMO_ROLE_COOKIE } from "@/lib/session";
+// R6 login-gate `onyx_demo_role` DEMO-shim'ini butunlay olib tashladi (session.ts'da
+// endi bunday eksport yo'q). Bu test o'sha cookie'ni QO'LDA qo'yган anonim tashrifchi
+// HAM kira olmasligini isbotlaydi — shuning uchun eski cookie nomini literal sifatida
+// saqlaymiz (mavjud bo'lmagan import o'rniga).
+const DEMO_ROLE_COOKIE = "onyx_demo_role";
 import {
   createAccount,
   deleteAccount,
