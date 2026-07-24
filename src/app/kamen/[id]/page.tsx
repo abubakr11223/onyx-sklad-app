@@ -30,6 +30,7 @@ import { requestLead } from "./lead-actions";
 import {
   addLocation,
   editStoneType,
+  generateInteriors,
   moveQty,
   setNeedsCheck,
   updateLocation,
@@ -297,12 +298,15 @@ export default async function KamenPage({
   // OWN-02: результат правки карточки камня владельцем.
   const cardOk = firstParam(sp.cardOk) === "1";
   const cardErr = firstParam(sp.cardErr);
+  // §6.7 «B»: результат генерации AI-интерьеров.
+  const aiOk = firstParam(sp.aiOk);
+  const aiErr = firstParam(sp.aiErr);
 
   // R2 — rol gate: наличие/фото/локации видит и склад, а вот цену (canSeePrices)
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
   // getCapabilities() — в общий Promise.all, чтобы не добавлять лишний
   // последовательный round-trip на самой горячей странице.
-  const [st, photoCfg, caps, me] = await Promise.all([
+  const [st, photoCfg, caps, me, interiors] = await Promise.all([
     // BATCH-B (perf): весь склад не тянем. Для формулы §3 — счётчики партий +
     // агрегаты (getBatchRemainders ниже); для показа — только AVAILABLE плиты/куски
     // и последние 12 фото. Наличие и «свежесть» фото (TG-C) считаются так же.
@@ -407,8 +411,16 @@ export default async function KamenPage({
     getCapabilities(),
     // OWN-02: реальная сессия — правку карточки показываем только OWNER.
     getRealSessionUser(),
+    // §6.7 «B»: AI-интерьеры вида (отдельный блок + галерея на /q).
+    db.photo.findMany({
+      where: { stoneTypeId: id, kind: "INTERIOR_AI" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }),
   ]);
   const isOwner = me?.role === "OWNER";
+  // §6.7 «B»: интерьеры генерируют OWNER/MANAGER (стоит денег — B2C-маркетинг).
+  const canGenAI = me?.role === "OWNER" || me?.role === "MANAGER";
   // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
   const photoStaleMonths = parsePhotoStaleMonthsConfig(photoCfg?.value);
 
@@ -778,6 +790,64 @@ export default async function KamenPage({
         >
           /q/{st.qrSlug}
         </Link>
+      </Card>
+
+      {/* §6.7 «B» — AI-интерьеры камня (генерирует OWNER/MANAGER по фото). */}
+      <Card className="mt-6">
+        <h2 className="text-lg font-semibold text-ink">Интерьеры (AI)</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          Как этот камень смотрится в интерьере — ресепшен, ванная, гостиная.
+          Клиент видит их на QR-странице.
+        </p>
+        {aiOk && (
+          <Alert variant="success" className="mt-3">
+            Готово: сгенерировано интерьеров — {aiOk}.
+          </Alert>
+        )}
+        {aiErr && (
+          <Alert variant="danger" className="mt-3">
+            {aiErr === "nophoto"
+              ? "Нужно хотя бы одно фото камня (образец/плита) — по нему рисуем интерьеры."
+              : aiErr === "denied"
+                ? "Недостаточно прав (генерируют владелец/менеджер)."
+                : aiErr === "failed"
+                  ? "Не удалось сгенерировать — попробуйте позже."
+                  : "Не удалось выполнить."}
+          </Alert>
+        )}
+        {interiors.length > 0 ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {interiors.map((p) => (
+              <a
+                key={p.id}
+                href={`/api/photo/${p.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="block"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/photo/${p.id}`}
+                  alt="AI-интерьер"
+                  loading="lazy"
+                  className="aspect-square w-full rounded-card object-cover"
+                />
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-ink/40">Интерьеры ещё не созданы.</p>
+        )}
+        {canGenAI && (
+          <form action={generateInteriors} className="mt-3">
+            <input type="hidden" name="stoneTypeId" value={st.id} />
+            <Button type="submit" variant="secondary" size="sm">
+              {interiors.length > 0
+                ? "Перегенерировать интерьеры"
+                : "Сгенерировать интерьеры"}
+            </Button>
+          </form>
+        )}
       </Card>
 
       {/* 2. Наличие */}

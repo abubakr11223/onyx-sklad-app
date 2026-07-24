@@ -551,3 +551,99 @@ export async function editStoneType(formData: FormData): Promise<void> {
   revalidatePath(next);
   redirect(`${next}?cardOk=1`);
 }
+
+/**
+ * §6.7 «B» — сгенерировать AI-интерьеры камня (ресепшен/ванная/гостиная) по его
+ * фото (image-to-image). ТОЛЬКО OWNER/MANAGER (стоит денег — по явному действию).
+ * Берём последнее фото-образец камня как референс, генерим сцены, кладём в Vercel
+ * Blob, создаём Photo(kind=INTERIOR_AI, storageKey=URL). Старые интерьеры вида
+ * заменяются. Fail-closed: нет ключа/фото/результата → аккуратная ошибка в UI.
+ */
+export async function generateInteriors(formData: FormData): Promise<void> {
+  const { generateInteriors: genInteriors } = await import("@/lib/interior-ai");
+  const { getFile, downloadFile } = await import("@/lib/telegram");
+  const { put } = await import("@vercel/blob");
+
+  const me = await getRealSessionUser();
+  const stoneTypeId = String(formData.get("stoneTypeId") ?? "");
+  const back = stoneTypeId ? `/kamen/${stoneTypeId}` : "/poisk";
+  if (!me || (me.role !== "OWNER" && me.role !== "MANAGER")) {
+    redirect(`${back}?aiErr=denied`);
+  }
+  if (!stoneTypeId) redirect(`${back}?aiErr=notfound`);
+
+  const stone = await db.stoneType.findUnique({
+    where: { id: stoneTypeId },
+    select: { id: true, name: true, rockType: true, color: true },
+  });
+  if (!stone) redirect(`${back}?aiErr=notfound`);
+
+  // Референс — последнее «настоящее» фото камня (образец/плита), НЕ AI-интерьер.
+  const ref = await db.photo.findFirst({
+    where: {
+      stoneTypeId,
+      kind: { in: ["SAMPLE", "SLAB", "PIECE"] },
+      storageKey: { not: { startsWith: "http" } }, // Telegram file_id, не blob
+    },
+    orderBy: { createdAt: "desc" },
+    select: { storageKey: true },
+  });
+  if (!ref) redirect(`${back}?aiErr=nophoto`);
+
+  // Тянем байты фото-референса из Telegram.
+  let refBytes: Uint8Array | null = null;
+  let refMime = "image/jpeg";
+  try {
+    const file = await getFile(ref.storageKey);
+    if (file?.file_path) {
+      const b = await downloadFile(file.file_path);
+      if (b) {
+        refBytes = b;
+        if (file.file_path.endsWith(".png")) refMime = "image/png";
+        else if (file.file_path.endsWith(".webp")) refMime = "image/webp";
+      }
+    }
+  } catch {
+    /* fall through — refBytes останется null */
+  }
+  if (!refBytes) redirect(`${back}?aiErr=nophoto`);
+
+  const desc = [stone.name, stone.rockType, stone.color]
+    .filter(Boolean)
+    .join(", ");
+
+  const interiors = await genInteriors(
+    { bytes: refBytes, mediaType: refMime },
+    desc,
+  );
+  if (interiors.length === 0) redirect(`${back}?aiErr=failed`);
+
+  // Кладём в Blob + пересоздаём Photo(INTERIOR_AI): сперва удаляем старые интерьеры.
+  const now = new Date();
+  const stamp = now.getTime();
+  try {
+    await db.photo.deleteMany({ where: { stoneTypeId, kind: "INTERIOR_AI" } });
+    for (const it of interiors) {
+      const ext = it.mediaType.includes("png") ? "png" : "jpg";
+      const blob = await put(
+        `interiors/${stoneTypeId}/${it.scene}-${stamp}.${ext}`,
+        it.bytes as unknown as Buffer,
+        { access: "public", contentType: it.mediaType },
+      );
+      await db.photo.create({
+        data: {
+          storageKey: blob.url,
+          kind: "INTERIOR_AI",
+          takenAt: now,
+          stoneTypeId,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("[kamen] generateInteriors: сохранение упало:", err);
+    redirect(`${back}?aiErr=failed`);
+  }
+
+  revalidatePath(back);
+  redirect(`${back}?aiOk=${interiors.length}`);
+}

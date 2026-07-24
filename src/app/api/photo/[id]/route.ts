@@ -36,6 +36,12 @@ export async function GET(
     return new Response("not found", { status: 404 });
   }
 
+  // §6.7 «B» — AI-интерьеры хранятся в Vercel Blob: storageKey = публичный URL
+  // (а не Telegram file_id). Отдаём редиректом на blob (сам кэшируется CDN).
+  if (/^https?:\/\//.test(photo.storageKey)) {
+    return Response.redirect(photo.storageKey, 308);
+  }
+
   // storageKey — Telegram file_id. Token yo'q bo'lsa getFile null qaytaradi →
   // yiqilmasdan 404. file_path olishda xato bo'lsa ham 404.
   let file;
