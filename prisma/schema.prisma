@@ -534,3 +534,21 @@ model Lead {
   @@index([createdById])
   @@index([assignedManagerId])
 }
+
+// §5.9 / onboarding — заявка на доступ через Telegram. Новый человек нажимает
+// /start и делится контактом; если телефон не привязан ни к какому аккаунту —
+// создаётся заявка (PENDING). Владелец в /accounts одобряет (выбирает роль →
+// создаётся User с telegramId+phone+role) или отклоняет. Доступ НИКОГДА не даётся
+// автоматически — только владелец решает (защита от самопривязки к складу).
+model TelegramAccessRequest {
+  id         String   @id @default(cuid())
+  telegramId String   @unique // Telegram chat/user id (строка, как User.telegramId)
+  name       String? // из contact.first_name + last_name
+  username   String? // @username, если есть
+  phone      String? // нормализованный из shared-контакта
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status, createdAt])
+}

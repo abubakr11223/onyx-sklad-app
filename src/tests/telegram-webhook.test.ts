@@ -25,6 +25,7 @@ const slabCreate = vi.fn();
 // §5.3 — reply-to bo'yicha PhotoDispatch qidirish mock'i.
 const pdFindFirst = vi.fn();
 // SK-4b: magic-link imzolovchisi mock'i.
+const tarUpsert = vi.fn(); // onboarding — заявка на доступ (upsert)
 const signMagicLinkToken = vi.fn();
 // §5.5b (singan tosh) mock'lari.
 const downloadPhotoBase64 = vi.fn();
@@ -38,6 +39,9 @@ function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
         update: (...a: unknown[]) => update(...a),
         findFirst: (...a: unknown[]) => userFindFirst(...a),
         findUnique: (...a: unknown[]) => userFindUnique(...a),
+      },
+      telegramAccessRequest: {
+        upsert: (...a: unknown[]) => tarUpsert(...a),
       },
       photoRequest: {
         findFirst: (...a: unknown[]) => prFindFirst(...a),
@@ -75,6 +79,8 @@ beforeEach(() => {
   slabCount.mockReset();
   slabCreate.mockReset();
   pdFindFirst.mockReset();
+  tarUpsert.mockReset();
+  tarUpsert.mockResolvedValue({});
   findMany.mockResolvedValue([]);
   update.mockResolvedValue({});
   sendMessage.mockResolvedValue(undefined);
@@ -212,7 +218,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(sendMessage.mock.calls[0][1]).toContain("Ali");
   });
 
-  it("mos telefon topilmadi → DB yozuv YO'Q, xushmuomala javob", async () => {
+  it("mos telefon topilmadi → заявка на доступ (PENDING), аккаунт НЕ трогаем", async () => {
     findMany.mockResolvedValue([
       { id: "u1", name: "Ali", phone: "+998901234567" },
     ]);
@@ -221,9 +227,21 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
       makeDeps(),
     );
 
+    // Аккаунт не создаётся/не привязывается — только заявка.
     expect(update).not.toHaveBeenCalled();
+    expect(tarUpsert).toHaveBeenCalledTimes(1);
+    const arg = tarUpsert.mock.calls[0][0] as {
+      where: { telegramId: string };
+      create: { telegramId: string; phone: string | null };
+      update: { status: string };
+    };
+    expect(arg.where.telegramId).toBe("999");
+    expect(arg.create.telegramId).toBe("999");
+    expect(arg.create.phone).toBe("998900000000");
+    expect(arg.update.status).toBe("PENDING");
+    // Пользователю — «заявка отправлена, ждите одобрения».
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("не найден");
+    expect(sendMessage.mock.calls[0][1]).toContain("Заявка на доступ отправлена");
   });
 
   it("forward qilingan kontakt (contact.user_id !== from.id) → bog'lanmaydi", async () => {

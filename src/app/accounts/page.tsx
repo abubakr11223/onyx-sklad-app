@@ -21,6 +21,8 @@ import {
   resetPassword,
   changePhone,
   changeEmail,
+  approveTelegramRequest,
+  rejectTelegramRequest,
 } from "./actions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -48,6 +50,7 @@ const ERROR_RU: Record<string, string> = {
   notfound: "Аккаунт не найден.",
   owner_protected: "Этот аккаунт защищён (владелец).",
   self: "Нельзя деактивировать самого себя.",
+  tg_taken: "Этот Telegram уже привязан к другому аккаунту.",
 };
 
 const OK_RU: Record<string, string> = {
@@ -57,6 +60,8 @@ const OK_RU: Record<string, string> = {
   password: "Пароль сброшен.",
   phone: "Телефон обновлён.",
   email: "Логин (email) обновлён.",
+  tg_approved: "Заявка одобрена — доступ открыт, пользователю отправлено уведомление.",
+  tg_rejected: "Заявка отклонена.",
 };
 
 export default async function AccountsPage({
@@ -92,6 +97,20 @@ export default async function AccountsPage({
   });
   // Владелец сам есть в списке — его логин нужен для префилла блока «Мой аккаунт».
   const meRow = users.find((u) => u.id === me.id);
+
+  // Onboarding — заявки на доступ через Telegram (PENDING): человек нажал /start
+  // и поделился контактом, но телефон не привязан ни к одному аккаунту.
+  const tgRequests = await db.telegramAccessRequest.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      phone: true,
+      telegramId: true,
+    },
+  });
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -271,6 +290,76 @@ export default async function AccountsPage({
           </Button>
         </form>
       </Card>
+
+      {/* ── Заявки на доступ через Telegram (onboarding) ── */}
+      {tgRequests.length > 0 && (
+        <Card className="mb-6 border-gold/40">
+          <h2 className="mb-1 font-serif text-xl font-bold text-ink">
+            Заявки на доступ (Telegram)
+          </h2>
+          <p className="mb-4 text-sm text-ink/60">
+            Человек нажал /start в боте и ждёт доступа. Выберите роль и одобрите —
+            аккаунт создастся, а ему придёт уведомление в Telegram.
+          </p>
+          <ul className="space-y-3">
+            {tgRequests.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-card border border-line bg-paper-2 p-3"
+              >
+                <p className="font-semibold text-ink">
+                  {r.name ?? "без имени"}
+                  {r.username && (
+                    <span className="ml-2 text-sm font-normal text-ink/50">
+                      @{r.username}
+                    </span>
+                  )}
+                </p>
+                <p className="tnum text-sm text-ink/60">
+                  {r.phone ? <>📞 {r.phone}</> : "телефон не передан"}
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                  <form
+                    action={approveTelegramRequest}
+                    className="flex flex-wrap items-end gap-2"
+                  >
+                    <input type="hidden" name="requestId" value={r.id} />
+                    <input
+                      name="name"
+                      defaultValue={r.name ?? ""}
+                      placeholder="Имя"
+                      required
+                      aria-label="Имя сотрудника"
+                      className={`${inputClass} sm:max-w-[10rem]`}
+                    />
+                    <select
+                      name="role"
+                      defaultValue="WAREHOUSE"
+                      aria-label="Роль"
+                      className={inputClass}
+                    >
+                      {CREATABLE_ROLES.map((rr) => (
+                        <option key={rr} value={rr}>
+                          {roleLabel(rr as Role)}
+                        </option>
+                      ))}
+                    </select>
+                    <Button type="submit" size="sm">
+                      Одобрить
+                    </Button>
+                  </form>
+                  <form action={rejectTelegramRequest}>
+                    <input type="hidden" name="requestId" value={r.id} />
+                    <Button type="submit" variant="danger" size="sm">
+                      Отклонить
+                    </Button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* ── Список аккаунтов ── */}
       <ul className="space-y-3">

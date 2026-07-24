@@ -20,6 +20,9 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getRealSessionUser } from "@/lib/session";
 import { hashUserPassword } from "@/lib/password";
+import { sendMessage } from "@/lib/telegram";
+import { roleLabel } from "@/lib/role-labels";
+import type { Role } from "@/lib/permissions";
 import {
   canonicalPhone,
   isCreatableRole,
@@ -288,4 +291,114 @@ export async function changePhone(formData: FormData): Promise<void> {
 
   revalidatePath("/accounts");
   redirect("/accounts?ok=phone");
+}
+
+/**
+ * Onboarding — ОДОБРИТЬ заявку на доступ через Telegram. FAQAT OWNER. Владелец
+ * выбирает роль (createable; по умолчанию WAREHOUSE) → создаётся User с
+ * telegramId+phone из заявки, isActive. Заявка → APPROVED. Пользователю уходит
+ * Telegram-уведомление «доступ открыт» (best-effort — сбой TG не ломает одобрение).
+ * Доступ НИКОГДА не выдаётся автоматически — только этим действием владельца.
+ */
+export async function approveTelegramRequest(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const requestId = String(formData.get("requestId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const role = String(formData.get("role") ?? "");
+  if (!requestId) redirect("/accounts?error=notfound");
+  if (!name) redirect("/accounts?error=name");
+  if (!isCreatableRole(role)) redirect("/accounts?error=role");
+
+  const req = await db.telegramAccessRequest.findUnique({
+    where: { id: requestId },
+    select: { id: true, telegramId: true, phone: true, status: true },
+  });
+  if (!req) redirect("/accounts?error=notfound");
+  if (req.status !== "PENDING") redirect("/accounts?ok=tg_approved"); // idempotent
+
+  try {
+    await db.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name,
+          role,
+          telegramId: req.telegramId,
+          phone: req.phone,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      await tx.telegramAccessRequest.update({
+        where: { id: requestId },
+        data: { status: "APPROVED" },
+      });
+      await logAccountAction(tx, actorId, created.id, {
+        kind: "tg.approve",
+        name,
+        role,
+        telegramId: req.telegramId,
+      });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const target = e.meta?.target;
+      const hitPhone = Array.isArray(target)
+        ? target.includes("phone")
+        : String(target ?? "").includes("phone");
+      redirect(`/accounts?error=${hitPhone ? "phone_taken" : "tg_taken"}`);
+    }
+    throw e;
+  }
+
+  // Уведомляем пользователя (best-effort): доступ открыт.
+  try {
+    await sendMessage(
+      req.telegramId,
+      `✅ Доступ открыт! Ваша роль: ${roleLabel(role as Role)}. Теперь задачи и фотозапросы будут приходить сюда.`,
+    );
+  } catch (err) {
+    console.error("[accounts] tg approve notify xatosi:", err);
+  }
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=tg_approved");
+}
+
+/**
+ * Onboarding — ОТКЛОНИТЬ заявку на доступ. FAQAT OWNER. Заявка → REJECTED,
+ * аккаунт НЕ создаётся. Пользователю — вежливое уведомление (best-effort).
+ */
+export async function rejectTelegramRequest(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const requestId = String(formData.get("requestId") ?? "");
+  if (!requestId) redirect("/accounts?error=notfound");
+
+  const req = await db.telegramAccessRequest.findUnique({
+    where: { id: requestId },
+    select: { id: true, telegramId: true, status: true },
+  });
+  if (!req) redirect("/accounts?error=notfound");
+
+  await db.$transaction(async (tx) => {
+    await tx.telegramAccessRequest.update({
+      where: { id: requestId },
+      data: { status: "REJECTED" },
+    });
+    await logAccountAction(tx, actorId, req.id, {
+      kind: "tg.reject",
+      telegramId: req.telegramId,
+    });
+  });
+
+  try {
+    await sendMessage(
+      req.telegramId,
+      "Заявка на доступ отклонена. Если это ошибка — обратитесь к вашему менеджеру.",
+    );
+  } catch (err) {
+    console.error("[accounts] tg reject notify xatosi:", err);
+  }
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=tg_rejected");
 }

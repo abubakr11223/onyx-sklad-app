@@ -33,6 +33,8 @@ vi.mock("@/lib/db", () => ({
       update: (...a: unknown[]) => userUpdate(...a),
       create: (...a: unknown[]) => userCreate(...a),
     },
+    // Onboarding — страница грузит PENDING-заявки Telegram; в этом тесте их нет.
+    telegramAccessRequest: { findMany: async () => [] },
     $transaction: (fn: (tx: unknown) => unknown) => $transaction(fn),
   },
 }));

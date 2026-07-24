@@ -58,6 +58,25 @@ export interface WebhookDeps {
         select: { telegramId: true };
       }): Promise<{ telegramId: string | null } | null>;
     };
+    // Onboarding — заявка на доступ через Telegram. Телефон не привязан ни к
+    // одному аккаунту → создаём/обновляем PENDING-заявку (владелец одобрит в /accounts).
+    telegramAccessRequest: {
+      upsert(args: {
+        where: { telegramId: string };
+        create: {
+          telegramId: string;
+          name: string | null;
+          username: string | null;
+          phone: string | null;
+        };
+        update: {
+          name: string | null;
+          username: string | null;
+          phone: string | null;
+          status: string;
+        };
+      }): Promise<unknown>;
+    };
     photoRequest: {
       // Skladchining eng eski ochiq (PENDING) zaprosini (umumiy navbat yoki o'ziga)
       // — FIFO fallback; YOKI §5.3 reply-to bo'yicha AYNAN o'sha zaprosni (id — status
@@ -166,6 +185,10 @@ const MSG_AMBIGUOUS =
 const MSG_ALREADY_LINKED =
   "Этот Telegram-аккаунт уже привязан к другому пользователю. Обратитесь к вашему менеджеру.";
 const MSG_TRY_LATER = "Произошла ошибка. Попробуйте ещё раз чуть позже.";
+// Onboarding — номер не привязан ни к одному аккаунту: создаём заявку на доступ,
+// её одобряет владелец в панели. Доступ НЕ выдаётся автоматически.
+const MSG_ACCESS_REQUESTED =
+  "Заявка на доступ отправлена. Как только владелец её одобрит, доступ откроется и вы получите сообщение.";
 const successMessage = (name: string) =>
   `Вы зарегистрированы, ${name}. Теперь фотозапросы будут приходить сюда.`;
 
@@ -298,7 +321,13 @@ export async function handleUpdate(
 
     // 1) Kontakt ulashildi → telefon bo'yicha User topib bog'lash.
     if (message.contact) {
-      await handleContact(message.contact, message.from?.id, chatId, deps);
+      await handleContact(
+        message.contact,
+        message.from?.id,
+        chatId,
+        deps,
+        message.from?.username,
+      );
       return;
     }
 
@@ -457,6 +486,7 @@ async function handleContact(
   fromId: number | undefined,
   chatId: number,
   deps: WebhookDeps,
+  username?: string,
 ): Promise<void> {
   if (!contact) return;
 
@@ -483,8 +513,30 @@ async function handleContact(
   const matches = users.filter((u) => normalizePhone(u.phone) === wanted);
 
   if (matches.length === 0) {
-    await deps.sendMessage(chatId, MSG_NOT_FOUND);
-    return; // DB yozuvi YO'Q.
+    // Onboarding: телефон не привязан ни к одному аккаунту → это НОВЫЙ человек.
+    // Создаём/обновляем заявку на доступ (PENDING). Владелец одобрит в /accounts —
+    // доступ НЕ выдаётся автоматически (защита: нельзя самопривязаться к складу).
+    const name =
+      [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() ||
+      null;
+    try {
+      await deps.db.telegramAccessRequest.upsert({
+        where: { telegramId: String(chatId) },
+        create: {
+          telegramId: String(chatId),
+          name,
+          username: username ?? null,
+          phone: wanted,
+        },
+        // Повторная заявка (напр. после отклонения) — обновляем и снова PENDING.
+        update: { name, username: username ?? null, phone: wanted, status: "PENDING" },
+      });
+      await deps.sendMessage(chatId, MSG_ACCESS_REQUESTED);
+    } catch (err) {
+      console.error("[telegram-webhook] access-request upsert xatosi:", err);
+      await deps.sendMessage(chatId, MSG_TRY_LATER);
+    }
+    return;
   }
   if (matches.length > 1) {
     // Bir xil raqam bir nechta yozuvda (format farqi) — noaniq, tasodifiy
