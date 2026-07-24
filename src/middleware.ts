@@ -5,8 +5,9 @@
 // tekshiruvi bu yerda EMAS — sahifalar va server-action'lar o'zlari qayta
 // tekshiradi (defense-in-depth). Gate faqat «kirganmi/kirmaganmi»ni hal qiladi.
 //
-// matcher: /login, /login/tg va barcha /api, statik fayllar gate'DAN TASHQARIDA
-// (/api'da o'z auth'i bor — Telegram webhook secret, cron secret).
+// matcher: /login, /login/tg, /q (§6.7 QR ochiq shou-room — mijoz login qilmagan)
+// va barcha /api, statik fayllar gate'DAN TASHQARIDA (/api'da o'z auth'i bor —
+// Telegram webhook secret, cron secret).
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
@@ -30,6 +31,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!login|api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    "/((?!login|api|q/|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

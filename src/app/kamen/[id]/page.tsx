@@ -313,6 +313,8 @@ export default async function KamenPage({
         name: true,
         rockType: true,
         color: true,
+        // §6.7 — публичная QR-ссылка шоу-рума (/q/[slug]).
+        qrSlug: true,
         basePrice: true,
         // §5.8: закупочная цена — видна только canSeePurchasePrice (OWNER;
         // менеджер — по явному разрешению). Тянем всегда, показываем по caps ниже.
@@ -760,6 +762,23 @@ export default async function KamenPage({
           </form>
         </details>
       )}
+
+      {/* §6.7 — публичная QR-ссылка для шоу-рума. Все, кто открыл /kamen, —
+          сотрудники (страница за login-gate), поэтому показываем всем им. */}
+      <Card className="mt-6">
+        <h2 className="text-lg font-semibold text-ink">QR для шоу-рума</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          Публичная страница вида камня — для клиента (без остатков и цен).
+          Разместите QR на образце: ссылка открывает эту карточку.
+        </p>
+        <Link
+          href={`/q/${st.qrSlug}`}
+          target="_blank"
+          className="mt-2 inline-block break-all font-medium text-gold-deep underline"
+        >
+          /q/{st.qrSlug}
+        </Link>
+      </Card>
 
       {/* 2. Наличие */}
       {/* §6.7: точные остатки/ярлыки плит/локации видят только роли с
