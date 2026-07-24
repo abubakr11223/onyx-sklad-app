@@ -14,8 +14,14 @@
 
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import {
+  getCapabilities,
+  getCurrentUser,
+  getRealSessionUser,
+} from "@/lib/session";
+import { validateStoneEdit } from "@/lib/stone-edit";
 import {
   buildMovePayload,
   isNoopMove,
@@ -469,4 +475,79 @@ export async function setNeedsCheck(formData: FormData): Promise<void> {
   });
 
   redirect(`${next}?checkOk=1`);
+}
+
+/**
+ * OWN-02 (ТЗ №2) — редактирование карточки камня. ТОЛЬКО OWNER: название, порода,
+ * цвет, описание, свойства, база/закупочная цена. Владелец задаёт цены и правит
+ * каталог из UI (раньше — только через seed/БД). Изменение + AuditLog одной
+ * транзакцией. name @unique → P2002 → «имя занято».
+ *
+ * ⚠️ XAVFSIZLIK: FAQAT haqiqiy OWNER sessiyasi (getRealSessionUser) — demo-shim
+ * EMAS, capability EMAS. Каталог/цены — самая чувствительная правка, поэтому
+ * гейт строгий, как в /accounts.
+ */
+export async function editStoneType(formData: FormData): Promise<void> {
+  const next = safeNext(formData.get("next"));
+  const me = await getRealSessionUser();
+  if (!me || me.role !== "OWNER") redirect(`${next}?cardErr=denied`);
+
+  const stoneTypeId = String(formData.get("stoneTypeId") ?? "");
+  if (!stoneTypeId) redirect(`${next}?cardErr=notfound`);
+
+  const parsed = validateStoneEdit({
+    name: String(formData.get("name") ?? ""),
+    rockType: String(formData.get("rockType") ?? ""),
+    color: String(formData.get("color") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    basePrice: String(formData.get("basePrice") ?? ""),
+    purchasePrice: String(formData.get("purchasePrice") ?? ""),
+    properties: String(formData.get("properties") ?? ""),
+  });
+  if (!parsed.ok) redirect(`${next}?cardErr=${parsed.error}`);
+
+  const v = parsed.value;
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.stoneType.update({
+        where: { id: stoneTypeId },
+        data: {
+          name: v.name,
+          rockType: v.rockType,
+          color: v.color,
+          description: v.description,
+          basePrice: v.basePrice === null ? null : v.basePrice.toFixed(2),
+          purchasePrice:
+            v.purchasePrice === null ? null : v.purchasePrice.toFixed(2),
+          // properties: null → очистить (JsonNull), иначе объект пар.
+          properties: v.properties === null ? Prisma.JsonNull : v.properties,
+        },
+      });
+      // enum'ga yangi a'zo qo'shmaslik uchun (migratsiya YO'Q) — STATUS_CHANGE +
+      // entityType "StoneType" + payload.kind bilan (accounts pattern kabi).
+      await tx.auditLog.create({
+        data: {
+          userId: me.id,
+          action: "STATUS_CHANGE",
+          entityType: "StoneType",
+          entityId: stoneTypeId,
+          payload: {
+            kind: "stonetype.edit",
+            name: v.name,
+            rockType: v.rockType,
+            basePrice: v.basePrice,
+            purchasePrice: v.purchasePrice,
+          },
+        },
+      });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      redirect(`${next}?cardErr=name_taken`);
+    }
+    throw e;
+  }
+
+  revalidatePath(next);
+  redirect(`${next}?cardOk=1`);
 }

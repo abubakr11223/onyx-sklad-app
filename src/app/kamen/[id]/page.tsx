@@ -23,12 +23,13 @@ import {
   isPhotoStale,
   parsePhotoStaleMonthsConfig,
 } from "@/lib/photos";
-import { getCapabilities } from "@/lib/session";
+import { getCapabilities, getRealSessionUser } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
 import { requestPhoto } from "@/app/poisk/actions";
 import { requestLead } from "./lead-actions";
 import {
   addLocation,
+  editStoneType,
   moveQty,
   setNeedsCheck,
   updateLocation,
@@ -39,6 +40,7 @@ import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import { patternStatus, PATTERN_STATUS_RU } from "@/lib/pattern-status";
 import Button from "@/components/ui/Button";
+import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 
@@ -292,12 +294,15 @@ export default async function KamenPage({
   // A1 (§6.8): результат запроса объёма партнёром (лид создан / ошибка поля).
   const leadOk = firstParam(sp.lead) === "ok";
   const leadErr = firstParam(sp.leadErr);
+  // OWN-02: результат правки карточки камня владельцем.
+  const cardOk = firstParam(sp.cardOk) === "1";
+  const cardErr = firstParam(sp.cardErr);
 
   // R2 — rol gate: наличие/фото/локации видит и склад, а вот цену (canSeePrices)
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
   // getCapabilities() — в общий Promise.all, чтобы не добавлять лишний
   // последовательный round-trip на самой горячей странице.
-  const [st, photoCfg, caps] = await Promise.all([
+  const [st, photoCfg, caps, me] = await Promise.all([
     // BATCH-B (perf): весь склад не тянем. Для формулы §3 — счётчики партий +
     // агрегаты (getBatchRemainders ниже); для показа — только AVAILABLE плиты/куски
     // и последние 12 фото. Наличие и «свежесть» фото (TG-C) считаются так же.
@@ -398,7 +403,10 @@ export default async function KamenPage({
       select: { value: true },
     }),
     getCapabilities(),
+    // OWN-02: реальная сессия — правку карточки показываем только OWNER.
+    getRealSessionUser(),
   ]);
+  const isOwner = me?.role === "OWNER";
   // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
   const photoStaleMonths = parsePhotoStaleMonthsConfig(photoCfg?.value);
 
@@ -637,6 +645,120 @@ export default async function KamenPage({
         <Alert variant="danger" className="mt-4">
           {leadErr}
         </Alert>
+      )}
+      {/* OWN-02: результат правки карточки. */}
+      {cardOk && (
+        <Alert variant="success" className="mt-4">
+          Карточка обновлена.
+        </Alert>
+      )}
+      {cardErr && (
+        <Alert variant="danger" className="mt-4">
+          {cardErr === "denied"
+            ? "Недостаточно прав (правит только владелец)."
+            : cardErr === "name_taken"
+              ? "Камень с таким названием уже есть."
+              : cardErr === "name"
+                ? "Укажите название."
+                : cardErr === "rockType"
+                  ? "Укажите породу."
+                  : cardErr === "basePrice"
+                    ? "Некорректная цена продажи."
+                    : cardErr === "purchasePrice"
+                      ? "Некорректная закупочная цена."
+                      : "Не удалось сохранить карточку."}
+        </Alert>
+      )}
+
+      {/* OWN-02 (ТЗ №2) — редактирование карточки: ТОЛЬКО владелец. Свёрнуто,
+          чтобы не мешать обычному просмотру. */}
+      {isOwner && (
+        <details className="mt-4 rounded-card border border-line bg-paper-2 p-4">
+          <summary className="cursor-pointer font-semibold text-ink">
+            Редактировать карточку
+          </summary>
+          <form
+            action={editStoneType}
+            className="mt-4 flex flex-col gap-3"
+          >
+            <input type="hidden" name="stoneTypeId" value={st.id} />
+            <input type="hidden" name="next" value={`/kamen/${st.id}`} />
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">Название</span>
+              <input
+                name="name"
+                defaultValue={st.name}
+                required
+                className={inputClass}
+              />
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                <span className="text-ink/70">Порода</span>
+                <input
+                  name="rockType"
+                  defaultValue={st.rockType}
+                  required
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                <span className="text-ink/70">Цвет</span>
+                <input
+                  name="color"
+                  defaultValue={st.color ?? ""}
+                  className={inputClass}
+                />
+              </label>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                <span className="text-ink/70">Цена продажи (за м²)</span>
+                <input
+                  name="basePrice"
+                  inputMode="decimal"
+                  defaultValue={basePrice ?? ""}
+                  placeholder="напр. 95"
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1 text-sm">
+                <span className="text-ink/70">Закупочная цена (за м²)</span>
+                <input
+                  name="purchasePrice"
+                  inputMode="decimal"
+                  defaultValue={purchasePrice ?? ""}
+                  placeholder="напр. 60"
+                  className={inputClass}
+                />
+              </label>
+            </div>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">Описание</span>
+              <textarea
+                name="description"
+                defaultValue={st.description ?? ""}
+                rows={2}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-ink/70">
+                Свойства — по строке «ключ: значение»
+              </span>
+              <textarea
+                name="properties"
+                defaultValue={propRows.map(([k, v]) => `${k}: ${v}`).join("\n")}
+                rows={3}
+                placeholder={"finish: полированный\norigin: Турция"}
+                className={inputClass}
+              />
+            </label>
+            <Button type="submit" className="w-full sm:w-auto">
+              Сохранить карточку
+            </Button>
+          </form>
+        </details>
       )}
 
       {/* 2. Наличие */}
