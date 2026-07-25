@@ -31,13 +31,16 @@ beforeEach(() => {
 
 describe("currentActorId", () => {
   it("сессия валидна + активный пользователь → id", async () => {
-    const token = await signSessionToken("user-42");
+    // ТЗ №7 #9 follow-up — signSessionToken v2: (userId, tokenVersion).
+    // Mock findFirst также возвращает tokenVersion (session.ts сверяет с БД).
+    const token = await signSessionToken("user-42", 0);
     cookieStore({ [SESSION_COOKIE]: token });
     findFirst.mockResolvedValue({
       id: "user-42",
       name: "Али",
       role: "MANAGER",
       canSeePurchasePrice: false,
+      tokenVersion: 0,
     });
 
     expect(await currentActorId()).toBe("user-42");
@@ -49,7 +52,7 @@ describe("currentActorId", () => {
   });
 
   it("сессия есть, но пользователь неактивен/удалён → null", async () => {
-    const token = await signSessionToken("user-gone");
+    const token = await signSessionToken("user-gone", 0);
     cookieStore({ [SESSION_COOKIE]: token });
     findFirst.mockResolvedValue(null);
 
