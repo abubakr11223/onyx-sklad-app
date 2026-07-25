@@ -72,6 +72,7 @@ import {
   deleteBlock,
   addLandmark,
   setBlockMeta,
+  addBlock,
 } from "@/app/karta-sklada/actions";
 
 /** Ждём, что action завершится редиректом на данный URL. */
@@ -318,5 +319,36 @@ describe("deleteBlock — blockHasStone ищет и норм., и raw форму
     );
 
     expect(wbDelete).toHaveBeenCalledWith({ where: { id: "wb1" } });
+  });
+});
+
+// ═══════════════ ТЗ №7 #7 · addBlock / setBlockMeta — bounded decimal ═══════════════
+
+describe("addBlock / setBlockMeta — переполнение площади ⇒ err=area (ТЗ №7 #7)", () => {
+  it("addBlock: 99999999999 (> Decimal(12,3) max) ⇒ err=area, WarehouseBlock.create НЕ вызывается", async () => {
+    await expectRedirect(
+      () => addBlock(fd({ letter: "К", areaM2: "99999999999" })),
+      "/karta-sklada?edit=1&err=area",
+    );
+    expect(wbCreate).not.toHaveBeenCalled();
+  });
+
+  it("addBlock: allowZero — «0» ⇒ создаётся с areaM2=0.000 (площадь блока может быть 0)", async () => {
+    wbCreate.mockResolvedValueOnce({ id: "wbZero" });
+
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Ф", areaM2: "0" })),
+      "/karta-sklada?edit=1&ok=block",
+    );
+    expect(wbCreate).toHaveBeenCalledTimes(1);
+    expect(wbCreate.mock.calls[0][0].data.areaM2).toBe("0.000");
+  });
+
+  it("setBlockMeta: текстовый ввод в площадь ⇒ err=area (bounded parser отклоняет 'abc')", async () => {
+    await expectRedirect(
+      () => setBlockMeta(fd({ blockId: "wb1", areaM2: "abc" })),
+      "/karta-sklada?edit=1&err=area",
+    );
+    expect(wbUpdate).not.toHaveBeenCalled();
   });
 });

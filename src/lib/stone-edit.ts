@@ -3,6 +3,8 @@
 // это и дополнительно проверяет роль OWNER на сервере (defense-in-depth).
 // Отдельно unit-тестируется — как validators/intake.ts, accounts.ts.
 
+import { MAX_DECIMAL_12_2, parseBoundedDecimal } from "@/lib/decimal";
+
 export interface StoneEditInput {
   name: string;
   rockType: string;
@@ -28,16 +30,22 @@ export type StoneEditError = "name" | "rockType" | "basePrice" | "purchasePrice"
 
 /**
  * Денежное поле: пусто → null (цена не задана). Иначе число ≥ 0 (запятая как
- * разделитель тоже принимается). Отрицательное / текст → ошибка.
+ * разделитель тоже принимается). Отрицательное / текст / переполнение → ошибка.
+ *
+ * Аудит ТЗ №7 #7 — раньше был локальный parseFloat без верхней границы, из-за
+ * чего ввод типа 10000000000 (11 цифр) при Decimal(12,2) приводил к Prisma
+ * numeric-overflow → 500 вместо ok:false. Теперь через parseBoundedDecimal
+ * с MAX_DECIMAL_12_2 (9 999 999 999.99).
  */
 export function parseMoneyField(
   raw: string,
 ): { ok: true; value: number | null } | { ok: false } {
-  const s = raw.trim().replace(",", ".");
-  if (s === "") return { ok: true, value: null };
-  const n = Number.parseFloat(s);
-  if (!Number.isFinite(n) || n < 0) return { ok: false };
-  return { ok: true, value: n };
+  const res = parseBoundedDecimal(raw, {
+    max: MAX_DECIMAL_12_2,
+    allowZero: true,
+  });
+  if (!res.ok) return { ok: false };
+  return { ok: true, value: res.value };
 }
 
 /**

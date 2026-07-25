@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { normalizeBlockLetter } from "@/lib/block-letter";
+import { MAX_DECIMAL_12_3, parseBoundedDecimal } from "@/lib/decimal";
 import { getRealSessionUser } from "@/lib/session";
 
 const BACK = "/karta-sklada?edit=1";
@@ -91,11 +92,15 @@ export async function addBlock(formData: FormData): Promise<void> {
   // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр (кир/лат дубли).
   const letter = normalizeBlockLetter(String(formData.get("letter") ?? ""));
   if (!letter) redirect(`${BACK}&err=letter`);
-  const areaRaw = String(formData.get("areaM2") ?? "").trim().replace(",", ".");
-  const areaM2 = areaRaw === "" ? null : Number.parseFloat(areaRaw);
-  if (areaM2 !== null && (!Number.isFinite(areaM2) || areaM2 < 0)) {
-    redirect(`${BACK}&err=area`);
-  }
+  // Аудит ТЗ №7 #7 — единый bounded-парсер вместо parseFloat без верхней границы:
+  // ввод типа 99999999999 больше не даёт Prisma numeric-overflow → 500, а
+  // корректно возвращает ?err=area (allowZero: площадь блока может быть 0).
+  const areaRes = parseBoundedDecimal(String(formData.get("areaM2") ?? ""), {
+    max: MAX_DECIMAL_12_3,
+    allowZero: true,
+  });
+  if (!areaRes.ok) redirect(`${BACK}&err=area`);
+  const areaM2 = areaRes.value;
   try {
     const max = await db.warehouseBlock.aggregate({ _max: { sortOrder: true } });
     await db.warehouseBlock.create({
@@ -196,11 +201,13 @@ export async function setBlockMeta(formData: FormData): Promise<void> {
   const id = await resolveBlockId(formData);
   const note = String(formData.get("note") ?? "").trim() || null;
   const isFull = formData.get("isFull") === "1";
-  const areaRaw = String(formData.get("areaM2") ?? "").trim().replace(",", ".");
-  const areaM2 = areaRaw === "" ? null : Number.parseFloat(areaRaw);
-  if (areaM2 !== null && (!Number.isFinite(areaM2) || areaM2 < 0)) {
-    redirect(`${BACK}&err=area`);
-  }
+  // Аудит ТЗ №7 #7 — единый bounded-парсер (см. addBlock).
+  const areaRes = parseBoundedDecimal(String(formData.get("areaM2") ?? ""), {
+    max: MAX_DECIMAL_12_3,
+    allowZero: true,
+  });
+  if (!areaRes.ok) redirect(`${BACK}&err=area`);
+  const areaM2 = areaRes.value;
   await db.warehouseBlock.update({
     where: { id },
     data: { note, isFull, areaM2: areaM2 === null ? null : areaM2.toFixed(3) },
