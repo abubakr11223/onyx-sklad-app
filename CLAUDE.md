@@ -27,6 +27,10 @@ Before editing **any** file:
 
 Read-only operations (`Read`, `Grep`, `git status`, `git diff`) do NOT need a lock.
 
+### Scope discipline
+
+Faqat topshirilgan task fayllariga teg. Boshqa fayl o'zgartirish kerak bo'lsa — to'xta va foydalanuvchiga ayt.
+
 ### Shared kanban (`active_tasks.md`)
 
 Four sections in order: 🟢 IN PROGRESS / TODO → 🟡 AWAITING REVIEW → 🟠 BLOCKED → ✅ DONE.
