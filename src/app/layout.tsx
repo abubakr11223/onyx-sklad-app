@@ -10,6 +10,7 @@ import Toaster from "@/components/ui/toast";
 import FlashToaster from "@/components/FlashToaster";
 import TelegramBackButton from "@/components/TelegramBackButton";
 import OfflineBanner from "@/components/OfflineBanner";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import { getCurrentUser } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
 
@@ -35,6 +36,7 @@ const lora = Lora({
 export const metadata: Metadata = {
   title: "Onyx — складская система",
   description: "Учёт натурального камня: партии, плиты, остатки, брони",
+  manifest: "/manifest.webmanifest", // §7/§8 — PWA (устанавливаемое приложение)
 };
 
 export default async function RootLayout({
@@ -93,6 +95,8 @@ export default async function RootLayout({
           strategy="afterInteractive"
         />
         <TelegramBackButton />
+        {/* §7/§8 — офлайн-загрузка оболочки (безопасный SW). */}
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

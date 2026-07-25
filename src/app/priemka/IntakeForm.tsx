@@ -174,6 +174,19 @@ export default function IntakeForm({
     window.location.href = "/priemka";
   };
 
+  // §7/§8 — связь появилась, а был отложенный офлайн-submit → отправляем сами.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const onOnline = () => {
+      if (offlineMsg) {
+        setOfflineMsg(null);
+        formRef.current?.requestSubmit();
+      }
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [offlineMsg]);
+
   const setField =
     (key: keyof typeof values) =>
     (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -312,7 +325,12 @@ export default function IntakeForm({
   }, [state]);
 
   return (
-    <form action={formAction} onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form
+      ref={formRef}
+      action={formAction}
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-6"
+    >
       {e.form && <Alert variant="danger">{e.form}</Alert>}
       {/* §7/§8 — офлайн: данные сохранены черновиком, не потеряны. */}
       {offlineMsg && <Alert variant="warning">{offlineMsg}</Alert>}
