@@ -114,6 +114,66 @@ export default function IntakeForm({
   const [clientErrors, setClientErrors] = useState<IntakeErrors | null>(null);
   const e = clientErrors ?? state.errors;
 
+  // §7/§8 — офлайн-черновик: приёмка не теряется при слабой связи. Значения
+  // формы сохраняются в localStorage; при обрыве связи submit не уходит (данные
+  // остаются черновиком), при возврате на страницу — восстанавливаются.
+  const DRAFT_KEY = "onyx-intake-draft-v1";
+  const [offlineMsg, setOfflineMsg] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  // Сохраняем черновик при каждом изменении.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ values, locs, rowIds, patternsEnabled, patRowIds, pats }),
+      );
+    } catch {
+      /* localStorage может быть недоступен — не критично */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values, locs, rowIds, patternsEnabled, patRowIds, pats]);
+
+  // При монтировании: успех (?ok=1) → чистим черновик; иначе — восстанавливаем.
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("ok") === "1") {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.values) setValues(d.values);
+      if (d.locs) setLocs(d.locs);
+      if (Array.isArray(d.rowIds) && d.rowIds.length) {
+        setRowIds(d.rowIds);
+        nextRowId.current = Math.max(...d.rowIds) + 1;
+      }
+      if (typeof d.patternsEnabled === "boolean") setPatternsEnabled(d.patternsEnabled);
+      if (Array.isArray(d.patRowIds) && d.patRowIds.length) {
+        setPatRowIds(d.patRowIds);
+        nextPatId.current = Math.max(...d.patRowIds) + 1;
+      }
+      if (d.pats) setPats(d.pats);
+      setDraftRestored(true);
+    } catch {
+      /* битый черновик — игнорируем */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* noop */
+    }
+    setDraftRestored(false);
+    window.location.href = "/priemka";
+  };
+
   const setField =
     (key: keyof typeof values) =>
     (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -231,6 +291,16 @@ export default function IntakeForm({
       return;
     }
     setClientErrors(null);
+    // §7/§8 — офлайн: НЕ отправляем (server action всё равно не дойдёт). Данные
+    // уже в черновике (localStorage) — не теряются. Отправьте при связи.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      ev.preventDefault();
+      setOfflineMsg(
+        "Нет связи — данные сохранены как черновик. Нажмите «Принять партию» ещё раз, когда связь появится.",
+      );
+      return;
+    }
+    setOfflineMsg(null);
   };
 
   // Ошибки уровня БД возвращает сервер через state — тоже показываем и фокусируем.
@@ -244,6 +314,20 @@ export default function IntakeForm({
   return (
     <form action={formAction} onSubmit={handleSubmit} className="flex flex-col gap-6">
       {e.form && <Alert variant="danger">{e.form}</Alert>}
+      {/* §7/§8 — офлайн: данные сохранены черновиком, не потеряны. */}
+      {offlineMsg && <Alert variant="warning">{offlineMsg}</Alert>}
+      {draftRestored && (
+        <Alert variant="success">
+          Восстановлен незаконченный черновик приёмки.{" "}
+          <button
+            type="button"
+            onClick={clearDraft}
+            className="font-semibold underline"
+          >
+            Очистить и начать заново
+          </button>
+        </Alert>
+      )}
 
       {/* ── Вид камня ── */}
       <Card>

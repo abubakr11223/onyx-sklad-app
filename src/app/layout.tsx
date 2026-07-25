@@ -9,6 +9,7 @@ import Ripple from "@/components/ui/Ripple";
 import Toaster from "@/components/ui/toast";
 import FlashToaster from "@/components/FlashToaster";
 import TelegramBackButton from "@/components/TelegramBackButton";
+import OfflineBanner from "@/components/OfflineBanner";
 import { getCurrentUser } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
 
@@ -59,6 +60,8 @@ export default async function RootLayout({
   return (
     <html lang="ru" className={`${montserrat.variable} ${lora.variable}`}>
       <body className="antialiased">
+        {/* §7/§8 — офлайн-индикатор (над всем интерфейсом). */}
+        <OfflineBanner />
         {/* R6: навигация — только для вошедших. Без сессии (страница /login,
             куда gate перенаправляет) — чистый экран без панели/таб-бара. */}
         {user ? (
