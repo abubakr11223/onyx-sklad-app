@@ -39,7 +39,11 @@ import {
 import Card from "@/components/ui/Card";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
-import { patternStatus, PATTERN_STATUS_RU } from "@/lib/pattern-status";
+import {
+  clampPatternRemainder,
+  patternStatus,
+  PATTERN_STATUS_RU,
+} from "@/lib/pattern-status";
 import Button from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
@@ -477,6 +481,9 @@ export default async function KamenPage({
     const availableSlabs = b.slabs;
     return { batch: b, free, availableSlabs };
   });
+  // Аудит ТЗ №7 #20 — узор-остаток на дисплее clamp'ится по свободному остатку
+  // партии; здесь готовим карту batchId → free, чтобы использовать в render'е.
+  const batchFreeMap = new Map(batches.map((x) => [x.batch.id, x.free]));
 
   // Отдельные бой/остатки в наличии (st.pieces уже AVAILABLE в запросе).
   const availablePieces = st.pieces;
@@ -1188,7 +1195,13 @@ export default async function KamenPage({
                 )}
 
                 {/* ТЗ №3 — узоры партии с фото (B2C: предложить клиенту узор). */}
-                {b.patterns.length > 0 && (
+                {b.patterns.length > 0 && (() => {
+                  // Аудит ТЗ №7 #20 — clamp узор-остатка по свободному остатку партии.
+                  const batchFree = batchFreeMap.get(b.id) ?? {
+                    slabsFree: null,
+                    areaFreeM2: null,
+                  };
+                  return (
                   <div className="mt-3 border-t border-line pt-3">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
                       Узоры в партии
@@ -1260,11 +1273,25 @@ export default async function KamenPage({
                               );
                             })()}
                           </div>
-                          <p className="tnum text-xs text-ink/60">
-                            {pat.thicknessMm !== null && <>{pat.thicknessMm} мм · </>}
-                            осталось {pat.slabsCount - pat.slabsSold} плит ·{" "}
-                            {m2Fmt.format(Number(pat.areaM2) - Number(pat.areaSoldM2))} м²
-                          </p>
+                          {(() => {
+                            // Аудит ТЗ №7 #20 — clamp по свободному остатку партии.
+                            const clamped = clampPatternRemainder(
+                              {
+                                slabsCount: pat.slabsCount,
+                                slabsSold: pat.slabsSold,
+                                areaM2: Number(pat.areaM2),
+                                areaSoldM2: Number(pat.areaSoldM2),
+                              },
+                              batchFree,
+                            );
+                            return (
+                              <p className="tnum text-xs text-ink/60">
+                                {pat.thicknessMm !== null && <>{pat.thicknessMm} мм · </>}
+                                осталось {clamped.slabsRemaining} плит ·{" "}
+                                {m2Fmt.format(clamped.areaRemainingM2)} м²
+                              </p>
+                            );
+                          })()}
                           {pat.slabsSold > 0 && (
                             <p className="tnum text-xs text-ink/40">
                               продано {pat.slabsSold} из {pat.slabsCount}
@@ -1274,7 +1301,8 @@ export default async function KamenPage({
                       ))}
                     </ul>
                   </div>
-                )}
+                  );
+                })()}
               </li>
             ))}
           </ul>
