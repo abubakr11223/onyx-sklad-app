@@ -172,38 +172,85 @@ export async function verifyMagicLinkToken(
   return { ok: true, userId };
 }
 
+/** Аудит ТЗ №7 #9 — token живёт 30 дней (совпадает с cookie maxAge). */
+export const SESSION_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
- * Session tokeni: `session.<userId>.<sigHex>`. Muddat YO'Q — umr cookie maxAge bilan
- * boshqariladi. Secret yo'q bo'lsa — fail-closed ("").
+ * Session tokeni v2: `session.<userId>.<expiresAtMs>.<tokenVersion>.<sigHex>`.
+ *
+ * Аудит ТЗ №7 #9 — раньше payload был `session.<userId>` без времени и версии,
+ * поэтому:
+ *  • утёкший cookie не истекал по подписи (только по cookie maxAge, который
+ *    можно проигнорировать вручную) — фактически бессрочный;
+ *  • нельзя было отозвать одну сессию или все сессии пользователя на смене пароля.
+ * Теперь imza qamraydi ВСЁ (userId+exp+version), и:
+ *  • за пределами `expiresAtMs` — verifySessionToken → null (даже с валидной imza);
+ *  • на инкременте User.tokenVersion (смена пароля / "log out everywhere") — все
+ *    ранее выпущенные токены становятся неактуальными и отсекаются в session.ts.
+ *
+ * Secret yo'q bo'lsa — fail-closed ("").
  */
-export async function signSessionToken(userId: string): Promise<string> {
+export async function signSessionToken(
+  userId: string,
+  tokenVersion: number,
+  nowMs: number = Date.now(),
+  ttlMs: number = SESSION_TOKEN_TTL_MS,
+): Promise<string> {
   const secret = getEnv("AUTH_COOKIE_SECRET");
   if (!secret) {
     console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — session token yaratib bo'lmadi.");
     return "";
   }
-  const payload = `session.${userId}`;
+  const expiresAtMs = nowMs + ttlMs;
+  const payload = `session.${userId}.${expiresAtMs}.${tokenVersion}`;
   const sig = await hmacHex(payload, secret);
   return `${payload}.${sig}`;
 }
 
 /**
- * Session tokenini tekshiradi. Imzo yaroqli va prefiks `session` bo'lsa — userId,
- * aks holda null. HECH QACHON throw qilmaydi.
+ * Session verifikatsiya natijasi:
+ *   ok  → { userId, tokenVersion } — imza yaroqli, muddat o'tmagan.
+ *   err → reason: `legacy` (eski 3-qismli token — миграция bosqichi, foydalanuvchi
+ *         qайта kirishi shart), `malformed`, `badsig`, `expired`.
+ * getCurrentUser (`session.ts`) tokenVersion'ni DB'даги qiymat bilan solishtiradi:
+ * farq → null (revoked) — bu ham «qайта kirish talab qilinadi» yo'liga tushadi.
  */
-export async function verifySessionToken(token: string): Promise<string | null> {
+export type SessionVerifyResult =
+  | { ok: true; userId: string; tokenVersion: number }
+  | { ok: false; reason: "legacy" | "malformed" | "badsig" | "expired" };
+
+/**
+ * Session tokenini tekshiradi. HECH QACHON throw qilmaydi.
+ * Eski 3-qismli token (session.<userId>.<sig>) → `legacy` — chaqiruvchi (middleware/
+ * session.ts) foydalanuvchini login sahifasiga tashlaydi. Migratsiya: eski cookie
+ * silently ishlab turmaydi — foydalanuvchi bir marta qayta kirishi shart.
+ */
+export async function verifySessionToken(
+  token: string,
+  nowMs: number = Date.now(),
+): Promise<SessionVerifyResult> {
   const secret = getEnv("AUTH_COOKIE_SECRET");
   if (!secret) {
     console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — session token rad etildi.");
-    return null;
+    return { ok: false, reason: "badsig" };
   }
-  if (!token) return null;
-  // Aynan 3 qism: [prefiks, userId, sig]. (Magic-token 4 qism → bu yerda rad etiladi.)
+  if (!token) return { ok: false, reason: "malformed" };
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [prefix, userId, sig] = parts;
-  if (prefix !== "session" || !userId) return null;
-  const expected = await hmacHex(`session.${userId}`, secret);
-  if (!timingSafeEqual(sig, expected)) return null;
-  return userId;
+  // v1 legacy (3 qism) — migration: qайта-login talab qilinadi.
+  if (parts.length === 3 && parts[0] === "session") {
+    return { ok: false, reason: "legacy" };
+  }
+  // v2: aynan 5 qism [prefiks, userId, expMs, version, sig].
+  if (parts.length !== 5) return { ok: false, reason: "malformed" };
+  const [prefix, userId, expStr, verStr, sig] = parts;
+  if (prefix !== "session" || !userId) return { ok: false, reason: "malformed" };
+  if (!/^\d+$/.test(expStr) || !/^\d+$/.test(verStr)) {
+    return { ok: false, reason: "malformed" };
+  }
+  const payload = `session.${userId}.${expStr}.${verStr}`;
+  const expected = await hmacHex(payload, secret);
+  if (!timingSafeEqual(sig, expected)) return { ok: false, reason: "badsig" };
+  const expiresAtMs = Number(expStr);
+  if (nowMs > expiresAtMs) return { ok: false, reason: "expired" };
+  return { ok: true, userId, tokenVersion: Number(verStr) };
 }

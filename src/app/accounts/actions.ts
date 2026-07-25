@@ -202,7 +202,13 @@ export async function resetPassword(formData: FormData): Promise<void> {
 
   const passwordHash = await hashUserPassword(password);
   await db.$transaction(async (tx) => {
-    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    // Аудит ТЗ №7 #9 — смена пароля инкрементит tokenVersion → все ранее выпущенные
+    // session-токены пользователя становятся невалидными («log out everywhere»).
+    // getRealSessionUser/getCurrentUser сверяют cookie.tokenVersion с DB.
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
     await logAccountAction(tx, actorId, userId, { kind: "account.reset_password" });
   });
 

@@ -330,6 +330,10 @@ model User {
   telegramId          String?  @unique
   email               String?  @unique
   passwordHash        String?
+  // Аудит ТЗ №7 #9 — эпоха session-токена. Инкремент → все ранее выпущенные
+  // session-токены пользователя становятся невалидными («log out everywhere»).
+  // Апается на смене пароля (accounts/actions.ts) и в будущем — вручную владельцем.
+  tokenVersion        Int      @default(0)
   canSeePurchasePrice Boolean  @default(false) // Owner uchun e'tiborga olinmaydi (doim ko'radi)
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())

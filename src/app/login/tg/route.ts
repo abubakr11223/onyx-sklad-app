@@ -26,13 +26,14 @@ export async function GET(req: Request): Promise<Response> {
     }
 
     // Sanity: foydalanuvchi hali ham mavjud va faol bo'lsin (o'chirilgan bo'lishi mumkin).
+    // Аудит ТЗ №7 #9 — tashiб qo'yamiz tokenVersion (session-token эпохи).
     const user = await db.user.findFirst({
       where: { id: result.userId, isActive: true },
-      select: { id: true },
+      select: { id: true, tokenVersion: true },
     });
     if (!user) return failRedirect();
 
-    const sessionToken = await signSessionToken(result.userId);
+    const sessionToken = await signSessionToken(result.userId, user.tokenVersion);
     if (!sessionToken) return failRedirect(); // AUTH_COOKIE_SECRET yo'q — fail-closed.
 
     // Login cookie flaglari login/actions.ts bilan bir xil.

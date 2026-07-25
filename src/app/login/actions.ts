@@ -94,7 +94,7 @@ export async function loginWithPassword(formData: FormData): Promise<void> {
 
   const user = await db.user.findFirst({
     where: { email, isActive: true },
-    select: { id: true, passwordHash: true },
+    select: { id: true, passwordHash: true, tokenVersion: true },
   });
   // Foydalanuvchi yo'q → DUMMY xesh ustida bitta verify yuritamiz (timing-oracle
   // himoyasi), so'ng generic xato. Bu «parol noto'g'ri» yo'li bilan vaqtni tenglashtiradi.
@@ -107,7 +107,9 @@ export async function loginWithPassword(formData: FormData): Promise<void> {
     return fail();
   }
 
-  const token = await signSessionToken(user.id);
+  // Аудит ТЗ №7 #9 — session-токен несёт actual tokenVersion, чтобы «logout everywhere»
+  // (инкремент версии) отсекал старые cookie'и в session.ts (сверка с DB).
+  const token = await signSessionToken(user.id, user.tokenVersion);
   if (!token) return fail(); // AUTH_COOKIE_SECRET yo'q — fail-closed.
 
   const store = await cookies();

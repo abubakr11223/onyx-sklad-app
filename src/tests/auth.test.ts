@@ -132,32 +132,67 @@ describe("signMagicLinkToken / verifyMagicLinkToken", () => {
   });
 });
 
-describe("signSessionToken / verifySessionToken", () => {
-  it("round-trip: yaroqli token → userId", async () => {
-    const token = await signSessionToken(USER_ID);
-    expect(await verifySessionToken(token)).toBe(USER_ID);
+describe("signSessionToken / verifySessionToken (v2 — exp + tokenVersion, ТЗ №7 #9)", () => {
+  it("round-trip: yaroqli token → { ok, userId, tokenVersion }", async () => {
+    const token = await signSessionToken(USER_ID, 5, NOW);
+    const res = await verifySessionToken(token, NOW);
+    expect(res).toEqual({ ok: true, userId: USER_ID, tokenVersion: 5 });
   });
 
-  it("buzilgan imzo → null", async () => {
-    const token = await signSessionToken(USER_ID);
+  it("muddat o'tgan (nowMs > expiresAtMs) → { ok:false, expired }", async () => {
+    const token = await signSessionToken(USER_ID, 0, NOW, 60_000); // 1 min TTL
+    const res = await verifySessionToken(token, NOW + 60_001);
+    expect(res).toEqual({ ok: false, reason: "expired" });
+  });
+
+  it("buzilgan imzo → { ok:false, badsig }", async () => {
+    const token = await signSessionToken(USER_ID, 0, NOW);
     const tampered = token.slice(0, -1) + (token.endsWith("a") ? "b" : "a");
-    expect(await verifySessionToken(tampered)).toBeNull();
+    expect(await verifySessionToken(tampered, NOW)).toEqual({
+      ok: false,
+      reason: "badsig",
+    });
   });
 
-  it("shaklsiz → null", async () => {
-    expect(await verifySessionToken("")).toBeNull();
-    expect(await verifySessionToken("no-dot")).toBeNull();
+  it("shaklsiz / bo'sh → malformed", async () => {
+    expect(await verifySessionToken("", NOW)).toEqual({ ok: false, reason: "malformed" });
+    expect(await verifySessionToken("no-dot", NOW)).toEqual({
+      ok: false,
+      reason: "malformed",
+    });
+  });
+
+  it("МИГРАЦИЯ: eski 3-qismli v1 token → { ok:false, legacy } (foydalanuvchi qайta kirishi shart)", async () => {
+    // Eski format: `session.<userId>.<sigHex>` — 3 qism.
+    const legacyToken = "session." + USER_ID + ".deadbeef";
+    const res = await verifySessionToken(legacyToken, NOW);
+    expect(res).toEqual({ ok: false, reason: "legacy" });
+  });
+
+  it("payload TIL: tokenVersion imzoni qamraydi — cookie'даги oshirilsa badsig", async () => {
+    const token = await signSessionToken(USER_ID, 3, NOW);
+    const parts = token.split(".");
+    // version'ни 3→4 qilib, sig'ни o'zgarтirmaymiz — imzo endi mos kelmaydi.
+    parts[3] = "4";
+    const forged = parts.join(".");
+    expect(await verifySessionToken(forged, NOW)).toEqual({
+      ok: false,
+      reason: "badsig",
+    });
   });
 });
 
 describe("prefiks izolatsiyasi (replay yo'q)", () => {
-  it("magic token session sifatida tekshirilmaydi (4 qism → null)", async () => {
+  it("magic token session sifatida tekshirilmaydi (4 qism → malformed)", async () => {
     const magic = await signMagicLinkToken(USER_ID, NOW + 60_000);
-    expect(await verifySessionToken(magic)).toBeNull();
+    const res = await verifySessionToken(magic, NOW);
+    expect(res.ok).toBe(false);
+    // 4 qism → aynan malformed (session v2 = 5 qism, v1 = 3 qism, oraliq — malformed).
+    if (!res.ok) expect(res.reason).toBe("malformed");
   });
 
-  it("session token magic sifatida tekshirilmaydi (3 qism → malformed)", async () => {
-    const session = await signSessionToken(USER_ID);
+  it("session token (v2, 5 qism) magic sifatida tekshirilmaydi", async () => {
+    const session = await signSessionToken(USER_ID, 0, NOW);
     const res = await verifyMagicLinkToken(session, NOW);
     expect(res.ok).toBe(false);
   });

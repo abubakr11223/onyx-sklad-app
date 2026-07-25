@@ -28,13 +28,14 @@ export async function POST(req: Request): Promise<Response> {
   if (!res.ok) return fail(res.reason);
 
   // Пользователь должен существовать (привязан telegramId) и быть активным.
+  // Аудит ТЗ №7 #9 — tokenVersion в session-токене (revoke на смене пароля).
   const user = await db.user.findFirst({
     where: { telegramId: res.telegramId, isActive: true },
-    select: { id: true },
+    select: { id: true, tokenVersion: true },
   });
   if (!user) return fail("not_registered");
 
-  const sessionToken = await signSessionToken(user.id);
+  const sessionToken = await signSessionToken(user.id, user.tokenVersion);
   if (!sessionToken) return fail("nosecret");
 
   const out = NextResponse.json({ ok: true });
