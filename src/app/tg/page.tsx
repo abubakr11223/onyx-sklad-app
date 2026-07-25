@@ -5,6 +5,7 @@
 // на /api/tg-auth, там проверяют подпись и ставят onyx_session cookie — после
 // чего все обычные страницы сайта работают внутри Telegram (поиск/продажа/бронь).
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Script from "next/script";
 
 type State =
@@ -20,6 +21,7 @@ interface TgWebApp {
 
 export default function TgMiniApp() {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const router = useRouter();
 
   async function authenticate() {
     const tg = (
@@ -40,7 +42,9 @@ export default function TgMiniApp() {
       });
       const data = (await r.json()) as { ok: boolean; reason?: string };
       if (data.ok) {
-        window.location.href = "/";
+        // Клиентская навигация (не reload) — сохраняет контекст Telegram WebApp,
+        // чтобы BackButton и др. работали на всех страницах внутри Telegram.
+        router.push("/");
         return;
       }
       setState({ kind: "error", reason: data.reason ?? "auth" });

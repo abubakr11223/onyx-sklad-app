@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Script from "next/script";
 import { Montserrat, Lora } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
@@ -7,6 +8,7 @@ import BottomTabBar from "@/components/BottomTabBar";
 import Ripple from "@/components/ui/Ripple";
 import Toaster from "@/components/ui/toast";
 import FlashToaster from "@/components/FlashToaster";
+import TelegramBackButton from "@/components/TelegramBackButton";
 import { getCurrentUser } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
 
@@ -79,6 +81,15 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <FlashToaster />
         </Suspense>
+
+        {/* §5.9 — Telegram Mini App SDK (нужен для BackButton и др.). Вне
+            Telegram — безвредная заглушка. BackButton управляет навигацией
+            «назад» внутри Telegram (в webview нет кнопки браузера). */}
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+        />
+        <TelegramBackButton />
       </body>
     </html>
   );
