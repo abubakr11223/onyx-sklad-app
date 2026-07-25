@@ -18,9 +18,17 @@ async function requireOwner(): Promise<void> {
   if (!me || me.role !== "OWNER") redirect(`${BACK}&err=denied`);
 }
 
-/** Есть ли камень в блоке (по букве) — для защиты удаления. */
-async function blockHasStone(letter: string): Promise<boolean> {
-  const n = await db.batchLocation.count({ where: { block: letter } });
+/**
+ * Есть ли камень в блоке — для защиты удаления. Аудит ТЗ №7 #16: проверяем
+ * И нормализованную форму, И исходную (legacy-строки в BatchLocation могли быть
+ * записаны ДО ввода нормализации; их фактическое значение и есть ключ поиска).
+ * Дедуп через Set: если нормализация — no-op, `in` со списком из одной буквы.
+ */
+async function blockHasStone(rawLetter: string): Promise<boolean> {
+  const variants = [
+    ...new Set([rawLetter, normalizeBlockLetter(rawLetter)].filter(Boolean)),
+  ];
+  const n = await db.batchLocation.count({ where: { block: { in: variants } } });
   return n > 0;
 }
 
@@ -30,18 +38,25 @@ async function blockHasStone(letter: string): Promise<boolean> {
  * так же, как ручные. При первой правке создаём для буквы строку WarehouseBlock
  * и переносим существующие ориентиры из BatchLocation, затем возвращаем её id.
  * Если строка уже есть (ручной блок или уже материализованный) — просто её id.
+ *
+ * Аудит ТЗ №7 #16: нормализуем букву — если fromLetter пришёл ненормализованным
+ * (curl / legacy), в сетке сохраняется каноническая форма (кириллица, верхний
+ * регистр). Ориентиры собираем из BatchLocation по обеим формам, чтобы не
+ * потерять legacy-строки, а материализуемый блок называем нормализованным.
  */
-async function materializeBlock(letter: string): Promise<string> {
+async function materializeBlock(rawLetter: string): Promise<string> {
+  const letter = normalizeBlockLetter(rawLetter) || rawLetter;
   const existing = await db.warehouseBlock.findUnique({
     where: { letter },
     select: { id: true },
   });
   if (existing) return existing.id;
 
-  // Ориентиры авто-блока — из BatchLocation (свободный текст). Дедуп по
-  // обрезанному значению, пустые — пропускаем (иначе дубль/пустой ориентир).
+  // Ориентиры авто-блока — из BatchLocation (свободный текст). Ищем по обеим
+  // формам буквы (норм. и raw), дедупим и пустые обрезаем.
+  const variants = [...new Set([letter, rawLetter].filter(Boolean))];
   const locs = await db.batchLocation.findMany({
-    where: { block: letter },
+    where: { block: { in: variants } },
     select: { landmark: true },
   });
   const numbers = [
@@ -107,10 +122,43 @@ export async function renameBlock(formData: FormData): Promise<void> {
   if (!letter) redirect(`${BACK}&err=letter`);
   const id = await resolveBlockId(formData);
   try {
-    await db.warehouseBlock.update({ where: { id }, data: { letter } });
+    // Аудит ТЗ №7 #6 — раньше renameBlock менял только WarehouseBlock.letter,
+    // а BatchLocation/Slab/Piece.block оставались под СТАРОЙ буквой (join —
+    // строковое равенство). После переименования камень «терялся»: сетка под
+    // «Б», физический склад под «А» — приёмка через datalist слала новые
+    // партии в «Б», а старые всплывали как orphan-карта «А». Теперь одна
+    // транзакция: читаем oldLetter → правим WarehouseBlock.letter → каскадом
+    // переносим все joined-строки. Если новая буква занята другим блоком —
+    // отказ (объединение блоков — отдельное решение, не молчаливое слияние).
+    await db.$transaction(async (tx) => {
+      const cur = await tx.warehouseBlock.findUnique({
+        where: { id },
+        select: { letter: true },
+      });
+      if (!cur) throw new Prisma.PrismaClientKnownRequestError("not found", {
+        code: "P2025",
+        clientVersion: "n/a",
+      });
+      const oldLetter = cur.letter;
+      if (oldLetter === letter) return; // no-op — те же буквы после нормализации
+      await tx.warehouseBlock.update({ where: { id }, data: { letter } });
+      await tx.batchLocation.updateMany({
+        where: { block: oldLetter },
+        data: { block: letter },
+      });
+      await tx.slab.updateMany({
+        where: { block: oldLetter },
+        data: { block: letter },
+      });
+      await tx.piece.updateMany({
+        where: { block: oldLetter },
+        data: { block: letter },
+      });
+    });
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      redirect(`${BACK}&err=block_taken`);
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P2002") redirect(`${BACK}&err=block_taken`);
+      if (e.code === "P2025") redirect(`${BACK}&err=notfound`);
     }
     throw e;
   }
