@@ -82,9 +82,12 @@ function CrossError({ msg }: { msg?: string }) {
 export default function IntakeForm({
   stoneTypes,
   defaultDate,
+  blocks = [],
 }: {
   stoneTypes: StoneTypeOption[];
   defaultDate: string;
+  // ТЗ №6 §5.4 — сетка склада для подсказок блока/ориентира (datalist).
+  blocks?: { letter: string; landmarks: string[] }[];
 }) {
   const [state, formAction, pending] = useActionState(submitIntake, initialState);
   const [isNewType, setIsNewType] = useState(false);
@@ -345,6 +348,23 @@ export default function IntakeForm({
             Очистить и начать заново
           </button>
         </Alert>
+      )}
+      {/* ТЗ №6 §5.4 — справочник сетки склада для подсказок блока/ориентира. */}
+      {blocks.length > 0 && (
+        <>
+          <datalist id="wh-blocks">
+            {blocks.map((b) => (
+              <option key={b.letter} value={b.letter} />
+            ))}
+          </datalist>
+          {blocks.map((b) => (
+            <datalist key={b.letter} id={`wh-lm-${b.letter}`}>
+              {b.landmarks.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          ))}
+        </>
       )}
 
       {/* ── Вид камня ── */}
@@ -640,6 +660,8 @@ export default function IntakeForm({
                     value={loc.block}
                     onChange={setLoc(id, "block")}
                     error={e[`loc-${idx}-block`]}
+                    // ТЗ №6 §5.4 — подсказки из сетки склада (блоки).
+                    list={blocks.length > 0 ? "wh-blocks" : undefined}
                   />
                   <Field
                     id={`locLandmark-${idx}`}
@@ -649,6 +671,12 @@ export default function IntakeForm({
                     value={loc.landmark}
                     onChange={setLoc(id, "landmark")}
                     error={e[`loc-${idx}-landmark`]}
+                    // Ориентиры выбранного блока (реактивно по loc.block).
+                    list={
+                      blocks.some((b) => b.letter === loc.block)
+                        ? `wh-lm-${loc.block}`
+                        : undefined
+                    }
                   />
                   <Field
                     id={`locSlabsHere-${idx}`}

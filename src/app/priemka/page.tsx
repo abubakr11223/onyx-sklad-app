@@ -42,6 +42,17 @@ export default async function PriemkaPage({
     select: { id: true, name: true, rockType: true },
   });
 
+  // ТЗ №6 §5.4 — единый справочник: блоки/ориентиры из сетки склада
+  // (WarehouseBlock) подсказываются в приёмке (datalist), а не свободный ввод.
+  const gridBlocks = await db.warehouseBlock.findMany({
+    orderBy: { sortOrder: "asc" },
+    select: { letter: true, landmarks: { select: { number: true } } },
+  });
+  const blocks = gridBlocks.map((b) => ({
+    letter: b.letter,
+    landmarks: b.landmarks.map((l) => l.number),
+  }));
+
   const ok = first(sp.ok) === "1";
   const stone = first(sp.stone);
   const slabs = first(sp.slabs);
@@ -75,7 +86,7 @@ export default async function PriemkaPage({
         </Alert>
       )}
 
-      <IntakeForm stoneTypes={stoneTypes} defaultDate={today} />
+      <IntakeForm stoneTypes={stoneTypes} defaultDate={today} blocks={blocks} />
     </main>
   );
 }
