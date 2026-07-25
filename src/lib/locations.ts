@@ -9,6 +9,7 @@
 // (validateNewLocation), перенос количества между локациями одной партии
 // (validateQtyMove) и локация на уровне плиты (validateSlabLocation).
 
+import { normalizeBlockLetter } from "@/lib/block-letter";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 
 // ──────────────────── Sof helperlar (DB YO'Q — unit-test) ────────────────────
@@ -39,7 +40,8 @@ export type ValidateLocationResult =
 export function validateLocationEdit(
   input: LocationEditInput,
 ): ValidateLocationResult {
-  const block = input.block.trim();
+  // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
+  const block = normalizeBlockLetter(input.block);
   if (!block) return { ok: false, error: "Укажите блок" };
 
   const landmark = input.landmark.trim();
@@ -123,7 +125,8 @@ export type ValidateNewLocationResult =
 export function validateNewLocation(
   input: NewLocationInput,
 ): ValidateNewLocationResult {
-  const block = input.block.trim();
+  // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
+  const block = normalizeBlockLetter(input.block);
   if (!block) return { ok: false, error: "Укажите блок" };
 
   const landmark = input.landmark.trim();

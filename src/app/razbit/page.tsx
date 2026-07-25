@@ -47,7 +47,7 @@ export default async function RazbitPage({
 
   const sp = await searchParams;
 
-  const [slabRows, batchRows] = await Promise.all([
+  const [slabRows, batchRows, gridBlocks] = await Promise.all([
     db.slab.findMany({
       where: { status: { in: ["AVAILABLE", "RESERVED"] } },
       orderBy: [{ stoneType: { name: "asc" } }, { label: "asc" }],
@@ -70,7 +70,18 @@ export default async function RazbitPage({
         stoneType: { select: { name: true } },
       },
     }),
+    // ТЗ №7 §2 (BUG-01) — подсказка буквы блока из сетки склада (datalist),
+    // как в приёмке. Нормализация всё равно на записи — подсказка лишь удобство.
+    db.warehouseBlock.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { letter: true, landmarks: { select: { number: true } } },
+    }),
   ]);
+
+  const blocks = gridBlocks.map((b) => ({
+    letter: b.letter,
+    landmarks: b.landmarks.map((l) => l.number),
+  }));
 
   const slabs: SlabOption[] = slabRows.map((s) => ({
     id: s.id,
@@ -127,7 +138,7 @@ export default async function RazbitPage({
         </Alert>
       )}
 
-      <BreakForm slabs={slabs} batches={batches} />
+      <BreakForm slabs={slabs} batches={batches} blocks={blocks} />
     </main>
   );
 }

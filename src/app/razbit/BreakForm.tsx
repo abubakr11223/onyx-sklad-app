@@ -34,6 +34,12 @@ export interface BatchOption {
   qty: string; // «40 плит / 220 м²»
 }
 
+/** ТЗ №7 §2 — блок из сетки склада для datalist-подсказки. */
+export interface BlockOption {
+  letter: string;
+  landmarks: string[];
+}
+
 const initialState: BreakFormState = { errors: {} };
 
 /** Значения одной строки-куска (CRIT-02: controlled, чтобы не слетали при ошибке). */
@@ -83,9 +89,11 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
 export default function BreakForm({
   slabs,
   batches,
+  blocks = [],
 }: {
   slabs: SlabOption[];
   batches: BatchOption[];
+  blocks?: BlockOption[];
 }) {
   const [state, formAction, pending] = useActionState(submitBreak, initialState);
   const [mode, setMode] = useState<"slab" | "direct">("slab");
@@ -132,6 +140,24 @@ export default function BreakForm({
     <form action={formAction} className="flex flex-col gap-6">
       {e.form && <Alert variant="danger">{e.form}</Alert>}
       <input type="hidden" name="mode" value={mode} />
+
+      {/* ТЗ №7 §2 — справочник сетки склада для подсказок блока/ориентира. */}
+      {blocks.length > 0 && (
+        <>
+          <datalist id="wh-blocks">
+            {blocks.map((b) => (
+              <option key={b.letter} value={b.letter} />
+            ))}
+          </datalist>
+          {blocks.map((b) => (
+            <datalist key={b.letter} id={`wh-lm-${b.letter}`}>
+              {b.landmarks.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          ))}
+        </>
+      )}
 
       {/* ── Что разбиваем ── */}
       <Card>
@@ -316,6 +342,7 @@ export default function BreakForm({
                     name="pBlock"
                     label={<>Блок <Req /></>}
                     placeholder="А"
+                    list={blocks.length > 0 ? "wh-blocks" : undefined}
                     value={rows[id]?.block ?? ""}
                     onChange={setPiece(id, "block")}
                     error={e[`p-${idx}-block`]}
@@ -325,6 +352,11 @@ export default function BreakForm({
                     name="pLandmark"
                     label={<>Ориентир <Req /></>}
                     placeholder="2 или 1–2"
+                    list={
+                      blocks.some((b) => b.letter === rows[id]?.block)
+                        ? `wh-lm-${rows[id]?.block}`
+                        : undefined
+                    }
                     value={rows[id]?.landmark ?? ""}
                     onChange={setPiece(id, "landmark")}
                     error={e[`p-${idx}-landmark`]}

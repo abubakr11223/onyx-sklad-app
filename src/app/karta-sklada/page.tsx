@@ -240,7 +240,16 @@ export default async function KartaSkladaPage({
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {blocks.map((blk) => (
+          {blocks.map((blk) => {
+            // ТЗ №7 §4 — идентификатор блока для форм правки: сетевой блок шлёт
+            // blockId, авто-блок (из приёмки) — свою букву (fromLetter), сервер
+            // материализует его при первой правке. Так все блоки редактируются.
+            const idField = blk.blockId ? (
+              <input type="hidden" name="blockId" value={blk.blockId} />
+            ) : (
+              <input type="hidden" name="fromLetter" value={blk.letter} />
+            );
+            return (
             <section
               key={blk.letter}
               className="relative overflow-hidden rounded-card border border-line bg-paper-2 p-5 shadow-card"
@@ -268,67 +277,63 @@ export default async function KartaSkladaPage({
                 </p>
               )}
 
-              {/* ── Режим редактирования: правки блока ── */}
+              {/* ── Режим редактирования: правки блока (все блоки, ТЗ №7 §4) ── */}
               {editMode && (
                 <div className="mb-3 flex flex-col gap-2 rounded-field border border-gold/25 bg-gold/[0.04] p-3">
-                  {blk.blockId ? (
-                    <>
-                      <form action={renameBlock} className="flex flex-wrap items-end gap-1.5">
-                        <input type="hidden" name="blockId" value={blk.blockId} />
-                        <input
-                          name="letter"
-                          defaultValue={blk.letter}
-                          aria-label="Буква"
-                          className={`${inputClass} max-w-[6rem]`}
-                        />
-                        <Button type="submit" variant="secondary" size="sm">
-                          Переименовать
-                        </Button>
-                      </form>
-                      <form action={setBlockMeta} className="flex flex-col gap-1.5">
-                        <input type="hidden" name="blockId" value={blk.blockId} />
-                        <input
-                          name="areaM2"
-                          inputMode="decimal"
-                          defaultValue={blk.areaM2 ?? ""}
-                          placeholder="Площадь м²"
-                          aria-label="Площадь"
-                          className={inputClass}
-                        />
-                        <input
-                          name="note"
-                          defaultValue={blk.note ?? ""}
-                          placeholder="Заметка (у ворот, плохой заезд…)"
-                          aria-label="Заметка"
-                          className={inputClass}
-                        />
-                        <label className="flex items-center gap-2 text-sm text-ink">
-                          <input
-                            type="checkbox"
-                            name="isFull"
-                            value="1"
-                            defaultChecked={blk.isFull}
-                            className="h-5 w-5 accent-ink"
-                          />
-                          Заполнен (нет места)
-                        </label>
-                        <Button type="submit" variant="secondary" size="sm">
-                          Сохранить
-                        </Button>
-                      </form>
-                      <form action={deleteBlock}>
-                        <input type="hidden" name="blockId" value={blk.blockId} />
-                        <Button type="submit" variant="danger" size="sm">
-                          Удалить блок
-                        </Button>
-                      </form>
-                    </>
-                  ) : (
+                  {!blk.blockId && (
                     <p className="text-xs text-ink/50">
-                      Этот блок появился из приёмки. Добавьте его в сетку, создав
-                      блок «{blk.letter}» выше — тогда им можно управлять.
+                      Блок из приёмки. Любая правка внесёт его в сетку склада.
                     </p>
                   )}
+                  <form action={renameBlock} className="flex flex-wrap items-end gap-1.5">
+                    {idField}
+                    <input
+                      name="letter"
+                      defaultValue={blk.letter}
+                      aria-label="Буква"
+                      className={`${inputClass} max-w-[6rem]`}
+                    />
+                    <Button type="submit" variant="secondary" size="sm">
+                      Переименовать
+                    </Button>
+                  </form>
+                  <form action={setBlockMeta} className="flex flex-col gap-1.5">
+                    {idField}
+                    <input
+                      name="areaM2"
+                      inputMode="decimal"
+                      defaultValue={blk.areaM2 ?? ""}
+                      placeholder="Площадь м²"
+                      aria-label="Площадь"
+                      className={inputClass}
+                    />
+                    <input
+                      name="note"
+                      defaultValue={blk.note ?? ""}
+                      placeholder="Заметка (у ворот, плохой заезд…)"
+                      aria-label="Заметка"
+                      className={inputClass}
+                    />
+                    <label className="flex items-center gap-2 text-sm text-ink">
+                      <input
+                        type="checkbox"
+                        name="isFull"
+                        value="1"
+                        defaultChecked={blk.isFull}
+                        className="h-5 w-5 accent-ink"
+                      />
+                      Заполнен (нет места)
+                    </label>
+                    <Button type="submit" variant="secondary" size="sm">
+                      Сохранить
+                    </Button>
+                  </form>
+                  <form action={deleteBlock}>
+                    {idField}
+                    <Button type="submit" variant="danger" size="sm">
+                      Удалить блок
+                    </Button>
+                  </form>
                 </div>
               )}
 
@@ -384,13 +389,13 @@ export default async function KartaSkladaPage({
                   </div>
                 ))}
 
-                {/* Добавить ориентир в блок (только сетевой блок). */}
-                {editMode && blk.blockId && (
+                {/* Добавить ориентир в блок — все блоки (ТЗ №7 §4). */}
+                {editMode && (
                   <form
                     action={addLandmark}
                     className="flex flex-wrap items-end gap-1.5 pt-1"
                   >
-                    <input type="hidden" name="blockId" value={blk.blockId} />
+                    {idField}
                     <input
                       name="number"
                       placeholder="Номер (1, 2…)"
@@ -405,7 +410,8 @@ export default async function KartaSkladaPage({
                 )}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
     </main>

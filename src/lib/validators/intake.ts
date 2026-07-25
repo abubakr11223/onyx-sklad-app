@@ -2,6 +2,8 @@
 // Без БД и внешних зависимостей: принимает «сырые» строки формы,
 // возвращает типизированный результат { ok, ... } с русскими сообщениями.
 
+import { normalizeBlockLetter } from "@/lib/block-letter";
+
 export interface IntakeLocationInput {
   block: string;
   landmark: string;
@@ -193,7 +195,8 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     errors.locations = "Добавьте хотя бы одну локацию (блок + ориентир)";
   }
   input.locations.forEach((loc, i) => {
-    const block = loc.block.trim();
+    // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
+    const block = normalizeBlockLetter(loc.block);
     const landmark = loc.landmark.trim();
     if (!block) errors[`loc-${i}-block`] = "Укажите блок (например «А»)";
     if (!landmark) errors[`loc-${i}-landmark`] = "Укажите ориентир (например «2» или «1–2»)";
