@@ -64,15 +64,37 @@ async function materializeBlock(rawLetter: string): Promise<string> {
     ...new Set(locs.map((l) => l.landmark.trim()).filter((s) => s !== "")),
   ];
   const max = await db.warehouseBlock.aggregate({ _max: { sortOrder: true } });
-  const created = await db.warehouseBlock.create({
-    data: {
-      letter,
-      sortOrder: (max._max.sortOrder ?? 0) + 1,
-      landmarks: { create: numbers.map((number) => ({ number })) },
-    },
-    select: { id: true },
-  });
-  return created.id;
+
+  // Аудит ТЗ №7 #17 — раньше пара findUnique→create была неатомарной: два
+  // параллельных первых-редактирования одного и того же авто-блока (две вкладки
+  // владельца / двойной submit) оба видели existing=null, оба шли в create, и
+  // второй словил бы P2002 (@unique letter). Unhandled Prisma-error → 500.
+  // Данных не портит (unique держит), но UX не должен показывать 500 на редком
+  // double-submit. Ловим P2002 и повторно читаем — победитель уже создал строку,
+  // берём её id (никогда не создаём дубль).
+  try {
+    const created = await db.warehouseBlock.create({
+      data: {
+        letter,
+        sortOrder: (max._max.sortOrder ?? 0) + 1,
+        landmarks: { create: numbers.map((number) => ({ number })) },
+      },
+      select: { id: true },
+    });
+    return created.id;
+  } catch (e) {
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
+      const winner = await db.warehouseBlock.findUnique({
+        where: { letter },
+        select: { id: true },
+      });
+      if (winner) return winner.id;
+    }
+    throw e;
+  }
 }
 
 /**

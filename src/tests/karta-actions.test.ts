@@ -322,6 +322,58 @@ describe("deleteBlock — blockHasStone ищет и норм., и raw форму
   });
 });
 
+// ═══════════════ ТЗ №7 #17 · materializeBlock race (двойной submit) ═══════════════
+
+describe("materializeBlock — race через P2002 (ТЗ №7 #17)", () => {
+  it("параллельные setBlockMeta на один авто-блок → БЕЗ 500, оба получают один id", async () => {
+    const { Prisma } = await import("@prisma/client");
+
+    // Оба вызова видят existing=null (мок отдаёт null дважды подряд).
+    wbFindUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    // Первый create — успех (id=wbA); второй — P2002 (гонка).
+    const conflict = new Prisma.PrismaClientKnownRequestError("dup letter", {
+      code: "P2002",
+      clientVersion: "n/a",
+    });
+    wbCreate
+      .mockResolvedValueOnce({ id: "wbA" })
+      .mockRejectedValueOnce(conflict);
+    // Второй вызов, после P2002, перечитывает — уже видит победителя.
+    wbFindUnique.mockResolvedValueOnce({ id: "wbA" });
+
+    // Дальше — обычный поток setBlockMeta (update WarehouseBlock).
+    // Первый вызов вернёт ok=meta.
+    const p1 = expectRedirect(
+      () => setBlockMeta(fd({ fromLetter: "К", note: "у ворот" })),
+      "/karta-sklada?edit=1&ok=meta",
+    );
+    const p2 = expectRedirect(
+      () => setBlockMeta(fd({ fromLetter: "К", note: "у ворот" })),
+      "/karta-sklada?edit=1&ok=meta",
+    );
+    await Promise.all([p1, p2]);
+
+    // create вызван РОВНО 2 раза — но только один WarehouseBlock есть в БД.
+    expect(wbCreate).toHaveBeenCalledTimes(2);
+    // Оба update указывают на ОДИН И ТОТ ЖЕ id (проигравший считал победителя).
+    expect(wbUpdate).toHaveBeenCalledTimes(2);
+    for (const call of wbUpdate.mock.calls) {
+      expect(call[0].where).toEqual({ id: "wbA" });
+    }
+  });
+
+  it("НЕ-P2002 ошибка (например, DB отвалилась) → throws (fail-fast, не глотаем)", async () => {
+    wbFindUnique.mockResolvedValueOnce(null);
+    wbCreate.mockRejectedValueOnce(new Error("db down"));
+
+    await expect(
+      setBlockMeta(fd({ fromLetter: "Л", note: "тест" })),
+    ).rejects.toThrow(/db down/);
+    // Update даже не пробовали.
+    expect(wbUpdate).not.toHaveBeenCalled();
+  });
+});
+
 // ═══════════════ ТЗ №7 #7 · addBlock / setBlockMeta — bounded decimal ═══════════════
 
 describe("addBlock / setBlockMeta — переполнение площади ⇒ err=area (ТЗ №7 #7)", () => {
