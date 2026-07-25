@@ -72,6 +72,7 @@ import {
   deleteBlock,
   addLandmark,
   setBlockMeta,
+  addBlock,
 } from "@/app/karta-sklada/actions";
 
 /** Ждём, что action завершится редиректом на данный URL. */
@@ -318,5 +319,133 @@ describe("deleteBlock — blockHasStone ищет и норм., и raw форму
     );
 
     expect(wbDelete).toHaveBeenCalledWith({ where: { id: "wb1" } });
+  });
+});
+
+// ═══════════════ ТЗ №7 #17 · materializeBlock race (двойной submit) ═══════════════
+
+describe("materializeBlock — race через P2002 (ТЗ №7 #17)", () => {
+  it("параллельные setBlockMeta на один авто-блок → БЕЗ 500, оба получают один id", async () => {
+    const { Prisma } = await import("@prisma/client");
+
+    // Оба вызова видят existing=null (мок отдаёт null дважды подряд).
+    wbFindUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    // Первый create — успех (id=wbA); второй — P2002 (гонка).
+    const conflict = new Prisma.PrismaClientKnownRequestError("dup letter", {
+      code: "P2002",
+      clientVersion: "n/a",
+    });
+    wbCreate
+      .mockResolvedValueOnce({ id: "wbA" })
+      .mockRejectedValueOnce(conflict);
+    // Второй вызов, после P2002, перечитывает — уже видит победителя.
+    wbFindUnique.mockResolvedValueOnce({ id: "wbA" });
+
+    // Дальше — обычный поток setBlockMeta (update WarehouseBlock).
+    // Первый вызов вернёт ok=meta.
+    const p1 = expectRedirect(
+      () => setBlockMeta(fd({ fromLetter: "К", note: "у ворот" })),
+      "/karta-sklada?edit=1&ok=meta",
+    );
+    const p2 = expectRedirect(
+      () => setBlockMeta(fd({ fromLetter: "К", note: "у ворот" })),
+      "/karta-sklada?edit=1&ok=meta",
+    );
+    await Promise.all([p1, p2]);
+
+    // create вызван РОВНО 2 раза — но только один WarehouseBlock есть в БД.
+    expect(wbCreate).toHaveBeenCalledTimes(2);
+    // Оба update указывают на ОДИН И ТОТ ЖЕ id (проигравший считал победителя).
+    expect(wbUpdate).toHaveBeenCalledTimes(2);
+    for (const call of wbUpdate.mock.calls) {
+      expect(call[0].where).toEqual({ id: "wbA" });
+    }
+  });
+
+  it("НЕ-P2002 ошибка (например, DB отвалилась) → throws (fail-fast, не глотаем)", async () => {
+    wbFindUnique.mockResolvedValueOnce(null);
+    wbCreate.mockRejectedValueOnce(new Error("db down"));
+
+    await expect(
+      setBlockMeta(fd({ fromLetter: "Л", note: "тест" })),
+    ).rejects.toThrow(/db down/);
+    // Update даже не пробовали.
+    expect(wbUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════ ТЗ №7 #7 · addBlock / setBlockMeta — bounded decimal ═══════════════
+
+describe("addBlock / setBlockMeta — переполнение площади ⇒ err=area (ТЗ №7 #7)", () => {
+  it("addBlock: 99999999999 (> Decimal(12,3) max) ⇒ err=area, WarehouseBlock.create НЕ вызывается", async () => {
+    await expectRedirect(
+      () => addBlock(fd({ letter: "К", areaM2: "99999999999" })),
+      "/karta-sklada?edit=1&err=area",
+    );
+    expect(wbCreate).not.toHaveBeenCalled();
+  });
+
+  it("addBlock: allowZero — «0» ⇒ создаётся с areaM2=0.000 (площадь блока может быть 0)", async () => {
+    wbCreate.mockResolvedValueOnce({ id: "wbZero" });
+
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Ф", areaM2: "0" })),
+      "/karta-sklada?edit=1&ok=block",
+    );
+    expect(wbCreate).toHaveBeenCalledTimes(1);
+    expect(wbCreate.mock.calls[0][0].data.areaM2).toBe("0.000");
+  });
+
+  it("setBlockMeta: текстовый ввод в площадь ⇒ err=area (bounded parser отклоняет 'abc')", async () => {
+    await expectRedirect(
+      () => setBlockMeta(fd({ blockId: "wb1", areaM2: "abc" })),
+      "/karta-sklada?edit=1&err=area",
+    );
+    expect(wbUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════ ТЗ №7 #18 · addBlock наследует ориентиры авто-блока ═══════════════
+
+describe("addBlock — ориентиры унаследуются от авто-блока (ТЗ №7 #18)", () => {
+  it("рука вводит букву «Д», у которой уже есть BatchLocation с ориентирами 1, 2, 2 → WarehouseBlock создаётся С этими ориентирами (дедупом)", async () => {
+    // BatchLocation содержит «Д» с ориентирами 1, 2 и один дубль 2.
+    blFindMany.mockResolvedValueOnce([
+      { landmark: "1" },
+      { landmark: "2" },
+      { landmark: "2" },
+    ]);
+    wbCreate.mockResolvedValueOnce({ id: "wbD" });
+
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Д", areaM2: "12,5" })),
+      "/karta-sklada?edit=1&ok=block",
+    );
+
+    expect(wbCreate).toHaveBeenCalledTimes(1);
+    const data = wbCreate.mock.calls[0][0].data;
+    expect(data.letter).toBe("Д");
+    // Ориентиры перенесены с дедупом (1, 2).
+    expect(data.landmarks.create.map((l: { number: string }) => l.number).sort()).toEqual(
+      ["1", "2"],
+    );
+    // BatchLocation.findMany вызван С поиском по обеим формам буквы (норм+raw
+    // совпадают у «Д», но `in` контракт сохранён — регрессия ловится).
+    expect(blFindMany).toHaveBeenCalledTimes(1);
+    const where = blFindMany.mock.calls[0][0].where.block;
+    expect(where.in).toContain("Д");
+  });
+
+  it("рука вводит НОВУЮ букву без BatchLocation → WarehouseBlock создаётся с ПУСТЫМИ ориентирами", async () => {
+    blFindMany.mockResolvedValueOnce([]);
+    wbCreate.mockResolvedValueOnce({ id: "wbFresh" });
+
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Ю", areaM2: "" })),
+      "/karta-sklada?edit=1&ok=block",
+    );
+
+    const data = wbCreate.mock.calls[0][0].data;
+    expect(data.landmarks.create).toEqual([]);
   });
 });

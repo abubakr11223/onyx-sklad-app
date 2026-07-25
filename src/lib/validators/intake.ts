@@ -3,6 +3,7 @@
 // возвращает типизированный результат { ok, ... } с русскими сообщениями.
 
 import { normalizeBlockLetter } from "@/lib/block-letter";
+import { MAX_DECIMAL_12_3, parseBoundedDecimal } from "@/lib/decimal";
 
 export interface IntakeLocationInput {
   block: string;
@@ -81,22 +82,27 @@ export type IntakeResult =
 // продажи, брони, разбить и singan (все идут через эти парсеры).
 /** Целые (штуки, мм, количества) — столбцы Int4 (макс 2 147 483 647). */
 export const MAX_INT_FIELD = 1_000_000;
-/** Площадь и объёмы — Decimal(12,3) (макс 999 999 999.999). */
-export const MAX_DECIMAL_FIELD = 999_999_999.999;
+/** Площадь и объёмы — Decimal(12,3) (макс 999 999 999.999). Оставлен для
+ *  обратной совместимости — новый код берёт MAX_DECIMAL_12_3 из lib/decimal.ts. */
+export const MAX_DECIMAL_FIELD = MAX_DECIMAL_12_3;
 
 /**
  * «12,5» → 12.5. Возвращает:
  *  - null — поле пустое (не заполнено);
  *  - undefined — не число, ноль, отрицательное ИЛИ больше MAX_DECIMAL_FIELD;
  *  - number — корректное положительное число в пределах Decimal(12,3).
+ *
+ * Аудит ТЗ №7 #7 — реализация делегирована parseBoundedDecimal, но контракт
+ * (null | undefined | number, strogo pozitiv) СОХРАНЁН, чтобы существующие
+ * вызывающие сайты (validators/intake.ts, breaking.ts, locations.ts) не менялись.
  */
 export function parsePositiveDecimal(raw: string): number | null | undefined {
-  const s = raw.trim().replace(",", ".");
-  if (s === "") return null;
-  if (!/^\d+(\.\d+)?$/.test(s)) return undefined;
-  const n = Number(s);
-  if (!Number.isFinite(n) || n <= 0 || n > MAX_DECIMAL_FIELD) return undefined;
-  return n;
+  const res = parseBoundedDecimal(raw, {
+    max: MAX_DECIMAL_12_3,
+    allowZero: false,
+  });
+  if (!res.ok) return undefined;
+  return res.value;
 }
 
 /**
