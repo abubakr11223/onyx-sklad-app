@@ -552,3 +552,34 @@ model TelegramAccessRequest {
 
   @@index([status, createdAt])
 }
+
+// ТЗ №6 — сетка склада (блоки + ориентиры), НЕЗАВИСИМАЯ от камня. Стратегия
+// внедрения (основное ТЗ §10): сначала разметить склад (блоки/флаги), потом
+// заносить камень. Пустой размеченный блок — норма. Локации приёмки
+// (BatchLocation) ссылаются на эти блоки/ориентиры по letter/number (единый
+// справочник). Редактирует ТОЛЬКО Владелец.
+model WarehouseBlock {
+  id        String   @id @default(cuid())
+  letter    String   @unique // «А», «Б», «В»… — буква блока, уникальна
+  areaM2    Decimal? @db.Decimal(12, 3) // примерная площадь (необязательно)
+  note      String? // «у ворот», «плохой заезд», «крыша течёт»
+  isFull    Boolean  @default(false) // false = есть место, true = заполнен
+  sortOrder Int      @default(0) // порядок на экране (не строго по алфавиту)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  landmarks WarehouseLandmark[]
+
+  @@index([sortOrder])
+}
+
+model WarehouseLandmark {
+  id      String @id @default(cuid())
+  blockId String
+  number  String // «1», «2»… (строка — допускает «1–2»); уникален в блоке
+
+  block WarehouseBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([blockId, number])
+  @@index([blockId])
+}
