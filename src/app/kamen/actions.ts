@@ -18,7 +18,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import {
   getCapabilities,
-  getCurrentUser,
+  currentActorId,
   getRealSessionUser,
 } from "@/lib/session";
 import { validateStoneEdit } from "@/lib/stone-edit";
@@ -77,7 +77,7 @@ export async function updateLocation(formData: FormData): Promise<void> {
 
   // Действующий пользователь — ДО транзакции (как actorId в priemka).
   // userId в AuditLog nullable → пустая база не ломает правку.
-  const actorId = (await getCurrentUser())?.id ?? null;
+  const actorId = await currentActorId();
 
   await db.$transaction(async (tx) => {
     const before = await tx.batchLocation.findUnique({
@@ -150,7 +150,7 @@ export async function addLocation(formData: FormData): Promise<void> {
   }
   const data = result.data;
 
-  const actorId = (await getCurrentUser())?.id ?? null;
+  const actorId = await currentActorId();
 
   await db.$transaction(async (tx) => {
     // Партия должна существовать (иначе FK 500 → отдаём дружелюбный locErr).
@@ -229,7 +229,7 @@ export async function moveQty(formData: FormData): Promise<void> {
   const qtySlabsRaw = String(formData.get("qtySlabs") ?? "");
   const qtyAreaM2Raw = String(formData.get("qtyAreaM2") ?? "");
 
-  const actorId = (await getCurrentUser())?.id ?? null;
+  const actorId = await currentActorId();
 
   await db.$transaction(async (tx) => {
     // Row-lock FOR UPDATE на обе локации в порядке id (см. док-комментарий выше).
@@ -331,7 +331,7 @@ export async function updateSlabLocation(formData: FormData): Promise<void> {
   }
   const after = result.data;
 
-  const actorId = (await getCurrentUser())?.id ?? null;
+  const actorId = await currentActorId();
 
   await db.$transaction(async (tx) => {
     const before = await tx.slab.findUnique({
@@ -408,7 +408,7 @@ export async function setNeedsCheck(formData: FormData): Promise<void> {
 
   // Действующий пользователь — ДО транзакции (как actorId в locations/priemka).
   // userId в AuditLog nullable → пустая база не ломает пометку.
-  const actorId = (await getCurrentUser())?.id ?? null;
+  const actorId = await currentActorId();
 
   await db.$transaction(async (tx) => {
     // Делегат Prisma по типу сущности — маленький type-safe switch. Каждая

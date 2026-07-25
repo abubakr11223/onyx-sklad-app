@@ -5,7 +5,7 @@
 // стаб-авторизация и маршрутизация ошибок в UI.
 
 import { redirect } from "next/navigation";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import {
   ReservationError,
   cancelReservation,
@@ -13,19 +13,10 @@ import {
   reserveUnit,
 } from "@/lib/reservations";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
+import { strOf } from "@/lib/form";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
-}
-
-/**
- * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
- * По умолчанию демо-роль MANAGER → как и раньше. Правило «бронь снимает только
- * её менеджер или владелец» уже работает в cancelReservation.
- * R1: identity plumbing only; role enforcement — R2+.
- */
-async function currentManagerId(): Promise<string | null> {
-  return (await getCurrentUser())?.id ?? null;
 }
 
 // A7: строгие парсеры из validators/intake — «12,5» плит и «3x» дней больше не
@@ -42,11 +33,11 @@ export async function createReservation(
     return { errors: { form: "Нет доступа: бронь доступна менеджеру" } };
   }
 
-  const str = (name: string) => String(formData.get(name) ?? "");
+  const str = strOf(formData);
 
   const target = str("target"); // "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>"
   const customerName = str("customerName");
-  const customerContact = str("customerContact").trim() || null;
+  const customerContact = str("customerContact") || null;
   const daysRaw = parsePositiveInt(str("days"));
 
   const errors: Record<string, string> = {};
@@ -54,7 +45,7 @@ export async function createReservation(
   if (!targetId || !["SLAB", "PIECE", "BATCH"].includes(targetKind)) {
     errors.target = "Выберите камень или объём из партии";
   }
-  if (!customerName.trim()) {
+  if (!customerName) {
     errors.customerName = "Укажите клиента — анонимных броней не бывает";
   }
   if (daysRaw === undefined) {
@@ -77,7 +68,7 @@ export async function createReservation(
 
   if (Object.keys(errors).length > 0) return { errors };
 
-  const managerId = await currentManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     return {
       errors: { form: "Менеджер не найден — выполните заполнение базы (seed)" },
@@ -132,7 +123,7 @@ export async function cancelReservationAction(formData: FormData): Promise<void>
   const id = String(formData.get("reservationId") ?? "");
   if (!id) redirect("/bron");
 
-  const managerId = await currentManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     redirect(`/bron?err=${encodeURIComponent("Менеджер не найден (seed)")}`);
   }

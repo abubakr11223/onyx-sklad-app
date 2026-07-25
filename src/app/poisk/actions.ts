@@ -6,21 +6,12 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import { sendMessage } from "@/lib/telegram";
 import {
   PhotoRequestError,
   createAndDispatchPhotoRequest,
 } from "@/lib/photo-requests";
-
-/**
- * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
- * По умолчанию демо-роль MANAGER → как и раньше, разрешается в менеджера.
- * R1: identity plumbing only; role enforcement — R2+.
- */
-async function currentManagerId(): Promise<string | null> {
-  return (await getCurrentUser())?.id ?? null;
-}
 
 /**
  * Куда вернуться после запроса фото. По умолчанию /poisk (поведение как было).
@@ -51,7 +42,7 @@ export async function requestPhoto(formData: FormData): Promise<void> {
     redirect(`${next}?photoErr=${encodeURIComponent("Не указана партия")}`);
   }
 
-  const managerId = await currentManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     redirect(
       `${next}?photoErr=${encodeURIComponent("Менеджер не найден — выполните заполнение базы (seed)")}`,

@@ -123,9 +123,14 @@ export default function IntakeForm({
   const DRAFT_KEY = "onyx-intake-draft-v1";
   const [offlineMsg, setOfflineMsg] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
+  // BUG-08: gate записи черновика, пока не отработало восстановление на
+  // монтировании — иначе пустой default-state успевает сохраниться первым и
+  // затирает старый черновик до того, как эффект восстановления его прочитает.
+  const hydrated = useRef(false);
 
-  // Сохраняем черновик при каждом изменении.
+  // Сохраняем черновик при каждом изменении (но не раньше восстановления).
   useEffect(() => {
+    if (!hydrated.current) return;
     try {
       localStorage.setItem(
         DRAFT_KEY,
@@ -163,6 +168,8 @@ export default function IntakeForm({
       setDraftRestored(true);
     } catch {
       /* битый черновик — игнорируем */
+    } finally {
+      hydrated.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

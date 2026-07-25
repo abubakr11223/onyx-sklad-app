@@ -5,7 +5,7 @@
 // вызов доменной логики. Вся запись — одной транзакцией внутри breaking.ts.
 
 import { redirect } from "next/navigation";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import {
   BreakError,
   breakSlab,
@@ -16,6 +16,7 @@ import {
   type RawPieceRow,
 } from "@/lib/breaking";
 import { parsePositiveDecimal } from "@/lib/validators/intake";
+import { strOf, allOf } from "@/lib/form";
 
 export type BreakFormErrors = Record<string, string>;
 
@@ -23,15 +24,8 @@ export interface BreakFormState {
   errors: BreakFormErrors;
 }
 
-// Действующий пользователь = текущий (getCurrentUser, DEMO-shim R1).
-// TZ §4.3: «Бой/остаток ставит складчик». R1: identity plumbing only; role
-// enforcement — R2+ (в дефолтном демо это менеджер — валидный User, FK-safe).
-async function currentWarehouseUserId(): Promise<string | null> {
-  return (await getCurrentUser())?.id ?? null;
-}
-
 function readPieceRows(formData: FormData): RawPieceRow[] {
-  const all = (name: string) => formData.getAll(name).map(String);
+  const all = allOf(formData);
   const kinds = all("pKind");
   const sides = all("pSides");
   const lens = all("pBoundLen");
@@ -84,12 +78,12 @@ export async function submitBreak(
     return { errors: { form: "Нет доступа: разбить камень может склад" } };
   }
 
-  const str = (name: string) => String(formData.get(name) ?? "").trim();
+  const str = strOf(formData);
   const mode = str("mode");
   const errors: BreakFormErrors = {};
   const pieces = parseRows(readPieceRows(formData), errors);
 
-  const byUserId = await currentWarehouseUserId();
+  const byUserId = await currentActorId();
   if (!byUserId) {
     return { errors: { form: "Складчик не найден в системе — обратитесь к администратору" } };
   }
