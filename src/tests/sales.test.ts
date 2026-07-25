@@ -277,9 +277,23 @@ describe("computeWholeBatchSale — оптовый выкуп партии (TZ �
     });
   });
 
-  it("площадь округляется до 3 знаков (Decimal(12,3))", () => {
+  it("площадь усекается до 3 знаков (Decimal(12,3)) — Math.floor, НЕ round-up (ТЗ №7 #21)", () => {
+    // Раньше Math.round давал 12.346 (round-up). Теперь Math.floor → 12.345,
+    // чтобы никогда не переконсумить остаток (регрессия к areaFree=-0.00029).
     const r = computeWholeBatchSale({ slabsFree: null, areaFreeM2: 12.3456789 });
-    expect(r).toEqual({ ok: true, qtySlabs: null, qtyAreaM2: 12.346 });
+    expect(r).toEqual({ ok: true, qtySlabs: null, qtyAreaM2: 12.345 });
+  });
+
+  it("ТЗ №7 #21: бесконечная дробь после average-slab-fallback → truncate, не round-up", () => {
+    // Классический сценарий из аудита: areaFreeM2 = 100 / 7 ≈ 14.2857142857...
+    // Math.round → 14.286 (превышение на ~0.0004 → areaFree после инкремента
+    // становится ~-0.0004 → блокирует последующий area-only registerDirectPiece).
+    // Math.floor → 14.285 (остаток становится +0.0007 — безопасно).
+    const r = computeWholeBatchSale({ slabsFree: null, areaFreeM2: 100 / 7 });
+    if (!r.ok) throw new Error("unexpected");
+    expect(r.qtyAreaM2).toBe(14.285);
+    // Ключевое: остаток после списания НЕ отрицательный.
+    expect(100 / 7 - (r.qtyAreaM2 ?? 0)).toBeGreaterThanOrEqual(0);
   });
 
   it("нулевой/отрицательный остаток по измерению → null по нему", () => {
