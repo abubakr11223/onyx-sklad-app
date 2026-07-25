@@ -13,6 +13,7 @@ import type {
 } from "@/lib/telegram";
 import { encodeShapeDraft } from "@/lib/singan";
 import { capabilitiesFor, type Role } from "@/lib/permissions";
+import type { SeparateSlabInput } from "@/lib/slab-separation";
 
 // ───────────────────────── Deps (inyeksiya) ─────────────────────────
 
@@ -106,24 +107,6 @@ export interface WebhookDeps {
         data: { status: "DONE"; completedAt: Date };
       }): Promise<unknown>;
     };
-    // §4.1 L3 / §6.1 — ajratilgan Plita (Slab). Yozuv faqat ajratish paytida
-    // (skladchi fotolaganda) tug'iladi (ADR-004). label = «Плита №N» bo'yicha
-    // @@unique([batchId,label]) — konkurentlikda P2002 tutilib qayta hisoblanadi.
-    slab: {
-      count(args: { where: { batchId: string } }): Promise<number>;
-      create(args: {
-        data: {
-          batchId: string;
-          stoneTypeId: string;
-          label: string;
-          block: string;
-          landmark: string;
-          needsCheck: boolean;
-          photoRequestId: string;
-          separatedById: string;
-        };
-      }): Promise<{ id: string }>;
-    };
     // §5.3 — reply-to bo'yicha fotozaprosni topish: skladchi bot yuborgan vazifa
     // xabariga reply qilgan foto o'sha xabarning message_id'sini olib keladi.
     photoDispatch: {
@@ -172,6 +155,11 @@ export interface WebhookDeps {
     imageBase64: string,
     mediaType: "image/jpeg" | "image/png",
   ): Promise<{ sideCount: number; vertices: { x: number; y: number }[] } | null>;
+  // §4.1 L3 / §6.1 — выделение «Плиты №N». Транзакция с batch-lock'ом и guard'ом
+  // остатка §3 живёт в slab-separation.ts (нужен реальный db); handler остаётся
+  // DI-чистым (route инъектирует реальную реализацию, тест — мок). Возвращает id
+  // созданной плиты; кидает SlabSeparationError при исчерпании остатка.
+  separateSlab(input: SeparateSlabInput): Promise<string>;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -714,13 +702,24 @@ async function handlePhoto(
   // bitta alohida «Плита №N» tug'diradi → klient «плиту №2»ni alohida sotib oladi.
   // QAYTA suratga olishda (slabId to'la) YANGI slab YO'Q — mavjud plitaga bog'lanadi.
   //
-  // ATOMIKLIK: webhook'da $transaction inyeksiya qilinmagan (deps minimal, testlar
-  // oson mock qilsin). Shuning uchun avval Slab, keyin Photo yaratamiz — Photo
-  // yiqilsa (nadir) faqat «yetim» slab qoladi (foto yo'q), teskarisi emas. To'la
-  // atomik tranzaksiya — TG-C follow-up (§9 — hozircha sodda saqlaymiz).
+  // Аудит ТЗ №7 #1: выделение теперь идёт через deps.separateSlab — ОДНА
+  // транзакция с batch-lock'ом и guard'ом свободного остатка §3 (slab-separation.ts),
+  // чтобы не увести остаток в минус (oversell). Слой webhook остаётся DI-чистым:
+  // реальная транзакция инъектируется в route, тест — мок. Photo пишется ПОСЛЕ
+  // (отдельно) — если оно упадёт, останется лишь «выделенная плита без фото»
+  // (не наоборот); полная атомарность Slab+Photo — TG-C follow-up (§9).
+  const loc = claimed.batchLocation;
   const slabId =
     claimed.slabId == null
-      ? await separateSlab(claimed, user.id, deps)
+      ? await deps.separateSlab({
+          batchId: claimed.batchId,
+          stoneTypeId: claimed.batch.stoneTypeId,
+          photoRequestId: claimed.id,
+          block: loc?.block ?? "?",
+          landmark: loc?.landmark ?? "?",
+          needsCheck: loc == null,
+          separatedById: user.id,
+        })
       : claimed.slabId;
 
   // (6) Photo yozuvi — storageKey = Telegram file_id (Blob yo'q).
@@ -758,58 +757,3 @@ async function handlePhoto(
   }
 }
 
-/**
- * §4.1 L3 / §6.1 — bitta ajratilgan «Плита №N» yaratadi va id'sini qaytaradi.
- *
- * label = «Плита №N», N = (partiyadagi mavjud slab soni) + 1. @@unique([batchId,
- * label]) — bir partiyaga bir vaqtda ikki foto tushsa ikkisi ham bir xil N ni
- * hisoblab P2002 berishi mumkin; buni tutamiz va N ni qayta hisoblab urinamiz
- * (FIFO-egallash uslubidagi bound-loop: ko'pi bilan 5 marta).
- *
- * Lokatsiya: zaprosda tanlangan blok/orientir bo'lsa — slab shuni oladi va darhol
- * sotiladigan/ko'rinadigan bo'ladi (needsCheck=false). Bo'lmasa — «?» placeholder +
- * needsCheck=true: skladchi keyin real lokatsiyani SlabLocationForm orqali kiritadi
- * (bu holat poisk hisobidan chiqaradi va lokatsiya to'lgunча sotuvni bloklaydi — bu
- * ataylab, noma'lum joyli plita «sotilib ketmasin»).
- */
-async function separateSlab(
-  request: PendingPhotoRequest,
-  separatedById: string,
-  deps: WebhookDeps,
-): Promise<string> {
-  const loc = request.batchLocation;
-  const block = loc?.block ?? "?";
-  const landmark = loc?.landmark ?? "?";
-  const needsCheck = loc == null;
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const existing = await deps.db.slab.count({
-      where: { batchId: request.batchId },
-    });
-    try {
-      const slab = await deps.db.slab.create({
-        data: {
-          batchId: request.batchId,
-          stoneTypeId: request.batch.stoneTypeId,
-          label: `Плита №${existing + 1}`,
-          block,
-          landmark,
-          needsCheck,
-          photoRequestId: request.id,
-          separatedById,
-        },
-      });
-      return slab.id;
-    } catch (err) {
-      // P2002 — @@unique([batchId,label]) to'qnashuvi (konkurent ajratish): N ni
-      // qayta hisoblab yana urinamiz. Boshqa xato — yuqoriga (outer catch tutadi).
-      if ((err as { code?: string })?.code === "P2002") continue;
-      throw err;
-    }
-  }
-  // Bound tugadi (juda kam ehtimol) — throw: outer try/catch loglaydi, foto
-  // yaratilmaydi (yetim slab qolmaydi), skladchi qayta yuboradi.
-  throw new Error(
-    `[telegram-webhook] slab label to'qnashuvi: ${request.batchId} uchun 5 urinish tugadi`,
-  );
-}

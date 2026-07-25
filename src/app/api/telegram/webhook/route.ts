@@ -8,6 +8,7 @@ import { downloadFile, getFile, sendMessage } from "@/lib/telegram";
 import type { TgUpdate } from "@/lib/telegram";
 import { handleUpdate } from "@/lib/telegram-webhook";
 import { analyzeBrokenStoneShape } from "@/lib/ai-shape";
+import { separateSlabGuarded } from "@/lib/slab-separation";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,8 @@ export async function POST(req: Request) {
     downloadPhotoBase64,
     analyzeShape: (imageBase64, mediaType) =>
       analyzeBrokenStoneShape(imageBase64, mediaType),
+    // Аудит ТЗ №7 #1 — выделение плиты в транзакции с batch-lock + guard §3.
+    separateSlab: (input) => separateSlabGuarded(input),
   });
   return Response.json({ ok: true });
 }
