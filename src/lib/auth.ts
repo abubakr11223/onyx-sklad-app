@@ -115,39 +115,45 @@ export async function isAuthedFromCookie(
 export const SESSION_COOKIE = "onyx_session";
 
 /**
- * Magic-link tokeni: `magic.<userId>.<expiresAtMs>.<sigHex>`.
- * userId — cuid (nuqtasiz), expiresAtMs — millisekundlar (raqamlar), sig — HMAC hex.
- * Secret yo'q bo'lsa — fail-closed: "" qaytadi (signToken naqshi).
+ * Magic-link tokeni v2: `magic.<userId>.<expiresAtMs>.<jti>.<sigHex>`.
  *
- * ⚠️ HALOLLIK: stateless token DB'siz haqiqiy «bir martalik» bo'la olmaydi —
- * imzo yaroqlik muddati ichida qayta ishlatilishi mumkin. Yumshatuv: 2 daqiqalik
- * qisqa muddat (route real chaqiruvda beradi). Haqiqiy single-use (DB'da ishlatilgan
- * jeton belgisi) — keyingi bosqichga qoldirilgan yaxshilanish.
+ * Аудит ТЗ №7 #10 — раньше был 4-qismli (`magic.<userId>.<exp>.<sig>`) без jti,
+ * поэтому в пределах 2-min окна токен можно было проиграть replay'ом (Telegram
+ * forwarding / proxy access-log / referer). Теперь:
+ *  • jti — уникальный UUID; подпись qamraydi (userId+exp+jti), подмену ловим.
+ *  • login/tg маршрут пишет jti в ConsumedMagicLinkToken (UNIQUE @id) —
+ *    первый успешный вход берёт row, второй получает P2002 и rad'ы (силу-uses).
+ *
+ * `jti` необязателен — по умолчанию crypto.randomUUID(). Тесты передают явный.
+ * Secret yo'q bo'lsa — fail-closed: "" qaytadi.
  */
 export async function signMagicLinkToken(
   userId: string,
   expiresAtMs: number,
+  jti: string = globalThis.crypto.randomUUID(),
 ): Promise<string> {
   const secret = getEnv("AUTH_COOKIE_SECRET");
   if (!secret) {
     console.warn("[auth] AUTH_COOKIE_SECRET o'rnatilmagan — magic-link token yaratib bo'lmadi.");
     return "";
   }
-  const payload = `magic.${userId}.${expiresAtMs}`;
+  const payload = `magic.${userId}.${expiresAtMs}.${jti}`;
   const sig = await hmacHex(payload, secret);
   return `${payload}.${sig}`;
 }
 
 /**
  * Magic-link tokenini tekshiradi. HECH QACHON throw qilmaydi — tipiklashgan natija.
- * Tartib: shakl → prefiks → imzo (timing-safe) → muddat.
+ * Tartib: shakl → prefiks → imzo (timing-safe) → muddat. jti tashqarига qaytadi —
+ * login маршрут его consumъет в ConsumedMagicLinkToken (single-use, ТЗ №7 #10).
+ * legacy v1 (4 qism, jti yo'q) → `legacy` — foydalanuvchi yangi link so'raydi.
  */
 export async function verifyMagicLinkToken(
   token: string,
   nowMs: number,
 ): Promise<
-  | { ok: true; userId: string }
-  | { ok: false; reason: "malformed" | "badsig" | "expired" }
+  | { ok: true; userId: string; expiresAtMs: number; jti: string }
+  | { ok: false; reason: "malformed" | "badsig" | "expired" | "legacy" }
 > {
   const secret = getEnv("AUTH_COOKIE_SECRET");
   if (!secret) {
@@ -155,21 +161,24 @@ export async function verifyMagicLinkToken(
     return { ok: false, reason: "badsig" };
   }
   if (!token) return { ok: false, reason: "malformed" };
-  // Aynan 4 qism: [prefiks, userId, expiresAtMs, sig]. userId cuid (nuqtasiz),
-  // expiresAtMs raqam, sig hex — hech biri nuqta tutmaydi.
   const parts = token.split(".");
-  if (parts.length !== 4) return { ok: false, reason: "malformed" };
-  const [prefix, userId, expiresAtStr, sig] = parts;
+  // Legacy v1 — 4 qism (jti yo'q edi): foydalanuvchidan yangi link talab qilamiz.
+  if (parts.length === 4 && parts[0] === "magic") {
+    return { ok: false, reason: "legacy" };
+  }
+  // v2: aynan 5 qism [prefiks, userId, expiresAtMs, jti, sig].
+  if (parts.length !== 5) return { ok: false, reason: "malformed" };
+  const [prefix, userId, expiresAtStr, jti, sig] = parts;
   if (prefix !== "magic") return { ok: false, reason: "malformed" };
-  if (!userId || !/^\d+$/.test(expiresAtStr)) {
+  if (!userId || !/^\d+$/.test(expiresAtStr) || !jti) {
     return { ok: false, reason: "malformed" };
   }
-  const payload = `magic.${userId}.${expiresAtStr}`;
+  const payload = `magic.${userId}.${expiresAtStr}.${jti}`;
   const expected = await hmacHex(payload, secret);
   if (!timingSafeEqual(sig, expected)) return { ok: false, reason: "badsig" };
   const expiresAtMs = Number(expiresAtStr);
   if (nowMs > expiresAtMs) return { ok: false, reason: "expired" };
-  return { ok: true, userId };
+  return { ok: true, userId, expiresAtMs, jti };
 }
 
 /** Аудит ТЗ №7 #9 — token живёт 30 дней (совпадает с cookie maxAge). */
