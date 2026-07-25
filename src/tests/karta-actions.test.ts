@@ -50,7 +50,23 @@ const {
 } = M;
 
 vi.mock("@/lib/db", () => ({ db: M.dbMock }));
-vi.mock("@/lib/session", () => ({ getRealSessionUser: M.getRealSessionUser }));
+// ТЗ №7 #13 — requireOwner теперь в lib/session.ts; мокаем оба экспорта.
+// requireOwner использует наш же mocked getRealSessionUser + throws через
+// mocked next/navigation.redirect (см. ниже). Совпадает с реальной реализацией.
+vi.mock("@/lib/session", () => ({
+  getRealSessionUser: M.getRealSessionUser,
+  requireOwner: async (deniedRedirect: string) => {
+    const me = await M.getRealSessionUser();
+    if (!me || me.role !== "OWNER") {
+      // Same shape как next/navigation.redirect ниже — тест-мок ждёт NEXT_REDIRECT.
+      const err = new Error("NEXT_REDIRECT") as Error & { location: string };
+      err.name = "NEXT_REDIRECT";
+      err.location = deniedRedirect;
+      throw err;
+    }
+    return me.id as string;
+  },
+}));
 
 // ── next mocks: redirect бросает NEXT_REDIRECT(location), revalidate — noop ──
 class NextRedirectError extends Error {

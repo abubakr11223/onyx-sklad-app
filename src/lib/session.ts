@@ -8,6 +8,7 @@
 // (login-gate middleware sessiyasizni /login'ga yo'naltiradi).
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { capabilitiesFor, type Capabilities, type Role } from "@/lib/permissions";
@@ -143,4 +144,18 @@ export async function requireCapability(
   key: keyof Capabilities,
 ): Promise<boolean> {
   return (await getCapabilities())[key];
+}
+
+/**
+ * Аудит ТЗ №7 #13 — единый OWNER-gate для action'ов (defense-in-depth, как
+ * /accounts). Раньше существовали 2 разные копии в karta-sklada/actions.ts
+ * (Promise<void>, redirect `&err=denied`) и accounts/actions.ts (Promise<string>
+ * с возвратом id, redirect `?error=denied`). Дрифт между копиями = слабое звено
+ * авторизации. Здесь — один helper, каждый вызывающий передаёт свой redirect-URL.
+ * Возвращает id актёра (можно игнорировать, если не нужен).
+ */
+export async function requireOwner(deniedRedirect: string): Promise<string> {
+  const me = await getRealSessionUser();
+  if (!me || me.role !== "OWNER") redirect(deniedRedirect);
+  return me.id;
 }

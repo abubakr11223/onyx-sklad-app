@@ -10,13 +10,13 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { normalizeBlockLetter } from "@/lib/block-letter";
 import { MAX_DECIMAL_12_3, parseBoundedDecimal } from "@/lib/decimal";
-import { getRealSessionUser } from "@/lib/session";
+import { requireOwner as requireOwnerBase } from "@/lib/session";
 
 const BACK = "/karta-sklada?edit=1";
 
+// Аудит ТЗ №7 #13 — общий OWNER-gate из lib/session.ts (был локальный дубль).
 async function requireOwner(): Promise<void> {
-  const me = await getRealSessionUser();
-  if (!me || me.role !== "OWNER") redirect(`${BACK}&err=denied`);
+  await requireOwnerBase(`${BACK}&err=denied`);
 }
 
 /**
