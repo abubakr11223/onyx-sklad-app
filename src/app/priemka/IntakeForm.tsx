@@ -23,6 +23,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
+import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
 
 export interface StoneTypeOption {
   id: string;
@@ -356,23 +357,9 @@ export default function IntakeForm({
           </button>
         </Alert>
       )}
-      {/* ТЗ №6 §5.4 — справочник сетки склада для подсказок блока/ориентира. */}
-      {blocks.length > 0 && (
-        <>
-          <datalist id="wh-blocks">
-            {blocks.map((b) => (
-              <option key={b.letter} value={b.letter} />
-            ))}
-          </datalist>
-          {blocks.map((b) => (
-            <datalist key={b.letter} id={`wh-lm-${b.letter}`}>
-              {b.landmarks.map((n) => (
-                <option key={n} value={n} />
-              ))}
-            </datalist>
-          ))}
-        </>
-      )}
+      {/* ТЗ №6 §5.4 / #14 — общий компонент datalist сетки склада (был дубль
+          в приёмке и разбитии; единый источник = одинаковые id и поведение). */}
+      <WarehouseGridDatalists blocks={blocks} />
 
       {/* ── Вид камня ── */}
       <Card>
