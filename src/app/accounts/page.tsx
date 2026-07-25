@@ -162,7 +162,7 @@ export default async function AccountsPage({
                 пароль (≥{MIN_PASSWORD_LENGTH} символов), роль, телефон.
               </li>
               <li>
-                <b>Забыл пароль</b> — «Сбросить пароль» в его карточке. Поменять
+                <b>Забыл пароль</b> — «Задать пароль» в его карточке. Поменять
                 логин — «Сохранить логин».
               </li>
               <li>
@@ -469,7 +469,7 @@ export default async function AccountsPage({
                         className={`${inputClass} sm:max-w-xs`}
                       />
                       <Button type="submit" variant="secondary" size="sm">
-                        Сбросить пароль
+                        Задать пароль
                       </Button>
                     </form>
 
