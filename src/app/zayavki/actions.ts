@@ -8,7 +8,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCurrentUser, requireCapabilityOrRedirect } from "@/lib/session";
 import { LeadError, updateLeadStatus } from "@/lib/leads";
 
 /**
@@ -16,7 +16,7 @@ import { LeadError, updateLeadStatus } from "@/lib/leads";
  * отказ ещё ДО записи. Возвращает id, чтобы закрепить его как assignedManager.
  */
 async function requireLeadsAccess(): Promise<string> {
-  if (!(await getCapabilities()).canSeeLeads) redirect("/zayavki?error=denied");
+  await requireCapabilityOrRedirect("canSeeLeads", "/zayavki?error=denied");
   const me = await getCurrentUser();
   if (!me) redirect("/zayavki?error=denied");
   return me.id;

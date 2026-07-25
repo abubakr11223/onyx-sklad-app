@@ -147,6 +147,21 @@ export async function requireCapability(
 }
 
 /**
+ * Аудит ТЗ №7 #28 — boilerplate `if (!(await getCapabilities())[k]) redirect(...)`
+ * повторялся в 7+ action'ах (kamen ×5, zayavki, lead-actions). Helper: если
+ * capability false → next-redirect на deniedUrl. Action продолжает как обычно
+ * при true. Return-based actions (useActionState с { errors: { form } }) — свой
+ * шаблон, здесь не унифицируем: сообщение зависит от контекста и переводится
+ * пользователю в UI формы.
+ */
+export async function requireCapabilityOrRedirect(
+  key: keyof Capabilities,
+  deniedRedirect: string,
+): Promise<void> {
+  if (!(await getCapabilities())[key]) redirect(deniedRedirect);
+}
+
+/**
  * Аудит ТЗ №7 #13 — единый OWNER-gate для action'ов (defense-in-depth, как
  * /accounts). Раньше существовали 2 разные копии в karta-sklada/actions.ts
  * (Promise<void>, redirect `&err=denied`) и accounts/actions.ts (Promise<string>
