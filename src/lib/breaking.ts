@@ -13,6 +13,7 @@ import type { PieceKind, UnitStatus, Prisma } from "@prisma/client";
 import { db } from "./db";
 import { computeFreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
+import { normalizeBlockLetter } from "./block-letter";
 import {
   MAX_DECIMAL_FIELD,
   MAX_INT_FIELD,
@@ -195,7 +196,8 @@ export function parsePieceRow(row: RawPieceRow): ParsePieceRowResult {
     errors.areaM2 = "Площадь — положительное число, например 1,2";
   }
 
-  const block = row.block.trim();
+  // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
+  const block = normalizeBlockLetter(row.block);
   const landmark = row.landmark.trim();
   if (!block) errors.block = "Укажите блок (например «А»)";
   if (!landmark) errors.landmark = "Укажите ориентир (например «2»)";

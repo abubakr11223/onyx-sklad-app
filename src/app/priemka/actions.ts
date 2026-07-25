@@ -23,6 +23,9 @@ export interface IntakeFormState {
   errors: IntakeErrors;
 }
 
+/** ТЗ №7 §3 — предел размера фото узора (телефонный снимок ≈ до 15 МБ). */
+const MAX_PATTERN_PHOTO_BYTES = 15 * 1024 * 1024;
+
 /** Ошибка уровня БД, адресованная конкретному полю формы. */
 class IntakeFieldError extends Error {
   constructor(
@@ -115,11 +118,13 @@ export async function submitIntake(
   // менеджер — валидный User, FK-safe; ролевая проверка складчика придёт позже).
   const actorId = (await getCurrentUser())?.id ?? null;
 
-  let summary: { stoneName: string; batchId: string };
+  let summary: { stoneName: string; batchId: string; patternIds: string[] };
   try {
     summary = await db.$transaction(async (tx) => {
       let stoneTypeId: string;
       let stoneName: string;
+      // ТЗ №7 §3 — id узор-подгрупп в порядке ввода (для привязки фото вне tx).
+      const patternIds: string[] = [];
       if (data.stoneType.kind === "existing") {
         const existing = await tx.stoneType.findUnique({
           where: { id: data.stoneType.id },
@@ -174,22 +179,26 @@ export async function submitIntake(
               areaHereM2: loc.areaHereM2 === null ? null : String(loc.areaHereM2),
             })),
           },
-          // ТЗ №3 — узор-подгруппы (если заведены). Пусто → однородная партия.
-          ...(data.patterns.length > 0
-            ? {
-                patterns: {
-                  create: data.patterns.map((p) => ({
-                    description: p.description,
-                    thicknessMm: p.thicknessMm,
-                    slabsCount: p.slabs,
-                    areaM2: String(p.areaM2),
-                  })),
-                },
-              }
-            : {}),
         },
         select: { id: true },
       });
+
+      // ТЗ №3 — узор-подгруппы (если заведены). Создаём по одной, сохраняя
+      // порядок ввода → id'шники нужны, чтобы вне транзакции привязать к ним
+      // загруженные в форме фото (ТЗ №7 §3, BUG-02).
+      for (const p of data.patterns) {
+        const pat = await tx.batchPattern.create({
+          data: {
+            batchId: batch.id,
+            description: p.description,
+            thicknessMm: p.thicknessMm,
+            slabsCount: p.slabs,
+            areaM2: String(p.areaM2),
+          },
+          select: { id: true },
+        });
+        patternIds.push(pat.id);
+      }
 
       await tx.auditLog.create({
         data: {
@@ -221,7 +230,7 @@ export async function submitIntake(
         },
       });
 
-      return { stoneName, batchId: batch.id };
+      return { stoneName, batchId: batch.id, patternIds };
     });
   } catch (e) {
     if (e instanceof IntakeFieldError) {
@@ -235,22 +244,63 @@ export async function submitIntake(
     throw e;
   }
 
-  // ТЗ №3 — по каждому узору АВТОМАТИЧЕСКИ ставим фотозапрос складчику (Telegram).
+  // ТЗ №7 §3 (BUG-02) — фото узор-подгрупп, загруженные ПРЯМО в форме приёмки.
+  // Вне транзакции: партия уже сохранена, а put() в Blob — сетевая операция
+  // (её сбой не должен откатывать приёмку). Индексы patPhoto выровнены с
+  // data.patterns (валидация прошла → все строки на месте), а те — с patternIds.
+  const patPhotoFiles = formData.getAll("patPhoto");
+  const photographed = new Set<number>();
+  if (summary.patternIds.length > 0) {
+    const { put } = await import("@vercel/blob");
+    const now = new Date();
+    for (let i = 0; i < summary.patternIds.length; i++) {
+      const file = patPhotoFiles[i];
+      if (!(file instanceof File) || file.size === 0) continue; // фото не приложили
+      if (!file.type.startsWith("image/") || file.size > MAX_PATTERN_PHOTO_BYTES) {
+        continue; // не картинка / слишком большое — молча пропускаем (уйдёт в фотозапрос)
+      }
+      try {
+        const buf = Buffer.from(await file.arrayBuffer());
+        const ext = file.type.includes("png")
+          ? "png"
+          : file.type.includes("webp")
+            ? "webp"
+            : "jpg";
+        const blob = await put(
+          `patterns/${summary.batchId}/${summary.patternIds[i]}-${now.getTime()}.${ext}`,
+          buf,
+          { access: "public", contentType: file.type },
+        );
+        await db.photo.create({
+          data: {
+            storageKey: blob.url,
+            kind: "SAMPLE", // образец узора (не Telegram-file_id, а Blob-URL)
+            takenAt: now, // «фиксация даты съёмки» — момент приёмки
+            takenById: actorId,
+            batchPatternId: summary.patternIds[i],
+          },
+        });
+        photographed.add(i);
+      } catch (err) {
+        // Фото не критично — партия сохранена; узор без фото уйдёт в фотозапрос ниже.
+        console.error("[priemka] узор-фото загрузка упала:", err);
+      }
+    }
+  }
+
+  // ТЗ №3 — по узорам БЕЗ фото из формы АВТОМАТИЧЕСКИ ставим фотозапрос (Telegram).
   // ВНЕ транзакции: партия уже сохранена, сбой доставки НЕ откатывает приёмку.
   // Только когда есть actor (managerId — FK на User; в пустой базе actorId=null).
-  if (data.patterns.length > 0 && actorId) {
-    const created = await db.batchPattern.findMany({
-      where: { batchId: summary.batchId },
-      select: { id: true, description: true },
-    });
-    for (const pat of created) {
+  if (summary.patternIds.length > 0 && actorId) {
+    for (let i = 0; i < summary.patternIds.length; i++) {
+      if (photographed.has(i)) continue; // фото уже приложено в форме — запрос не нужен
       try {
         await createAndDispatchPhotoRequest(
           {
             managerId: actorId,
             batchId: summary.batchId,
-            batchPatternId: pat.id,
-            comment: `Узор: ${pat.description}`,
+            batchPatternId: summary.patternIds[i],
+            comment: `Узор: ${data.patterns[i].description}`,
           },
           { db, sendMessage },
         );

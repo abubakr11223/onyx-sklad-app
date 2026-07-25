@@ -559,6 +559,30 @@ export default function IntakeForm({
                       error={e[`pattern-${idx}-area`]}
                     />
                   </div>
+
+                  {/* ТЗ №7 §3 (BUG-02) — фото узора прямо в приёмке: менеджер
+                      покажет готовое фото B2C-клиенту без нового фотозапроса.
+                      Необязательно: без фото узор уйдёт в Telegram-фотозапрос. */}
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <label
+                      htmlFor={`patPhoto-${idx}`}
+                      className="text-sm font-semibold text-ink"
+                    >
+                      Фото узора
+                    </label>
+                    <input
+                      id={`patPhoto-${idx}`}
+                      name="patPhoto"
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+                    />
+                    <p className="text-xs text-ink/50">
+                      Снимок подгруппы — по нему узор покажут клиенту. Можно
+                      пропустить: тогда придёт фотозапрос в Telegram.
+                    </p>
+                  </div>
                 </div>
               );
             })}
