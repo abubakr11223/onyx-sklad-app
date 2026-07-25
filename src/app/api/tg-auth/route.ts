@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE, signSessionToken } from "@/lib/auth";
 import { validateTelegramInitData } from "@/lib/telegram-webapp";
+import { TELEGRAM_INIT_DATA_TTL_SEC } from "@/lib/config";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,14 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const token = process.env.TELEGRAM_BOT_TOKEN ?? "";
-  const res = await validateTelegramInitData(initData, token, Date.now());
+  // Аудит ТЗ №7 #24 — раньше здесь работал дефолт 24 ч, что для минтинга
+  // 30-дневной cookie слишком широкое окно replay'а. Явно 1 час.
+  const res = await validateTelegramInitData(
+    initData,
+    token,
+    Date.now(),
+    TELEGRAM_INIT_DATA_TTL_SEC,
+  );
   if (!res.ok) return fail(res.reason);
 
   // Пользователь должен существовать (привязан telegramId) и быть активным.
