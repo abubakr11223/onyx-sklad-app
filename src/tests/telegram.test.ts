@@ -132,7 +132,7 @@ describe("getFile — fail-closed null (ТЗ №7 #30)", () => {
 
 // ═══════════════ downloadFile — Uint8Array | null ═══════════════
 
-describe("downloadFile — fail-closed на token/404, но throws на network (ТЗ №7 #30)", () => {
+describe("downloadFile — fail-closed на token/404/network (ТЗ №7 #30 + B5 follow-up)", () => {
   it("нет token → null, fetch НЕ вызывается", async () => {
     delete process.env.TELEGRAM_BOT_TOKEN;
     const fetchSpy = vi.fn();
@@ -164,16 +164,15 @@ describe("downloadFile — fail-closed на token/404, но throws на network 
     expect(Array.from(res!)).toEqual([1, 2, 3]);
   });
 
-  it("⚠️ КОНТРАКТНОЕ РАЗЛИЧИЕ: network throw НЕ ловится (документируем поведение)", async () => {
-    // downloadFile (в отличие от getFile через apiPost) НЕ оборачивает fetch в
-    // try/catch. Регрессия к «стало throws» ловится обратной стороной: если в
-    // будущем поведение будет исправлено (fail-closed → null), этот тест сломается
-    // и будет заменён на `expect(...).resolves.toBeNull()`. Пока — фиксируем.
+  it("network throw → null (B5 follow-up: fail-closed единый с getFile)", async () => {
+    // Раньше downloadFile НЕ оборачивал fetch в try/catch — network throws
+    // ронял вызывающие (/api/photo/[id], webhook downloadPhotoBase64). Теперь
+    // единый контракт: null + warn. Регрессия к «снова throws» ловится здесь.
     globalThis.fetch = vi.fn(async () => {
       throw new Error("ECONNRESET");
     }) as unknown as typeof fetch;
 
     const { downloadFile } = await loadModule();
-    await expect(downloadFile("photos/abc.jpg")).rejects.toThrow(/ECONNRESET/);
+    await expect(downloadFile("photos/abc.jpg")).resolves.toBeNull();
   });
 });

@@ -188,14 +188,28 @@ export async function getFile(fileId: string): Promise<TgFile | null> {
   return r.ok ? r.result : null;
 }
 
-/** Fayl baytlarini yuklab oladi. filePath — getFile natijasidagi file_path. */
+/**
+ * Fayl baytlarini yuklab oladi. filePath — getFile natijasidagi file_path.
+ * Аудит ТЗ №7 #30 follow-up (B5) — раньше fetch НЕ был обёрнут в try/catch:
+ * network-ошибка (ECONNRESET, DNS) роняла downloadFile throws-ом, в отличие
+ * от getFile (apiPost ловит fetch). Регрессия к 500 в /api/photo/[id] и в
+ * webhook downloadPhotoBase64 (там ожидается null → фотозапрос переспросит).
+ * Теперь единый fail-closed контракт: no-token / non-2xx / network → null + warn.
+ */
 export async function downloadFile(filePath: string): Promise<Uint8Array | null> {
   const token = getToken();
   if (!token) {
     console.warn("[telegram] TELEGRAM_BOT_TOKEN o'rnatilmagan — downloadFile o'tkazib yuborildi.");
     return null;
   }
-  const res = await fetch(`${API_ROOT}/file/bot${token}/${filePath}`);
+  let res: Response;
+  try {
+    res = await fetch(`${API_ROOT}/file/bot${token}/${filePath}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[telegram] downloadFile tarmoq xatosi: ${msg}`);
+    return null;
+  }
   if (!res.ok) {
     console.warn(`[telegram] downloadFile muvaffaqiyatsiz (${res.status}).`);
     return null;
