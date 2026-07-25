@@ -45,6 +45,25 @@ async function blockHasStone(rawLetter: string): Promise<boolean> {
  * регистр). Ориентиры собираем из BatchLocation по обеим формам, чтобы не
  * потерять legacy-строки, а материализуемый блок называем нормализованным.
  */
+/**
+ * Собирает уникальные ориентиры этой буквы из BatchLocation по ОБЕИМ формам
+ * (нормализованная + сырая) — legacy-строки не теряются. Пустые обрезаются.
+ * Общий помощник для materializeBlock и addBlock (ТЗ №7 #18).
+ */
+async function collectLandmarksFromLocations(
+  letter: string,
+  rawLetter: string,
+): Promise<string[]> {
+  const variants = [...new Set([letter, rawLetter].filter(Boolean))];
+  const locs = await db.batchLocation.findMany({
+    where: { block: { in: variants } },
+    select: { landmark: true },
+  });
+  return [
+    ...new Set(locs.map((l) => l.landmark.trim()).filter((s) => s !== "")),
+  ];
+}
+
 async function materializeBlock(rawLetter: string): Promise<string> {
   const letter = normalizeBlockLetter(rawLetter) || rawLetter;
   const existing = await db.warehouseBlock.findUnique({
@@ -53,16 +72,7 @@ async function materializeBlock(rawLetter: string): Promise<string> {
   });
   if (existing) return existing.id;
 
-  // Ориентиры авто-блока — из BatchLocation (свободный текст). Ищем по обеим
-  // формам буквы (норм. и raw), дедупим и пустые обрезаем.
-  const variants = [...new Set([letter, rawLetter].filter(Boolean))];
-  const locs = await db.batchLocation.findMany({
-    where: { block: { in: variants } },
-    select: { landmark: true },
-  });
-  const numbers = [
-    ...new Set(locs.map((l) => l.landmark.trim()).filter((s) => s !== "")),
-  ];
+  const numbers = await collectLandmarksFromLocations(letter, rawLetter);
   const max = await db.warehouseBlock.aggregate({ _max: { sortOrder: true } });
 
   // Аудит ТЗ №7 #17 — раньше пара findUnique→create была неатомарной: два
@@ -124,12 +134,19 @@ export async function addBlock(formData: FormData): Promise<void> {
   if (!areaRes.ok) redirect(`${BACK}&err=area`);
   const areaM2 = areaRes.value;
   try {
+    // Аудит ТЗ №7 #18 — если владелец руками добавляет ту же букву, что уже есть
+    // как авто-блок из приёмки, сеть должна унаследовать его ориентиры (иначе
+    // datalist предложит новую «Д» с ZERO orientирами, хотя физически камень
+    // лежит на «1»/«2»). Общий сборщик с materializeBlock — единая семантика.
+    const rawLetter = String(formData.get("letter") ?? "").trim();
+    const numbers = await collectLandmarksFromLocations(letter, rawLetter);
     const max = await db.warehouseBlock.aggregate({ _max: { sortOrder: true } });
     await db.warehouseBlock.create({
       data: {
         letter,
         areaM2: areaM2 === null ? null : areaM2.toFixed(3),
         sortOrder: (max._max.sortOrder ?? 0) + 1,
+        landmarks: { create: numbers.map((number) => ({ number })) },
       },
     });
   } catch (e) {

@@ -404,3 +404,48 @@ describe("addBlock / setBlockMeta — переполнение площади �
     expect(wbUpdate).not.toHaveBeenCalled();
   });
 });
+
+// ═══════════════ ТЗ №7 #18 · addBlock наследует ориентиры авто-блока ═══════════════
+
+describe("addBlock — ориентиры унаследуются от авто-блока (ТЗ №7 #18)", () => {
+  it("рука вводит букву «Д», у которой уже есть BatchLocation с ориентирами 1, 2, 2 → WarehouseBlock создаётся С этими ориентирами (дедупом)", async () => {
+    // BatchLocation содержит «Д» с ориентирами 1, 2 и один дубль 2.
+    blFindMany.mockResolvedValueOnce([
+      { landmark: "1" },
+      { landmark: "2" },
+      { landmark: "2" },
+    ]);
+    wbCreate.mockResolvedValueOnce({ id: "wbD" });
+
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Д", areaM2: "12,5" })),
+      "/karta-sklada?edit=1&ok=block",
+    );
+
+    expect(wbCreate).toHaveBeenCalledTimes(1);
+    const data = wbCreate.mock.calls[0][0].data;
+    expect(data.letter).toBe("Д");
+    // Ориентиры перенесены с дедупом (1, 2).
+    expect(data.landmarks.create.map((l: { number: string }) => l.number).sort()).toEqual(
+      ["1", "2"],
+    );
+    // BatchLocation.findMany вызван С поиском по обеим формам буквы (норм+raw
+    // совпадают у «Д», но `in` контракт сохранён — регрессия ловится).
+    expect(blFindMany).toHaveBeenCalledTimes(1);
+    const where = blFindMany.mock.calls[0][0].where.block;
+    expect(where.in).toContain("Д");
+  });
+
+  it("рука вводит НОВУЮ букву без BatchLocation → WarehouseBlock создаётся с ПУСТЫМИ ориентирами", async () => {
+    blFindMany.mockResolvedValueOnce([]);
+    wbCreate.mockResolvedValueOnce({ id: "wbFresh" });
+
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Ю", areaM2: "" })),
+      "/karta-sklada?edit=1&ok=block",
+    );
+
+    const data = wbCreate.mock.calls[0][0].data;
+    expect(data.landmarks.create).toEqual([]);
+  });
+});
