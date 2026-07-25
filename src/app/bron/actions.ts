@@ -5,7 +5,7 @@
 // стаб-авторизация и маршрутизация ошибок в UI.
 
 import { redirect } from "next/navigation";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import {
   ReservationError,
   cancelReservation,
@@ -17,16 +17,6 @@ import { strOf } from "@/lib/form";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
-}
-
-/**
- * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
- * По умолчанию демо-роль MANAGER → как и раньше. Правило «бронь снимает только
- * её менеджер или владелец» уже работает в cancelReservation.
- * R1: identity plumbing only; role enforcement — R2+.
- */
-async function currentManagerId(): Promise<string | null> {
-  return (await getCurrentUser())?.id ?? null;
 }
 
 // A7: строгие парсеры из validators/intake — «12,5» плит и «3x» дней больше не
@@ -78,7 +68,7 @@ export async function createReservation(
 
   if (Object.keys(errors).length > 0) return { errors };
 
-  const managerId = await currentManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     return {
       errors: { form: "Менеджер не найден — выполните заполнение базы (seed)" },
@@ -133,7 +123,7 @@ export async function cancelReservationAction(formData: FormData): Promise<void>
   const id = String(formData.get("reservationId") ?? "");
   if (!id) redirect("/bron");
 
-  const managerId = await currentManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     redirect(`/bron?err=${encodeURIComponent("Менеджер не найден (seed)")}`);
   }

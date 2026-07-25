@@ -7,7 +7,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import {
   confirmReturnedUnit,
   returnSale,
@@ -54,15 +54,6 @@ function failState(error: SaleError): SaleFormState {
     return { errors: {}, conflict: error.message };
   }
   return { errors: { form: error.message }, conflict: null };
-}
-
-/**
- * Действующий менеджер = текущий пользователь (getCurrentUser, DEMO-shim R1).
- * По умолчанию демо-роль MANAGER → как и раньше, разрешается в менеджера.
- * R1: identity plumbing only; role enforcement — R2+.
- */
-async function getActingManagerId(): Promise<string | null> {
-  return (await getCurrentUser())?.id ?? null;
 }
 
 /** Итог продажи для баннера успеха — «что, сколько, кому». */
@@ -151,7 +142,7 @@ export async function submitSale(
 
   if (Object.keys(errors).length > 0) return { errors, conflict: null };
 
-  const managerId = await getActingManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     return {
       errors: { form: "В системе нет активного менеджера (seed) — обратитесь к администратору" },
@@ -200,7 +191,7 @@ export async function returnSaleAction(formData: FormData): Promise<void> {
     redirect(`/prodazha?retErr=${encodeURIComponent("Продажа не указана")}`);
   }
 
-  const managerId = await getActingManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     redirect(`/prodazha?retErr=${encodeURIComponent("В системе нет активного менеджера")}`);
   }
@@ -237,7 +228,7 @@ export async function confirmReturnAction(formData: FormData): Promise<void> {
     redirect(`/prodazha?retErr=${encodeURIComponent("Камень не указан")}`);
   }
 
-  const managerId = await getActingManagerId();
+  const managerId = await currentActorId();
   if (!managerId) {
     redirect(`/prodazha?retErr=${encodeURIComponent("В системе нет активного менеджера")}`);
   }

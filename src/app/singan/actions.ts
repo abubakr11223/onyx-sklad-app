@@ -12,7 +12,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import { decodeShapeDraft } from "@/lib/singan";
 import { renderChertyoj } from "@/lib/chertyoj";
 import {
@@ -91,7 +91,7 @@ export async function submitSingan(formData: FormData): Promise<void> {
   const decrementSlabs = formData.get("decrementSlabs") === "1";
 
   // Действующий пользователь — ДО транзакции (kamen/actions actorId uslubi).
-  const byUserId = (await getCurrentUser())?.id ?? null;
+  const byUserId = await currentActorId();
   if (!byUserId) {
     fail("Складчик не найден в системе — обратитесь к администратору");
   }

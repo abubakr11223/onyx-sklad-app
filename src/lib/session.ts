@@ -98,6 +98,16 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 }
 
 /**
+ * БАГ-27: actor-id — action'lar yozuvni kimga bog'lash uchun ishlatadigan
+ * amaldagi foydalanuvchi id'si (menejer, skladchik — R1: identity plumbing
+ * only, rol tekshiruvi getCapabilities orqali alohida bo'ladi). Foydalanuvchi
+ * topilmasa — null (mavjud stub'lar bilan bir xil kontrakt).
+ */
+export async function currentActorId(): Promise<string | null> {
+  return (await getCurrentUser())?.id ?? null;
+}
+
+/**
  * Amaldagi foydalanuvchi huquqlari. Foydalanuvchi topilmasa — eng cheklangan
  * XAVFSIZ default (PARTNER: hech qanday narx/sotuv/ombor huquqi yo'q) —
  * shunda «foydalanuvchi yo'q» holati hech qachon ortiqcha ruxsat bermaydi.

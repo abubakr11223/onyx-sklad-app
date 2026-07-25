@@ -7,7 +7,7 @@
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import { sendMessage } from "@/lib/telegram";
 import {
   createAndDispatchPhotoRequest,
@@ -113,11 +113,8 @@ export async function submitIntake(
   if (!result.ok) return { errors: result.errors };
   const data = result.data;
 
-  // Действующий пользователь = текущий (getCurrentUser, DEMO-shim R1).
   // userId в AuditLog nullable, поэтому пустая база не ломает приёмку.
-  // R1: identity plumbing only; role enforcement — R2+ (в дефолтном демо это
-  // менеджер — валидный User, FK-safe; ролевая проверка складчика придёт позже).
-  const actorId = (await getCurrentUser())?.id ?? null;
+  const actorId = await currentActorId();
 
   let summary: { stoneName: string; batchId: string; patternIds: string[] };
   try {
