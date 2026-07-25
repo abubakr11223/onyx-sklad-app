@@ -13,6 +13,7 @@ import {
   reserveUnit,
 } from "@/lib/reservations";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
+import { strOf } from "@/lib/form";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
@@ -42,11 +43,11 @@ export async function createReservation(
     return { errors: { form: "Нет доступа: бронь доступна менеджеру" } };
   }
 
-  const str = (name: string) => String(formData.get(name) ?? "");
+  const str = strOf(formData);
 
   const target = str("target"); // "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>"
   const customerName = str("customerName");
-  const customerContact = str("customerContact").trim() || null;
+  const customerContact = str("customerContact") || null;
   const daysRaw = parsePositiveInt(str("days"));
 
   const errors: Record<string, string> = {};
@@ -54,7 +55,7 @@ export async function createReservation(
   if (!targetId || !["SLAB", "PIECE", "BATCH"].includes(targetKind)) {
     errors.target = "Выберите камень или объём из партии";
   }
-  if (!customerName.trim()) {
+  if (!customerName) {
     errors.customerName = "Укажите клиента — анонимных броней не бывает";
   }
   if (daysRaw === undefined) {

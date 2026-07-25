@@ -21,6 +21,7 @@ import {
   parsePositiveDecimal,
   parsePositiveInt,
 } from "@/lib/validators/intake";
+import { strOf } from "@/lib/form";
 
 export type SaleMode =
   | "SLAB"
@@ -105,7 +106,7 @@ export async function submitSale(
     };
   }
 
-  const str = (name: string) => String(formData.get(name) ?? "").trim();
+  const str = strOf(formData);
   const mode = str("mode") as SaleMode;
   const errors: Record<string, string> = {};
 

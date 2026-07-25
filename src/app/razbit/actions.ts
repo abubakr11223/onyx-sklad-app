@@ -16,6 +16,7 @@ import {
   type RawPieceRow,
 } from "@/lib/breaking";
 import { parsePositiveDecimal } from "@/lib/validators/intake";
+import { strOf, allOf } from "@/lib/form";
 
 export type BreakFormErrors = Record<string, string>;
 
@@ -31,7 +32,7 @@ async function currentWarehouseUserId(): Promise<string | null> {
 }
 
 function readPieceRows(formData: FormData): RawPieceRow[] {
-  const all = (name: string) => formData.getAll(name).map(String);
+  const all = allOf(formData);
   const kinds = all("pKind");
   const sides = all("pSides");
   const lens = all("pBoundLen");
@@ -84,7 +85,7 @@ export async function submitBreak(
     return { errors: { form: "Нет доступа: разбить камень может склад" } };
   }
 
-  const str = (name: string) => String(formData.get(name) ?? "").trim();
+  const str = strOf(formData);
   const mode = str("mode");
   const errors: BreakFormErrors = {};
   const pieces = parseRows(readPieceRows(formData), errors);

@@ -22,6 +22,7 @@ import {
 } from "@/lib/breaking";
 import type { PieceKind } from "@prisma/client";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
+import { strOf } from "@/lib/form";
 
 export async function submitSingan(formData: FormData): Promise<void> {
   // Draft'ni URL'ga qaytarish uchun oldindan o'qiymiz (xato banneri forma bilan
@@ -46,7 +47,7 @@ export async function submitSingan(formData: FormData): Promise<void> {
     redirect(`/singan?err=${encodeURIComponent("Ссылка повреждена — запросите новую в боте")}`);
   }
 
-  const str = (name: string) => String(formData.get(name) ?? "").trim();
+  const str = strOf(formData);
 
   // Tomonlar: chertyojdagi har tomon uchun bitta side_i (mm, musbat butun).
   const sides: number[] = [];

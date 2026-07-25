@@ -18,6 +18,7 @@ import {
   type IntakeErrors,
   type IntakeInput,
 } from "@/lib/validators/intake";
+import { strOf, allOf } from "@/lib/form";
 
 export interface IntakeFormState {
   errors: IntakeErrors;
@@ -61,8 +62,8 @@ function randomSuffix(): string {
 }
 
 function readInput(formData: FormData): IntakeInput {
-  const str = (name: string) => String(formData.get(name) ?? "");
-  const all = (name: string) => formData.getAll(name).map(String);
+  const str = strOf(formData);
+  const all = allOf(formData);
   const blocks = all("locBlock");
   const landmarks = all("locLandmark");
   const slabs = all("locSlabsHere");
