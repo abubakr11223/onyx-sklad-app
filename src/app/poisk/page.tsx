@@ -32,6 +32,9 @@ export const dynamic = "force-dynamic";
 
 /** Bitta sahifada ko'rsatiladigan vidlar soni (qolgani «Показать ещё» orqali). */
 const PAGE_SIZE = 30;
+/** Аудит ТЗ №7 #31 — cap на in-memory сортировку gabarit-подходящих offcut'ов.
+ *  Ordering по areaM2 asc в БД, окончательная сортировка по L*W в JS. */
+const MAX_POISK_PIECES = 500;
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
@@ -290,6 +293,18 @@ export default async function PoiskPage({
           landmark: true,
           stoneType: { select: { name: true } },
         },
+        // Аудит ТЗ №7 #31 — раньше take не было: результат ограничен лишь тем,
+        // сколько offcut'ов вообще проходят gabarit-фильтр. При росте склада это
+        // могло вырасти в тысячи строк, материализуемых и сортируемых per-request
+        // на force-dynamic странице. Ставим safety-cap: ORDER BY areaM2 ASC
+        // (мельче — предпочтительнее по TZ §6.5 «предлагать первыми»), take
+        // MAX_POISK_PIECES. Индекса на bounding-area нет (см. комментарий выше),
+        // поэтому пред-cap-ранкинг делается по колонке areaM2 (тоже монотонно
+        // растёт с площадью), а окончательная сортировка по L*W происходит в JS
+        // на уже усечённом множестве. При типичном хвосте (десятки-сотни offcut'ов)
+        // cap не сработает и результат идентичен доаудитному.
+        orderBy: { areaM2: "asc" },
+        take: MAX_POISK_PIECES,
       })
     : [];
   // «Предложить первыми» — eng kichik bounding-maydon oldinda (old kod bilan AYNAN bir
