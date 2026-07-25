@@ -143,13 +143,14 @@ describe("actions DENY — demo-role=OWNER bo'lsa ham, haqiqiy sessiya yo'q", ()
 // ── DENY: haqiqiy sessiya bor, ammo rol OWNER emas (MANAGER token) ──
 describe("actions DENY — haqiqiy sessiya bor, lekin rol ≠ OWNER", () => {
   it("MANAGER sessiya → resetPassword denied", async () => {
-    const token = await signSessionToken("manager-id");
+    const token = await signSessionToken("manager-id", 0);
     cookieStore({ [SESSION_COOKIE]: token });
     // getRealSessionUser DB'dan MANAGER'ni yuklaydi.
     findFirst.mockResolvedValueOnce({
       id: "manager-id",
       name: "Manager",
       role: "MANAGER",
+      tokenVersion: 0,
     });
     await expect(
       resetPassword(fd({ userId: "target-id", password: "password1" })),
@@ -162,13 +163,14 @@ describe("actions DENY — haqiqiy sessiya bor, lekin rol ≠ OWNER", () => {
 // ────────────────────────── (b) ALLOW: haqiqiy OWNER sessiyasi ──────────────────────────
 describe("actions ALLOW — haqiqiy OWNER sessiyasi", () => {
   beforeEach(async () => {
-    const token = await signSessionToken("owner-id");
+    const token = await signSessionToken("owner-id", 0);
     cookieStore({ [SESSION_COOKIE]: token });
     // getRealSessionUser → OWNER (birinchi findFirst chaqiruvi).
     findFirst.mockResolvedValue({
       id: "owner-id",
       name: "Owner",
       role: "OWNER",
+      tokenVersion: 0,
     });
   });
 
@@ -209,19 +211,82 @@ describe("AccountsPage — sahifa gate'i", () => {
   });
 
   it("MANAGER sessiyasi → ro'yxat qurilmaydi (NoAccess)", async () => {
-    const token = await signSessionToken("manager-id");
+    const token = await signSessionToken("manager-id", 0);
     cookieStore({ [SESSION_COOKIE]: token });
-    findFirst.mockResolvedValueOnce({ id: "manager-id", name: "M", role: "MANAGER" });
+    findFirst.mockResolvedValueOnce({ id: "manager-id", name: "M", role: "MANAGER", tokenVersion: 0 });
     await AccountsPage({ searchParams });
     expect(findMany).not.toHaveBeenCalled();
   });
 
   it("haqiqiy OWNER sessiyasi → ro'yxat quriladi (findMany chaqiriladi)", async () => {
-    const token = await signSessionToken("owner-id");
+    const token = await signSessionToken("owner-id", 0);
     cookieStore({ [SESSION_COOKIE]: token });
-    findFirst.mockResolvedValueOnce({ id: "owner-id", name: "Owner", role: "OWNER" });
+    findFirst.mockResolvedValueOnce({ id: "owner-id", name: "Owner", role: "OWNER", tokenVersion: 0 });
     findMany.mockResolvedValueOnce([]);
     await AccountsPage({ searchParams });
     expect(findMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ────────────────────────── ТЗ №7 #9 — «log out everywhere» ──────────────────────────
+// Аудит: session-cookie теперь несёт tokenVersion; session.ts (getRealSessionUser/
+// getCurrentUser) сверяет его с DB.tokenVersion — mismatch → null (revoked).
+// Пароль-reset должен инкрементить DB.tokenVersion, чтобы ранее выпущенные cookie'и
+// перестали работать (в т.ч. у того же пользователя на других устройствах).
+
+describe("ТЗ №7 #9 — session revocation через tokenVersion", () => {
+  it("cookie.tokenVersion старее DB.tokenVersion → sahifa/action rad etadi (revoked)", async () => {
+    // 1) старая cookie с tokenVersion=0.
+    const staleCookie = await signSessionToken("owner-id", 0);
+    cookieStore({ [SESSION_COOKIE]: staleCookie });
+    // 2) DB отдаёт того же owner, но tokenVersion=1 (после смены пароля).
+    findFirst.mockResolvedValueOnce({
+      id: "owner-id",
+      name: "Owner",
+      role: "OWNER",
+      tokenVersion: 1,
+    });
+    // Action должен упереться в gate (session.ts вернёт null → requireOwner → error=denied).
+    await expect(
+      resetPassword(fd({ userId: "target-id", password: "password1" })),
+    ).rejects.toThrow(/error=denied/);
+    // Целевой пользователь даже не читался.
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it("resetPassword инкрементит tokenVersion в UPDATE data (log out everywhere)", async () => {
+    // OWNER-сессия свежая (сходится).
+    const token = await signSessionToken("owner-id", 0);
+    cookieStore({ [SESSION_COOKIE]: token });
+    findFirst.mockResolvedValue({
+      id: "owner-id",
+      name: "Owner",
+      role: "OWNER",
+      tokenVersion: 0,
+    });
+    findUnique.mockResolvedValueOnce({ id: "target-id", role: "MANAGER" });
+
+    await expect(
+      resetPassword(fd({ userId: "target-id", password: "password1" })),
+    ).rejects.toThrow(/ok=password/);
+
+    // UPDATE data — И passwordHash, И tokenVersion:{increment:1}.
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+    const upd = userUpdate.mock.calls[0][0];
+    expect(upd.where).toEqual({ id: "target-id" });
+    expect(upd.data.passwordHash).toBeTruthy();
+    expect(upd.data.tokenVersion).toEqual({ increment: 1 });
+  });
+
+  it("МИГРАЦИЯ: legacy v1 cookie (3 qism) → action rad etadi (foydalanuvchi qайта kirishi shart)", async () => {
+    // Старый формат: session.<userId>.<sig>
+    cookieStore({ [SESSION_COOKIE]: "session.owner-id.deadbeef" });
+    // findFirst даже не должен успеть — verifySessionToken отдаст legacy до DB.
+    await expect(
+      resetPassword(fd({ userId: "target-id", password: "password1" })),
+    ).rejects.toThrow(/error=denied/);
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
   });
 });

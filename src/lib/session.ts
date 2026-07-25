@@ -42,14 +42,20 @@ export async function getRealSessionUser(): Promise<RealSessionUser | null> {
   const sessionCookie = store.get(SESSION_COOKIE)?.value;
   if (!sessionCookie) return null;
 
-  const userId = await verifySessionToken(sessionCookie);
-  if (!userId) return null;
+  // Аудит ТЗ №7 #9: verify возвращает { userId, tokenVersion } или error-reason.
+  // legacy (v1) / expired / badsig / malformed — все ведут к null, middleware
+  // отправит на /login (qайta-login talab qilinadi).
+  const res = await verifySessionToken(sessionCookie);
+  if (!res.ok) return null;
 
   const real = await db.user.findFirst({
-    where: { id: userId, isActive: true },
-    select: { id: true, name: true, role: true },
+    where: { id: res.userId, isActive: true },
+    select: { id: true, name: true, role: true, tokenVersion: true },
   });
   if (!real) return null;
+  // «Log out everywhere» / password change: DB tokenVersion oshirilgan bo'lsa —
+  // cookie'даги eski version endi yaroqsiz.
+  if (real.tokenVersion !== res.tokenVersion) return null;
 
   return { id: real.id, name: real.name, role: real.role as Role };
 }
@@ -72,13 +78,20 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   // (1) Haqiqiy sessiya cookie'si ustuvor.
   const sessionCookie = store.get(SESSION_COOKIE)?.value;
   if (sessionCookie) {
-    const userId = await verifySessionToken(sessionCookie);
-    if (userId) {
+    // Аудит ТЗ №7 #9 — verify: { userId, tokenVersion } yoki reason (см. getRealSessionUser).
+    const res = await verifySessionToken(sessionCookie);
+    if (res.ok) {
       const real = await db.user.findFirst({
-        where: { id: userId, isActive: true },
-        select: { id: true, name: true, role: true, canSeePurchasePrice: true },
+        where: { id: res.userId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          canSeePurchasePrice: true,
+          tokenVersion: true,
+        },
       });
-      if (real) {
+      if (real && real.tokenVersion === res.tokenVersion) {
         return {
           id: real.id,
           name: real.name,
@@ -86,7 +99,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
           canSeePurchasePrice: real.canSeePurchasePrice,
         };
       }
-      // Token yaroqli, ammo user o'chirilgan/nofaol → kirish yo'q.
+      // Token yaroqli, ammo user o'chirilgan/nofaol yoki tokenVersion oshirilgan →
+      // kirish yo'q (revoked). Foydalanuvchi qайta login qiladi.
     }
   }
 

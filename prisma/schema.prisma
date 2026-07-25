@@ -330,6 +330,10 @@ model User {
   telegramId          String?  @unique
   email               String?  @unique
   passwordHash        String?
+  // Аудит ТЗ №7 #9 — эпоха session-токена. Инкремент → все ранее выпущенные
+  // session-токены пользователя становятся невалидными («log out everywhere»).
+  // Апается на смене пароля (accounts/actions.ts) и в будущем — вручную владельцем.
+  tokenVersion        Int      @default(0)
   canSeePurchasePrice Boolean  @default(false) // Owner uchun e'tiborga olinmaydi (doim ko'radi)
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
@@ -558,6 +562,18 @@ model TelegramAccessRequest {
 // заносить камень. Пустой размеченный блок — норма. Локации приёмки
 // (BatchLocation) ссылаются на эти блоки/ориентиры по letter/number (единый
 // справочник). Редактирует ТОЛЬКО Владелец.
+// Аудит ТЗ №7 #10 — истраченные magic-link jti. Row-level UNIQUE @id — атомарный
+// «один раз» без внешнего KV: create → P2002 у второй попытки. expiresAt = exp
+// самого токена (2 мин); индекс — только для sweep'а pruneExpiredMagicJti.
+model ConsumedMagicLinkToken {
+  jti       String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model WarehouseBlock {
   id        String   @id @default(cuid())
   letter    String   @unique // «А», «Б», «В»… — буква блока, уникальна

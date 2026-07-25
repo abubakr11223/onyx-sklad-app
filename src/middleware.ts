@@ -14,8 +14,12 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 export async function middleware(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const userId = token ? await verifySessionToken(token) : null;
-  if (userId) return NextResponse.next();
+  // Аудит ТЗ №7 #9 — verify возвращает { ok, userId?, tokenVersion? } / reason.
+  // На Edge проверяем только подпись+срок; tokenVersion сверяется с БД в session.ts
+  // (getRealSessionUser/getCurrentUser) — там же реализуется revoke на смене пароля.
+  // legacy / expired / badsig / malformed — все тянут на /login (qайta-login).
+  const res = token ? await verifySessionToken(token) : null;
+  if (res?.ok) return NextResponse.next();
 
   // Sessiya yo'q → /login. Kelingan yo'lni ?next bilan saqlaymiz (login'dan keyin
   // qaytish uchun). Open-redirect xavfi yo'q — bu faqat lokal path.
