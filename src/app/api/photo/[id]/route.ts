@@ -28,8 +28,17 @@ export async function GET(
 ) {
   const { id } = await params; // Next 16: params — Promise.
 
-  const photo = await db.photo.findUnique({
-    where: { id },
+  // Аудит ТЗ №7 #26 — маршрут по дизайну открытый (QR show-room, §6.7): id — cuid
+  // без предсказуемости, весь контент здесь b2c-ориентированный. Явный allowlist
+  // по kind защищает от будущих регрессий: если в PhotoKind добавится внутренний
+  // вид (например AUDIT/PRIVATE), он не станет автоматически публично доступен —
+  // нужно явно расширить список. Текущие 5 kind остаются открытыми (поведение
+  // прежнее).
+  const photo = await db.photo.findFirst({
+    where: {
+      id,
+      kind: { in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "DRAWING"] },
+    },
     select: { storageKey: true },
   });
   if (!photo) {
