@@ -108,4 +108,24 @@ describe("loginWithPassword — timing-oracle himoyasi", () => {
     const [name] = cookieSet.mock.calls[0];
     expect(name).toBe("onyx_session");
   });
+
+  // ТЗ №7 #22 — раньше passwordHash=null branch (Telegram-only юзер) возвращал
+  // fail БЕЗ verifyUserPassword, timing выдавал существование такого email.
+  // Теперь и здесь один DUMMY_PASSWORD_HASH verify (тот же PBKDF2-cost).
+  it("passwordHash null (Telegram-only) → dummy verify YURITILADI, тот же generic error (ТЗ №7 #22)", async () => {
+    findFirst.mockResolvedValue({ id: "u1", passwordHash: null, tokenVersion: 0 });
+    verifyUserPassword.mockResolvedValue(false);
+
+    await expect(
+      loginWithPassword(fd({ email: "tg@example.com", password: "guess" })),
+    ).rejects.toThrow(/error=login/);
+
+    // Ключевое: 1 verify c well-formed pbkdf2 xesh (DUMMY), а не 0 chaqiruv.
+    expect(verifyUserPassword).toHaveBeenCalledTimes(1);
+    expect(verifyUserPassword).toHaveBeenCalledWith(
+      "guess",
+      expect.stringMatching(/^pbkdf2\$\d+\$[^$]+\$[^$]+$/),
+    );
+    expect(cookieSet).not.toHaveBeenCalled();
+  });
 });
