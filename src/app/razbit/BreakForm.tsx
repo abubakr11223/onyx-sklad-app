@@ -17,6 +17,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
+import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
 
 export interface SlabOption {
   id: string;
@@ -141,23 +142,8 @@ export default function BreakForm({
       {e.form && <Alert variant="danger">{e.form}</Alert>}
       <input type="hidden" name="mode" value={mode} />
 
-      {/* ТЗ №7 §2 — справочник сетки склада для подсказок блока/ориентира. */}
-      {blocks.length > 0 && (
-        <>
-          <datalist id="wh-blocks">
-            {blocks.map((b) => (
-              <option key={b.letter} value={b.letter} />
-            ))}
-          </datalist>
-          {blocks.map((b) => (
-            <datalist key={b.letter} id={`wh-lm-${b.letter}`}>
-              {b.landmarks.map((n) => (
-                <option key={n} value={n} />
-              ))}
-            </datalist>
-          ))}
-        </>
-      )}
+      {/* ТЗ №7 §2 / #14 — общий компонент datalist сетки склада. */}
+      <WarehouseGridDatalists blocks={blocks} />
 
       {/* ── Что разбиваем ── */}
       <Card>

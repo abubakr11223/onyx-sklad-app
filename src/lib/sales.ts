@@ -245,15 +245,24 @@ export function checkPatternSaleGuard(input: {
  * «Партию выкупили оптом целиком» (TZ §7.6): весь текущий свободный остаток
  * одним действием уходит в slabsSoldDirect/areaSoldDirectM2. Плиты НЕ создаются
  * (ADR-004). Возвращает количества для продажи; нечего продавать → ошибка.
- * Площадь округляется до 3 знаков (Decimal(12,3) в БД).
+ * Площадь усекается до 3 знаков (Decimal(12,3) в БД).
+ *
+ * Аудит ТЗ №7 #21 — раньше Math.round мог округлить ВВЕРХ (когда после
+ * average-slab-fallback возникает бесконечная дробь, напр. areaFreeM2=14.28571...
+ * → 14.286). Затем executeVolumeSale инкрементил areaSoldDirectM2 на 14.286,
+ * а свободный остаток становился −0.00029. checkVolumeSaleGuard пропускал
+ * (AREA_EPS=0.001 > max round-up ≈0.0005), но breaking.ts:646 (guard `-1e-9`)
+ * потом блокировал легитимный area-only registerDirectPiece («партия пуста, а
+ * бой не даёт списать»). Math.floor гарантирует НИКОГДА не переконсумить —
+ * остаток может обнулиться, но не уйти в минус.
  */
 export function computeWholeBatchSale(
   free: FreeRemainder,
 ): { ok: true; qtySlabs: number | null; qtyAreaM2: number | null } | SaleFail {
   const qtySlabs = free.slabsFree !== null && free.slabsFree > 0 ? free.slabsFree : null;
-  const areaRounded =
-    free.areaFreeM2 !== null ? Math.round(free.areaFreeM2 * 1000) / 1000 : null;
-  const qtyAreaM2 = areaRounded !== null && areaRounded > 0 ? areaRounded : null;
+  const areaTruncated =
+    free.areaFreeM2 !== null ? Math.floor(free.areaFreeM2 * 1000) / 1000 : null;
+  const qtyAreaM2 = areaTruncated !== null && areaTruncated > 0 ? areaTruncated : null;
   if (qtySlabs === null && qtyAreaM2 === null) {
     return fail("INSUFFICIENT_REMAINDER", "Свободного остатка в партии нет — продавать нечего");
   }

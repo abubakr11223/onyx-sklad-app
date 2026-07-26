@@ -18,7 +18,7 @@ import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { getRealSessionUser } from "@/lib/session";
+import { getRealSessionUser, requireOwner as requireOwnerBase } from "@/lib/session";
 import { hashUserPassword } from "@/lib/password";
 import { sendMessage } from "@/lib/telegram";
 import { roleLabel } from "@/lib/role-labels";
@@ -43,10 +43,10 @@ import {
  * qilib qo'yib akkauntlarni egallab olishi mumkin edi. Endi har action DB'dagi
  * haqiqiy rolni qayta talab qiladi. Sessiya yo'q / rol ≠ OWNER → yozuvdan OLDIN rad.
  */
+// Аудит ТЗ №7 #13 — общий OWNER-gate из lib/session.ts (был локальный дубль,
+// расходившийся с karta-sklada по redirect-URL и return type).
 async function requireOwner(): Promise<string> {
-  const me = await getRealSessionUser();
-  if (!me || me.role !== "OWNER") redirect("/accounts?error=denied");
-  return me.id;
+  return requireOwnerBase("/accounts?error=denied");
 }
 
 /** AuditLog yozuvi (STATUS_CHANGE + entityType "User" + payload.kind). */

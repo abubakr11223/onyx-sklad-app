@@ -10,7 +10,7 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { getCapabilities, getCurrentUser } from "@/lib/session";
+import { getCurrentUser, requireCapabilityOrRedirect } from "@/lib/session";
 import { createLead } from "@/lib/leads";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 
@@ -32,11 +32,10 @@ export async function requestLead(formData: FormData): Promise<void> {
   // Авторизация: «Запросить объём» — партнёрский флоу (requestsRouteToManager =
   // только PARTNER). OWNER/MANAGER продают напрямую и лидов не создают. Прямой
   // POST от другой роли блокируется на сервере, не только скрытием формы.
-  if (!(await getCapabilities()).requestsRouteToManager) {
-    redirect(
-      `${next}?leadErr=${encodeURIComponent("Запрос объёма доступен дизайнеру-партнёру")}`,
-    );
-  }
+  await requireCapabilityOrRedirect(
+    "requestsRouteToManager",
+    `${next}?leadErr=${encodeURIComponent("Запрос объёма доступен дизайнеру-партнёру")}`,
+  );
 
   const me = await getCurrentUser();
   if (!me) {

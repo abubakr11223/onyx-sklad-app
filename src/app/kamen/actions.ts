@@ -20,6 +20,7 @@ import {
   getCapabilities,
   currentActorId,
   getRealSessionUser,
+  requireCapabilityOrRedirect,
 } from "@/lib/session";
 import { validateStoneEdit } from "@/lib/stone-edit";
 import {
@@ -56,9 +57,10 @@ export async function updateLocation(formData: FormData): Promise<void> {
   // R2 — DEFENSE-IN-DEPTH (первый оператор): править локацию может только склад
   // (canManageWarehouse: OWNER/WAREHOUSE). Сайт открыт («kodsiz»), поэтому прямой
   // POST от менеджера/партнёра блокируется на сервере, а не только скрытием UI.
-  if (!(await getCapabilities()).canManageWarehouse) {
-    redirect(`${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`);
-  }
+  await requireCapabilityOrRedirect(
+    "canManageWarehouse",
+    `${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`,
+  );
 
   const locationId = String(formData.get("locationId") ?? "").trim();
   if (!locationId) {
@@ -129,9 +131,10 @@ export async function addLocation(formData: FormData): Promise<void> {
   const next = safeNext(formData.get("next"));
 
   // R2 — DEFENSE-IN-DEPTH (первый оператор): локацию заводит только склад.
-  if (!(await getCapabilities()).canManageWarehouse) {
-    redirect(`${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`);
-  }
+  await requireCapabilityOrRedirect(
+    "canManageWarehouse",
+    `${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`,
+  );
 
   const batchId = String(formData.get("batchId") ?? "").trim();
   if (!batchId) {
@@ -213,9 +216,10 @@ export async function moveQty(formData: FormData): Promise<void> {
   const next = safeNext(formData.get("next"));
 
   // R2 — DEFENSE-IN-DEPTH (первый оператор): перенос делает только склад.
-  if (!(await getCapabilities()).canManageWarehouse) {
-    redirect(`${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`);
-  }
+  await requireCapabilityOrRedirect(
+    "canManageWarehouse",
+    `${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`,
+  );
 
   const sourceId = String(formData.get("sourceLocationId") ?? "").trim();
   const destId = String(formData.get("destLocationId") ?? "").trim();
@@ -313,9 +317,10 @@ export async function updateSlabLocation(formData: FormData): Promise<void> {
   const next = safeNext(formData.get("next"));
 
   // R2 — DEFENSE-IN-DEPTH (первый оператор): локацию плиты правит только склад.
-  if (!(await getCapabilities()).canManageWarehouse) {
-    redirect(`${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`);
-  }
+  await requireCapabilityOrRedirect(
+    "canManageWarehouse",
+    `${next}?locErr=${encodeURIComponent("Нет доступа: локацию меняет склад")}`,
+  );
 
   const slabId = String(formData.get("slabId") ?? "").trim();
   if (!slabId) {
@@ -388,9 +393,10 @@ export async function setNeedsCheck(formData: FormData): Promise<void> {
   // R2 — DEFENSE-IN-DEPTH (первый оператор): пометку ставит только склад
   // (canManageWarehouse: OWNER/WAREHOUSE). Сайт открыт («kodsiz»), поэтому
   // прямой POST от менеджера/партнёра блокируется на сервере, а не только UI.
-  if (!(await getCapabilities()).canManageWarehouse) {
-    redirect(`${next}?checkErr=${encodeURIComponent("Нет доступа: отметку ставит склад")}`);
-  }
+  await requireCapabilityOrRedirect(
+    "canManageWarehouse",
+    `${next}?checkErr=${encodeURIComponent("Нет доступа: отметку ставит склад")}`,
+  );
 
   const entityTypeRaw = String(formData.get("entityType") ?? "").trim();
   if (!isValidCheckEntity(entityTypeRaw)) {
@@ -562,7 +568,8 @@ export async function editStoneType(formData: FormData): Promise<void> {
 export async function generateInteriors(formData: FormData): Promise<void> {
   const { generateInteriors: genInteriors } = await import("@/lib/interior-ai");
   const { getFile, downloadFile } = await import("@/lib/telegram");
-  const { put } = await import("@vercel/blob");
+  // Аудит ТЗ №7 #29 — общий helper storePhotoBlob (был локальный put+create).
+  const { storePhotoBlob } = await import("@/lib/photo-blob");
 
   const me = await getRealSessionUser();
   const stoneTypeId = String(formData.get("stoneTypeId") ?? "");
@@ -628,19 +635,13 @@ export async function generateInteriors(formData: FormData): Promise<void> {
   try {
     await db.photo.deleteMany({ where: { stoneTypeId, kind: "INTERIOR_AI" } });
     for (const it of interiors) {
-      const ext = it.mediaType.includes("png") ? "png" : "jpg";
-      const blob = await put(
-        `interiors/${stoneTypeId}/${it.scene}-${stamp}.${ext}`,
-        it.bytes as unknown as Buffer,
-        { access: "public", contentType: it.mediaType },
-      );
-      await db.photo.create({
-        data: {
-          storageKey: blob.url,
-          kind: "INTERIOR_AI",
-          takenAt: now,
-          stoneTypeId,
-        },
+      await storePhotoBlob({
+        pathPrefix: `interiors/${stoneTypeId}/${it.scene}-${stamp}`,
+        bytes: it.bytes as unknown as Buffer,
+        mediaType: it.mediaType,
+        kind: "INTERIOR_AI",
+        takenAt: now,
+        stoneTypeId,
       });
     }
   } catch (err) {

@@ -102,7 +102,16 @@ export async function loginWithPassword(formData: FormData): Promise<void> {
     await verifyUserPassword(password, DUMMY_PASSWORD_HASH);
     return fail();
   }
-  // passwordHash null → parol bilan kirish yo'q. verifyUserPassword ham null'da false.
+  // Аудит ТЗ №7 #22 — passwordHash null (Telegram-only akkaunt) branch раньше
+  // возвращал fail БЕЗ вызова verifyUserPassword — network-наблюдатель мог по
+  // разнице времени (≈100k PBKDF2 vs мгновенно) распознать «есть Telegram-only
+  // юзер с таким email». Теперь и здесь прогоняем один DUMMY_PASSWORD_HASH, чтобы
+  // все три branch (not-found / password-account / null-hash) имели одинаковую
+  // PBKDF2-стоимость.
+  if (user.passwordHash === null) {
+    await verifyUserPassword(password, DUMMY_PASSWORD_HASH);
+    return fail();
+  }
   if (!(await verifyUserPassword(password, user.passwordHash))) {
     return fail();
   }
