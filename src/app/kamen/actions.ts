@@ -568,7 +568,8 @@ export async function editStoneType(formData: FormData): Promise<void> {
 export async function generateInteriors(formData: FormData): Promise<void> {
   const { generateInteriors: genInteriors } = await import("@/lib/interior-ai");
   const { getFile, downloadFile } = await import("@/lib/telegram");
-  const { put } = await import("@vercel/blob");
+  // Аудит ТЗ №7 #29 — общий helper storePhotoBlob (был локальный put+create).
+  const { storePhotoBlob } = await import("@/lib/photo-blob");
 
   const me = await getRealSessionUser();
   const stoneTypeId = String(formData.get("stoneTypeId") ?? "");
@@ -634,19 +635,13 @@ export async function generateInteriors(formData: FormData): Promise<void> {
   try {
     await db.photo.deleteMany({ where: { stoneTypeId, kind: "INTERIOR_AI" } });
     for (const it of interiors) {
-      const ext = it.mediaType.includes("png") ? "png" : "jpg";
-      const blob = await put(
-        `interiors/${stoneTypeId}/${it.scene}-${stamp}.${ext}`,
-        it.bytes as unknown as Buffer,
-        { access: "public", contentType: it.mediaType },
-      );
-      await db.photo.create({
-        data: {
-          storageKey: blob.url,
-          kind: "INTERIOR_AI",
-          takenAt: now,
-          stoneTypeId,
-        },
+      await storePhotoBlob({
+        pathPrefix: `interiors/${stoneTypeId}/${it.scene}-${stamp}`,
+        bytes: it.bytes as unknown as Buffer,
+        mediaType: it.mediaType,
+        kind: "INTERIOR_AI",
+        takenAt: now,
+        stoneTypeId,
       });
     }
   } catch (err) {

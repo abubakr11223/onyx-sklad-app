@@ -249,7 +249,8 @@ export async function submitIntake(
   const patPhotoFiles = formData.getAll("patPhoto");
   const photographed = new Set<number>();
   if (summary.patternIds.length > 0) {
-    const { put } = await import("@vercel/blob");
+    // Аудит ТЗ №7 #29 — общий helper storePhotoBlob (put + Photo.create).
+    const { storePhotoBlob } = await import("@/lib/photo-blob");
     const now = new Date();
     for (let i = 0; i < summary.patternIds.length; i++) {
       const file = patPhotoFiles[i];
@@ -259,24 +260,14 @@ export async function submitIntake(
       }
       try {
         const buf = Buffer.from(await file.arrayBuffer());
-        const ext = file.type.includes("png")
-          ? "png"
-          : file.type.includes("webp")
-            ? "webp"
-            : "jpg";
-        const blob = await put(
-          `patterns/${summary.batchId}/${summary.patternIds[i]}-${now.getTime()}.${ext}`,
-          buf,
-          { access: "public", contentType: file.type },
-        );
-        await db.photo.create({
-          data: {
-            storageKey: blob.url,
-            kind: "SAMPLE", // образец узора (не Telegram-file_id, а Blob-URL)
-            takenAt: now, // «фиксация даты съёмки» — момент приёмки
-            takenById: actorId,
-            batchPatternId: summary.patternIds[i],
-          },
+        await storePhotoBlob({
+          pathPrefix: `patterns/${summary.batchId}/${summary.patternIds[i]}-${now.getTime()}`,
+          bytes: buf,
+          mediaType: file.type,
+          kind: "SAMPLE", // образец узора (не Telegram-file_id, а Blob-URL)
+          takenAt: now, // «фиксация даты съёмки» — момент приёмки
+          takenById: actorId,
+          batchPatternId: summary.patternIds[i],
         });
         photographed.add(i);
       } catch (err) {
