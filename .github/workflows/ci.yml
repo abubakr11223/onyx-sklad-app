@@ -1,0 +1,46 @@
+# CI: тесты + сборка на каждом PR и push в main.
+# БД не требуется: все тесты изолированы (vi.mock для @/lib/db, in-memory моки
+# для PrismaClient; type-only import @prisma/client не выходит в рантайм).
+# `prisma generate` запускается автоматически через `postinstall` из package.json.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Отменяем предыдущие ран'ы того же PR/бранча — не тратим минут CI на устаревшее.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # package.json engines.node = ">=20.9" → берём последнюю LTS (24 сейчас),
+      # но фиксируем через .node-version в будущем при желании. Cache npm.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # `npm ci` уважает package-lock.json и запускает postinstall
+      # (`prisma generate` — нужен для type-check и import type @prisma/client).
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      # `next build` включает typecheck + оптимизацию. Ошибка типов = failed CI.
+      - name: Build
+        run: npm run build
