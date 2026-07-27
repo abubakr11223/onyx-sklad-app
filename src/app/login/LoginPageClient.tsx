@@ -10,10 +10,13 @@
 // orqali chaqiriladi (Next.js buni qo'llab-quvvatlaydi). Field/Button UI komponentlari
 // dark tema uchun mos EMAS, shuning uchun inline styled JSX ishlatiladi.
 
-import { motion } from "framer-motion";
+import { motion, MotionConfig } from "framer-motion";
 import dynamic from "next/dynamic";
+import { useState } from "react";
 import { loginWithPassword } from "./actions";
 import { StaticLogo } from "@/components/login/StaticLogo";
+import { useIsWeakDevice } from "@/lib/use-device-heuristic";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { loraWordmark, montserratTag } from "./login-fonts";
 
 // TZ §11 / §6 — 3D sfera FAQAT client'da, dynamic import, ssr:false. `loading`
@@ -43,22 +46,51 @@ export function LoginPageClient({
   magicError,
   tgDeepLink,
 }: LoginPageClientProps) {
+  // TZ §8 fallback zanjiri:
+  //  1) prefers-reduced-motion → statik logo, animatsiya YO'Q.
+  //  2) statik zaif-qurilma (deviceMemory/hardwareConcurrency ≤4) → statik + glow.
+  //  3) dinamik FPS probe (Canvas ichida) → onLowFps ishlab ketsa lowFps=true.
+  //  4) hech nima ishlamasa → 3D sfera.
+  const reducedMotion = useReducedMotion();
+  const isWeakDevice = useIsWeakDevice();
+  const [lowFps, setLowFps] = useState(false);
+
+  // Fallback qaror: reduced-motion — eng qattiq (hatto glow ham yo'q).
+  // Weak-device / low-fps — statik + CSS glow (yumshoq nafas oluvchi shu'la).
+  // Aks holda — 3D sfera dynamic import bilan (loading fallback = breathing SVG).
+  const shouldRender3D = !reducedMotion && !isWeakDevice && !lowFps;
+  const staticVariant: "static" | "glow" = reducedMotion ? "static" : "glow";
+
   return (
+    <MotionConfig reducedMotion={reducedMotion ? "always" : "never"}>
     <main
       className={`${loraWordmark.variable} ${montserratTag.variable} login-root`}
     >
       {/* Radial gradient overlay — TZ §3 */}
       <div className="login-bg-radial" aria-hidden />
 
-      {/* 3D sfera slot. Dynamic import (ssr:false) — loading fallback StaticLogo.
-          Fallback zanjiri (weak-device, reduced-motion) S5'da qo'shiladi. */}
+      {/* 3D sfera slot — fallback zanjiri (TZ §8):
+          reduced-motion → static (animatsiya yo'q)
+          weak-device / low-FPS → static glow
+          aks holda → dynamic 3D (loading fallback = breathing SVG)
+          Motion wrapper reduced-motion'da opacity/scale animatsiyasidan
+          voz kechadi (framer-motion o'zi `useReducedMotion`ni hurmat qiladi
+          — biz initial=animate qilib qo'yamiz). */}
       <motion.div
         className="login-logo-slot"
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={reducedMotion ? false : { opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: EASE_OUT_EXPO }}
+        transition={
+          reducedMotion
+            ? { duration: 0 }
+            : { duration: 0.8, ease: EASE_OUT_EXPO }
+        }
       >
-        <LogoSphere3D size={280} />
+        {shouldRender3D ? (
+          <LogoSphere3D size={280} onLowFps={() => setLowFps(true)} />
+        ) : (
+          <StaticLogo variant={staticVariant} size={280} />
+        )}
       </motion.div>
 
       {/* Wordmark: "ONYX" (Lora, gold gradient) + "stones boutique" (Montserrat) */}
@@ -356,5 +388,6 @@ export function LoginPageClient({
         }
       `}</style>
     </main>
+    </MotionConfig>
   );
 }
