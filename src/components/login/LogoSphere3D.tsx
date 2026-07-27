@@ -21,52 +21,52 @@ const GOLD_MAIN = 0xc9a55c;
 const GOLD_HIGHLIGHT = 0xe9cf8f;
 const GOLD_SPARKLE = 0xf5e7c0;
 
-// TZ §6.1 — 6 ta lenta = globus. 3 ta latitude (parallel, sfera atrofida
-// gorizontal halqalar turli balandliklarda) + 3 ta longitude (meridian,
-// qutbdan qutbga o'tuvchi vertikal halqalar turli phi burchaklarida).
-// Ular kesishadi va toza globus taassurotini beradi.
-type BandKind = "latitude" | "longitude";
+// TZ §6.1 (v2 — spiral) — sfera yuzasini o'ragan SPIRAL lentalar ("o'ralgan ip
+// koptok" ta'siri, reference'ga mos). Har bir lenta janubiy qutbdan shimoliy
+// qutbga o'tayotganda Y-o'q atrofida bir necha marta aylanadi. Lentalar boshi
+// bir tekis (360/N) burchak farqi bilan siljigan — natijada ular sfera yuzasida
+// bir-birini kesib, "ip o'ragan koptok" naqshi hosil qiladi.
+//
+// Eski implementatsiya (3 latitude + 3 longitude) "qafas" ko'rinishida edi —
+// reference'dagi silliq spiral koptokga umuman o'xshamas edi.
+const BAND_COUNT = 8;         // 8 ta spiral lenta (reference'dagi ~8 loop bilan mos)
+const SPIRAL_TURNS = 1.5;      // har lenta 1.5 to'liq aylanadi (janubdan shimolgacha)
+const TUBE_RADIUS = 0.055;     // qalinroq lenta (avval 0.04 juda ingichka edi)
+
 interface BandSpec {
-  kind: BandKind;
-  /** latitude uchun: 0 = ekvator, ±π/2 = qutb. longitude uchun: 0 = grennich meridiani. */
-  offsetRad: number;
+  /** Boshlang'ich burchak (Y atrofida), radianga. */
+  startTheta: number;
 }
 
-// 3 latitude: ekvatorda + shim/jan ~30°. 3 longitude: 3 meridian 60° oralig'da.
-const BAND_SPECS: BandSpec[] = [
-  { kind: "latitude", offsetRad: 0 },              // ekvator
-  { kind: "latitude", offsetRad: Math.PI / 6 },     // 30° shim
-  { kind: "latitude", offsetRad: -Math.PI / 6 },    // 30° jan
-  { kind: "longitude", offsetRad: 0 },
-  { kind: "longitude", offsetRad: Math.PI / 3 },    // 60°
-  { kind: "longitude", offsetRad: (2 * Math.PI) / 3 }, // 120°
-];
+// N ta lenta, har biri boshlang'ich burchak bilan farqlanadi.
+const BAND_SPECS: BandSpec[] = Array.from({ length: BAND_COUNT }, (_, i) => ({
+  startTheta: (i / BAND_COUNT) * Math.PI * 2,
+}));
 
 /**
- * Sfera (R=1) yuzasidagi great/small circle uchun CatmullRomCurve3 nuqtalari.
- * - latitude: y = sin(offset) qatlamda gorizontal halqa (kichik doira).
- * - longitude: qutbdan qutbga o'tuvchi vertikal halqa (katta doira), offset — phi.
+ * Spiral parametrik chiziq: t=0 (janubiy qutb, y=-1) → t=1 (shimoliy qutb, y=+1),
+ * yo'lda Y-o'q atrofida SPIRAL_TURNS marta aylanadi. Natijada sfera yuzasida
+ * qutbdan qutbga o'tuvchi lenta.
  */
-function makeBandCurve(spec: BandSpec, points = 128): THREE.CatmullRomCurve3 {
+function makeSpiralCurve(spec: BandSpec, points = 200): THREE.CatmullRomCurve3 {
   const pts: THREE.Vector3[] = [];
   for (let i = 0; i <= points; i++) {
-    const t = (i / points) * Math.PI * 2;
-    let x: number, y: number, z: number;
-    if (spec.kind === "latitude") {
-      const lat = spec.offsetRad;
-      const r = Math.cos(lat);
-      x = r * Math.cos(t);
-      y = Math.sin(lat);
-      z = r * Math.sin(t);
-    } else {
-      const phi = spec.offsetRad;
-      x = Math.cos(phi) * Math.cos(t);
-      y = Math.sin(t);
-      z = Math.sin(phi) * Math.cos(t);
-    }
-    pts.push(new THREE.Vector3(x, y, z));
+    const t = i / points; // [0, 1]
+    // Latitude phi: -π/2 (janubiy qutb) → +π/2 (shimoliy qutb).
+    const phi = -Math.PI / 2 + t * Math.PI;
+    // Longitude theta: boshlang'ich burchakdan SPIRAL_TURNS*2π gacha.
+    const theta = spec.startTheta + t * SPIRAL_TURNS * Math.PI * 2;
+    const r = Math.cos(phi);
+    pts.push(
+      new THREE.Vector3(
+        r * Math.cos(theta),
+        Math.sin(phi),
+        r * Math.sin(theta),
+      ),
+    );
   }
-  return new THREE.CatmullRomCurve3(pts, true, "catmullrom", 0.5);
+  // Yopilmagan chiziq (closed=false): qutblardan boshlanadi va tugaydi.
+  return new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
 }
 
 interface RibbonBandProps {
@@ -76,9 +76,10 @@ interface RibbonBandProps {
 
 function RibbonBand({ spec, material }: RibbonBandProps) {
   const geometry = useMemo(() => {
-    const curve = makeBandCurve(spec);
-    // TZ §6.1 — tubularSegments=400, radius=0.04, radialSegments=8, closed=true.
-    return new THREE.TubeGeometry(curve, 400, 0.04, 8, true);
+    const curve = makeSpiralCurve(spec);
+    // Yopilmagan spiral chiziq uchun TubeGeometry: closed=false.
+    // tubularSegments=400 — silliq egri chiziqlar uchun yetadi.
+    return new THREE.TubeGeometry(curve, 400, TUBE_RADIUS, 12, false);
   }, [spec]);
 
   return <mesh geometry={geometry} material={material} />;
@@ -234,15 +235,19 @@ export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps
         gl={{ antialias: true, alpha: true }}
         frameloop="always"
       >
-        {/* TZ §6.3 — qo'lda light rig (bundle budget uchun Environment o'rniga). */}
-        <ambientLight intensity={0.4} color={"#2A2418"} />
+        {/* TZ §6.3 — qo'lda light rig. Metalness=0.9 material yaqindagi
+            yorug'likni juda ko'p qaytaradi, shu sabab yaqin va yorqin nurlar
+            berilgan (aks holda sfera qorong'i qora ko'rinadi — deploy'da shu
+            muammo bo'lgan edi). Ambient ham iliqroq. */}
+        <ambientLight intensity={0.9} color={"#3D3020"} />
         <directionalLight
-          position={[3, 4, 3]}
-          intensity={1.4}
+          position={[2, 3, 4]}
+          intensity={3.0}
           color={"#FFF5E0"}
         />
-        <pointLight position={[-3, 2, 2]} intensity={0.6} color={GOLD_HIGHLIGHT} />
-        <pointLight position={[0, -3, 2]} intensity={0.3} color={GOLD_SPARKLE} />
+        <pointLight position={[-2, 1, 3]} intensity={2.0} color={GOLD_HIGHLIGHT} />
+        <pointLight position={[0, -2, 3]} intensity={1.2} color={GOLD_SPARKLE} />
+        <pointLight position={[3, -1, 1]} intensity={1.5} color={"#FFF5E0"} />
 
         <SphereGroup hovered={hovered} tilt={tilt} />
 
