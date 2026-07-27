@@ -93,25 +93,31 @@ interface SphereGroupProps {
 function SphereGroup({ hovered, tilt }: SphereGroupProps) {
   const groupRef = useRef<THREE.Group>(null);
 
-  // Yorqinroq oltin material — prod'da qorong'i chiqqan edi. Emissive iliq
-  // oltin tuson beradi (metalness+roughness'ni yumshatmasdan), highlight rangi
-  // asosiy tuson qilib olindi. Aylanishda highlight+darker balans hosil qiladi.
+  // Reference'ga yaqinlashtirilgan material — MeshPhysicalMaterial + clearcoat.
+  // Iliq bronze emissive va yorqin oltin base — iliq fon ustida ham
+  // kontrastda qoladi.
   const material = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
-      color: GOLD_HIGHLIGHT,     // asosiy tuson yorqinroq (avval GOLD_MAIN — qorong'i)
-      metalness: 0.85,
-      roughness: 0.28,
-      emissive: 0x3a2a10,        // iliq bronze glow — sfera qora fon ustida yo'qolmasin
-      emissiveIntensity: 0.35,
-      envMapIntensity: 1.5,
+    return new THREE.MeshPhysicalMaterial({
+      color: GOLD_SPARKLE,       // eng yorqin oltin (avval HIGHLIGHT) — iliq fonda ham chiqadi
+      metalness: 0.92,
+      roughness: 0.2,
+      emissive: 0x5a3e1a,        // ochroq iliq oltin glow
+      emissiveIntensity: 0.55,
+      envMapIntensity: 2.2,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.12,
     });
   }, []);
 
+  // Ikki qatlamli halo: (1) yorqin oltin (avvalgi) + (2) ichkariga qorong'i
+  // "vignette" — sfera ortidagi hudud sal qorong'iroq bo'lib, sfera aniq
+  // ajralib ko'rinsin. Vignette Radius 1.05 sferaga juda yaqin (BackSide),
+  // yorqin halo 1.25da tashqarida.
   const haloMaterial = useMemo(() => {
     return new THREE.MeshBasicMaterial({
       color: GOLD_HIGHLIGHT,
       transparent: true,
-      opacity: 0.18,             // 0.08 → 0.18 (yorqinroq halo, sfera atrofida yumshoq nur)
+      opacity: 0.22,
       side: THREE.BackSide,
     });
   }, []);
@@ -144,9 +150,11 @@ function SphereGroup({ hovered, tilt }: SphereGroupProps) {
       {BAND_SPECS.map((spec, i) => (
         <RibbonBand key={i} spec={spec} material={material} />
       ))}
-      {/* TZ §6.3 — halo (BackSide) */}
+      {/* Yorqin halo (BackSide) — tashqi yumshoq nur.
+          Vignette olib tashlandi: BackSide + transparent order xatosi tufayli
+          sfera bandslarini ham qoraytirar edi (dev'da tekshirilgan). */}
       <mesh material={haloMaterial}>
-        <sphereGeometry args={[1.15, 32, 32]} />
+        <sphereGeometry args={[1.2, 32, 32]} />
       </mesh>
     </group>
   );
@@ -238,20 +246,32 @@ export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
         frameloop="always"
+        onCreated={({ scene, gl }) => {
+          // Fonda "qora quyosh" o'rniga iliq radial rang — sfera bunga qarshi
+          // kontrastda chiqadi. Alpha=true sabab CSS ustidan ko'rinsin uchun
+          // scene.background berilmaydi; buning o'rniga tone-mapping exposure
+          // biroz ko'tarilib bandlar ustida yorug'lik yaqqol chiqadi.
+          gl.toneMappingExposure = 1.35;
+        }}
       >
         {/* TZ §6.3 — qo'lda light rig. Metalness=0.9 material yaqindagi
             yorug'likni juda ko'p qaytaradi, shu sabab yaqin va yorqin nurlar
             berilgan (aks holda sfera qorong'i qora ko'rinadi — deploy'da shu
             muammo bo'lgan edi). Ambient ham iliqroq. */}
-        <ambientLight intensity={0.9} color={"#3D3020"} />
+        {/* Ancha yorqinroq light rig — iliq fon ustida ham sfera aniq kontrast
+            beradi. 5 nur: key (yuqori-old), fill (chap-past), 2 rim (orqa),
+            ambient. Reference-darajali sheen uchun. */}
+        <ambientLight intensity={0.7} color={"#5A4530"} />
         <directionalLight
-          position={[2, 3, 4]}
-          intensity={3.0}
+          position={[2, 4, 5]}
+          intensity={4.5}
           color={"#FFF5E0"}
         />
-        <pointLight position={[-2, 1, 3]} intensity={2.0} color={GOLD_HIGHLIGHT} />
-        <pointLight position={[0, -2, 3]} intensity={1.2} color={GOLD_SPARKLE} />
-        <pointLight position={[3, -1, 1]} intensity={1.5} color={"#FFF5E0"} />
+        <pointLight position={[-3, 1, 3]} intensity={3.0} color={GOLD_HIGHLIGHT} />
+        <pointLight position={[0, -3, 3]} intensity={2.0} color={GOLD_SPARKLE} />
+        <pointLight position={[3, -1, 2]} intensity={2.5} color={"#FFF5E0"} />
+        {/* Rim-light orqadan — sfera silhuetini yorqinlashtiradi. */}
+        <pointLight position={[0, 0, -3]} intensity={2.0} color={GOLD_HIGHLIGHT} />
 
         <SphereGroup hovered={hovered} tilt={tilt} />
 
