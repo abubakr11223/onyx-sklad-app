@@ -155,6 +155,10 @@ export interface WebhookDeps {
     imageBase64: string,
     mediaType: "image/jpeg" | "image/png",
   ): Promise<{ sideCount: number; vertices: { x: number; y: number }[] } | null>;
+  // Push-уведомление владельцам о новой заявке на доступ. Возвращает всех
+  // активных OWNER'ов с привязанным Telegram (для in-app SMS-подобного пинга).
+  // Отделено от db.user.findMany — там жёсткая сигнатура (isActive+phone).
+  findOwnersWithTelegram(): Promise<Array<{ id: string; telegramId: string }>>;
   // §4.1 L3 / §6.1 — выделение «Плиты №N». Транзакция с batch-lock'ом и guard'ом
   // остатка §3 живёт в slab-separation.ts (нужен реальный db); handler остаётся
   // DI-чистым (route инъектирует реальную реализацию, тест — мок). Возвращает id
@@ -177,6 +181,24 @@ const MSG_TRY_LATER = "Произошла ошибка. Попробуйте е�
 // её одобряет владелец в панели. Доступ НЕ выдаётся автоматически.
 const MSG_ACCESS_REQUESTED =
   "Заявка на доступ отправлена. Как только владелец её одобрит, доступ откроется и вы получите сообщение.";
+// Push-уведомление владельцу при новой заявке. Одна строка — телефон/имя/логин
+// заявителя + ссылка на страницу одобрения. Магическая ссылка (2 мин), чтобы
+// владелец в один тап попал прямо на `/accounts`.
+const ownerNotifyMessage = (
+  applicant: { name: string | null; username: string | null; phone: string | null },
+  url: string | null,
+): string => {
+  const parts: string[] = ["🔔 Новая заявка на доступ."];
+  if (applicant.name) parts.push(`Имя: ${applicant.name}`);
+  if (applicant.username) parts.push(`Telegram: @${applicant.username}`);
+  if (applicant.phone) parts.push(`Телефон: +${applicant.phone}`);
+  parts.push(
+    url
+      ? `Открыть и одобрить (ссылка действует 2 мин):\n${url}`
+      : "Откройте раздел «Аккаунты», чтобы одобрить или отклонить.",
+  );
+  return parts.join("\n");
+};
 const successMessage = (name: string) =>
   `Вы зарегистрированы, ${name}. Теперь фотозапросы будут приходить сюда.`;
 
@@ -469,6 +491,41 @@ async function handleBrokenStone(
   await deps.sendMessage(chatId, singanLinkMessage(shape.sideCount, url));
 }
 
+/**
+ * Push OWNER'ам о новой заявке на доступ. Для каждого владельца с привязанным
+ * Telegram: генерируем 2-мин магическую ссылку с `next=/accounts` (один тап —
+ * страница одобрения). Env не готов (нет secret/appBaseUrl) → отправляем
+ * текст без ссылки (владелец откроет /accounts вручную). Каждая отправка в
+ * своём try/catch — падение одного OWNER'а не блокирует остальных.
+ */
+async function notifyOwnersOfAccessRequest(
+  applicant: { name: string | null; username: string | null; phone: string | null },
+  deps: WebhookDeps,
+): Promise<void> {
+  const owners = await deps.findOwnersWithTelegram();
+  if (owners.length === 0) return;
+
+  const expiresAtMs = Date.now() + 2 * 60 * 1000;
+  for (const owner of owners) {
+    let url: string | null = null;
+    try {
+      const token = deps.appBaseUrl
+        ? await deps.signMagicLinkToken(owner.id, expiresAtMs)
+        : "";
+      if (token && deps.appBaseUrl) {
+        url = `${deps.appBaseUrl}/login/tg?token=${token}&next=%2Faccounts`;
+      }
+    } catch (err) {
+      console.error("[telegram-webhook] owner magic-link xatosi:", err);
+    }
+    try {
+      await deps.sendMessage(owner.telegramId, ownerNotifyMessage(applicant, url));
+    } catch (err) {
+      console.error("[telegram-webhook] owner sendMessage xatosi:", err);
+    }
+  }
+}
+
 async function handleContact(
   contact: NonNullable<TgUpdate["message"]>["contact"],
   fromId: number | undefined,
@@ -523,6 +580,18 @@ async function handleContact(
     } catch (err) {
       console.error("[telegram-webhook] access-request upsert xatosi:", err);
       await deps.sendMessage(chatId, MSG_TRY_LATER);
+      return;
+    }
+    // Push OWNER'ам — ОТДЕЛЬНЫЙ try/catch: провал уведомления не должен ломать
+    // саму заявку (она уже создана и видна в /accounts). Best-effort, как и
+    // approve/reject-notify в accounts/actions.ts.
+    try {
+      await notifyOwnersOfAccessRequest(
+        { name: contact.first_name ? [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() : null, username: username ?? null, phone: wanted },
+        deps,
+      );
+    } catch (err) {
+      console.error("[telegram-webhook] owner-notify xatosi:", err);
     }
     return;
   }
