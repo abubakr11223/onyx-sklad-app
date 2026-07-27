@@ -21,6 +21,7 @@ import {
   resetPassword,
   changePhone,
   changeEmail,
+  changeTelegramId,
   approveTelegramRequest,
   rejectTelegramRequest,
 } from "./actions";
@@ -51,6 +52,7 @@ const ERROR_RU: Record<string, string> = {
   owner_protected: "Этот аккаунт защищён (владелец).",
   self: "Нельзя деактивировать самого себя.",
   tg_taken: "Этот Telegram уже привязан к другому аккаунту.",
+  tg_format: "Telegram ID — только цифры (например 123456789).",
 };
 
 const OK_RU: Record<string, string> = {
@@ -60,6 +62,7 @@ const OK_RU: Record<string, string> = {
   password: "Пароль сброшен.",
   phone: "Телефон обновлён.",
   email: "Логин (email) обновлён.",
+  telegram: "Telegram ID обновлён.",
   tg_approved: "Заявка одобрена — доступ открыт, пользователю отправлено уведомление.",
   tg_rejected: "Заявка отклонена.",
 };
@@ -93,6 +96,7 @@ export default async function AccountsPage({
       role: true,
       isActive: true,
       phone: true,
+      telegramId: true,
     },
   });
   // Владелец сам есть в списке — его логин нужен для префилла блока «Мой аккаунт».
@@ -232,6 +236,32 @@ export default async function AccountsPage({
               Сменить пароль
             </Button>
           </form>
+          {/* Мой Telegram ID — владелец может привязать/отвязать TG на свой
+              аккаунт. Полезно, если TG был привязан для тестов и фотозапросы
+              приходят владельцу — очистить, и они будут идти только складчикам. */}
+          <form action={changeTelegramId} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="userId" value={me.id} />
+            <input
+              type="text"
+              name="telegramId"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              defaultValue={meRow?.telegramId ?? ""}
+              placeholder="Мой Telegram ID (пусто — отвязать)"
+              autoComplete="off"
+              aria-label="Мой Telegram ID"
+              className={`${inputClass} sm:max-w-xs`}
+            />
+            <Button type="submit" variant="secondary" size="sm">
+              Сохранить TG ID
+            </Button>
+          </form>
+          {meRow?.telegramId ? (
+            <p className="text-xs text-ink/50">
+              Текущий: {meRow.telegramId}. Очистите, если фотозапросы приходят
+              вам вместо складчика.
+            </p>
+          ) : null}
         </div>
       </Card>
 
@@ -402,6 +432,19 @@ export default async function AccountsPage({
                         <span className="text-ink/40">телефон не задан</span>
                       )}
                     </p>
+                    <p className="text-sm">
+                      {u.telegramId ? (
+                        <span className="tnum text-ink/60">
+                          ✈️ TG ID: {u.telegramId}
+                        </span>
+                      ) : u.role === "WAREHOUSE" ? (
+                        <span className="text-warning">
+                          Telegram не привязан — фотозапросы не придут
+                        </span>
+                      ) : (
+                        <span className="text-ink/40">Telegram не привязан</span>
+                      )}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="neutral">{roleLabel(u.role as Role)}</Badge>
@@ -493,6 +536,34 @@ export default async function AccountsPage({
                         />
                         <Button type="submit" variant="secondary" size="sm">
                           Сохранить телефон
+                        </Button>
+                      </form>
+                    )}
+
+                    {/* Telegram ID — вручную. Пусто + сохранить → отвязать.
+                        Если введённый ID уже занят другим аккаунтом — у того
+                        аккаунта TG очищается автоматически (одна привязка —
+                        один аккаунт). Полезно: перевесить складчика на нужный
+                        аккаунт без повторного /start. */}
+                    {isManageable && (
+                      <form
+                        action={changeTelegramId}
+                        className="flex flex-wrap items-end gap-2"
+                      >
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input
+                          type="text"
+                          name="telegramId"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          defaultValue={u.telegramId ?? ""}
+                          placeholder="123456789 (пусто — отвязать)"
+                          autoComplete="off"
+                          aria-label={`Telegram ID для ${u.name}`}
+                          className={`${inputClass} sm:max-w-xs`}
+                        />
+                        <Button type="submit" variant="secondary" size="sm">
+                          Сохранить TG ID
                         </Button>
                       </form>
                     )}

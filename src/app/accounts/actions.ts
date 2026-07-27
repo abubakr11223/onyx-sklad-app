@@ -300,6 +300,83 @@ export async function changePhone(formData: FormData): Promise<void> {
 }
 
 /**
+ * Ручное управление Telegram ID для существующего аккаунта. Только OWNER.
+ *
+ * Ввод: `userId` (обязательно), `telegramId` (пусто = отвязать; иначе — только
+ * цифры, 1..20 символов; Telegram user_id — целое число ≤ 2⁶³). Перед записью
+ * ЕСЛИ значение занято другим User'ом (уникальность), у того User'а
+ * telegramId ОЧИЩАЕТСЯ (одна привязка — один аккаунт). Это ровно то, чего
+ * хочет владелец: перекинуть уже привязанный TG на нужный account без
+ * повторного /start-цикла.
+ *
+ * OWNER-корень защищён только от кросс-owner изменений (сам владелец может
+ * править СВОЙ telegramId — это полезно, если он привязал свой TG для тестов
+ * и хочет снять привязку).
+ */
+export async function changeTelegramId(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const userId = String(formData.get("userId") ?? "");
+  const raw = String(formData.get("telegramId") ?? "").trim();
+  if (!userId) redirect("/accounts?error=notfound");
+
+  // Пусто → отвязать. Иначе — 1..20 цифр, лидирующие нули убираем.
+  let telegramId: string | null = null;
+  if (raw) {
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (!digits || digits.length > 20) redirect("/accounts?error=tg_format");
+    telegramId = digits.replace(/^0+(?=\d)/, "");
+  }
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
+  if (!target) redirect("/accounts?error=notfound");
+  if (target.role === "OWNER" && target.id !== actorId) {
+    redirect("/accounts?error=owner_protected");
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      // Bir telegram = bir account garantiyasi. Agar berilgan telegramId
+      // boshqa userga bog'langan bo'lsa — oldin uni tozalaymiz (P2002 unique
+      // constraint xatosini oldini olamiz), keyin yangi userga biriktiramiz.
+      if (telegramId) {
+        const existing = await tx.user.findUnique({
+          where: { telegramId },
+          select: { id: true },
+        });
+        if (existing && existing.id !== userId) {
+          await tx.user.update({
+            where: { id: existing.id },
+            data: { telegramId: null },
+          });
+          await logAccountAction(tx, actorId, existing.id, {
+            kind: "account.telegram_moved",
+            from: existing.id,
+            to: userId,
+            telegramId,
+          });
+        }
+      }
+      await tx.user.update({ where: { id: userId }, data: { telegramId } });
+      await logAccountAction(tx, actorId, userId, {
+        kind: "account.telegram",
+        telegramId,
+      });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      redirect("/accounts?error=tg_taken");
+    }
+    throw e;
+  }
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=telegram");
+}
+
+/**
  * Onboarding — ОДОБРИТЬ заявку на доступ через Telegram. FAQAT OWNER. Владелец
  * выбирает роль (createable; по умолчанию WAREHOUSE) → создаётся User с
  * telegramId+phone из заявки, isActive. Заявка → APPROVED. Пользователю уходит
@@ -324,6 +401,24 @@ export async function approveTelegramRequest(formData: FormData): Promise<void> 
 
   try {
     await db.$transaction(async (tx) => {
+      // Bir telegram = bir account garantiyasi. Yangi user yaratishdan oldin
+      // shu telegramId'ga bog'langan oldingi userlar (masalan owner'ning o'zi
+      // test uchun /start bosgan bo'lsa) telegramId'sini tozalaymiz. Aks holda
+      // P2002 unique xatosi + eski akkaunt yangi tasklarni tortib qolar edi.
+      const stale = await tx.user.findMany({
+        where: { telegramId: req.telegramId },
+        select: { id: true },
+      });
+      for (const s of stale) {
+        await tx.user.update({
+          where: { id: s.id },
+          data: { telegramId: null },
+        });
+        await logAccountAction(tx, actorId, s.id, {
+          kind: "tg.approve_stole",
+          telegramId: req.telegramId,
+        });
+      }
       const created = await tx.user.create({
         data: {
           name,
