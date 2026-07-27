@@ -93,13 +93,17 @@ interface SphereGroupProps {
 function SphereGroup({ hovered, tilt }: SphereGroupProps) {
   const groupRef = useRef<THREE.Group>(null);
 
-  // TZ §6.2 — sharedmaterial (barcha 6 lenta uchun bitta material).
+  // Yorqinroq oltin material — prod'da qorong'i chiqqan edi. Emissive iliq
+  // oltin tuson beradi (metalness+roughness'ni yumshatmasdan), highlight rangi
+  // asosiy tuson qilib olindi. Aylanishda highlight+darker balans hosil qiladi.
   const material = useMemo(() => {
     return new THREE.MeshStandardMaterial({
-      color: GOLD_MAIN,
-      metalness: 0.9,
-      roughness: 0.25,
-      envMapIntensity: 1.2,
+      color: GOLD_HIGHLIGHT,     // asosiy tuson yorqinroq (avval GOLD_MAIN — qorong'i)
+      metalness: 0.85,
+      roughness: 0.28,
+      emissive: 0x3a2a10,        // iliq bronze glow — sfera qora fon ustida yo'qolmasin
+      emissiveIntensity: 0.35,
+      envMapIntensity: 1.5,
     });
   }, []);
 
@@ -107,7 +111,7 @@ function SphereGroup({ hovered, tilt }: SphereGroupProps) {
     return new THREE.MeshBasicMaterial({
       color: GOLD_HIGHLIGHT,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.18,             // 0.08 → 0.18 (yorqinroq halo, sfera atrofida yumshoq nur)
       side: THREE.BackSide,
     });
   }, []);

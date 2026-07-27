@@ -178,18 +178,18 @@ export function LoginPageClient({
       <style>{`
         :root {
           --login-bg-base: #0B0B0D;
-          --login-bg-radial: radial-gradient(ellipse at 50% 30%, #1A1712 0%, #0B0B0D 60%);
+          --login-bg-radial: radial-gradient(ellipse 90% 70% at 50% 25%, #241C10 0%, #14100A 45%, #0B0B0D 80%);
           --login-gold-main: #C9A55C;
           --login-gold-hi-1: #E9CF8F;
           --login-gold-hi-2: #F5E7C0;
           --login-gold-glow: rgba(233, 207, 143, 0.35);
-          --login-card-bg: rgba(20, 18, 28, 0.6);
-          --login-card-border: rgba(201, 165, 92, 0.15);
+          --login-card-bg: rgba(28, 22, 14, 0.72);
+          --login-card-border: rgba(233, 207, 143, 0.28);
           --login-card-blur: 24px;
           --login-text-primary: #F5F0E8;
           --login-text-muted: rgba(245, 240, 232, 0.6);
-          --login-input-bg: rgba(255, 255, 255, 0.04);
-          --login-input-border: rgba(201, 165, 92, 0.2);
+          --login-input-bg: rgba(20, 16, 10, 0.55);
+          --login-input-border: rgba(233, 207, 143, 0.28);
           --login-input-border-focus: #E9CF8F;
           --login-error: #FF6B6B;
         }
@@ -271,7 +271,7 @@ export function LoginPageClient({
           border-radius: 20px;
           backdrop-filter: blur(var(--login-card-blur));
           -webkit-backdrop-filter: blur(var(--login-card-blur));
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7), 0 0 40px rgba(233, 207, 143, 0.08), inset 0 1px 0 rgba(233, 207, 143, 0.12);
         }
         @media (max-width: 640px) {
           .login-card { padding: 28px 20px; }
