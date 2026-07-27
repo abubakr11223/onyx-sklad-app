@@ -54,8 +54,19 @@ export async function GET(req: Request): Promise<Response> {
     // выдачу cookie, ошибка проглатывается внутри prune.
     void pruneExpiredMagicJti().catch(() => {});
 
-    // Login cookie flaglari login/actions.ts bilan bir xil.
-    const res = NextResponse.redirect(new URL("/", origin));
+    // `next=/path` — magic-link ochilgach yo'naltiriladigan ichki manzil.
+    // XAVFSIZLIK: faqat bir `/` bilan boshlanuvchi (nisbiy) yo'l; `//host`,
+    // `/\host`, sxemali URL (`http://…`) va bo'sh — RAD etiladi (open-redirect
+    // himoyasi). Aks holda — bosh sahifa (`/`).
+    const rawNext = url.searchParams.get("next") ?? "";
+    const safeNext =
+      rawNext.length > 1 &&
+      rawNext.startsWith("/") &&
+      !rawNext.startsWith("//") &&
+      !rawNext.startsWith("/\\")
+        ? rawNext
+        : "/";
+    const res = NextResponse.redirect(new URL(safeNext, origin));
     res.cookies.set(SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       sameSite: "lax",

@@ -80,6 +80,16 @@ export async function POST(req: Request) {
       analyzeBrokenStoneShape(imageBase64, mediaType),
     // Аудит ТЗ №7 #1 — выделение плиты в транзакции с batch-lock + guard §3.
     separateSlab: (input) => separateSlabGuarded(input),
+    // Push OWNER'ам при новой tg-заявке: активные OWNER'ы с привязанным
+    // telegramId. Пустой список → уведомлений нет (без ошибки).
+    findOwnersWithTelegram: async () => {
+      const rows = await db.user.findMany({
+        where: { role: "OWNER", isActive: true, telegramId: { not: null } },
+        select: { id: true, telegramId: true },
+      });
+      return rows
+        .filter((r): r is { id: string; telegramId: string } => r.telegramId !== null);
+    },
   });
   return Response.json({ ok: true });
 }

@@ -26,6 +26,7 @@ const separateSlabMock = vi.fn();
 const pdFindFirst = vi.fn();
 // SK-4b: magic-link imzolovchisi mock'i.
 const tarUpsert = vi.fn(); // onboarding — заявка на доступ (upsert)
+const findOwnersWithTelegram = vi.fn(); // push OWNER'ам о новой tg-заявке
 const signMagicLinkToken = vi.fn();
 // §5.5b (singan tosh) mock'lari.
 const downloadPhotoBase64 = vi.fn();
@@ -55,6 +56,7 @@ function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
       },
     },
     sendMessage: (...a: unknown[]) => sendMessage(...a),
+    findOwnersWithTelegram: (...a: unknown[]) => findOwnersWithTelegram(...a),
     signMagicLinkToken: (...a: unknown[]) => signMagicLinkToken(...a),
     appBaseUrl: "https://onyx.test",
     downloadPhotoBase64: (...a: unknown[]) => downloadPhotoBase64(...a),
@@ -77,6 +79,8 @@ beforeEach(() => {
   pdFindFirst.mockReset();
   tarUpsert.mockReset();
   tarUpsert.mockResolvedValue({});
+  findOwnersWithTelegram.mockReset();
+  findOwnersWithTelegram.mockResolvedValue([]);
   findMany.mockResolvedValue([]);
   update.mockResolvedValue({});
   sendMessage.mockResolvedValue(undefined);
@@ -237,6 +241,58 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     // Пользователю — «заявка отправлена, ждите одобрения».
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("Заявка на доступ отправлена");
+  });
+
+  it("заявка + OWNER'ы с Telegram → всем OWNER'ам приходит push с magic-link на /accounts", async () => {
+    findMany.mockResolvedValue([]); // ни один аккаунт не совпал
+    findOwnersWithTelegram.mockResolvedValue([
+      { id: "owner1", telegramId: "111" },
+      { id: "owner2", telegramId: "222" },
+    ]);
+    signMagicLinkToken.mockResolvedValue("MAGIC");
+
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "998900000000" }),
+      makeDeps(),
+    );
+
+    // 1 сообщение заявителю + по одному каждому OWNER'у = 3.
+    expect(sendMessage).toHaveBeenCalledTimes(3);
+    const targets = sendMessage.mock.calls.map((c) => c[0]);
+    expect(targets).toContain(999); // заявителю
+    expect(targets).toContain("111");
+    expect(targets).toContain("222");
+    const ownerMsg = sendMessage.mock.calls.find((c) => c[0] === "111")?.[1] as string;
+    expect(ownerMsg).toContain("Новая заявка");
+    expect(ownerMsg).toContain("998900000000");
+    expect(ownerMsg).toContain("https://onyx.test/login/tg?token=MAGIC&next=%2Faccounts");
+  });
+
+  it("заявка + OWNER'ов нет → OWNER-уведомлений нет, заявка отправлена", async () => {
+    findMany.mockResolvedValue([]);
+    findOwnersWithTelegram.mockResolvedValue([]);
+
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "998900000000" }),
+      makeDeps(),
+    );
+
+    expect(tarUpsert).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledTimes(1); // только заявителю
+  });
+
+  it("sendMessage OWNER'у падает → заявка всё равно создана, ошибка проглочена", async () => {
+    findMany.mockResolvedValue([]);
+    findOwnersWithTelegram.mockResolvedValue([{ id: "o1", telegramId: "111" }]);
+    signMagicLinkToken.mockResolvedValue("MAGIC");
+    // Первый вызов (заявителю) — ok; второй (OWNER'у) — throw.
+    sendMessage.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("tg down"));
+
+    await expect(
+      handleUpdate(contactUpdate({ chatId: 999, phone: "998900000000" }), makeDeps()),
+    ).resolves.toBeUndefined();
+
+    expect(tarUpsert).toHaveBeenCalledTimes(1);
   });
 
   it("forward qilingan kontakt (contact.user_id !== from.id) → bog'lanmaydi", async () => {
