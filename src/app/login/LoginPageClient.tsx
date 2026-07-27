@@ -26,7 +26,7 @@ const LogoSphere3D = dynamic(
   () => import("@/components/login/LogoSphere3D"),
   {
     ssr: false,
-    loading: () => <StaticLogo variant="breathing" size={280} />,
+    loading: () => <StaticLogo variant="breathing" size={400} />,
   },
 );
 
@@ -87,9 +87,9 @@ export function LoginPageClient({
         }
       >
         {shouldRender3D ? (
-          <LogoSphere3D size={280} onLowFps={() => setLowFps(true)} />
+          <LogoSphere3D size={400} onLowFps={() => setLowFps(true)} />
         ) : (
-          <StaticLogo variant={staticVariant} size={280} />
+          <StaticLogo variant={staticVariant} size={400} />
         )}
       </motion.div>
 
@@ -177,8 +177,8 @@ export function LoginPageClient({
           globals.css tegilmagan (TZ §3 talabidek). */}
       <style>{`
         :root {
-          --login-bg-base: #0B0B0D;
-          --login-bg-radial: radial-gradient(ellipse 90% 70% at 50% 25%, #241C10 0%, #14100A 45%, #0B0B0D 80%);
+          --login-bg-base: #14100A;
+          --login-bg-radial: radial-gradient(ellipse 120% 100% at 50% 30%, #3A2A16 0%, #251C10 35%, #14100A 70%, #0F0A05 100%);
           --login-gold-main: #C9A55C;
           --login-gold-hi-1: #E9CF8F;
           --login-gold-hi-2: #F5E7C0;
@@ -218,14 +218,14 @@ export function LoginPageClient({
         .login-logo-slot {
           position: relative;
           z-index: 1;
-          height: 40vh;
-          max-height: 320px;
+          height: 48vh;
+          max-height: 440px;
           display: flex;
           align-items: center;
           justify-content: center;
         }
         @media (max-width: 640px) {
-          .login-logo-slot { height: 32vh; max-height: 240px; }
+          .login-logo-slot { height: 38vh; max-height: 320px; }
         }
 
         .login-header {
