@@ -13,7 +13,7 @@
 
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Sparkles } from "@react-three/drei";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 // TZ §6.2 — material parametrlari (AYNAN).
@@ -111,8 +111,12 @@ function SphereGroup({ hovered, tilt }: SphereGroupProps) {
     });
   }, []);
 
-  // TZ §6.4 — idle aylanish: Y=0.15, X=0.05 rad/s. Hover'da 1.5x (§7.4).
-  // Tilt (hover-driven) lerp bilan yumshatiladi.
+  // TZ §6.4 + §7.4 — idle aylanish: Y=0.15, X=0.05 rad/s. Hover'da 1.5x.
+  // Tilt: sichqoncha koordinatasi (normal [-1,1]) → ±0.3 rad, lerp 0.05.
+  // Idle aylanish + tilt qo'shiladi (tilt "yuza" burchak sifatida keladi:
+  // rotation'ga to'g'ridan qo'shsak, aylanish barbaqar ekvatordan siljiydi va
+  // qaytadi — bu keladigan burchak asosiy egilishni beradi).
+  const rotOffset = useRef({ x: 0, y: 0 });
   useFrame((_, delta) => {
     const g = groupRef.current;
     if (!g) return;
@@ -120,10 +124,14 @@ function SphereGroup({ hovered, tilt }: SphereGroupProps) {
     g.rotation.y += 0.15 * delta * factor;
     g.rotation.x += 0.05 * delta * factor;
 
-    // Hover tilt — S4 da desktop'ga ulanadi (mouse handler LoginPageClient'da).
-    // Bu yerda faqat lerp — `tilt.current` LoginPageClient tomonidan yozib turiladi.
-    g.rotation.x += (tilt.current.x - (g.rotation.x % (Math.PI * 2))) * 0.05 * 0;
-    g.rotation.y += (tilt.current.y - (g.rotation.y % (Math.PI * 2))) * 0.05 * 0;
+    // Tilt offset lerp — sichqoncha keskin harakat qilsa ham, sfera yumshoq
+    // egiladi. Target: mouseX/Y × 0.3. Lerp: 0.05 (5% har frame).
+    const targetX = -tilt.current.y * 0.3;
+    const targetY = tilt.current.x * 0.3;
+    rotOffset.current.x += (targetX - rotOffset.current.x) * 0.05;
+    rotOffset.current.y += (targetY - rotOffset.current.y) * 0.05;
+    g.rotation.x += rotOffset.current.x * delta * 4;
+    g.rotation.y += rotOffset.current.y * delta * 4;
   });
 
   return (
@@ -174,14 +182,50 @@ function FpsMonitor({ onLowFps }: { onLowFps?: () => void }) {
 export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps) {
   const hovered = useRef(false);
   const tilt = useRef({ x: 0, y: 0 });
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Hover — S4 da mouse tracking LoginPageClient tomonidan bog'lanadi.
-  // Hozircha idle aylanish + Sparkles + halo.
+  // TZ §7.4 — hover tilt FAQAT desktop'da (hover + fine pointer). Touch'da
+  // umuman ulanmaydi (mobil qurilma o'zining scroll/tap gestlarini erkin
+  // qilsin, sfera bezovta qilmasin). matchMedia SSR'da yo'q, shu sabab client-only
+  // (dynamic ssr:false garanti beradi, lekin defensivroq: window guard).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(hover: hover) and (pointer: fine)");
+    if (!mql.matches) return;
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    const onMove = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      // Normal koordinata [-1, 1]: -1 chap/tepa, +1 o'ng/past.
+      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+      tilt.current.x = Math.max(-1, Math.min(1, nx));
+      tilt.current.y = Math.max(-1, Math.min(1, ny));
+    };
+    const onEnter = () => {
+      hovered.current = true;
+    };
+    const onLeave = () => {
+      hovered.current = false;
+      // Sfera markazga qaytsin (idle aylanish davom etadi).
+      tilt.current.x = 0;
+      tilt.current.y = 0;
+    };
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerenter", onEnter);
+    el.addEventListener("pointerleave", onLeave);
+    return () => {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerenter", onEnter);
+      el.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+
   return (
     <div
+      ref={wrapperRef}
       style={{ width: size, height: size }}
-      onPointerEnter={() => (hovered.current = true)}
-      onPointerLeave={() => (hovered.current = false)}
       aria-hidden
     >
       <Canvas
