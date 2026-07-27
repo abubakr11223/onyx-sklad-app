@@ -11,9 +11,21 @@
 // dark tema uchun mos EMAS, shuning uchun inline styled JSX ishlatiladi.
 
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { loginWithPassword } from "./actions";
 import { StaticLogo } from "@/components/login/StaticLogo";
 import { loraWordmark, montserratTag } from "./login-fonts";
+
+// TZ §11 / §6 — 3D sfera FAQAT client'da, dynamic import, ssr:false. `loading`
+// darhol StaticLogo (breathing variant) — 3D chunk yuklanguncha ham SLOT to'la
+// bo'ladi (layout shift yo'q, forma darhol interaktiv qoladi).
+const LogoSphere3D = dynamic(
+  () => import("@/components/login/LogoSphere3D"),
+  {
+    ssr: false,
+    loading: () => <StaticLogo variant="breathing" size={280} />,
+  },
+);
 
 interface LoginPageClientProps {
   next: string;
@@ -38,14 +50,15 @@ export function LoginPageClient({
       {/* Radial gradient overlay — TZ §3 */}
       <div className="login-bg-radial" aria-hidden />
 
-      {/* 3D sfera S3 da bu joyga keladi. Hozircha statik logo (breathing). */}
+      {/* 3D sfera slot. Dynamic import (ssr:false) — loading fallback StaticLogo.
+          Fallback zanjiri (weak-device, reduced-motion) S5'da qo'shiladi. */}
       <motion.div
         className="login-logo-slot"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: EASE_OUT_EXPO }}
       >
-        <StaticLogo variant="breathing" size={280} />
+        <LogoSphere3D size={280} />
       </motion.div>
 
       {/* Wordmark: "ONYX" (Lora, gold gradient) + "stones boutique" (Montserrat) */}
