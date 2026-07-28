@@ -89,14 +89,15 @@ describe("/login redizayn (TZ №8 v2)", () => {
     expect(screen.getByRole("button", { name: "Войти" })).toBeTruthy();
   });
 
-  it("prefers-reduced-motion → Canvas render qilinmaydi, statik logo mavjud", () => {
+  it("prefers-reduced-motion → forma va layout render qilinadi (sfera hero-vizual, doim ko'rinadi)", () => {
+    // TZ №8 v3 — sfera hero-vizual; foydalanuvchi so'raganidek doim 3D
+    // (referens'ga aynan mos). Reduced-motion faqat framer-motion
+    // transitionlarini o'chiradi, sfera fon'ga tegmaydi. Form to'liq
+    // interaktiv qoladi.
     mockMatchMedia((q) => q.includes("prefers-reduced-motion"));
     render(<LoginPageClient {...baseProps} />);
-    // Canvas'ga (haqiqiy 3D) yo'l qo'yilmaydi.
-    expect(document.querySelector("canvas")).toBeNull();
-    // Static SVG logo (variant=static, data-variant orqali aniqlanadi).
-    const logo = document.querySelector('[data-variant="static"]');
-    expect(logo).not.toBeNull();
+    expect(screen.getByPlaceholderText("you@example.com")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Войти" })).toBeTruthy();
   });
 
   it("zaif qurilma (deviceMemory=2) → Canvas render qilinmaydi, statik glow", () => {
