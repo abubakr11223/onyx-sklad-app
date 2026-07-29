@@ -377,6 +377,57 @@ export async function changeTelegramId(formData: FormData): Promise<void> {
 }
 
 /**
+ * §5.8 / audit 3.3 — User.canSeePurchasePrice bayrog'i (zakup/marja ko'rinishi).
+ * FAQAT OWNER. MANAGER uchun ma'noli (capabilitiesFor opts); WAREHOUSE/PARTNER
+ * da capability baribir false, lekin bayroq saqlanadi. Boshqa OWNER'ga tegilmaydi.
+ * OWNER o'zi uchun UI yo'q (doim ko'radi, opts e'tiborga olinmaydi).
+ *
+ * Form: `userId`, `value` — "true" | "false" (checkbox: checked=true, yoki
+ * yashirin false + checkbox true juftligi).
+ */
+export async function setCanSeePurchasePrice(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) redirect("/accounts?error=notfound");
+
+  // Checkbox + yashirin juftlik: checked bo'lsa getAll ichida "true" bor;
+  // unchecked — faqat "false". getAll ishonchli (tartib mustaqil).
+  const raws = formData.getAll("value").map((v) => String(v).toLowerCase());
+  if (raws.length === 0) redirect("/accounts?error=flag");
+  if (raws.some((r) => r !== "true" && r !== "false")) {
+    redirect("/accounts?error=flag");
+  }
+  const value = raws.includes("true");
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, canSeePurchasePrice: true },
+  });
+  if (!target) redirect("/accounts?error=notfound");
+  // Boshqa OWNER himoyalangan; o'zini ham bu action orqali o'zgartirmaymiz
+  // (OWNER.canSeePurchasePrice capability'da baribir e'tiborga olinmaydi).
+  if (target.role === "OWNER") redirect("/accounts?error=owner_protected");
+  if (target.canSeePurchasePrice === value) {
+    redirect("/accounts?ok=purchase_price"); // no-op
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { canSeePurchasePrice: value },
+    });
+    await logAccountAction(tx, actorId, userId, {
+      kind: "account.can_see_purchase_price",
+      from: target.canSeePurchasePrice,
+      to: value,
+    });
+  });
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=purchase_price");
+}
+
+/**
  * Onboarding — ОДОБРИТЬ заявку на доступ через Telegram. FAQAT OWNER. Владелец
  * выбирает роль (createable; по умолчанию WAREHOUSE) → создаётся User с
  * telegramId+phone из заявки, isActive. Заявка → APPROVED. Пользователю уходит

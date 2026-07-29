@@ -22,6 +22,7 @@ import {
   changePhone,
   changeEmail,
   changeTelegramId,
+  setCanSeePurchasePrice,
   approveTelegramRequest,
   rejectTelegramRequest,
 } from "./actions";
@@ -53,6 +54,7 @@ const ERROR_RU: Record<string, string> = {
   self: "Нельзя деактивировать самого себя.",
   tg_taken: "Этот Telegram уже привязан к другому аккаунту.",
   tg_format: "Telegram ID — только цифры (например 123456789).",
+  flag: "Некорректное значение флага.",
 };
 
 const OK_RU: Record<string, string> = {
@@ -63,6 +65,7 @@ const OK_RU: Record<string, string> = {
   phone: "Телефон обновлён.",
   email: "Логин (email) обновлён.",
   telegram: "Telegram ID обновлён.",
+  purchase_price: "Право на закупочную цену / маржу обновлено.",
   tg_approved: "Заявка одобрена — доступ открыт, пользователю отправлено уведомление.",
   tg_rejected: "Заявка отклонена.",
 };
@@ -97,6 +100,7 @@ export default async function AccountsPage({
       isActive: true,
       phone: true,
       telegramId: true,
+      canSeePurchasePrice: true,
     },
   });
   // Владелец сам есть в списке — его логин нужен для префилла блока «Мой аккаунт».
@@ -174,6 +178,11 @@ export default async function AccountsPage({
               </li>
               <li>
                 <b>Свой логин и пароль</b> — блок «Мой аккаунт» вверху.
+              </li>
+              <li>
+                <b>Закупочная цена / маржа</b> — в карточке сотрудника чекбокс
+                «Видеть закупочную цену». Нужен менеджеру (§5.8); складчик и
+                партнёр цены закупа не видят.
               </li>
             </ul>
           </div>
@@ -564,6 +573,40 @@ export default async function AccountsPage({
                         />
                         <Button type="submit" variant="secondary" size="sm">
                           Сохранить TG ID
+                        </Button>
+                      </form>
+                    )}
+
+                    {/* §5.8: canSeePurchasePrice — менеджер закупочную/маржу
+                        видит только если OWNER явно разрешил. Checkbox +
+                        сохранить (server action). Сейчас: да/нет в подписи. */}
+                    {isManageable && (
+                      <form
+                        action={setCanSeePurchasePrice}
+                        className="flex flex-wrap items-center gap-2"
+                      >
+                        <input type="hidden" name="userId" value={u.id} />
+                        {/* Tartib muhim: checked bo'lsa birinchi "true",
+                            aks holda faqat yashirin "false" ketadi. */}
+                        <label className="flex items-center gap-2 text-sm text-ink">
+                          <input
+                            type="checkbox"
+                            name="value"
+                            value="true"
+                            defaultChecked={u.canSeePurchasePrice}
+                            aria-label={`Видеть закупочную цену — ${u.name}`}
+                            className="size-4 accent-gold-deep"
+                          />
+                          <span>
+                            Видеть закупочную цену / маржу
+                            <span className="ml-1 text-ink/50">
+                              (сейчас: {u.canSeePurchasePrice ? "да" : "нет"})
+                            </span>
+                          </span>
+                        </label>
+                        <input type="hidden" name="value" value="false" />
+                        <Button type="submit" variant="secondary" size="sm">
+                          Сохранить
                         </Button>
                       </form>
                     )}

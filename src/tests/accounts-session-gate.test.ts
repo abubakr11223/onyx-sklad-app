@@ -63,6 +63,7 @@ import {
   deleteAccount,
   changeRole,
   resetPassword,
+  setCanSeePurchasePrice,
 } from "@/app/accounts/actions";
 import AccountsPage from "@/app/accounts/page";
 
@@ -138,6 +139,15 @@ describe("actions DENY — demo-role=OWNER bo'lsa ham, haqiqiy sessiya yo'q", ()
     ).rejects.toThrow(/error=denied/);
     expect(userUpdate).not.toHaveBeenCalled();
   });
+
+  it("setCanSeePurchasePrice → denied (sessiya yo'q), yozuv yo'q", async () => {
+    await expect(
+      setCanSeePurchasePrice(fd({ userId: "target-id", value: "true" })),
+    ).rejects.toThrow(/error=denied/);
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
+  });
 });
 
 // ── DENY: haqiqiy sessiya bor, ammo rol OWNER emas (MANAGER token) ──
@@ -157,6 +167,23 @@ describe("actions DENY — haqiqiy sessiya bor, lekin rol ≠ OWNER", () => {
     ).rejects.toThrow(/error=denied/);
     expect(findUnique).not.toHaveBeenCalled();
     expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it("MANAGER sessiya → setCanSeePurchasePrice denied, bayroq o'zgarmaydi", async () => {
+    const token = await signSessionToken("manager-id", 0);
+    cookieStore({ [SESSION_COOKIE]: token });
+    findFirst.mockResolvedValueOnce({
+      id: "manager-id",
+      name: "Manager",
+      role: "MANAGER",
+      tokenVersion: 0,
+    });
+    await expect(
+      setCanSeePurchasePrice(fd({ userId: "target-id", value: "true" })),
+    ).rejects.toThrow(/error=denied/);
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(auditCreate).not.toHaveBeenCalled();
   });
 });
 
@@ -194,6 +221,64 @@ describe("actions ALLOW — haqiqiy OWNER sessiyasi", () => {
       changeRole(fd({ userId: "target-id", role: "WAREHOUSE" })),
     ).rejects.toThrow(/ok=role/);
     expect(userUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("setCanSeePurchasePrice → MANAGER bayroq true saqlanadi + audit", async () => {
+    findUnique.mockResolvedValueOnce({
+      id: "target-id",
+      role: "MANAGER",
+      canSeePurchasePrice: false,
+    });
+    await expect(
+      setCanSeePurchasePrice(fd({ userId: "target-id", value: "true" })),
+    ).rejects.toThrow(/ok=purchase_price/);
+
+    expect(userUpdate).toHaveBeenCalledTimes(1);
+    const upd = userUpdate.mock.calls[0][0];
+    expect(upd.where).toEqual({ id: "target-id" });
+    expect(upd.data).toEqual({ canSeePurchasePrice: true });
+
+    expect(auditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "owner-id",
+          action: "STATUS_CHANGE",
+          entityType: "User",
+          entityId: "target-id",
+          payload: expect.objectContaining({
+            kind: "account.can_see_purchase_price",
+            from: false,
+            to: true,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("setCanSeePurchasePrice → false ga o'chirish saqlanadi", async () => {
+    findUnique.mockResolvedValueOnce({
+      id: "target-id",
+      role: "MANAGER",
+      canSeePurchasePrice: true,
+    });
+    await expect(
+      setCanSeePurchasePrice(fd({ userId: "target-id", value: "false" })),
+    ).rejects.toThrow(/ok=purchase_price/);
+    expect(userUpdate.mock.calls[0][0].data).toEqual({
+      canSeePurchasePrice: false,
+    });
+  });
+
+  it("setCanSeePurchasePrice → OWNER nishonga rad (owner_protected)", async () => {
+    findUnique.mockResolvedValueOnce({
+      id: "other-owner",
+      role: "OWNER",
+      canSeePurchasePrice: true,
+    });
+    await expect(
+      setCanSeePurchasePrice(fd({ userId: "other-owner", value: "false" })),
+    ).rejects.toThrow(/error=owner_protected/);
+    expect(userUpdate).not.toHaveBeenCalled();
   });
 });
 
