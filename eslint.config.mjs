@@ -5,7 +5,7 @@ import typescript from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...coreWebVitals,
   ...typescript,
-  globalIgnores([".next/**", "node_modules/**", "next-env.d.ts"]),
+  globalIgnores(["**/.next/**", "**/node_modules/**", ".claude/**", "next-env.d.ts"]),
 ]);
 
 export default eslintConfig;
