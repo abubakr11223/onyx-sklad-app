@@ -35,35 +35,47 @@ afterEach(() => {
   else process.env.NODE_APP_INSTANCE = SAVED.instance;
 });
 
+// Next.js ProcessEnv da NODE_ENV majburiy ('development'|'production'|'test').
+// Sof helper testlari faqat NEXT_RUNTIME / NODE_APP_INSTANCE o'qiydi — NODE_ENV
+// qiymati xulqqa ta'sir qilmaydi; ProcessEnv to'ldirish uchun "test" beramiz.
+const env = (
+  partial: Record<string, string | undefined> = {},
+): NodeJS.ProcessEnv =>
+  ({ NODE_ENV: "test", ...partial }) as NodeJS.ProcessEnv;
+
 describe("shouldScheduleSweep — klaster/runtime himoyasi (sof)", () => {
   it("nodejs + instance yo'q → true (fork/bitta nusxa)", () => {
-    expect(shouldScheduleSweep({ NEXT_RUNTIME: "nodejs" })).toBe(true);
+    expect(shouldScheduleSweep(env({ NEXT_RUNTIME: "nodejs" }))).toBe(true);
   });
 
   it("nodejs + instance '0' → true (klasterning yagona nusxasi)", () => {
     expect(
-      shouldScheduleSweep({ NEXT_RUNTIME: "nodejs", NODE_APP_INSTANCE: "0" }),
+      shouldScheduleSweep(
+        env({ NEXT_RUNTIME: "nodejs", NODE_APP_INSTANCE: "0" }),
+      ),
     ).toBe(true);
   });
 
   it("nodejs + instance '1' → false (dublikat sweep oldini olamiz)", () => {
     expect(
-      shouldScheduleSweep({ NEXT_RUNTIME: "nodejs", NODE_APP_INSTANCE: "1" }),
+      shouldScheduleSweep(
+        env({ NEXT_RUNTIME: "nodejs", NODE_APP_INSTANCE: "1" }),
+      ),
     ).toBe(false);
   });
 
   it("edge runtime → false", () => {
-    expect(shouldScheduleSweep({ NEXT_RUNTIME: "edge" })).toBe(false);
+    expect(shouldScheduleSweep(env({ NEXT_RUNTIME: "edge" }))).toBe(false);
   });
 
   // ⚠️ Standalone `node server.js` (repo prod yo'li) da NEXT_RUNTIME UNDEFINED —
   // cron shu yerda ISHLASHI shart, aks holda prod'da jimgina o'lik bo'ladi.
   it("runtime yo'q (standalone node server.js) → true", () => {
-    expect(shouldScheduleSweep({})).toBe(true);
+    expect(shouldScheduleSweep(env())).toBe(true);
   });
 
   it("runtime yo'q + instance '1' → false (klaster dublikat)", () => {
-    expect(shouldScheduleSweep({ NODE_APP_INSTANCE: "1" })).toBe(false);
+    expect(shouldScheduleSweep(env({ NODE_APP_INSTANCE: "1" }))).toBe(false);
   });
 });
 

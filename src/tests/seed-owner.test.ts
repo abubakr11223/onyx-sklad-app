@@ -6,11 +6,16 @@ import {
   type RawOwnerArgs,
 } from "@/lib/seed-owner";
 
+// Next.js ProcessEnv da NODE_ENV majburiy. parseOwnerArgs faqat OWNER_* o'qiydi;
+// NODE_ENV xulqqa ta'sir qilmaydi — tip to'ldirish uchun "test".
+const emptyEnv = (): NodeJS.ProcessEnv =>
+  ({ NODE_ENV: "test" }) as NodeJS.ProcessEnv;
+
 describe("parseOwnerArgs", () => {
   it("argv bayroqlarini o'qiydi (--email/--password/--name/--force)", () => {
     const r = parseOwnerArgs(
       ["--email=a@b.uz", "--password=Secret123", "--name=Boss", "--force"],
-      {},
+      emptyEnv(),
     );
     expect(r).toEqual({
       email: "a@b.uz",
@@ -22,6 +27,7 @@ describe("parseOwnerArgs", () => {
 
   it("env'dan oladi, argv env'dan ustun", () => {
     const env = {
+      NODE_ENV: "test",
       OWNER_EMAIL: "env@b.uz",
       OWNER_PASSWORD: "EnvPass12",
       OWNER_NAME: "EnvName",
@@ -42,7 +48,7 @@ describe("parseOwnerArgs", () => {
   });
 
   it("hech narsa berilmasa — barchasi null/false", () => {
-    expect(parseOwnerArgs([], {})).toEqual({
+    expect(parseOwnerArgs([], emptyEnv())).toEqual({
       email: null,
       password: null,
       name: null,
