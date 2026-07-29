@@ -10,10 +10,33 @@
 //    yashiq bo'lardi).
 //  • hardwareConcurrency <= 4 → weak.
 // SSR'da undefined navigatorga tegmasin — server render'da har doim `false`.
-import { useEffect, useState } from "react";
+//
+// Pattern: useSyncExternalStore — getServerSnapshot=false (hydration), client
+// getSnapshot navigator'ni o'qiydi. Obuna yo'q (qiymat runtime'da o'zgarmaydi).
+import { useSyncExternalStore } from "react";
 
 interface NavigatorMemoryExt extends Navigator {
   deviceMemory?: number;
+}
+
+function computeIsWeak(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const nav = navigator as NavigatorMemoryExt;
+  const mem = nav.deviceMemory;
+  const cores = nav.hardwareConcurrency;
+  const memWeak = typeof mem === "number" && mem <= 4;
+  const coreWeak = typeof cores === "number" && cores <= 4;
+  return memWeak || coreWeak;
+}
+
+function subscribe(onChange: () => void): () => void {
+  // Statik heuristika — runtime'da o'zgarmaydi. onChange saqlanadi (API shakli).
+  void onChange;
+  return () => {};
+}
+
+function getServerSnapshot(): boolean {
+  return false;
 }
 
 /**
@@ -22,15 +45,5 @@ interface NavigatorMemoryExt extends Navigator {
  * render qilmasdan darhol statik logo'ga o'tadi.
  */
 export function useIsWeakDevice(): boolean {
-  const [weak, setWeak] = useState(false);
-  useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    const nav = navigator as NavigatorMemoryExt;
-    const mem = nav.deviceMemory;
-    const cores = nav.hardwareConcurrency;
-    const memWeak = typeof mem === "number" && mem <= 4;
-    const coreWeak = typeof cores === "number" && cores <= 4;
-    if (memWeak || coreWeak) setWeak(true);
-  }, []);
-  return weak;
+  return useSyncExternalStore(subscribe, computeIsWeak, getServerSnapshot);
 }

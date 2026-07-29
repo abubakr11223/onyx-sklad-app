@@ -5,28 +5,41 @@
 // media query'ni tekshirib true'ga o'tishi mumkin. Kuzatuvchi (`change` event)
 // tayinlanadi — foydalanuvchi jarayonda A11y sozlamasini yoqsa ham sfera darhol
 // o'chib statik logo'ga o'tadi.
-import { useEffect, useState } from "react";
+//
+// Pattern: useSyncExternalStore (React tavsiyasi media query uchun) —
+// effect ichida setState o'rniga tashqi store obuna.
+import { useSyncExternalStore } from "react";
+
+const QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribe(onChange: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) {
+    return () => {};
+  }
+  const mql = window.matchMedia(QUERY);
+  const handler = () => onChange();
+  if (typeof mql.addEventListener === "function") {
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }
+  // Eski Safari yo'li.
+  const legacy = mql as unknown as {
+    addListener: (fn: () => void) => void;
+    removeListener: (fn: () => void) => void;
+  };
+  legacy.addListener(handler);
+  return () => legacy.removeListener(handler);
+}
+
+function getSnapshot(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia(QUERY).matches;
+}
+
+function getServerSnapshot(): boolean {
+  return false;
+}
 
 export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mql.matches);
-    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
-    // Modern brauzerlar `addEventListener`, eski Safari `addListener`.
-    if (typeof mql.addEventListener === "function") {
-      mql.addEventListener("change", onChange);
-      return () => mql.removeEventListener("change", onChange);
-    } else {
-      // Eski Safari yo'li — @ts-ignore olib qo'ymaymiz, defensive.
-      const legacy = mql as unknown as {
-        addListener: (fn: (e: MediaQueryListEvent) => void) => void;
-        removeListener: (fn: (e: MediaQueryListEvent) => void) => void;
-      };
-      legacy.addListener(onChange);
-      return () => legacy.removeListener(onChange);
-    }
-  }, []);
-  return reduced;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

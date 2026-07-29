@@ -124,14 +124,17 @@ export default function IntakeForm({
   const DRAFT_KEY = "onyx-intake-draft-v1";
   const [offlineMsg, setOfflineMsg] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
-  // BUG-08: gate записи черновика, пока не отработало восстановление на
-  // монтировании — иначе пустой default-state успевает сохраниться первым и
-  // затирает старый черновик до того, как эффект восстановления его прочитает.
-  const hydrated = useRef(false);
+  // BUG-08 + W2-B-FIX: gate — useRef (state emas!).
+  // Sabab: setHydrated(true) save effect deps orqali qayta ishga tushib
+  // ?ok=1 / bo'sh tashrifda default formani draft qilib QAYTA yozardi.
+  // Ref flip re-render bermaydi → save faqat values o'zgaganda (restore
+  // setState yoki user input) yozadi. Eski pre-W2-B xulq.
+  // setState effect body da SINXRON emas → queueMicrotask (set-state-in-effect).
+  const draftReady = useRef(false);
 
-  // Сохраняем черновик при каждом изменении (но не раньше восстановления).
+  // Сохраняем черновик при каждом изменении (но не раньше restore gate).
   useEffect(() => {
-    if (!hydrated.current) return;
+    if (!draftReady.current) return;
     try {
       localStorage.setItem(
         DRAFT_KEY,
@@ -140,39 +143,57 @@ export default function IntakeForm({
     } catch {
       /* localStorage может быть недоступен — не критично */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, locs, rowIds, patternsEnabled, patRowIds, pats]);
 
   // При монтировании: успех (?ok=1) → чистим черновик; иначе — восстанавливаем.
+  // Microtask: setState sync effect emas. finally: draftReady=true (ref).
+  // - restore: setStates → re-render → save tiklangan qiymatni yozadi
+  // - ok=1 / no-draft: setState yo'q → save qayta ishlamaydi (bo'sh yozilmaydi)
   useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      if (sp.get("ok") === "1") {
-        localStorage.removeItem(DRAFT_KEY);
-        return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.get("ok") === "1") {
+          localStorage.removeItem(DRAFT_KEY);
+          return;
+        }
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return;
+        const d = JSON.parse(raw) as {
+          values?: typeof values;
+          locs?: typeof locs;
+          rowIds?: number[];
+          patternsEnabled?: boolean;
+          patRowIds?: number[];
+          pats?: typeof pats;
+        };
+        if (d.values) setValues(d.values);
+        if (d.locs) setLocs(d.locs);
+        if (Array.isArray(d.rowIds) && d.rowIds.length) {
+          setRowIds(d.rowIds);
+          nextRowId.current = Math.max(...d.rowIds) + 1;
+        }
+        if (typeof d.patternsEnabled === "boolean") {
+          setPatternsEnabled(d.patternsEnabled);
+        }
+        if (Array.isArray(d.patRowIds) && d.patRowIds.length) {
+          setPatRowIds(d.patRowIds);
+          nextPatId.current = Math.max(...d.patRowIds) + 1;
+        }
+        if (d.pats) setPats(d.pats);
+        setDraftRestored(true);
+      } catch {
+        /* битый черновик — игнорируем */
+      } finally {
+        // Ref — re-render yo'q. Save effect faqat values o'zgaganda ishlaydi.
+        if (!cancelled) draftReady.current = true;
       }
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const d = JSON.parse(raw);
-      if (d.values) setValues(d.values);
-      if (d.locs) setLocs(d.locs);
-      if (Array.isArray(d.rowIds) && d.rowIds.length) {
-        setRowIds(d.rowIds);
-        nextRowId.current = Math.max(...d.rowIds) + 1;
-      }
-      if (typeof d.patternsEnabled === "boolean") setPatternsEnabled(d.patternsEnabled);
-      if (Array.isArray(d.patRowIds) && d.patRowIds.length) {
-        setPatRowIds(d.patRowIds);
-        nextPatId.current = Math.max(...d.patRowIds) + 1;
-      }
-      if (d.pats) setPats(d.pats);
-      setDraftRestored(true);
-    } catch {
-      /* битый черновик — игнорируем */
-    } finally {
-      hydrated.current = true;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const clearDraft = () => {

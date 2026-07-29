@@ -7,7 +7,6 @@
 
 import {
   useActionState,
-  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -122,9 +121,15 @@ export default function BreakForm({
   // CRIT-01 (ТЗ №4): при ошибке валидации ВЫХОДИМ из шага подтверждения, чтобы
   // ошибки полей стали видны (иначе submit «молча не проходит» — ошибки висят на
   // скрытых сверху полях, а форма застряла на «Подтвердить»).
-  useEffect(() => {
-    if (Object.keys(state.errors).length > 0) setConfirming(false);
-  }, [state]);
+  // Pattern: React "adjusting state when props/state change" — render paytida
+  // oldingi state bilan solishtirib setState (effect emas, cascading emas).
+  const [prevActionState, setPrevActionState] = useState(state);
+  if (state !== prevActionState) {
+    setPrevActionState(state);
+    if (Object.keys(state.errors).length > 0) {
+      setConfirming(false);
+    }
+  }
 
   const addRow = () => {
     const id = nextRowId.current++;
