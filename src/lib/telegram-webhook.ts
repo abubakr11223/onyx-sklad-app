@@ -79,18 +79,10 @@ export interface WebhookDeps {
       }): Promise<unknown>;
     };
     photoRequest: {
-      // Skladchining eng eski ochiq (PENDING) zaprosini (umumiy navbat yoki o'ziga)
-      // — FIFO fallback; YOKI §5.3 reply-to bo'yicha AYNAN o'sha zaprosni (id — status
-      // e'tiborga OLINMAYDI: §6.1 bo'yicha bir zapros N plita to'playdi, foto yo'qolmasin).
-      // where union: ikkala chaqiruv ham shu imzoga mos (orderBy ixtiyoriy).
+      // §5.3 reply-to: AYNAN o'sha zapros (id). Status e'tiborga OLINMAYDI —
+      // §6.1 bo'yicha bir zapros N plita to'playdi; yopilgani alohida rad etiladi.
       findFirst(args: {
-        where:
-          | {
-              status: "PENDING";
-              OR: Array<{ assigneeId: null } | { assigneeId: string }>;
-            }
-          | { id: string };
-        orderBy?: { createdAt: "asc" };
+        where: { id: string };
         include: {
           batch: {
             select: {
@@ -101,6 +93,24 @@ export interface WebhookDeps {
           batchLocation: { select: { block: true; landmark: true } };
         };
       }): Promise<PendingPhotoRequest | null>;
+      // Bare-foto disambiguation: ochiq (PENDING) zaproslar (umumiy navbat yoki
+      // shu skladchiga). 0 → yo'q; 1 → FIFO biriktir; 2+ → biriktirmay, reply so'ra.
+      findMany(args: {
+        where: {
+          status: "PENDING";
+          OR: Array<{ assigneeId: null } | { assigneeId: string }>;
+        };
+        orderBy?: { createdAt: "asc" };
+        include: {
+          batch: {
+            select: {
+              stoneTypeId: true;
+              stoneType: { select: { name: true } };
+            };
+          };
+          batchLocation: { select: { block: true; landmark: true } };
+        };
+      }): Promise<PendingPhotoRequest[]>;
       // ТЗ №3 — узор-запрос закрывается ОДНИМ фото (DONE).
       update(args: {
         where: { id: string };
@@ -194,8 +204,28 @@ const MSG_PHOTO_NO_REQUEST = "Пока нет активного фото-зап
 const MSG_PHOTO_REQUEST_CLOSED =
   "Этот запрос уже закрыт. Обратитесь к вашему менеджеру для нового запроса.";
 const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
+// Audit 3.1 — bare foto + 2+ PENDING: FIFO adashmasin; reply-first saqlanadi.
+const MSG_PHOTO_AMBIGUOUS_HEADER =
+  "Открыто несколько фото-запросов. Не могу выбрать автоматически — ответьте (reply) фото на нужное задание:";
 const managerNotifyMessage = (stoneTypeName: string) =>
   `📷 Фото готово: ${stoneTypeName}.`;
+
+/** Bare-foto 2+ PENDING ro'yxati (batch/tosh nomi + lokatsiya). Export — unit-test. */
+export function buildPhotoAmbiguousMessage(
+  pending: Array<{
+    batch: { stoneType: { name: string } | null };
+    batchLocation: { block: string; landmark: string } | null;
+  }>,
+): string {
+  const lines = pending.map((r, i) => {
+    const name = r.batch.stoneType?.name ?? "камень";
+    const loc = r.batchLocation
+      ? `блок ${r.batchLocation.block}, ориентир ${r.batchLocation.landmark}`
+      : "локация не указана";
+    return `${i + 1}) ${name} — ${loc}`;
+  });
+  return [MSG_PHOTO_AMBIGUOUS_HEADER, ...lines].join("\n");
+}
 
 // SK-4b login matnlari (o'zbekcha — skladchi ko'radi).
 const MSG_LOGIN_NOT_REGISTERED =
@@ -638,16 +668,17 @@ async function handlePhoto(
     return;
   }
 
-  // (4) FIFO fallback — FAQAT tanish vazifaga reply BO'LMAGANDA (rasm bare yoki
-  // begona xabarga reply). Reply aynan vazifaga tushgan-u, lekin zapros topilmasa
-  // (o'chirilgan) — FIFO'ga TUSHMAYMIZ (boshqa toshga noto'g'ri biriktirmaslik
-  // uchun): pastda MSG_PHOTO_NO_REQUEST beriladi.
+  // (4) Bare / begona-reply fallback — FAQAT tanish vazifaga reply BO'LMAGANDA.
+  // Reply aynan vazifaga tushgan-u, lekin zapros topilmasa (o'chirilgan) —
+  // bu yerga TUSHMAYMIZ (boshqa toshga noto'g'ri biriktirmaslik): MSG_PHOTO_NO_REQUEST.
   //
-  // Eng eski OCHIQ (PENDING) zaprosni olamiz. Zapros ochiq qoladi (N plita
-  // to'plash uchun) — ATOMIK «egallash» endi YO'Q: bir zaprosga bir nechta foto
-  // tushishi §6.1 bo'yicha kutilgan. Yopishni menejer «Готово» hal qiladi.
+  // Audit 3.1 xavfsiz disambiguation:
+  //  • 0 PENDING → «faol so'rov yo'q»
+  //  • 1 PENDING → hozirgidek biriktir (tez yo'l / FIFO)
+  //  • 2+ PENDING → BIRIKTIRMAYMIZ (noto'g'ri tosh xavfi); ochiq so'rovlar
+  //    ro'yxati + reply so'rash (mavjud reply-first mantiq ishlaydi)
   if (!claimed && !replyToResolved) {
-    claimed = await deps.db.photoRequest.findFirst({
+    const pending = await deps.db.photoRequest.findMany({
       where: {
         status: "PENDING",
         OR: [{ assigneeId: null }, { assigneeId: user.id }],
@@ -655,6 +686,16 @@ async function handlePhoto(
       orderBy: { createdAt: "asc" },
       include: requestInclude,
     });
+    if (pending.length === 0) {
+      await deps.sendMessage(chatId, MSG_PHOTO_NO_REQUEST);
+      return;
+    }
+    if (pending.length === 1) {
+      claimed = pending[0]!;
+    } else {
+      await deps.sendMessage(chatId, buildPhotoAmbiguousMessage(pending));
+      return;
+    }
   }
   if (!claimed) {
     await deps.sendMessage(chatId, MSG_PHOTO_NO_REQUEST);
