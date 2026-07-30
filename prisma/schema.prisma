@@ -140,6 +140,15 @@ model StoneType {
 
   @@index([rockType])
   @@index([color])
+  // /poisk (page.tsx:96-104): `WHERE isArchived = false [AND name > :after]
+  // ORDER BY name ASC LIMIT 31`. isArchived'da index YO'Q edi, `name @unique`
+  // esa isArchived'ni filtrlay olmaydi → butun katalog skan + sort. Bu kompozit
+  // kursorli sahifalashni to'g'ridan-to'g'ri indeksdan tartiblangan holda beradi.
+  // Shu filtrni ishlatadigan boshqa sahifalar: prodazha:74, priemka:40, bron:147.
+  // DIQQAT: `name`/`rockType`/`color` bo'yicha ILIKE '%q%' (poisk-search.ts:19-28)
+  // uchun GIN pg_trgm indekslari bor — ular Prisma tilida ifodalanmaydi,
+  // migratsiya SQL'ida qo'lda (yuqoridagi 1-5 qatordagi izohga qarang).
+  @@index([isArchived, name])
 }
 
 /// §1.2 — Партия. Asosiy hisob birligi (L2). Status va erkin qoldiq SAQLANMAYDI (ADR-005).
@@ -252,9 +261,14 @@ model Slab {
   reshootRequests PhotoRequest[] @relation("PhotoRequestReshootSlab")
 
   @@unique([batchId, label])
-  @@index([stoneTypeId, status])
   @@index([batchId])
   @@index([block, landmark])
+  // /poisk + poisk-query groupBy: `stoneTypeId IN (…) AND status='AVAILABLE'
+  // AND needsCheck = false` (TZ §7.4). Btree left-prefix: (a,b,c) (a,b) ni
+  // ham qamrab oladi — eski `Slab_stoneTypeId_status_idx` ortiqcha edi va
+  // shu migratsiyada olib tashlandi (W2-C). Call-site'lar: poisk-query.ts
+  // groupBy, bron/kamen/prodazha/q nested `slabs where status [+ needsCheck]`.
+  @@index([stoneTypeId, status, needsCheck])
 }
 
 /// §1.5 — Бой / остаток / обрезок. Har doim poshtuchno, o'z gabaritlari bilan.
@@ -286,10 +300,28 @@ model Piece {
   reservations Reservation[]
   sales        SaleRecord[]
 
-  @@index([stoneTypeId, status])
   @@index([status, boundingLengthMm, boundingWidthMm])
   @@index([batchId])
   @@index([block, landmark])
+  // /poisk + poisk-query groupBy: Slab bilan bir xil — needsCheck indeksda.
+  // Eski `Piece_stoneTypeId_status_idx` left-prefix sifatida ortiqcha — olib
+  // tashlandi (W2-C). Nested call-site'lar: bron/kamen/prodazha/q `pieces where
+  // status [+ needsCheck]` stoneTypeId FK orqali.
+  @@index([stoneTypeId, status, needsCheck])
+  // /poisk (page.tsx:306-307): `ORDER BY areaM2 ASC LIMIT 500`, where'da
+  // status='AVAILABLE' (poisk-search.ts:48). Faqat `areaM2` bo'yicha index EMAS:
+  // status tenglik-predikati oldinda tursa, planner `status` bo'yicha kirib
+  // areaM2 tartibida chiqa oladi va 500 qator topilgach to'xtaydi (gabarit OR +
+  // stoneType filtri residual bo'lib qoladi). areaM2 nullable — ASC'da NULL'lar
+  // oxirida, bu yerdagi «eng kichik maydon oldinda» tartibiga mos.
+  @@index([status, areaM2])
+  // batch-remainders.ts:139-144 — `batchId IN (…) AND originSlabId IS NULL`
+  // (§3 formulasi: plitadan chiqqan boy hisobga KIRMAYDI). Yolg'iz
+  // `originSlabId` indeksi foydasiz bo'lardi (IS NULL past selektivlik —
+  // to'g'ridan-to'g'ri boy ko'pchilik), shuning uchun batchId prefiks sifatida.
+  // Xuddi shu shaklni ishlatadigan joylar: reservations.ts:339, breaking.ts:610,
+  // breaking.ts:758, slab-separation.ts:73, sales.ts:682.
+  @@index([batchId, originSlabId])
 }
 
 /// §1.6 — Бронь (ADR-003, ADR-006).
@@ -319,6 +351,11 @@ model Reservation {
 
   @@index([status, expiresAt]) // cron: muddati o'tgan bronlar
   @@index([managerId, status]) // «kim nimani muzlatgan»
+  // batch-remainders.ts:233-241 (BUG-03 volume-hold): `status='ACTIVE' AND
+  // targetType='BATCH_VOLUME' AND batchId IN (…) AND expiresAt > now()`.
+  // Mavjud indekslarning HECH BIRIDA batchId yoki targetType yo'q. Ustunlar
+  // tartibi: tenglik (status, targetType) → IN (batchId) → oraliq (expiresAt).
+  @@index([status, targetType, batchId, expiresAt])
 }
 
 /// §1.7 — foydalanuvchi, 4 rol. Auth mexanikasi keyingi sprint; model ikkala kirishga tayyor.

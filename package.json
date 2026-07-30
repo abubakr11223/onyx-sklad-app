@@ -18,6 +18,7 @@
     "test": "vitest run",
     "seed:demo": "tsx prisma/seed-demo-cli.ts",
     "seed:owner": "tsx prisma/seed-owner-cli.ts",
+    "seed:perf": "tsx prisma/seed-perf-cli.ts",
     "postinstall": "prisma generate",
     "tg:menu": "tsx prisma/set-tg-menu-cli.ts"
   },

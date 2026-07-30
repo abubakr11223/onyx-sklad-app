@@ -2,22 +2,35 @@
 // BATCH-B (perf): butun ombor xotiraga tortilmaydi —
 //   • partiya erkin qoldig'i SQL agregatlaridan hisoblanadi (batch-remainders.ts);
 //   • gabarit-qidiruv AVAILABLE boy indeksi bo'yicha SQL'da filtrlanadi (JS emas);
-//   • vidlar ro'yxati take:30 + `?after=<name>` kursor bilan chegaralanadi.
+//   • vidlar ro'yxati PAGE_SIZE + `?after=<name>` kursor bilan chegaralanadi.
 // «В наличии» sonlari o'zgarmaydi — formula (inventory.ts §3) aynan o'sha, faqat
 // kirishlari row-fetch o'rniga agregat (par.: src/tests/batch-remainders.test.ts).
+//
+// W2-A: vidlar sahifasining BUTUN olinishi (so'rov + agregatlar + «наличие»
+// filtri + kursor) src/lib/poisk-query.ts ga ko'chirildi — sabab pastda,
+// fetchPoiskTypesPage chaqirig'i ustidagi izohda.
+//
+// CHEGARALAR (halol ro'yxat — yuqoridagi «xotiraga tortilmaydi» MUTLAQ emas):
+//   • sahifadagi har bir vid uchun `batches` select'ida `where` ham, `take` ham
+//     YO'Q — ya'ni butun sahifa vidlarining BARCHA partiya qatorlari o'qiladi,
+//     har biriga korrelyatsiyalangan `_count.patterns` bilan. Ko'p partiyali
+//     vidda bu chegarasiz o'sadi; to'g'ri yechim — alohida agregat (hali
+//     qilinmagan).
+//   • naliche filtri JS'da qolgani uchun bo'sh so'rovda modul sahifa to'lguncha
+//     bo'laklab o'qiydi: odatdagi holatda AYNAN bitta so'rov (bugungidek), lekin
+//     ko'p vid «нет в наличии» bo'lsa POISK_MAX_SCAN_ROWS (1000) xom qatorgacha.
+//     Chegara urilsa natija to'liq emas va bu foydalanuvchiga aytiladi.
+//   • boy/qoldiq ro'yxati MAX_POISK_PIECES bilan SQL'da cap qilinadi va cap
+//     ba'zi mos qoldiqni ko'rsatmasdan tushirib qoldirishi MUMKIN — sabab va
+//     foydalanuvchiga ogohlantirish pastda (fittingPieces izohi).
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { CUTTING_MARGIN_MM } from "@/lib/inventory";
-import { materialWhere, piecesWhere } from "@/lib/poisk-search";
-import {
-  EMPTY_AGGREGATE,
-  EMPTY_HOLD,
-  freeRemainderFromAggregate,
-  getBatchRemainders,
-  getBatchReservationHolds,
-} from "@/lib/batch-remainders";
+import { piecesWhere } from "@/lib/poisk-search";
+import { fetchPoiskTypesPage } from "@/lib/poisk-query";
 import Card from "@/components/ui/Card";
+import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
@@ -35,6 +48,10 @@ const PAGE_SIZE = 30;
 /** Аудит ТЗ №7 #31 — cap на in-memory сортировку gabarit-подходящих offcut'ов.
  *  Ordering по areaM2 asc в БД, окончательная сортировка по L*W в JS. */
 const MAX_POISK_PIECES = 500;
+/** Boy/qoldiq blokida BIR marta ko'rsatiladigan qator soni («Показать ещё» qadami).
+ *  Vidlar (30) dan kichik: qoldiq kartochkasi 3 qatorli va bu blok «предложить
+ *  первыми» — menejerga avval eng kichik bir nechtasi kerak, butun dumi emas. */
+const PIECES_PAGE_SIZE = 20;
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
@@ -49,31 +66,51 @@ function firstParam(v: ParamValue): string {
   return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
 }
 
-function parseMm(v: ParamValue): number | null {
-  const s = firstParam(v);
-  if (!s) return null;
-  const n = Number.parseInt(s, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
+/** Bitta gabarit maydonining tahlili — foydalanuvchiga qaytarish uchun `raw` ham. */
+type DimInput = {
+  /** Foydalanuvchi kiritgani (trim qilingan). */
+  raw: string;
+  /** Qidiruvda ISHLATILGAN qiymat; null → yaroqsiz yoki bo'sh. */
+  mm: number | null;
+  /** `raw` sonli, lekin aynan `mm` emas: «120.5»→120, «12abc»→12, «012»→12. */
+  coerced: boolean;
+};
+
+/** parseInt semantikasi ATAYIN saqlangan (xatti-harakat o'zgarmaydi) — yangisi
+ *  faqat shu: nima bo'lganini chaqiruvchiga aytadi, jimgina yutmaydi. */
+function parseDim(v: ParamValue): DimInput {
+  const raw = firstParam(v);
+  if (!raw) return { raw, mm: null, coerced: false };
+  const n = Number.parseInt(raw, 10);
+  const mm = Number.isFinite(n) && n > 0 ? n : null;
+  return { raw, mm, coerced: mm !== null && String(mm) !== raw };
 }
 
-/** Prisma Decimal | null → number | null. */
-function toNum(d: { toString(): string } | null): number | null {
-  return d === null ? null : Number(d.toString());
+/** «Показать ещё» bilan ochilgan qoldiqlar soni (`?pn=`). Chegara — SQL cap. */
+function parseShownPieces(v: ParamValue): number {
+  const n = Number.parseInt(firstParam(v), 10);
+  if (!Number.isFinite(n) || n <= 0) return PIECES_PAGE_SIZE;
+  return Math.min(n, MAX_POISK_PIECES);
 }
 
-/** q/l/w'ni saqlab «Показать ещё» havolasini quradi. */
+/** q/l/w + IKKALA «Показать ещё» holatini saqlab havola quradi.
+ *  `after` — vidlar keyset kursori, `pn` — ochilgan qoldiqlar soni. Ikkalasi bir
+ *  havolada ham yuriladi: bloklar mustaqil, biri ikkinchisini nolga qaytarmasin. */
 function buildHref(base: {
   q: string;
   l: number | null;
   w: number | null;
-  after: string;
+  after?: string | null;
+  pn?: number | null;
+  hash?: string;
 }): string {
   const sp = new URLSearchParams();
   if (base.q) sp.set("q", base.q);
   if (base.l !== null) sp.set("l", String(base.l));
   if (base.w !== null) sp.set("w", String(base.w));
-  sp.set("after", base.after);
-  return "/poisk?" + sp.toString();
+  if (base.after) sp.set("after", base.after);
+  if (base.pn) sp.set("pn", String(base.pn));
+  return "/poisk?" + sp.toString() + (base.hash ?? "");
 }
 
 export default async function PoiskPage({
@@ -83,179 +120,70 @@ export default async function PoiskPage({
 }) {
   const params = await searchParams;
   const q = firstParam(params.q);
-  const lenMm = parseMm(params.l);
-  const widMm = parseMm(params.w);
+  const lenDim = parseDim(params.l);
+  const widDim = parseDim(params.w);
+  const lenMm = lenDim.mm;
+  const widMm = widDim.mm;
   const hasDims = lenMm !== null && widMm !== null;
   const after = firstParam(params.after);
+  const shownPieces = parseShownPieces(params.pn);
+
+  // Kiritilgan, lekin ishlatib bo'lmagan o'lcham JIMGINA yutilmasin: ilgari
+  // faqat `l` (yoki «abc», «0») kiritilsa butun boy/qoldiq bloki hech qanday
+  // izohsiz yo'qolardi — foydalanuvchi buni «omborda yo'q» deb o'qiydi.
+  const dimNotes: string[] = [];
+  for (const [label, d] of [
+    ["Длина", lenDim],
+    ["Ширина", widDim],
+  ] as const) {
+    if (d.raw && d.mm === null) {
+      dimNotes.push(
+        `${label}: «${d.raw}» — не размер. Нужно целое число миллиметров больше нуля.`,
+      );
+    } else if (d.coerced) {
+      dimNotes.push(
+        `${label}: «${d.raw}» понята как ${d.mm} мм — дробные и нечисловые части отбрасываются.`,
+      );
+    }
+  }
+  if (!hasDims && (lenMm !== null || widMm !== null)) {
+    dimNotes.push(
+      "Нужны обе стороны: подбор боя и остатков включается, только когда заданы и длина, и ширина.",
+    );
+  }
   // TG-B1: fotozapros natijasi — redirect'dan qaytgan ?photo=ok/?photoErr
   // bayroqlarini FlashToaster (layout) toast qilib ko'rsatadi va URL'dan tozalaydi.
 
-  // ── Vidlar: chegaralangan sahifa (take PAGE_SIZE + 1 → keyingi sahifa bor-yo'qligi).
-  // Partiyalarning FAQAT hisoblagichlari olinadi — plita/boy qatorlari EMAS.
-  const fetched = await db.stoneType.findMany({
-    where: {
-      isArchived: false,
-      // Material (вид/тип/цвет) filtri — boy so'rovi bilan BIR XIL manba
-      // (materialWhere), shuning uchun ikkisi doim sinxron (BUG-FIX §5.2/§6.5).
-      ...(materialWhere(q) ?? {}),
-      ...(after ? { name: { gt: after } } : {}),
-    },
-    orderBy: { name: "asc" },
-    take: PAGE_SIZE + 1,
-    select: {
-      id: true,
-      name: true,
-      rockType: true,
-      color: true,
-      batches: {
-        orderBy: { arrivedAt: "asc" },
-        select: {
-          id: true,
-          slabsTotal: true,
-          areaTotalM2: true,
-          slabsAdjusted: true,
-          areaAdjustedM2: true,
-          slabsSoldDirect: true,
-          areaSoldDirectM2: true,
-          // ТЗ №3 / §4 — сколько узор-подгрупп в партии (индикатор «раскрыть»).
-          _count: { select: { patterns: true } },
-        },
-      },
-    },
+  // ── Vidlar: chegaralangan sahifa. W2-A — sahifalash, agregatlar va «наличие»
+  // filtri endi BITTA joyda: fetchPoiskTypesPage (src/lib/poisk-query.ts).
+  //
+  // NEGA ko'chirildi (bu sahifadagi XATOning o'zi): ilgari SQL `take: PAGE_SIZE + 1`
+  // filtrdan OLDIN ishlardi, «наличие» filtri esa (`types.filter(hasAvailability)`)
+  // keyin — JS'da. Natijada bo'sh so'rov + o'lchamsiz holatda 30 ta o'rniga bir
+  // nechta (yoki nol) qator chiqar, «Показать ещё» esa baribir turardi —
+  // «Ничего не найдено.» + «Показать ещё» yolg'on juftligi. Modul sahifa
+  // TO'LGUNCHA o'qiydi (qattiq chegara: POISK_MAX_SCAN_ROWS xom qator), kursorni
+  // esa o'qilgan OXIRGI xom qatorda qoldiradi — shuning uchun qator na tushib
+  // qoladi, na takrorlanadi.
+  //
+  // Modul invarianti: `nextCursor !== null` ⟺ «yana bor». Bu yerda «Показать ещё»
+  // aynan `nextCursor`ga qarab chiziladi (pastda), demak havola hech qachon
+  // «o'lik» bo'lmaydi. `q` yoki gabarit berilganda filtr QO'LLANMAYDI — xatti-
+  // harakat bugungidek qoladi.
+  const typesPage = await fetchPoiskTypesPage(db, {
+    q,
+    hasDims,
+    after,
+    pageSize: PAGE_SIZE,
   });
-
-  const hasMore = fetched.length > PAGE_SIZE;
-  const pageTypes = hasMore ? fetched.slice(0, PAGE_SIZE) : fetched;
-  const nextCursor = hasMore ? pageTypes[pageTypes.length - 1].name : null;
-
-  const typeIds = pageTypes.map((t) => t.id);
-  const batchIds = pageTypes.flatMap((t) => t.batches.map((b) => b.id));
-
-  // Partiya qoldiqlari (agregat) + BATCH_VOLUME band bronlari (BUG-03) +
-  // «отдельных плит / боя и остатков» sonlari (AVAILABLE, needsCheck emas —
-  // TZ §7.4) bitta round-trip guruhida.
-  const now = new Date();
-  const [remainders, holds, slabCounts, pieceCounts] = await Promise.all([
-    getBatchRemainders(db, batchIds),
-    getBatchReservationHolds(db, batchIds, now),
-    typeIds.length > 0
-      ? db.slab.groupBy({
-          by: ["stoneTypeId"],
-          where: {
-            stoneTypeId: { in: typeIds },
-            status: "AVAILABLE",
-            needsCheck: false,
-          },
-          _count: { _all: true },
-        })
-      : Promise.resolve([]),
-    typeIds.length > 0
-      ? db.piece.groupBy({
-          by: ["stoneTypeId"],
-          where: {
-            stoneTypeId: { in: typeIds },
-            status: "AVAILABLE",
-            needsCheck: false,
-          },
-          _count: { _all: true },
-        })
-      : Promise.resolve([]),
-  ]);
-
-  const slabCountMap = new Map(
-    slabCounts.map((g) => [g.stoneTypeId, g._count._all]),
-  );
-  const pieceCountMap = new Map(
-    pieceCounts.map((g) => [g.stoneTypeId, g._count._all]),
-  );
-
-  const types = pageTypes.map((st) => {
-    // Vid bo'yicha jami: partiyalar §3 qoldig'i (null'lar halol — yig'indidan
-    // tashqarida). BUG-03: §3 qoldiq faqat AJRATILGAN plita/boyni minus qiladi —
-    // BATCH_VOLUME bronlar birlik statusiga tegmaydi, shuning uchun ALOHIDA
-    // ayiriladi. slabsTotalSum/areaTotalSum = bronlardan OLDINgi jami; erkin
-    // qoldiq = jami − faol bron (pastda).
-    let slabsTotalSum = 0;
-    let reservedSlabsSum = 0;
-    let slabsKnown = false;
-    let slabsUnknown = false;
-    let areaTotalSum = 0;
-    let reservedAreaSum = 0;
-    let areaKnown = false;
-    let areaUnknown = false;
-    for (const b of st.batches) {
-      const agg = remainders.get(b.id) ?? EMPTY_AGGREGATE;
-      const hold = holds.get(b.id) ?? EMPTY_HOLD;
-      const free = freeRemainderFromAggregate(
-        {
-          slabsTotal: b.slabsTotal,
-          areaTotalM2: toNum(b.areaTotalM2),
-          slabsAdjusted: b.slabsAdjusted,
-          areaAdjustedM2: Number(b.areaAdjustedM2),
-          slabsSoldDirect: b.slabsSoldDirect,
-          areaSoldDirectM2: Number(b.areaSoldDirectM2),
-        },
-        agg,
-      );
-      if (free.slabsFree === null) slabsUnknown = true;
-      else {
-        slabsKnown = true;
-        slabsTotalSum += free.slabsFree;
-        reservedSlabsSum += hold.reservedSlabs;
-      }
-      if (free.areaFreeM2 === null) areaUnknown = true;
-      else {
-        areaKnown = true;
-        areaTotalSum += free.areaFreeM2;
-        reservedAreaSum += hold.reservedAreaM2;
-      }
-    }
-
-    // Erkin = max(0, jami − band) — invariant buzilsa ham manfiy ko'rsatilmaydi.
-    const slabsFreeSum = Math.max(0, slabsTotalSum - reservedSlabsSum);
-    const areaFreeSum = Math.max(0, areaTotalSum - reservedAreaSum);
-
-    // needsCheck birliklari sonlarga KIRMAYDI (TZ §7.4), lekin naliche summasida.
-    const countedSlabs = slabCountMap.get(st.id) ?? 0;
-    const countedPieces = pieceCountMap.get(st.id) ?? 0;
-
-    // ТЗ №3 / §4 — узор-подгрупп по всем партиям вида (B2C: «раскрыть узоры»).
-    const patternsCount = st.batches.reduce(
-      (sum, b) => sum + b._count.patterns,
-      0,
-    );
-
-    // «в наличии» — bronlardan OLDINgi jami yoki alohida birliklar bo'yicha
-    // (ko'rinadigan vidlar to'plami BUG-03 tuzatishдан OLDINGIDEK qoladi; faqat
-    // ichki raqamlar endi bo'sh/бронь ga ajratiladi).
-    const hasAvailability =
-      slabsTotalSum > 0 ||
-      areaTotalSum > 0 ||
-      countedSlabs > 0 ||
-      countedPieces > 0;
-
-    return {
-      st,
-      slabsTotalSum,
-      slabsFreeSum,
-      reservedSlabsSum,
-      slabsKnown,
-      slabsUnknown,
-      areaTotalSum,
-      areaFreeSum,
-      reservedAreaSum,
-      areaKnown,
-      areaUnknown,
-      countedSlabs,
-      countedPieces,
-      patternsCount,
-      hasAvailability,
-    };
-  });
-
-  // Bo'sh so'rov + o'lchamsiz → faqat naligi bor vidlar (talab №2).
-  const visibleTypes =
-    !q && !hasDims ? types.filter((t) => t.hasAvailability) : types;
+  const visibleTypes = typesPage.types;
+  const nextCursor = typesPage.nextCursor;
+  // Skan chegarasi sahifa to'lmasdan tugadi VA kursordan keyin hali xom qatorlar
+  // bor → ro'yxat TO'LIQ EMAS, buni foydalanuvchi bilishi shart (jimgina
+  // yutilmaydi). Muhim nuance: `truncated && nextCursor === null` — bu aslida
+  // TO'LIQ natija (skan jadval oxiriga aynan chegarada yetgan, keyin hech narsa
+  // qolmagan), shuning uchun u ogohlantirish EMAS, oddiy «Ничего не найдено.».
+  const typesIncomplete = typesPage.truncated && nextCursor !== null;
 
   // TZ §5.2 / §6.5: gabarit berilganda AVVAL boy va qoldiqlar. Old kod BARCHA mos
   // boy'ni tortib bounding-maydon (bL*bW) o'sish tartibida saralagan — eng kichik
@@ -264,14 +192,24 @@ export default async function PoiskPage({
   // (dopusk + 90° burish) ekvivalent OR-shart bilan:
   //   max(L,W) ≥ needMax ∧ min(L,W) ≥ needMin
   //     ⇔ (L≥needMax ∧ W≥needMin) ∨ (L≥needMin ∧ W≥needMax).
-  // MUHIM: DB'da CAP QILMAYMIZ va DB tartibiga tayanmaymiz — bounding-maydon indeks
-  // ustunida yo'q, shuning uchun cap-then-rank eng kichik-maydonli mosni tushirib
-  // qoldirishi mumkin (masalan 2500×60 ni ko'plab 100×2000 to'ldirib qo'yadi). Yengil
-  // proyeksiya bilan BARCHA mos boy olinadi (int/decimal ustunlar — qatoriga juda
-  // arzon, eski to'liq-include butun-ombor fetchidan ancha yengil), keyin JS'da old
-  // kod bilan AYNAN bir xil kalitda (bL*bW o'sish) saralanadi. isArchived=false —
-  // eski gabarit yo'li vidlarni `isArchived:false` bo'yicha olardi (arxiv vid boyi
-  // chiqmasin).
+  // Yengil proyeksiya olinadi (int/decimal ustunlar — eski to'liq-include
+  // butun-ombor fetchidan ancha arzon), keyin JS'da bL*bW o'sish bo'yicha
+  // saralanadi. isArchived=false — arxiv vid boyi chiqmasin.
+  //
+  // OGOHLANTIRISH (612ce93 dan beri shunday, eski izoh buni inkor etardi):
+  // DB'da CAP BOR — `take: MAX_POISK_PIECES`. Cap `areaM2 asc` bo'yicha, ekranda
+  // esa tartib bL*bW (bounding-maydon) bo'yicha — BU IKKI XIL KALIT, shuning
+  // uchun cap ko'rsatilishi kerak bo'lgan qoldiqni tushirib qoldirishi MUMKIN:
+  //   • areaM2 — haqiqiy yuza, bL*bW — gabarit to'rtburchak; noto'g'ri shakl
+  //     uchun areaM2 ≤ bL*bW, ya'ni kichik areaM2 kichik gabaritni ANGLATMAYDI.
+  //     500 ta «ingichka, katta gabaritli» qoldiq oldinga chiqib, gabariti eng
+  //     kichik mosni cap ortida qoldirishi mumkin;
+  //   • `areaM2` NULL bo'lishi mumkin (schema: Decimal?), Postgres'da ASC →
+  //     NULLS LAST, demak yuzasi noma'lum qoldiqlar cap'ning BIRINCHI qurboni —
+  //     gabariti qanchalik kichik bo'lishidan qat'i nazar.
+  // To'g'ri yechim — bounding-maydon bo'yicha indeks/generated ustun va shu
+  // ustunda keyset (bu yerda emas: prisma/ o'zgarishi kerak). Shu paytgacha cap
+  // urilgani foydalanuvchidan YASHIRILMAYDI — pastda ogohlantirish ko'rsatiladi.
   const needMax = hasDims ? Math.max(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
   const needMin = hasDims ? Math.min(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
   const fittingPieces = hasDims
@@ -307,13 +245,29 @@ export default async function PoiskPage({
         take: MAX_POISK_PIECES,
       })
     : [];
-  // «Предложить первыми» — eng kichik bounding-maydon oldinda (old kod bilan AYNAN bir
-  // xil tartib va to'liqlik: cap yo'q → eng kichik-maydonli mos hech qachon tushmaydi).
+  // «Предложить первыми» — eng kichik bounding-maydon oldinda. TARTIB: bu saralash
+  // faqat CAP'DAN O'TGAN to'plamni tartiblaydi (yuqoridagi ogohlantirishga qarang) —
+  // «eng kichik mos hech qachon tushmaydi» degan KAFOLAT YO'Q.
+  // `id` — teng-maydonli qoldiqlar uchun tie-breaker: usiz Postgres teng `areaM2`
+  // qatorlarini ixtiyoriy tartibda qaytaradi va ro'yxat har so'rovda qayta
+  // aralashadi. `id` bilan tartib TO'LIQ va takrorlanadigan bo'ladi — «Показать
+  // ещё» (prefiks kengaytirish) shunga tayanadi.
   fittingPieces.sort(
     (a, b) =>
       a.boundingLengthMm * a.boundingWidthMm -
-      b.boundingLengthMm * b.boundingWidthMm,
+        b.boundingLengthMm * b.boundingWidthMm ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
+
+  // Cap urilgan bo'lsa — natija to'liq emas (foydalanuvchiga aytiladi).
+  const piecesCapped = fittingPieces.length >= MAX_POISK_PIECES;
+  // «Показать ещё» = ko'rsatilayotgan PREFIKSNI uzaytirish (offset-sahifa emas):
+  // foydalanuvchi doim joriy tartibning [0, N) boshini ko'radi, shuning uchun
+  // qator na tushib qoladi, na takrorlanadi — hatto ro'yxat so'rovlar orasida
+  // o'zgarsa ham. Keyset kursor bu yerda IMKONSIZ: tartib kaliti bL*bW — DB'da
+  // bunday ustun ham, indeks ham yo'q (yuqoridagi izoh).
+  const visiblePieces = fittingPieces.slice(0, shownPieces);
+  const hasMorePieces = fittingPieces.length > visiblePieces.length;
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -352,7 +306,9 @@ export default async function PoiskPage({
                 name="l"
                 type="text"
                 inputMode="numeric"
-                defaultValue={lenMm ?? ""}
+                // Yaroqli bo'lsa — qidiruvda ISHLATILGAN son (maydon o'zini
+                // tuzatadi), yaroqsiz bo'lsa — kiritilgani (tuzatib bo'lsin).
+                defaultValue={lenDim.mm ?? lenDim.raw}
                 placeholder="Длина"
                 className={inputClass}
               />
@@ -361,7 +317,7 @@ export default async function PoiskPage({
                 name="w"
                 type="text"
                 inputMode="numeric"
-                defaultValue={widMm ?? ""}
+                defaultValue={widDim.mm ?? widDim.raw}
                 placeholder="Ширина"
                 className={inputClass}
               />
@@ -379,13 +335,44 @@ export default async function PoiskPage({
         </form>
       </Card>
 
+      {/* O'lcham kiritilgan-u, ishlatib bo'lmagan bo'lsa — jimgina yutmaymiz.
+          hasDims bo'lsa blok ishladi (faqat aniqlashtirish) → info; bo'lmasa
+          butun boy/qoldiq bloki chiqmadi → warning. */}
+      {dimNotes.length > 0 && (
+        <Alert
+          variant={hasDims ? "info" : "warning"}
+          title={hasDims ? "Размеры уточнены" : "Подбор по размеру не выполнен"}
+          className="mt-6"
+        >
+          {dimNotes.length === 1 ? (
+            <p className="text-sm">{dimNotes[0]}</p>
+          ) : (
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {dimNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      )}
+
       {hasDims && (
-        <section className="mt-6 rounded-card border border-warning/40 bg-warning/10 p-4">
+        <section
+          id="ostatki"
+          className="mt-6 scroll-mt-4 rounded-card border border-warning/40 bg-warning/10 p-4"
+        >
           <h2 className="text-lg font-bold text-ink">
             Бой и остатки — предложить первыми
           </h2>
           <p className="text-sm text-ink/70">
             Под размер {lenMm}×{widMm} мм (с запасом на рез)
+            {fittingPieces.length > 0 && (
+              <>
+                {" "}
+                · показано {visiblePieces.length} из {fittingPieces.length}
+                {piecesCapped && "+"}
+              </>
+            )}
           </p>
           {fittingPieces.length === 0 ? (
             <p className="mt-3 text-sm text-ink/70">
@@ -393,7 +380,7 @@ export default async function PoiskPage({
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {fittingPieces.map((p) => (
+              {visiblePieces.map((p) => (
                 <li
                   key={p.id}
                   className="rounded-card border border-ink/10 bg-paper p-3"
@@ -421,6 +408,31 @@ export default async function PoiskPage({
               ))}
             </ul>
           )}
+
+          {hasMorePieces && (
+            <div className="mt-3">
+              <Link
+                href={buildHref({
+                  q,
+                  l: lenMm,
+                  w: widMm,
+                  after,
+                  pn: visiblePieces.length + PIECES_PAGE_SIZE,
+                  hash: "#ostatki",
+                })}
+                className={buttonClass("secondary", "sm")}
+              >
+                Показать ещё остатки →
+              </Link>
+            </div>
+          )}
+
+          {piecesCapped && (
+            <p className="mt-3 text-sm font-medium text-warning">
+              Показаны первые {MAX_POISK_PIECES} подходящих — это предел выдачи,
+              часть остатков в список не попала. Уточните размер или материал.
+            </p>
+          )}
         </section>
       )}
 
@@ -428,8 +440,30 @@ export default async function PoiskPage({
         <h2 className="text-lg font-bold text-ink">
           {hasDims ? "Целые плиты и партии" : "В наличии"}
         </h2>
+        {/* «Ничего не найдено.» va «Показать ещё» BIRGA chiqishi — aynan shu
+            xatoning ko'rinadigan alomati edi. Endi bo'sh natijadagi xabar
+            `nextCursor`ning YO'Qligiga bog'langan, «Показать ещё» esa (pastda)
+            uning BORligiga — ikkovi bir-birini SINTAKTIK istisno qiladi, ya'ni
+            juftlik modul nima qaytarishidan qat'i nazar imkonsiz.
+            Kursor bor-u ro'yxat bo'sh (skan chegarasi urilgan holat) → «hech
+            narsa yo'q» emas, «davom etadi» deb aytiladi. */}
         {visibleTypes.length === 0 ? (
-          <p className="mt-3 text-ink/70">Ничего не найдено.</p>
+          nextCursor ? (
+            <Alert
+              variant="warning"
+              title="Поиск продолжается"
+              className="mt-3"
+            >
+              <p className="text-sm">
+                Просмотрено подряд {typesPage.scannedRows} видов — ни в одном нет
+                остатка на складе. Это предел одного шага поиска, а не конец
+                склада: нажмите «Показать ещё», чтобы продолжить с этого места,
+                или уточните название, породу или цвет.
+              </p>
+            </Alert>
+          ) : (
+            <p className="mt-3 text-ink/70">Ничего не найдено.</p>
+          )
         ) : (
           <ul className="mt-3 space-y-2.5">
             {visibleTypes.map((t) => {
@@ -523,10 +557,28 @@ export default async function PoiskPage({
           </ul>
         )}
 
+        {/* Sahifa TO'LMAGAN, chunki skan chegarasiga yetdi (fittingPieces cap
+            ogohlantirishi bilan bir uslubda). Bo'sh natijada bu xabar
+            takrorlanmaydi — u yerda yuqoridagi Alert allaqachon aytadi. */}
+        {typesIncomplete && visibleTypes.length > 0 && (
+          <p className="mt-3 text-sm font-medium text-warning">
+            Просмотрено {typesPage.scannedRows} видов — это предел одного шага
+            поиска, показаны не все подходящие. Продолжите по «Показать ещё» или
+            уточните название, породу или цвет.
+          </p>
+        )}
+
         {nextCursor && (
           <div className="mt-4">
             <Link
-              href={buildHref({ q, l: lenMm, w: widMm, after: nextCursor })}
+              href={buildHref({
+                q,
+                l: lenMm,
+                w: widMm,
+                after: nextCursor,
+                // Vidlar sahifasi almashsa ham qoldiqlar bloki yopilib qolmasin.
+                pn: shownPieces,
+              })}
               className={buttonClass("secondary", "sm")}
             >
               Показать ещё →
