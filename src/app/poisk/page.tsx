@@ -138,11 +138,11 @@ export default async function PoiskPage({
   ] as const) {
     if (d.raw && d.mm === null) {
       dimNotes.push(
-        `${label}: «${d.raw}» — не размер. Нужно целое число миллиметров больше нуля.`,
+        `${label}: «${d.raw}» — так размер не задают. Нужно целое число миллиметров, больше нуля.`,
       );
     } else if (d.coerced) {
       dimNotes.push(
-        `${label}: «${d.raw}» понята как ${d.mm} мм — дробные и нечисловые части отбрасываются.`,
+        `${label}: «${d.raw}» принято как ${d.mm} мм (дробная часть и лишние символы не учитываются).`,
       );
     }
   }
@@ -197,9 +197,10 @@ export default async function PoiskPage({
   // saralanadi. isArchived=false — arxiv vid boyi chiqmasin.
   //
   // OGOHLANTIRISH (612ce93 dan beri shunday, eski izoh buni inkor etardi):
-  // DB'da CAP BOR — `take: MAX_POISK_PIECES`. Cap `areaM2 asc` bo'yicha, ekranda
-  // esa tartib bL*bW (bounding-maydon) bo'yicha — BU IKKI XIL KALIT, shuning
-  // uchun cap ko'rsatilishi kerak bo'lgan qoldiqni tushirib qoldirishi MUMKIN:
+  // DB'da CAP BOR — `take: MAX_POISK_PIECES + 1` (probe: cap urilganini bilish
+  // uchun). Cap `areaM2 asc` bo'yicha, ekranda esa tartib bL*bW (bounding-
+  // maydon) bo'yicha — BU IKKI XIL KALIT, shuning uchun cap ko'rsatilishi kerak
+  // bo'lgan qoldiqni tushirib qoldirishi MUMKIN:
   //   • areaM2 — haqiqiy yuza, bL*bW — gabarit to'rtburchak; noto'g'ri shakl
   //     uchun areaM2 ≤ bL*bW, ya'ni kichik areaM2 kichik gabaritni ANGLATMAYDI.
   //     500 ta «ingichka, katta gabaritli» qoldiq oldinga chiqib, gabariti eng
@@ -210,9 +211,11 @@ export default async function PoiskPage({
   // To'g'ri yechim — bounding-maydon bo'yicha indeks/generated ustun va shu
   // ustunda keyset (bu yerda emas: prisma/ o'zgarishi kerak). Shu paytgacha cap
   // urilgani foydalanuvchidan YASHIRILMAYDI — pastda ogohlantirish ko'rsatiladi.
+  // Cap signal: `length > MAX` (take+1 probe); aynan MAX bo'lsa — hammasi
+  // chiqdi, «часть не попала» yolg'on bo'lmasin.
   const needMax = hasDims ? Math.max(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
   const needMin = hasDims ? Math.min(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
-  const fittingPieces = hasDims
+  const fittingPiecesRaw = hasDims
     ? await db.piece.findMany({
         // §5.2/§6.5: gabarit + MATERIAL filtri. `q` bo'sh bo'lsa material filtri
         // qo'llanmaydi (barcha mos qoldiq); `q` bo'lsa — piece.stoneType relatsiyasi
@@ -236,15 +239,20 @@ export default async function PoiskPage({
         // могло вырасти в тысячи строк, материализуемых и сортируемых per-request
         // на force-dynamic странице. Ставим safety-cap: ORDER BY areaM2 ASC
         // (мельче — предпочтительнее по TZ §6.5 «предлагать первыми»), take
-        // MAX_POISK_PIECES. Индекса на bounding-area нет (см. комментарий выше),
-        // поэтому пред-cap-ранкинг делается по колонке areaM2 (тоже монотонно
-        // растёт с площадью), а окончательная сортировка по L*W происходит в JS
-        // на уже усечённом множестве. При типичном хвосте (десятки-сотни offcut'ов)
-        // cap не сработает и результат идентичен доаудитному.
+        // MAX_POISK_PIECES + 1 (probe). Индекса на bounding-area нет (см.
+        // комментарий выше), поэтому пред-cap-ранкинг делается по колонке
+        // areaM2, а окончательная сортировка по L*W — в JS на усечённом
+        // множестве (сначала trim до MAX, потом sort — tartib avvalgidek).
         orderBy: { areaM2: "asc" },
-        take: MAX_POISK_PIECES,
+        take: MAX_POISK_PIECES + 1,
       })
     : [];
+  // Cap: faqat probe qator kelganda (501+). Aynan 500 → hammasi ro'yxatda.
+  // Trim sort DAN OLDIN: areaM2 prefiksi eski `take: MAX` bilan bir xil qoladi.
+  const piecesCapped = fittingPiecesRaw.length > MAX_POISK_PIECES;
+  const fittingPieces = piecesCapped
+    ? fittingPiecesRaw.slice(0, MAX_POISK_PIECES)
+    : fittingPiecesRaw;
   // «Предложить первыми» — eng kichik bounding-maydon oldinda. TARTIB: bu saralash
   // faqat CAP'DAN O'TGAN to'plamni tartiblaydi (yuqoridagi ogohlantirishga qarang) —
   // «eng kichik mos hech qachon tushmaydi» degan KAFOLAT YO'Q.
@@ -259,8 +267,6 @@ export default async function PoiskPage({
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
 
-  // Cap urilgan bo'lsa — natija to'liq emas (foydalanuvchiga aytiladi).
-  const piecesCapped = fittingPieces.length >= MAX_POISK_PIECES;
   // «Показать ещё» = ko'rsatilayotgan PREFIKSNI uzaytirish (offset-sahifa emas):
   // foydalanuvchi doim joriy tartibning [0, N) boshini ko'radi, shuning uchun
   // qator na tushib qoladi, na takrorlanadi — hatto ro'yxat so'rovlar orasida
@@ -422,7 +428,7 @@ export default async function PoiskPage({
                 })}
                 className={buttonClass("secondary", "sm")}
               >
-                Показать ещё остатки →
+                Показать ещё бой и остатки →
               </Link>
             </div>
           )}
@@ -455,10 +461,9 @@ export default async function PoiskPage({
               className="mt-3"
             >
               <p className="text-sm">
-                Просмотрено подряд {typesPage.scannedRows} видов — ни в одном нет
-                остатка на складе. Это предел одного шага поиска, а не конец
-                склада: нажмите «Показать ещё», чтобы продолжить с этого места,
-                или уточните название, породу или цвет.
+                Просмотрено подряд {typesPage.scannedRows} видов — все они не в
+                наличии. Это не весь склад: нажмите «Показать ещё», чтобы идти
+                дальше, или уточните название, породу или цвет.
               </p>
             </Alert>
           ) : (

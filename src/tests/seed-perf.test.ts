@@ -363,6 +363,92 @@ describe("parsePerfArgs / validatePerfArgs", () => {
       validatePerfArgs(parsePerfArgs(["--yes", "--types=0"], emptyEnv())),
     ).toEqual({ ok: false, error: "range" });
   });
+
+  // W3-A / W2-B Finding A regression:
+  // isZeroAvailabilityType(0) === true → types=1 never creates batches.
+  // Without this guard, validate ok:true and buildPerfDataset returns 0 slabs/pieces.
+  it("rejects types=1 when slabs or pieces > 0 (impossible: no available batch)", () => {
+    // Explicit impossible combo reported by W2-B.
+    expect(
+      validatePerfArgs({
+        types: "1",
+        slabs: "50000",
+        pieces: "10000",
+        confirm: true,
+        purge: false,
+      }),
+    ).toEqual({ ok: false, error: "range" });
+
+    // --yes --types=1 alone uses DEFAULT_SCALE slabs/pieces → also impossible.
+    expect(
+      validatePerfArgs(parsePerfArgs(["--yes", "--types=1"], emptyEnv())),
+    ).toEqual({ ok: false, error: "range" });
+
+    // Either dimension alone is enough to reject.
+    expect(
+      validatePerfArgs({
+        types: "1",
+        slabs: "10",
+        pieces: "0",
+        confirm: true,
+        purge: false,
+      }),
+    ).toEqual({ ok: false, error: "range" });
+    expect(
+      validatePerfArgs({
+        types: "1",
+        slabs: "0",
+        pieces: "10",
+        confirm: true,
+        purge: false,
+      }),
+    ).toEqual({ ok: false, error: "range" });
+
+    // types-only seed (no units) remains valid — generator still yields 1 StoneType.
+    expect(
+      validatePerfArgs({
+        types: "1",
+        slabs: "0",
+        pieces: "0",
+        confirm: true,
+        purge: false,
+      }),
+    ).toEqual({
+      ok: true,
+      scale: { types: 1, slabs: 0, pieces: 0 },
+      purge: false,
+    });
+
+    // types=2 is the minimum that has a non-zero-availability index under i%3===0.
+    expect(
+      validatePerfArgs({
+        types: "2",
+        slabs: "10",
+        pieces: "5",
+        confirm: true,
+        purge: false,
+      }),
+    ).toEqual({
+      ok: true,
+      scale: { types: 2, slabs: 10, pieces: 5 },
+      purge: false,
+    });
+
+    // Purge ignores scale — types=1 + purge must still be allowed.
+    expect(
+      validatePerfArgs({
+        types: "1",
+        slabs: "50000",
+        pieces: "10000",
+        confirm: true,
+        purge: true,
+      }),
+    ).toEqual({
+      ok: true,
+      scale: { types: 1, slabs: 50000, pieces: 10000 },
+      purge: true,
+    });
+  });
 });
 
 describe("chunk", () => {

@@ -566,6 +566,41 @@ describe("buildTypeRows — «наличие» semantikasi page.tsx:231-235 bila
     expect(t.hasAvailability).toBe(false);
   });
 
+  it("partiyalar free {+2, −3} → Σ = −1, hasAvailability false (nol-clamp YO'Q)", () => {
+    // freeRemainderFromAggregate (batch-remainders.ts:90-97) slabsFree ni 0 ga
+    // KESMAYDI. buildTypeRows shu unclamped qiymatlarni yig'adi
+    // (poisk-query.ts:259 slabsTotalSum += free.slabsFree) va
+    // hasAvailability = slabsTotalSum > 0 (poisk-query.ts:284-288).
+    //
+    // Fixture: batch A free=+2, batch B free=−3 → Σ=−1.
+    //   • joriy mantiq: hasAvailability === false
+    //   • per-batch EXISTS(free > 0): A uchun true bo'lardi
+    // Shu test «наличие»ni SQL EXISTS ga «optimallashtiruvchi» o'zgarishni ushlaydi.
+    const [t] = buildTypeRows(
+      [
+        row([
+          batch({ id: "b-plus", slabsTotal: 2 }),
+          batch({ id: "b-minus", slabsTotal: 1 }),
+        ]),
+      ],
+      new Map([
+        // free = 2 − 0 = +2
+        ["b-plus", { ...EMPTY_AGGREGATE }],
+        // free = 1 − 4 = −3 (ajratilgan plitalar overshoot)
+        ["b-minus", { ...EMPTY_AGGREGATE, slabCount: 4 }],
+      ]),
+      new Map(),
+      new Map(),
+      new Map(),
+    );
+    expect(t.slabsTotalSum).toBe(-1);
+    expect(t.hasAvailability).toBe(false);
+    // Ekran raqami alohida clamp: Math.max(0, Σ − bron) (poisk-query.ts:271).
+    // hasAvailability UNCLAMPED Σ ga bog'liq — shu juftlik sinishi kerak bo'lsa
+    // test yiqiladi.
+    expect(t.slabsFreeSum).toBe(0);
+  });
+
   it("bron (hold) hasAvailability'ga TA'SIR QILMAYDI — faqat raqamlarga", () => {
     const [t] = buildTypeRows(
       [row([batch()])],

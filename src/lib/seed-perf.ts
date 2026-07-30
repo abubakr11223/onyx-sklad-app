@@ -106,7 +106,8 @@ function parseCount(raw: string | null, fallback: number): number | null {
  * Xom argsni tekshiradi. Xato kodlari:
  *   - "confirm" — ANIQ rozilik yo'q (`--yes` / SEED_PERF_CONFIRM=yes). ⛔ asosiy himoya.
  *   - "number"  — son argumenti butun son emas.
- *   - "range"   — son manfiy yoki MAX_SCALE'dan katta.
+ *   - "range"   — son manfiy yoki MAX_SCALE'dan katta, yoki imkonsiz
+ *                 kombinatsiya (types=1 + slabs/pieces>0 — pastda).
  */
 export function validatePerfArgs(raw: RawPerfArgs): PerfArgsResult {
   // Rozilik BIRINCHI tekshiriladi — hajmdan qat'i nazar, u holda hech qachon
@@ -131,6 +132,16 @@ export function validatePerfArgs(raw: RawPerfArgs): PerfArgsResult {
   // Purge rejimida tosh yaratilmaydi, lekin generatsiya rejimida 0 tur — mantiqsiz.
   if (!raw.purge && types === 0) return { ok: false, error: "range" };
 
+  // buildPerfDataset: isZeroAvailabilityType(i) === (i % 3 === 0).
+  // types=1 → faqat indeks 0 → 100% naligisiz → batchIds bo'sh → slabs/pieces
+  // sikllari o'tkazib yuboriladi (W2-B Finding A). Sukutda 0 qator qaytarmaslik
+  // uchun: slabs yoki pieces so'ralganda kamida 1 ta «в наличии» tur kerak
+  // (types ≥ 2). Nol-availability ulushi (~33.4%) o'zgarmaydi — generator
+  // qoidasi tegilmagan; faqat imkonsiz CLI/API kirim rad etiladi.
+  if (!raw.purge && (slabs > 0 || pieces > 0) && types < 2) {
+    return { ok: false, error: "range" };
+  }
+
   return { ok: true, scale: { types, slabs, pieces }, purge: raw.purge };
 }
 
@@ -149,6 +160,8 @@ export function usageText(): string {
     "   DATABASE_URL ko'pincha LIVE bazaga qaraydi — avval qayerga ulanayotganingizni tekshiring.",
     `   Barcha yozuvlar id'si "${PERF_ID_PREFIX}" bilan boshlanadi, nomi "${PERF_NAME_PREFIX}" bilan.`,
     `   Maksimal hajm: types ≤ ${MAX_SCALE.types}, slabs ≤ ${MAX_SCALE.slabs}, pieces ≤ ${MAX_SCALE.pieces}.`,
+    "   slabs yoki pieces > 0 bo'lsa types ≥ 2 kerak (types=1 da barcha turlar",
+    "   naligisiz — plita/boy yaratib bo'lmaydi; sukutda 0 qator qaytmaydi).",
   ].join("\n");
 }
 
