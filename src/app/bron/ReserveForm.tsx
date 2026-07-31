@@ -6,7 +6,11 @@
 // Поведение, имена полей и контракт валидации НЕ менялись.
 
 import { useActionState, useState } from "react";
-import { createReservation, type ReserveFormState } from "./actions";
+import {
+  createReservation,
+  type ReserveFormState,
+} from "./actions";
+import type { ReservationAlternative } from "@/lib/reservations";
 import Button from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
@@ -32,7 +36,16 @@ export interface StoneGroup {
   batches: BatchVolumeOption[];
 }
 
-const initialState: ReserveFormState = { errors: {} };
+const initialState: ReserveFormState = { errors: {}, alternatives: [] };
+
+function alternativeLine(a: ReservationAlternative): string {
+  const parts = [a.stoneTypeName, a.kindRu];
+  if (a.detail) parts.push(a.detail);
+  if (a.place) parts.push(a.place);
+  if (a.freeText) parts.push(a.freeText);
+  if (a.inStockLabel) parts.push(a.inStockLabel);
+  return parts.join(" · ");
+}
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
@@ -77,9 +90,44 @@ export default function ReserveForm({
     );
   }
 
+  const alternatives = state.alternatives ?? [];
+
   return (
     <form action={formAction} className="flex flex-col gap-4">
       {e.form && <Alert variant="danger">{e.form}</Alert>}
+
+      {/* TZ §7: отказ брони не «глухой» — похожие AVAILABLE (не авто-бронь). */}
+      {alternatives.length > 0 && (
+        <Alert variant="info" title="Похожие варианты в наличии">
+          <p className="mb-2 text-sm text-ink/70">
+            Выбранный камень недоступен. Можно предложить клиенту другое — нажмите,
+            чтобы подставить в форму (бронь не создаётся сама).
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {alternatives.map((a) => (
+              <li key={a.target}>
+                <button
+                  type="button"
+                  className="w-full rounded-field border border-line bg-paper-2 px-3 py-2 text-left text-sm font-medium text-ink transition hover:border-gold hover:text-gold-deep"
+                  onClick={() => {
+                    // target = "SLAB:id" | "PIECE:id" | "BATCH:id"
+                    const stone = stones.find(
+                      (s) =>
+                        s.slabs.some((o) => o.value === a.target) ||
+                        s.pieces.some((o) => o.value === a.target) ||
+                        s.batches.some((o) => o.value === a.target),
+                    );
+                    if (stone) setStoneId(stone.id);
+                    setTarget(a.target);
+                  }}
+                >
+                  {alternativeLine(a)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
 
       {/* ── Вид камня (клиентский фильтр — без name, не уходит на сервер) ── */}
       <Field id="bron-stone" label={<>Вид камня <Req /></>}>

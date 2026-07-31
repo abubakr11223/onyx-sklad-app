@@ -615,6 +615,26 @@ model ConsumedMagicLinkToken {
   @@index([expiresAt])
 }
 
+/// W7-A2 — idempotent client mutation receipts (Slice 1: INTAKE).
+/// mutationId (UUID) @id: first commit creates domain row + receipt; replay
+/// finds receipt and returns the same entityId (no second Batch).
+/// Concurrent race: second tx creates Batch then receipt INSERT P2002 →
+/// throw → whole $transaction rolls back orphan Batch; caller redirects to
+/// winner's entityId. No expiresAt / no prune — late replay after prune
+/// would double-create stock; intake volume is low.
+model MutationReceipt {
+  mutationId  String   @id
+  kind        String // «INTAKE» (sale/reserve intentionally out of scope)
+  userId      String?
+  entityType  String // «Batch»
+  entityId    String
+  resultJson  Json? // e.g. { stoneName, patternIds } for redirect without re-query
+  createdAt   DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([userId, createdAt])
+}
+
 model WarehouseBlock {
   id        String   @id @default(cuid())
   letter    String   @unique // «А», «Б», «В»… — буква блока, уникальна

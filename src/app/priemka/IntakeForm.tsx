@@ -19,11 +19,25 @@ import {
   type IntakeErrors,
   type IntakeInput,
 } from "@/lib/validators/intake";
+import { parseMutationId } from "@/lib/intake-receipt";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
+
+/** W7-A2 — mint client mutationId (crypto.randomUUID when available). */
+function newMutationId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback (non-secure): still unique enough for de-dupe key shape.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 export interface StoneTypeOption {
   id: string;
@@ -129,9 +143,20 @@ export default function IntakeForm({
   // §7/§8 — офлайн-черновик: приёмка не теряется при слабой связи. Значения
   // формы сохраняются в localStorage; при обрыве связи submit не уходит (данные
   // остаются черновиком), при возврате на страницу — восстанавливаются.
+  //
+  // W7-A2 mutationId rotation rule:
+  //  • Mint once per logical intake (restore from draft if present).
+  //  • KEEP across validation errors, offline block, online auto-resubmit.
+  //  • ROTATE only when starting a new logical intake: success (?ok=1 clears
+  //    draft + new id) or explicit clearDraft (full reload).
+  // Rotating on every submit would defeat de-dupe; never rotating would make
+  // two real intakes share one id after success.
   const DRAFT_KEY = "onyx-intake-draft-v1";
   const [offlineMsg, setOfflineMsg] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
+  // Mint once per mount; restore may overwrite. Not in save-effect deps —
+  // otherwise empty mount would write a draft (breaks hydrated-gate tests).
+  const [mutationId, setMutationId] = useState(newMutationId);
   // BUG-08 + W2-B-FIX: gate — useRef (state emas!).
   // Sabab: setHydrated(true) save effect deps orqali qayta ishga tushib
   // ?ok=1 / bo'sh tashrifda default formani draft qilib QAYTA yozardi.
@@ -141,22 +166,33 @@ export default function IntakeForm({
   const draftReady = useRef(false);
 
   // Сохраняем черновик при каждом изменении (но не раньше restore gate).
+  // mutationId is bundled into the payload but NOT a dep: rotating id alone
+  // must not create an empty draft (W2-B-FIX gate).
   useEffect(() => {
     if (!draftReady.current) return;
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ values, locs, rowIds, patternsEnabled, patRowIds, pats }),
+        JSON.stringify({
+          values,
+          locs,
+          rowIds,
+          patternsEnabled,
+          patRowIds,
+          pats,
+          mutationId,
+        }),
       );
     } catch {
       /* localStorage может быть недоступен — не критично */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutationId intentionally omitted (see comment above)
   }, [values, locs, rowIds, patternsEnabled, patRowIds, pats]);
 
   // При монтировании: успех (?ok=1) → чистим черновик; иначе — восстанавливаем.
   // Microtask: setState sync effect emas. finally: draftReady=true (ref).
   // - restore: setStates → re-render → save tiklangan qiymatni yozadi
-  // - ok=1 / no-draft: setState yo'q → save qayta ishlamaydi (bo'sh yozilmaydi)
+  // - ok=1 / no-draft: form values unchanged → save effect does not re-fire
   useEffect(() => {
     let cancelled = false;
     queueMicrotask(() => {
@@ -165,6 +201,9 @@ export default function IntakeForm({
         const sp = new URLSearchParams(window.location.search);
         if (sp.get("ok") === "1") {
           localStorage.removeItem(DRAFT_KEY);
+          // New logical intake after success — mint fresh id (values unchanged
+          // so save effect will not write an empty draft).
+          if (!cancelled) setMutationId(newMutationId());
           return;
         }
         const raw = localStorage.getItem(DRAFT_KEY);
@@ -176,6 +215,7 @@ export default function IntakeForm({
           patternsEnabled?: boolean;
           patRowIds?: number[];
           pats?: typeof pats;
+          mutationId?: string;
         };
         if (d.values) setValues(d.values);
         if (d.locs) setLocs(d.locs);
@@ -191,6 +231,8 @@ export default function IntakeForm({
           nextPatId.current = Math.max(...d.patRowIds) + 1;
         }
         if (d.pats) setPats(d.pats);
+        const restoredId = parseMutationId(d.mutationId ?? null);
+        if (restoredId) setMutationId(restoredId);
         setDraftRestored(true);
       } catch {
         /* битый черновик — игнорируем */
@@ -386,6 +428,8 @@ export default function IntakeForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-6"
     >
+      {/* W7-A2 — same logical intake → same mutationId (de-dupe on server). */}
+      <input type="hidden" name="mutationId" value={mutationId} />
       {e.form && <Alert variant="danger">{e.form}</Alert>}
       {/* §7/§8 — офлайн: данные сохранены черновиком, не потеряны. */}
       {offlineMsg && <Alert variant="warning">{offlineMsg}</Alert>}

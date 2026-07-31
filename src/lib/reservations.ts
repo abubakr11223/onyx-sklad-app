@@ -10,7 +10,10 @@
 
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { computeFreeRemainder } from "@/lib/inventory";
+import {
+  CUTTING_MARGIN_MM,
+  computeFreeRemainder,
+} from "@/lib/inventory";
 import { lockBatchForUpdate } from "@/lib/batch-lock";
 import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "@/lib/validators/intake";
 
@@ -625,3 +628,454 @@ export async function expireOverdueReservations(): Promise<number> {
   }
   return expired;
 }
+
+// ───────────── §7 «похожие варианты» (bron rad etilganda) ─────────────
+// TZ §7: «Один камень нужен двум клиентам → … Второму система предлагает
+// похожие варианты.» Bron baribir FAIL qiladi — bu faqat ma'lumot.
+//
+// «Похожие» = /poisk bilan bir xil domen:
+//   • bir xil stoneTypeId (aniq vid, matn qidiruvidan qattiqroq);
+//   • gabarit: CUTTING_MARGIN_MM (20) + 90° burish — poisk-search.piecesWhere /
+//     inventory.pieceFitsRequest bilan bir xil OR-shart.
+
+/** UI/query cap — cheksiz findMany taqiqlangan. */
+export const MAX_RESERVATION_ALTERNATIVES = 5;
+
+const PIECE_KIND_RU: Record<string, string> = {
+  BROKEN: "бой",
+  OFFCUT: "остаток",
+};
+
+/**
+ * So'ralgan L×W dan poisk needMax/needMin (margin qo'shilgan).
+ * O'lcham yo'q yoki yaroqsiz → null (faqat stoneType bo'yicha qidiriladi).
+ */
+export function gabaritNeedFromDims(
+  lengthMm: number | null | undefined,
+  widthMm: number | null | undefined,
+  marginMm: number = CUTTING_MARGIN_MM,
+): { needMax: number; needMin: number } | null {
+  if (
+    lengthMm == null ||
+    widthMm == null ||
+    !Number.isFinite(lengthMm) ||
+    !Number.isFinite(widthMm) ||
+    lengthMm <= 0 ||
+    widthMm <= 0
+  ) {
+    return null;
+  }
+  return {
+    needMax: Math.max(lengthMm, widthMm) + marginMm,
+    needMin: Math.min(lengthMm, widthMm) + marginMm,
+  };
+}
+
+/**
+ * AVAILABLE piece where — /poisk piecesWhere gabarit OR-i bilan bir xil,
+ * lekin material filtri matn emas, aniq stoneTypeId (failed unit vid).
+ */
+export function similarAvailablePiecesWhere(
+  stoneTypeId: string,
+  excludeId: string,
+  need: { needMax: number; needMin: number } | null,
+): Prisma.PieceWhereInput {
+  const base: Prisma.PieceWhereInput = {
+    status: "AVAILABLE",
+    needsCheck: false,
+    stoneTypeId,
+    id: { not: excludeId },
+  };
+  if (!need) return base;
+  // piecesWhere (poisk-search.ts:50-53) bilan bir xil 90° ekvivalenti.
+  return {
+    ...base,
+    OR: [
+      {
+        boundingLengthMm: { gte: need.needMax },
+        boundingWidthMm: { gte: need.needMin },
+      },
+      {
+        boundingLengthMm: { gte: need.needMin },
+        boundingWidthMm: { gte: need.needMax },
+      },
+    ],
+  };
+}
+
+/** DB qatori (to'liq) — rol redaksiyasidan OLDIN. */
+export type ReservationAlternativeRaw = {
+  target: string; // "SLAB:id" | "PIECE:id" | "BATCH:id"
+  kind: "SLAB" | "PIECE" | "BATCH";
+  stoneTypeName: string;
+  kindRu: string;
+  detail: string | null;
+  /** «Блок X, ор. Y» — aniq lokatsiya. */
+  place: string | null;
+  /** Partiya erkin hajmi matni. */
+  freeText: string | null;
+};
+
+/** UI uchun — canSeeExactRemainder=false da lokatsiya/aniq sonlar yo'q. */
+export type ReservationAlternative = {
+  target: string;
+  kind: "SLAB" | "PIECE" | "BATCH";
+  stoneTypeName: string;
+  kindRu: string;
+  detail: string | null;
+  place: string | null;
+  freeText: string | null;
+  /** Past ko'rinish: faqat «В наличии» (poisk PARTNER uslubi). */
+  inStockLabel: string | null;
+};
+
+/**
+ * §3 / §4.6 / poisk aa1b517: aniq qoldiq va lokatsiya faqat canSeeExactRemainder.
+ * Gabarit (detail) — o'lcham, ombor sirri emas; saqlanadi.
+ */
+export function presentReservationAlternative(
+  raw: ReservationAlternativeRaw,
+  canSeeExactRemainder: boolean,
+): ReservationAlternative {
+  if (canSeeExactRemainder) {
+    return {
+      target: raw.target,
+      kind: raw.kind,
+      stoneTypeName: raw.stoneTypeName,
+      kindRu: raw.kindRu,
+      detail: raw.detail,
+      place: raw.place,
+      freeText: raw.freeText,
+      inStockLabel: null,
+    };
+  }
+  return {
+    target: raw.target,
+    kind: raw.kind,
+    stoneTypeName: raw.stoneTypeName,
+    kindRu: raw.kindRu,
+    detail: raw.detail,
+    place: null,
+    freeText: null,
+    inStockLabel: "В наличии",
+  };
+}
+
+export function presentReservationAlternatives(
+  raws: ReservationAlternativeRaw[],
+  canSeeExactRemainder: boolean,
+): ReservationAlternative[] {
+  return raws.map((r) => presentReservationAlternative(r, canSeeExactRemainder));
+}
+
+type AltDb = {
+  slab: {
+    findUnique: (args: unknown) => Promise<{
+      id: string;
+      lengthMm: number | null;
+      widthMm: number | null;
+      stoneTypeId: string;
+      stoneType: { name: string };
+    } | null>;
+    findMany: (args: unknown) => Promise<
+      Array<{
+        id: string;
+        label: string;
+        lengthMm: number | null;
+        widthMm: number | null;
+        block: string;
+        landmark: string;
+        stoneType: { name: string };
+      }>
+    >;
+  };
+  piece: {
+    findUnique: (args: unknown) => Promise<{
+      id: string;
+      boundingLengthMm: number;
+      boundingWidthMm: number;
+      stoneTypeId: string;
+      stoneType: { name: string };
+    } | null>;
+    findMany: (args: unknown) => Promise<
+      Array<{
+        id: string;
+        kind: string;
+        boundingLengthMm: number;
+        boundingWidthMm: number;
+        block: string;
+        landmark: string;
+        stoneType: { name: string };
+      }>
+    >;
+  };
+  batch: {
+    findUnique: (args: unknown) => Promise<{
+      id: string;
+      stoneTypeId: string;
+      stoneType: { name: string };
+    } | null>;
+  };
+};
+
+/**
+ * Bron muvaffaqiyatsiz (UNIT_UNAVAILABLE / VOLUME_EXCEEDED) bo'lganda
+ * o'xshash AVAILABLE variantlar. Hech narsani rezerv qilmaydi.
+ */
+export async function findReservationAlternatives(
+  args: {
+    targetType: "SLAB" | "PIECE" | "BATCH";
+    unitId: string;
+    canSeeExactRemainder: boolean;
+    limit?: number;
+  },
+  deps: { db: AltDb } = { db: db as unknown as AltDb },
+): Promise<ReservationAlternative[]> {
+  const limit = Math.min(
+    Math.max(1, args.limit ?? MAX_RESERVATION_ALTERNATIVES),
+    MAX_RESERVATION_ALTERNATIVES,
+  );
+  const raws: ReservationAlternativeRaw[] = [];
+
+  if (args.targetType === "SLAB") {
+    const failed = await deps.db.slab.findUnique({
+      where: { id: args.unitId },
+      select: {
+        id: true,
+        lengthMm: true,
+        widthMm: true,
+        stoneTypeId: true,
+        stoneType: { select: { name: true } },
+      },
+    });
+    if (!failed) return [];
+
+    const need = gabaritNeedFromDims(failed.lengthMm, failed.widthMm);
+
+    // 1) Boshqa AVAILABLE plitalar (shu vid).
+    const slabs = await deps.db.slab.findMany({
+      where: {
+        status: "AVAILABLE",
+        needsCheck: false,
+        stoneTypeId: failed.stoneTypeId,
+        id: { not: failed.id },
+      },
+      orderBy: { label: "asc" },
+      take: limit,
+      select: {
+        id: true,
+        label: true,
+        lengthMm: true,
+        widthMm: true,
+        block: true,
+        landmark: true,
+        stoneType: { select: { name: true } },
+      },
+    });
+    for (const s of slabs) {
+      raws.push({
+        target: `SLAB:${s.id}`,
+        kind: "SLAB",
+        stoneTypeName: s.stoneType.name,
+        kindRu: s.label,
+        detail:
+          s.lengthMm != null && s.widthMm != null
+            ? `${s.lengthMm}×${s.widthMm} мм`
+            : null,
+        place: `Блок ${s.block}, ор. ${s.landmark}`,
+        freeText: null,
+      });
+    }
+
+    // 2) Joy bo'sh qolsa — mos boy/qoldiq (poisk gabarit).
+    const rest = limit - raws.length;
+    if (rest > 0) {
+      const pieces = await deps.db.piece.findMany({
+        where: similarAvailablePiecesWhere(failed.stoneTypeId, failed.id, need),
+        orderBy: { boundingAreaMm2: "asc" },
+        take: rest,
+        select: {
+          id: true,
+          kind: true,
+          boundingLengthMm: true,
+          boundingWidthMm: true,
+          block: true,
+          landmark: true,
+          stoneType: { select: { name: true } },
+        },
+      });
+      for (const p of pieces) {
+        raws.push({
+          target: `PIECE:${p.id}`,
+          kind: "PIECE",
+          stoneTypeName: p.stoneType.name,
+          kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
+          detail: `${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+          place: `Блок ${p.block}, ор. ${p.landmark}`,
+          freeText: null,
+        });
+      }
+    }
+  } else if (args.targetType === "PIECE") {
+    const failed = await deps.db.piece.findUnique({
+      where: { id: args.unitId },
+      select: {
+        id: true,
+        boundingLengthMm: true,
+        boundingWidthMm: true,
+        stoneTypeId: true,
+        stoneType: { select: { name: true } },
+      },
+    });
+    if (!failed) return [];
+
+    const need = gabaritNeedFromDims(
+      failed.boundingLengthMm,
+      failed.boundingWidthMm,
+    );
+
+    // Avval o'xshash gabaritli boy/qoldiq (poisk «предложить первыми»).
+    const pieces = await deps.db.piece.findMany({
+      where: similarAvailablePiecesWhere(failed.stoneTypeId, failed.id, need),
+      orderBy: { boundingAreaMm2: "asc" },
+      take: limit,
+      select: {
+        id: true,
+        kind: true,
+        boundingLengthMm: true,
+        boundingWidthMm: true,
+        block: true,
+        landmark: true,
+        stoneType: { select: { name: true } },
+      },
+    });
+    for (const p of pieces) {
+      raws.push({
+        target: `PIECE:${p.id}`,
+        kind: "PIECE",
+        stoneTypeName: p.stoneType.name,
+        kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
+        detail: `${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+        place: `Блок ${p.block}, ор. ${p.landmark}`,
+        freeText: null,
+      });
+    }
+
+    const rest = limit - raws.length;
+    if (rest > 0) {
+      const slabs = await deps.db.slab.findMany({
+        where: {
+          status: "AVAILABLE",
+          needsCheck: false,
+          stoneTypeId: failed.stoneTypeId,
+        },
+        orderBy: { label: "asc" },
+        take: rest,
+        select: {
+          id: true,
+          label: true,
+          lengthMm: true,
+          widthMm: true,
+          block: true,
+          landmark: true,
+          stoneType: { select: { name: true } },
+        },
+      });
+      for (const s of slabs) {
+        raws.push({
+          target: `SLAB:${s.id}`,
+          kind: "SLAB",
+          stoneTypeName: s.stoneType.name,
+          kindRu: s.label,
+          detail:
+            s.lengthMm != null && s.widthMm != null
+              ? `${s.lengthMm}×${s.widthMm} мм`
+              : null,
+          place: `Блок ${s.block}, ор. ${s.landmark}`,
+          freeText: null,
+        });
+      }
+    }
+  } else {
+    // BATCH volume yetmadi / partiya yopiq: shu vidning AVAILABLE plita/qoldiqlari
+    // (aniq erkin m² hisobi bu yerda qayta ixtiro qilinmaydi — formadagi
+    // getBatchRemainders yo‘li; taklif — konkret birliklar, bound take).
+    const failed = await deps.db.batch.findUnique({
+      where: { id: args.unitId },
+      select: {
+        id: true,
+        stoneTypeId: true,
+        stoneType: { select: { name: true } },
+      },
+    });
+    if (!failed) return [];
+
+    const slabs = await deps.db.slab.findMany({
+      where: {
+        status: "AVAILABLE",
+        needsCheck: false,
+        stoneTypeId: failed.stoneTypeId,
+      },
+      orderBy: { label: "asc" },
+      take: limit,
+      select: {
+        id: true,
+        label: true,
+        lengthMm: true,
+        widthMm: true,
+        block: true,
+        landmark: true,
+        stoneType: { select: { name: true } },
+      },
+    });
+    for (const s of slabs) {
+      raws.push({
+        target: `SLAB:${s.id}`,
+        kind: "SLAB",
+        stoneTypeName: s.stoneType.name,
+        kindRu: s.label,
+        detail:
+          s.lengthMm != null && s.widthMm != null
+            ? `${s.lengthMm}×${s.widthMm} мм`
+            : null,
+        place: `Блок ${s.block}, ор. ${s.landmark}`,
+        freeText: null,
+      });
+    }
+
+    const rest = limit - raws.length;
+    if (rest > 0) {
+      const pieces = await deps.db.piece.findMany({
+        where: similarAvailablePiecesWhere(failed.stoneTypeId, failed.id, null),
+        orderBy: { boundingAreaMm2: "asc" },
+        take: rest,
+        select: {
+          id: true,
+          kind: true,
+          boundingLengthMm: true,
+          boundingWidthMm: true,
+          block: true,
+          landmark: true,
+          stoneType: { select: { name: true } },
+        },
+      });
+      for (const p of pieces) {
+        raws.push({
+          target: `PIECE:${p.id}`,
+          kind: "PIECE",
+          stoneTypeName: p.stoneType.name,
+          kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
+          detail: `${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+          place: `Блок ${p.block}, ор. ${p.landmark}`,
+          freeText: null,
+        });
+      }
+    }
+  }
+
+  return presentReservationAlternatives(
+    raws.slice(0, limit),
+    args.canSeeExactRemainder,
+  );
+}
+

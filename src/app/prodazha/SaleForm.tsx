@@ -102,10 +102,51 @@ function BackButton({ onClick, label }: { onClick: () => void; label: string }) 
   );
 }
 
-export default function SaleForm({ stoneTypes }: { stoneTypes: StoneTypeGroup[] }) {
+/** W7-B: deep-link bilan ochilganda boshlang'ich tanlov (server validatsiyadan). */
+export type SaleFormInitialPick = {
+  stoneTypeId: string;
+  mode: SaleMode;
+  unitId: string;
+  title: string;
+  subtitle: string;
+};
+
+function initialStoneAndTarget(
+  stoneTypes: StoneTypeGroup[],
+  initialPick: SaleFormInitialPick | null | undefined,
+): { stone: StoneTypeGroup | null; target: Target | null } {
+  if (!initialPick) return { stone: null, target: null };
+  const st = stoneTypes.find((s) => s.id === initialPick.stoneTypeId) ?? null;
+  if (!st) return { stone: null, target: null };
+  // Plita/piece hali picker ro'yxatida bo'lishi shart (SOLD filterlangan).
+  const inList =
+    initialPick.mode === "SLAB"
+      ? st.slabs.some((s) => s.id === initialPick.unitId && !s.needsCheck)
+      : st.pieces.some((p) => p.id === initialPick.unitId && !p.needsCheck);
+  if (!inList) return { stone: null, target: null };
+  return {
+    stone: st,
+    target: {
+      mode: initialPick.mode,
+      id: initialPick.unitId,
+      title: initialPick.title,
+      subtitle: initialPick.subtitle,
+    },
+  };
+}
+
+export default function SaleForm({
+  stoneTypes,
+  initialPick = null,
+}: {
+  stoneTypes: StoneTypeGroup[];
+  /** Server tomonda resolve qilingan preselect; null = oddiy ochilish. */
+  initialPick?: SaleFormInitialPick | null;
+}) {
+  const boot = initialStoneAndTarget(stoneTypes, initialPick);
   const [state, formAction, pending] = useActionState(submitSale, initialState);
-  const [stone, setStone] = useState<StoneTypeGroup | null>(null);
-  const [target, setTarget] = useState<Target | null>(null);
+  const [stone, setStone] = useState<StoneTypeGroup | null>(boot.stone);
+  const [target, setTarget] = useState<Target | null>(boot.target);
   const [confirming, setConfirming] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerContact, setCustomerContact] = useState("");

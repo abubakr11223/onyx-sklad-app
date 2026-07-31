@@ -10,14 +10,23 @@ import {
   freeRemainderFromAggregate,
   getBatchRemainders,
 } from "@/lib/batch-remainders";
-import { getCapabilities } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import SaleForm, { type StoneTypeGroup } from "./SaleForm";
+import SaleForm, {
+  type SaleFormInitialPick,
+  type StoneTypeGroup,
+} from "./SaleForm";
 import { confirmReturnAction, returnSaleAction } from "./actions";
+import {
+  parseSalePreselectQuery,
+  resolveSalePreselect,
+  salePreselectAlert,
+  type SalePreselectUnitRow,
+} from "./sale-preselect";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -65,7 +74,16 @@ export default async function ProdazhaPage({
   const retOk = first(sp.retOk);
   const retErr = first(sp.retErr);
 
-  const [stoneTypesRaw, recentSales] = await Promise.all([
+  // W7-B / §6.1 шаг 8: ?slab= | ?piece= deep-link. Query ishonchsiz — DB + canSell.
+  const preQ = parseSalePreselectQuery({
+    slab: sp.slab,
+    piece: sp.piece,
+  });
+  // Ikkala berilsa slab ustun (kamen «Купить» faqat slab yuboradi).
+  const preKind = preQ.slabId ? ("SLAB" as const) : preQ.pieceId ? ("PIECE" as const) : null;
+  const preId = preQ.slabId ?? preQ.pieceId;
+
+  const [stoneTypesRaw, recentSales, actorId, preUnit] = await Promise.all([
     // BATCH-B (perf): весь склад больше не тянется. Для формулы §3 берём только
     // счётчики партий + агрегаты (getBatchRemainders ниже); для пикера — только
     // продаваемые плиты (AVAILABLE/RESERVED) и куски (AVAILABLE). SOLD/история
@@ -152,7 +170,87 @@ export default async function ProdazhaPage({
         batch: { select: { stoneType: { select: { name: true } } } },
       },
     }),
+    currentActorId(),
+    preKind === "SLAB" && preId
+      ? db.slab.findUnique({
+          where: { id: preId },
+          select: {
+            id: true,
+            status: true,
+            needsCheck: true,
+            label: true,
+            stoneTypeId: true,
+            stoneType: { select: { name: true } },
+            reservations: {
+              where: { status: "ACTIVE" },
+              select: { managerId: true },
+              take: 1,
+            },
+          },
+        })
+      : preKind === "PIECE" && preId
+        ? db.piece.findUnique({
+            where: { id: preId },
+            select: {
+              id: true,
+              status: true,
+              needsCheck: true,
+              kind: true,
+              stoneTypeId: true,
+              stoneType: { select: { name: true } },
+              reservations: {
+                where: { status: "ACTIVE" },
+                select: { managerId: true },
+                take: 1,
+              },
+            },
+          })
+        : Promise.resolve(null),
   ]);
+
+  // Deep-link preselect (sof resolve). Parametr yo'q → form oddiy ochiladi.
+  let initialPick: SaleFormInitialPick | null = null;
+  let preselectBanner: {
+    variant: "danger" | "info";
+    title: string;
+    body: string;
+  } | null = null;
+
+  if (preKind && preId) {
+    const row: SalePreselectUnitRow | null = preUnit
+      ? {
+          id: preUnit.id,
+          status: preUnit.status,
+          needsCheck: preUnit.needsCheck,
+          stoneTypeId: preUnit.stoneTypeId,
+          stoneName: preUnit.stoneType.name,
+          unitLabel:
+            "label" in preUnit
+              ? preUnit.label
+              : PIECE_KIND_RU[(preUnit as { kind: string }).kind] ??
+                (preUnit as { kind: string }).kind,
+          activeReservationManagerId:
+            preUnit.reservations[0]?.managerId ?? null,
+        }
+      : null;
+    const resolved = resolveSalePreselect({
+      canSell: caps.canSell,
+      actorId,
+      kind: preKind,
+      requestedId: preId,
+      unit: row,
+    });
+    preselectBanner = salePreselectAlert(resolved);
+    if (resolved.ok) {
+      initialPick = {
+        stoneTypeId: resolved.stoneTypeId,
+        mode: resolved.kind,
+        unitId: resolved.unitId,
+        title: resolved.title,
+        subtitle: resolved.subtitle,
+      };
+    }
+  }
 
   // §3 формула: свободный остаток партий по SQL-агрегатам (весь склад не тянем).
   const remainders = await getBatchRemainders(
@@ -278,7 +376,17 @@ export default async function ProdazhaPage({
         </Alert>
       )}
 
-      <SaleForm stoneTypes={stoneTypes} />
+      {preselectBanner && (
+        <Alert
+          variant={preselectBanner.variant}
+          title={preselectBanner.title}
+          className="mb-6"
+        >
+          {preselectBanner.body}
+        </Alert>
+      )}
+
+      <SaleForm stoneTypes={stoneTypes} initialPick={initialPick} />
 
       <section className="mt-8">
         <h2 className="text-lg font-bold text-ink">Последние продажи</h2>

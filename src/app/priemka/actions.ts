@@ -19,6 +19,12 @@ import {
   type IntakeInput,
 } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
+import {
+  createIntakeWithReceipt,
+  IntakeConcurrentClaimError,
+  IntakeFieldError,
+  parseMutationId,
+} from "@/lib/intake-receipt";
 
 export interface IntakeFormState {
   errors: IntakeErrors;
@@ -26,16 +32,6 @@ export interface IntakeFormState {
 
 /** ТЗ №7 §3 — предел размера фото узора (телефонный снимок ≈ до 15 МБ). */
 const MAX_PATTERN_PHOTO_BYTES = 15 * 1024 * 1024;
-
-/** Ошибка уровня БД, адресованная конкретному полю формы. */
-class IntakeFieldError extends Error {
-  constructor(
-    public field: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 // Простая транслитерация RU → latin для qrSlug (StoneType.qrSlug unique).
 const TRANSLIT: Record<string, string> = {
@@ -116,200 +112,119 @@ export async function submitIntake(
   if (!result.ok) return { errors: result.errors };
   const data = result.data;
 
+  // W7-A2 — same logical intake must carry the same mutationId (client UUID).
+  // Missing/invalid → refuse (do not silently mint server-side: that would
+  // defeat de-dupe on retry).
+  const mutationId = parseMutationId(formData.get("mutationId"));
+  if (!mutationId) {
+    return {
+      errors: {
+        form: "Сессия формы устарела — обновите страницу и повторите приёмку",
+      },
+    };
+  }
+
   // userId в AuditLog nullable, поэтому пустая база не ломает приёмку.
   const actorId = await currentActorId();
 
-  let summary: { stoneName: string; batchId: string; patternIds: string[] };
+  let summary: {
+    stoneName: string;
+    batchId: string;
+    patternIds: string[];
+    replay: boolean;
+  };
   try {
-    summary = await db.$transaction(async (tx) => {
-      let stoneTypeId: string;
-      let stoneName: string;
-      // ТЗ №7 §3 — id узор-подгрупп в порядке ввода (для привязки фото вне tx).
-      const patternIds: string[] = [];
-      if (data.stoneType.kind === "existing") {
-        const existing = await tx.stoneType.findUnique({
-          where: { id: data.stoneType.id },
-          select: { id: true, name: true, isArchived: true },
-        });
-        if (!existing || existing.isArchived) {
-          throw new IntakeFieldError(
-            "stoneTypeId",
-            "Вид камня не найден — обновите страницу и выберите заново",
-          );
-        }
-        stoneTypeId = existing.id;
-        stoneName = existing.name;
-      } else {
-        const stNew = data.stoneType;
-        const duplicate = await tx.stoneType.findUnique({
-          where: { name: stNew.name },
-          select: { id: true },
-        });
-        if (duplicate) {
-          throw new IntakeFieldError(
-            "newName",
-            "Вид с таким названием уже есть — выберите его из списка",
-          );
-        }
-        // Случайный суффикс делает qrSlug практически уникальным;
-        // остаточная коллизия уйдёт в общий catch P2002 ниже.
-        // W6-C: description всегда (опционально); basePrice только canSeePrices
-        // (WAREHOUSE не видит цен — подделка поля игнорируется). purchasePrice
-        // на приёмке НЕ пишем (§5.8 — карточка / canSeePurchasePrice).
-        const basePrice =
-          caps.canSeePrices && stNew.basePrice !== null
-            ? stNew.basePrice.toFixed(2)
-            : null;
-        const created = await tx.stoneType.create({
-          data: {
-            name: stNew.name,
-            rockType: stNew.rockType,
-            color: stNew.color,
-            description: stNew.description,
-            basePrice,
-            qrSlug: `${slugify(stNew.name)}-${randomSuffix()}`,
-          },
-          select: { id: true, name: true },
-        });
-        stoneTypeId = created.id;
-        stoneName = created.name;
-      }
-
-      const batch = await tx.batch.create({
-        data: {
-          stoneTypeId,
-          arrivedAt: data.arrivedAt,
-          supplierNote: data.supplierNote,
-          slabsTotal: data.slabsTotal,
-          areaTotalM2: data.areaTotalM2 === null ? null : String(data.areaTotalM2),
-          locations: {
-            create: data.locations.map((loc) => ({
-              block: loc.block,
-              landmark: loc.landmark,
-              slabsHere: loc.slabsHere,
-              areaHereM2: loc.areaHereM2 === null ? null : String(loc.areaHereM2),
-            })),
-          },
-        },
-        select: { id: true },
-      });
-
-      // ТЗ №3 — узор-подгруппы (если заведены). Создаём по одной, сохраняя
-      // порядок ввода → id'шники нужны, чтобы вне транзакции привязать к ним
-      // загруженные в форме фото (ТЗ №7 §3, BUG-02).
-      for (const p of data.patterns) {
-        const pat = await tx.batchPattern.create({
-          data: {
-            batchId: batch.id,
-            description: p.description,
-            thicknessMm: p.thicknessMm,
-            slabsCount: p.slabs,
-            areaM2: String(p.areaM2),
-          },
-          select: { id: true },
-        });
-        patternIds.push(pat.id);
-      }
-
-      await tx.auditLog.create({
-        data: {
-          userId: actorId,
-          action: "INTAKE",
-          entityType: "Batch",
-          entityId: batch.id,
-          payload: {
-            stoneTypeId,
-            stoneName,
-            newStoneType: data.stoneType.kind === "new",
-            slabsTotal: data.slabsTotal,
-            areaTotalM2: data.areaTotalM2,
-            supplierNote: data.supplierNote,
-            arrivedAt: data.arrivedAt.toISOString(),
-            locations: data.locations.map((loc) => ({
-              block: loc.block,
-              landmark: loc.landmark,
-              slabsHere: loc.slabsHere,
-              areaHereM2: loc.areaHereM2,
-            })),
-            patterns: data.patterns.map((p) => ({
-              description: p.description,
-              thicknessMm: p.thicknessMm,
-              slabs: p.slabs,
-              areaM2: p.areaM2,
-            })),
-          },
-        },
-      });
-
-      return { stoneName, batchId: batch.id, patternIds };
-    });
+    summary = await db.$transaction(async (tx) =>
+      createIntakeWithReceipt(tx, {
+        mutationId,
+        actorId,
+        data,
+        canSeePrices: caps.canSeePrices,
+        slugify,
+        randomSuffix,
+      }),
+    );
   } catch (e) {
-    if (e instanceof IntakeFieldError) {
+    // Concurrent race: this tx rolled back; winner's batch is committed.
+    if (e instanceof IntakeConcurrentClaimError) {
+      summary = e.winner;
+    } else if (e instanceof IntakeFieldError) {
       return { errors: { [e.field]: e.message } };
-    }
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    } else if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
       return {
-        errors: { form: "Не удалось сохранить (конфликт уникальности) — попробуйте ещё раз" },
+        errors: {
+          form: "Не удалось сохранить (конфликт уникальности) — попробуйте ещё раз",
+        },
       };
-    }
-    throw e;
-  }
-
-  // ТЗ №7 §3 (BUG-02) — фото узор-подгрупп, загруженные ПРЯМО в форме приёмки.
-  // Вне транзакции: партия уже сохранена, а put() в Blob — сетевая операция
-  // (её сбой не должен откатывать приёмку). Индексы patPhoto выровнены с
-  // data.patterns (валидация прошла → все строки на месте), а те — с patternIds.
-  const patPhotoFiles = formData.getAll("patPhoto");
-  const photographed = new Set<number>();
-  if (summary.patternIds.length > 0) {
-    // Аудит ТЗ №7 #29 — общий helper storePhotoBlob (put + Photo.create).
-    const { storePhotoBlob } = await import("@/lib/photo-blob");
-    const now = new Date();
-    for (let i = 0; i < summary.patternIds.length; i++) {
-      const file = patPhotoFiles[i];
-      if (!(file instanceof File) || file.size === 0) continue; // фото не приложили
-      if (!file.type.startsWith("image/") || file.size > MAX_PATTERN_PHOTO_BYTES) {
-        continue; // не картинка / слишком большое — молча пропускаем (уйдёт в фотозапрос)
-      }
-      try {
-        const buf = Buffer.from(await file.arrayBuffer());
-        await storePhotoBlob({
-          pathPrefix: `patterns/${summary.batchId}/${summary.patternIds[i]}-${now.getTime()}`,
-          bytes: buf,
-          mediaType: file.type,
-          kind: "SAMPLE", // образец узора (не Telegram-file_id, а Blob-URL)
-          takenAt: now, // «фиксация даты съёмки» — момент приёмки
-          takenById: actorId,
-          batchPatternId: summary.patternIds[i],
-        });
-        photographed.add(i);
-      } catch (err) {
-        // Фото не критично — партия сохранена; узор без фото уйдёт в фотозапрос ниже.
-        console.error("[priemka] узор-фото загрузка упала:", err);
-      }
+    } else {
+      throw e;
     }
   }
 
-  // ТЗ №3 — по узорам БЕЗ фото из формы АВТОМАТИЧЕСКИ ставим фотозапрос (Telegram).
-  // ВНЕ транзакции: партия уже сохранена, сбой доставки НЕ откатывает приёмку.
-  // Только когда есть actor (managerId — FK на User; в пустой базе actorId=null).
-  if (summary.patternIds.length > 0 && actorId) {
-    for (let i = 0; i < summary.patternIds.length; i++) {
-      if (photographed.has(i)) continue; // фото уже приложено в форме — запрос не нужен
-      try {
-        await createAndDispatchPhotoRequest(
-          {
-            managerId: actorId,
-            batchId: summary.batchId,
+  // Replay / concurrent claim: domain already exists — skip Blob photos &
+  // photo-requests (would duplicate side effects).
+
+  // Side effects only on first successful create (not replay / concurrent claim).
+  if (!summary.replay) {
+    // ТЗ №7 §3 (BUG-02) — фото узор-подгрупп, загруженные ПРЯМО в форме приёмки.
+    // Вне транзакции: партия уже сохранена, а put() в Blob — сетевая операция
+    // (её сбой не должен откатывать приёмку). Индексы patPhoto выровнены с
+    // data.patterns (валидация прошла → все строки на месте), а те — с patternIds.
+    const patPhotoFiles = formData.getAll("patPhoto");
+    const photographed = new Set<number>();
+    if (summary.patternIds.length > 0) {
+      // Аудит ТЗ №7 #29 — общий helper storePhotoBlob (put + Photo.create).
+      const { storePhotoBlob } = await import("@/lib/photo-blob");
+      const now = new Date();
+      for (let i = 0; i < summary.patternIds.length; i++) {
+        const file = patPhotoFiles[i];
+        if (!(file instanceof File) || file.size === 0) continue; // фото не приложили
+        if (!file.type.startsWith("image/") || file.size > MAX_PATTERN_PHOTO_BYTES) {
+          continue; // не картинка / слишком большое — молча пропускаем (уйдёт в фотозапрос)
+        }
+        try {
+          const buf = Buffer.from(await file.arrayBuffer());
+          await storePhotoBlob({
+            pathPrefix: `patterns/${summary.batchId}/${summary.patternIds[i]}-${now.getTime()}`,
+            bytes: buf,
+            mediaType: file.type,
+            kind: "SAMPLE", // образец узора (не Telegram-file_id, а Blob-URL)
+            takenAt: now, // «фиксация даты съёмки» — момент приёмки
+            takenById: actorId,
             batchPatternId: summary.patternIds[i],
-            comment: `Узор: ${data.patterns[i].description}`,
-          },
-          { db, sendMessage },
-        );
-      } catch (err) {
-        // Доставка не критична — партия сохранена. Логируем и продолжаем.
-        if (!(err instanceof PhotoRequestError)) {
-          console.error("[priemka] узор-фотозапрос ошибка:", err);
+          });
+          photographed.add(i);
+        } catch (err) {
+          // Фото не критично — партия сохранена; узор без фото уйдёт в фотозапрос ниже.
+          console.error("[priemka] узор-фото загрузка упала:", err);
+        }
+      }
+    }
+
+    // ТЗ №3 — по узорам БЕЗ фото из формы АВТОМАТИЧЕСКИ ставим фотозапрос (Telegram).
+    // ВНЕ транзакции: партия уже сохранена, сбой доставки НЕ откатывает приёмку.
+    // Только когда есть actor (managerId — FK на User; в пустой базе actorId=null).
+    if (summary.patternIds.length > 0 && actorId) {
+      for (let i = 0; i < summary.patternIds.length; i++) {
+        if (photographed.has(i)) continue; // фото уже приложено в форме — запрос не нужен
+        try {
+          await createAndDispatchPhotoRequest(
+            {
+              managerId: actorId,
+              batchId: summary.batchId,
+              batchPatternId: summary.patternIds[i],
+              comment: `Узор: ${data.patterns[i].description}`,
+            },
+            { db, sendMessage },
+          );
+        } catch (err) {
+          // Доставка не критична — партия сохранена. Логируем и продолжаем.
+          if (!(err instanceof PhotoRequestError)) {
+            console.error("[priemka] узор-фотозапрос ошибка:", err);
+          }
         }
       }
     }

@@ -1,15 +1,24 @@
 // §6.7 — QR шоу-рум. ПУБЛИЧНАЯ карточка вида камня по qrSlug: клиент сканирует
-// QR на образце и видит вид, фото и (в будущем) интерьеры — БЕЗ складских
-// остатков, локаций и цен. Тот же URL, но сотрудник (canSeeExactRemainder)
-// дополнительно получает ссылку на полную складскую карточку /kamen/[id].
+// QR на образце и видит вид, фото и интерьеры — БЕЗ складских остатков, локаций
+// и цен. Тот же URL: сотрудник (canSeeExactRemainder) получает ссылку на
+// полную складскую карточку /kamen/[id].
 //
-// ⚠️ Маршрут ВНЕ login-gate (middleware matcher исключает /q) — клиент не
-// залогинен. Поэтому здесь показываем только клиент-безопасные данные; точные
-// остатки живут на /kamen/[id] под ролевым гейтом.
+// W7-D: пустой «фото готовится» — худший first impression. Если AI-интерьеров
+// нет, показываем реальные SAMPLE/SLAB (уже в allowlist /api/photo); identity
+// (порода/цвет/описание) всегда на виду; честный CTA «спросите менеджера».
+//
+// ⚠️ Маршрут ВНЕ login-gate (middleware matcher исключает /q).
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
+import {
+  QR_PUBLIC_PHOTO_KINDS,
+  buildQrPublicView,
+  buildQrStaffExtras,
+  orderShowroomPhotos,
+  photoKindLabelRu,
+} from "@/lib/qr-showroom";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 
@@ -40,10 +49,11 @@ async function loadStone(slug: string) {
       textureFileUrl: true,
       properties: true,
       photos: {
-        where: { kind: { in: ["SAMPLE", "SLAB", "INTERIOR_AI"] } },
+        // Только product imagery: INTERIOR_AI + SAMPLE + SLAB (не DRAWING/PIECE).
+        where: { kind: { in: [...QR_PUBLIC_PHOTO_KINDS] } },
         orderBy: { createdAt: "desc" },
-        take: 8,
-        select: { id: true, kind: true },
+        take: 12,
+        select: { id: true, kind: true, createdAt: true },
       },
       // Нейтральный признак наличия (без чисел): есть ли что-то доступное.
       slabs: { where: { status: "AVAILABLE" }, select: { id: true }, take: 1 },
@@ -89,7 +99,8 @@ export default async function QrStonePage({
           Камень не найден
         </h1>
         <p className="mt-2 text-base text-ink/70">
-          Возможно, образец снят с каталога или ссылка устарела.
+          Возможно, образец снят с каталога или ссылка устарела. Спросите
+          менеджера в шоу-руме — подберут похожий камень.
         </p>
       </main>
     );
@@ -108,6 +119,26 @@ export default async function QrStonePage({
 
   const propRows = propertyRows(st.properties);
   const isStaff = caps.canSeeExactRemainder;
+  const orderedPhotos = orderShowroomPhotos(st.photos);
+  const view = buildQrPublicView({
+    name: st.name,
+    rockType: st.rockType,
+    color: st.color,
+    description: st.description,
+    properties: propRows,
+    hasStock,
+    textureFileUrl: st.textureFileUrl,
+    photos: orderedPhotos,
+  });
+  const staff = buildQrStaffExtras(isStaff, st.id);
+
+  // Public contact: optional Telegram bot (same env as login CTA). No secrets.
+  const botUser =
+    process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME?.replace(/^@/, "").trim() ||
+    process.env.TELEGRAM_BOT_USERNAME?.replace(/^@/, "").trim() ||
+    "";
+
+  const monogram = (st.rockType || st.name).trim().charAt(0).toUpperCase() || "·";
 
   return (
     <main className="mx-auto max-w-2xl p-4 pb-12 sm:p-8">
@@ -117,68 +148,127 @@ export default async function QrStonePage({
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="font-serif text-display font-bold tracking-tight text-ink">
-            {st.name}
+            {view.name}
           </h1>
           <Badge variant={hasStock ? "success" : "neutral"}>
-            {hasStock ? "в наличии" : "под заказ"}
+            {view.stockLabel}
           </Badge>
         </div>
-        <p className="mt-1 text-base text-ink/70">
-          {st.rockType}
-          {st.color && <> · {st.color}</>}
+        {/* Identity always prominent — even when photos/description are thin. */}
+        <p className="mt-2 text-lg font-medium text-ink">
+          {view.rockType}
+          {view.color && (
+            <>
+              {" "}
+              <span className="text-ink/40">·</span> {view.color}
+            </>
+          )}
         </p>
       </header>
 
-      {/* Фото и интерьеры (INTERIOR_AI — когда появятся, отрисуются здесь же). */}
-      {st.photos.length > 0 ? (
+      {/* Media: ordered INTERIOR_AI → SAMPLE → SLAB (warehouse fallback). */}
+      {orderedPhotos.length > 0 ? (
         <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {st.photos.map((p) => (
+          {orderedPhotos.map((p, i) => (
             <a
               key={p.id}
               href={`/api/photo/${p.id}`}
               target="_blank"
               rel="noreferrer"
-              className="block"
+              className={
+                i === 0
+                  ? "relative col-span-2 block sm:col-span-3"
+                  : "relative block"
+              }
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/api/photo/${p.id}`}
-                alt={st.name}
-                loading="lazy"
-                className="aspect-square w-full rounded-card object-cover"
+                alt={`${st.name} — ${photoKindLabelRu(p.kind)}`}
+                loading={i === 0 ? "eager" : "lazy"}
+                className={
+                  i === 0
+                    ? "aspect-[16/10] w-full rounded-card object-cover"
+                    : "aspect-square w-full rounded-card object-cover"
+                }
               />
+              <span className="absolute bottom-2 left-2 rounded-full bg-ink/70 px-2 py-0.5 text-xs font-medium text-paper">
+                {photoKindLabelRu(p.kind)}
+              </span>
             </a>
           ))}
         </div>
       ) : (
-        <div className="mt-6 flex aspect-video w-full items-center justify-center rounded-card bg-ink/[0.04] text-sm text-ink/40">
-          фото готовится
+        <div className="mt-6 overflow-hidden rounded-card border border-line bg-paper-2">
+          <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 bg-gold/10 px-4">
+            <span
+              aria-hidden
+              className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gold/20 font-serif text-3xl font-bold text-gold-deep"
+            >
+              {monogram}
+            </span>
+            <p className="text-center text-sm font-medium text-ink/70">
+              Фото и интерьеры ещё готовятся
+            </p>
+            <p className="max-w-sm text-center text-sm text-ink/55">
+              Камень в каталоге есть
+              {view.color ? ` — ${view.rockType}, ${view.color}` : ` — ${view.rockType}`}.
+              Попросите менеджера в шоу-руме показать образец вживую
+              {view.stockLabel === "в наличии" ? " — он в наличии на складе" : ""}.
+            </p>
+          </div>
         </div>
       )}
 
-      {(st.description || propRows.length > 0) && (
-        <Card className="mt-6">
-          {st.description && (
-            <p className="text-base leading-relaxed text-ink/80">
-              {st.description}
-            </p>
-          )}
-          {propRows.length > 0 && (
-            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-              {propRows.map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="text-ink/50">{k}</dt>
-                  <dd className="text-ink">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </Card>
+      {view.mediaMode === "warehouse_photos_only" && (
+        <p className="mt-2 text-xs text-ink/50">
+          Показаны фото со склада. Виды в интерьере появятся, когда менеджер
+          сгенерирует их для этого камня.
+        </p>
       )}
 
-      {st.textureFileUrl && (
+      {/* Always show identity card — not only when description/properties exist. */}
+      <Card className="mt-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+          О камне
+        </h2>
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dt className="text-ink/50">Порода</dt>
+          <dd className="font-medium text-ink">{view.rockType}</dd>
+          {view.color && (
+            <>
+              <dt className="text-ink/50">Цвет</dt>
+              <dd className="font-medium text-ink">{view.color}</dd>
+            </>
+          )}
+          <dt className="text-ink/50">Наличие</dt>
+          <dd className="font-medium text-ink">{view.stockLabel}</dd>
+        </dl>
+        {view.description ? (
+          <p className="mt-4 text-base leading-relaxed text-ink/80">
+            {view.description}
+          </p>
+        ) : (
+          <p className="mt-4 text-sm text-ink/50">
+            Подробное описание появится позже. Менеджер расскажет о фактуре и
+            толщинах на месте.
+          </p>
+        )}
+        {view.properties.length > 0 && (
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-3 text-sm">
+            {view.properties.map(([k, v]) => (
+              <div key={k} className="contents">
+                <dt className="text-ink/50">{k}</dt>
+                <dd className="text-ink">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </Card>
+
+      {view.textureFileUrl && (
         <a
-          href={st.textureFileUrl}
+          href={view.textureFileUrl}
           target="_blank"
           rel="noreferrer"
           className="mt-4 inline-block text-sm font-medium text-gold-deep underline"
@@ -187,14 +277,38 @@ export default async function QrStonePage({
         </a>
       )}
 
-      {/* Сотрудник по тому же QR получает полную складскую карточку. */}
-      {isStaff && (
+      {/* Honest next step when visuals are thin — not a dead end. */}
+      {(view.mediaMode === "no_photos" || !view.description) && (
+        <Card className="mt-6 border-gold/30 bg-gold/5">
+          <h2 className="text-base font-semibold text-ink">
+            Хотите увидеть камень вживую?
+          </h2>
+          <p className="mt-1 text-sm text-ink/70">
+            Подойдите к менеджеру в шоу-руме с названием{" "}
+            <span className="font-medium text-ink">«{view.name}»</span> — покажут
+            образец, наличие и цену.
+          </p>
+          {botUser && (
+            <a
+              href={`https://t.me/${botUser}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block text-sm font-semibold text-gold-deep underline"
+            >
+              Написать в Telegram →
+            </a>
+          )}
+        </Card>
+      )}
+
+      {/* Сотрудник по тому же QR — полная складская карточка (остатки/цены). */}
+      {staff && (
         <Card className="mt-6 border-gold/40">
           <p className="text-sm text-ink/70">
             Вы вошли как сотрудник — доступны остатки, локации и цены.
           </p>
           <Link
-            href={`/kamen/${st.id}`}
+            href={staff.fullCardHref}
             className="mt-2 inline-block font-semibold text-gold-deep underline"
           >
             Открыть складскую карточку →

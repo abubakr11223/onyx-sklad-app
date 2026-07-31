@@ -9,19 +9,28 @@ import { getCapabilities, currentActorId } from "@/lib/session";
 import {
   ReservationError,
   cancelReservation,
+  findReservationAlternatives,
   reserveBatchVolume,
   reserveUnit,
+  type ReservationAlternative,
 } from "@/lib/reservations";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 import { strOf } from "@/lib/form";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
+  /**
+   * TZ §7: bron rad etilganda («камень уже занят») — o'xshash AVAILABLE
+   * variantlar. Bron o'zi FAIL qoladi; bu faqat suhbatni davom ettirish uchun.
+   */
+  alternatives: ReservationAlternative[];
 }
 
 // A7: строгие парсеры из validators/intake — «12,5» плит и «3x» дней больше не
 // молча усекаются parseInt-ом до 12/3, а дают ошибку поля (undefined). Пустое →
 // null (срок берётся из конфига; количество проверяется отдельно).
+
+const emptyAlts = (): ReservationAlternative[] => [];
 
 export async function createReservation(
   _prev: ReserveFormState,
@@ -29,8 +38,12 @@ export async function createReservation(
 ): Promise<ReserveFormState> {
   // R2 — DEFENSE-IN-DEPTH: бронь доступна OWNER/MANAGER (canReserve). Прямой POST
   // склада/партнёра блокируется на сервере, не только скрытием UI.
-  if (!(await getCapabilities()).canReserve) {
-    return { errors: { form: "Нет доступа: бронь доступна менеджеру" } };
+  const caps = await getCapabilities();
+  if (!caps.canReserve) {
+    return {
+      errors: { form: "Нет доступа: бронь доступна менеджеру" },
+      alternatives: emptyAlts(),
+    };
   }
 
   const str = strOf(formData);
@@ -66,12 +79,15 @@ export async function createReservation(
     }
   }
 
-  if (Object.keys(errors).length > 0) return { errors };
+  if (Object.keys(errors).length > 0) {
+    return { errors, alternatives: emptyAlts() };
+  }
 
   const managerId = await currentActorId();
   if (!managerId) {
     return {
       errors: { form: "Менеджер не найден — выполните заполнение базы (seed)" },
+      alternatives: emptyAlts(),
     };
   }
 
@@ -106,7 +122,31 @@ export async function createReservation(
             : e.code === "VOLUME_EXCEEDED"
               ? "qtySlabs"
               : "form";
-      return { errors: { [field]: e.message } };
+
+      // §7: only when the stone/volume is unavailable — suggest similar stock.
+      // Failure itself is unchanged (no auto-reserve of an alternative).
+      let alternatives: ReservationAlternative[] = emptyAlts();
+      if (
+        (e.code === "UNIT_UNAVAILABLE" || e.code === "VOLUME_EXCEEDED") &&
+        targetId &&
+        (targetKind === "SLAB" ||
+          targetKind === "PIECE" ||
+          targetKind === "BATCH")
+      ) {
+        try {
+          alternatives = await findReservationAlternatives({
+            targetType: targetKind,
+            unitId: targetId,
+            // Match /poisk aa1b517 gate — never leak exact place/free if false.
+            canSeeExactRemainder: caps.canSeeExactRemainder,
+          });
+        } catch {
+          // Alternatives are best-effort; the refusal message still stands.
+          alternatives = emptyAlts();
+        }
+      }
+
+      return { errors: { [field]: e.message }, alternatives };
     }
     throw e;
   }

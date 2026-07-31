@@ -919,13 +919,12 @@ export default async function KamenPage({
                     )}{" "}
                     · Блок {s.block}, ориентир {s.landmark}
                     {s.needsCheck && <NeedsCheckBadge />}
-                    {/* §6.1: клиент выбрал плиту №N → «Купить» ведёт на продажу.
-                        Только продаваемым (canSell) и только для плит без пометки
-                        «проверить» (needsCheck). Плиты здесь уже AVAILABLE (фильтр
-                        запроса). Флоу продажи не трогаем — это ссылка на /prodazha. */}
+                    {/* §6.1 шаг 8: клиент выбрал плиту №N → продажа с preselect.
+                        ?slab=<id> — /prodazha server-side tekshiradi (SOLD/чужая
+                        бронь/yo'q). Faqat canSell + !needsCheck (AVAILABLE filter). */}
                     {caps.canSell && !s.needsCheck && (
                       <Link
-                        href="/prodazha"
+                        href={"/prodazha?slab=" + encodeURIComponent(s.id)}
                         className="ml-2 inline-block align-middle text-sm font-medium text-gold-deep hover:underline"
                       >
                         Купить ({s.label})
