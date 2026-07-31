@@ -15,6 +15,7 @@ import NoAccess from "@/components/NoAccess";
 import { decodeShapeDraft } from "@/lib/singan";
 import { renderChertyoj } from "@/lib/chertyoj";
 import { submitSingan } from "./actions";
+import { BREAK_CAUSES } from "@/lib/breaking";
 import Button, { buttonClass } from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -66,6 +67,7 @@ export default async function SinganPage({
   const sp = await searchParams;
   const ok = first(sp.ok) === "1";
   const stoneId = first(sp.stone);
+  const causeLabel = first(sp.cause);
   const err = first(sp.err);
 
   // ── Muvaffaqiyat holati: forma o'rniga yakuniy panel ──
@@ -75,6 +77,11 @@ export default async function SinganPage({
         <PageHeader />
         <Alert variant="success" title="Кусок записан">
           <p className="text-ink/70">Чертёж и фото сохранены в карточке камня.</p>
+          {causeLabel && (
+            <p className="mt-1 text-sm text-ink/70">
+              Причина: <span className="font-medium text-ink">{causeLabel}</span>
+            </p>
+          )}
           {stoneId && (
             <Link
               href={`/kamen/${stoneId}`}
@@ -253,6 +260,31 @@ export default async function SinganPage({
                 required
               />
             </div>
+            {/* TZ §5.6 — same cause list as /razbit (both paths → AuditLog). */}
+            <Field id="breakCause" label="Причина">
+              <select
+                id="breakCause"
+                name="breakCause"
+                required
+                defaultValue=""
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  — выберите —
+                </option>
+                {BREAK_CAUSES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.labelRu}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              id="breakCauseNote"
+              name="breakCauseNote"
+              label="Пояснение (если «Другое»)"
+              placeholder="необязательно, до 80 символов"
+            />
           </div>
         </Card>
 

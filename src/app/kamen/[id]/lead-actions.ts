@@ -77,6 +77,7 @@ export async function requestLead(formData: FormData): Promise<void> {
   await createLead(db, {
     createdById: me.id,
     stoneTypeId,
+    kind: "REQUEST",
     requestedSlabs: slabs ?? null,
     requestedAreaM2: area ?? null,
     contact,

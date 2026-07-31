@@ -25,6 +25,7 @@ import {
 } from "@/lib/photos";
 import { getCapabilities, getRealSessionUser } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
+import { recordPassiveView } from "@/lib/leads";
 import { requestPhoto } from "@/app/poisk/actions";
 import { requestLead } from "./lead-actions";
 import {
@@ -428,6 +429,20 @@ export default async function KamenPage({
   const canGenAI = me?.role === "OWNER" || me?.role === "MANAGER";
   // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
   const photoStaleMonths = parsePhotoStaleMonthsConfig(photoCfg?.value);
+
+  // W8-A / §6.8.5 — passive interest: identified PARTNER opened this stone card.
+  // One call per navigation (not per list tile). No anonymous / non-PARTNER.
+  // Failures must not break the card (manager queue is secondary to browsing).
+  if (st && me?.role === "PARTNER") {
+    try {
+      await recordPassiveView(db, {
+        createdById: me.id,
+        stoneTypeId: st.id,
+      });
+    } catch (err) {
+      console.error("[kamen] recordPassiveView:", err);
+    }
+  }
 
   if (!st) {
     return (

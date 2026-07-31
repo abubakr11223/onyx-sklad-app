@@ -12,6 +12,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { submitBreak, type BreakFormState } from "./actions";
+import { BREAK_CAUSES } from "@/lib/breaking";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -107,6 +108,7 @@ export default function BreakForm({
   // валидации данные НЕ слетают (как в IntakeForm, паттерн ТЗ №2 BUG-01).
   const [batchId, setBatchId] = useState("");
   const [slabId, setSlabId] = useState("");
+  const [breakCause, setBreakCause] = useState("");
   const [rows, setRows] = useState<Record<number, PieceVals>>({
     0: emptyPiece(),
   });
@@ -364,6 +366,49 @@ export default function BreakForm({
         >
           + Добавить кусок
         </Button>
+      </Card>
+
+      {/* TZ §5.6 — причина (короткий список; AuditLog + экран успеха). */}
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold text-ink">Причина</h2>
+        <p className="mb-3 text-sm text-ink/60">
+          Зачем разбили или распилили — для журнала. Один выбор.
+        </p>
+        <Field
+          id="breakCause"
+          label={<>Причина <Req /></>}
+          error={e.breakCause}
+        >
+          <select
+            id="breakCause"
+            name="breakCause"
+            className={inputClass}
+            value={breakCause}
+            onChange={(ev) => setBreakCause(ev.target.value)}
+            required
+            aria-invalid={e.breakCause ? true : undefined}
+            aria-describedby={e.breakCause ? "breakCause-error" : undefined}
+          >
+            <option value="" disabled>
+              — выберите —
+            </option>
+            {BREAK_CAUSES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.labelRu}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {breakCause === "OTHER" && (
+          <div className="mt-3">
+            <Field
+              id="breakCauseNote"
+              name="breakCauseNote"
+              label="Пояснение (необязательно)"
+              placeholder="кратко, до 80 символов"
+            />
+          </div>
+        )}
       </Card>
 
       {/* ── Распил: часть ушла клиенту (только для плиты) ── */}

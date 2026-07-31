@@ -114,6 +114,12 @@ enum LeadStatus {
   CLOSED // обработана / закрыта
 }
 
+/// TZ §6.8.5 — explicit request vs passive interest (looked, no order).
+enum LeadKind {
+  REQUEST // «Запросить объём» form submit
+  VIEW // PARTNER opened stone card (no order)
+}
+
 // ──────────────────────── Modellar ────────────────────────
 
 /// §1.1 — Вид (sort) камня. Katalog darajasi (L1).
@@ -562,6 +568,8 @@ model Lead {
   id                String     @id @default(cuid())
   createdById       String // партнёр/дизайнер, создавший запрос
   stoneTypeId       String? // интересующий вид (может быть null)
+  /// W8-A: REQUEST = explicit form; VIEW = passive open of stone card (§6.8.5).
+  kind              LeadKind   @default(REQUEST)
   requestedSlabs    Int?
   requestedAreaM2   Decimal?   @db.Decimal(12, 3)
   contact           String? // контакт партнёра/его клиента (свободный текст)
@@ -578,6 +586,8 @@ model Lead {
   @@index([status, createdAt]) // очередь менеджера: новые сверху
   @@index([createdById])
   @@index([assignedManagerId])
+  // Passive-view dedupe lookup: partner + stone + kind + open status.
+  @@index([createdById, stoneTypeId, kind, status])
 }
 
 // §5.9 / onboarding — заявка на доступ через Telegram. Новый человек нажимает

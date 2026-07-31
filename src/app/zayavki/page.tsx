@@ -12,11 +12,13 @@ import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDateTime } from "@/lib/datetime";
 import {
+  LEAD_KIND_RU,
   LEAD_STATUS_FLOW,
   LEAD_STATUS_RU,
+  type LeadKind,
   type LeadStatus,
+  listLeads,
 } from "@/lib/leads";
-import { listLeads } from "@/lib/leads";
 import { advanceLead } from "./actions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -38,6 +40,12 @@ const STATUS_VARIANT: Record<LeadStatus, "warning" | "neutral" | "success"> = {
   NEW: "warning",
   CONTACTED: "neutral",
   CLOSED: "success",
+};
+
+// W8-A: VIEW (passive) must never look like REQUEST (explicit).
+const KIND_VARIANT: Record<LeadKind, "neutral" | "warning"> = {
+  REQUEST: "warning",
+  VIEW: "neutral",
 };
 
 // Подпись кнопки перехода в конкретный статус (действие, не название статуса).
@@ -88,8 +96,9 @@ export default async function ZayavkiPage({
           Заявки
         </h1>
         <p className="mt-1 text-sm text-ink/60">
-          Запросы дизайнеров-партнёров. Ни один интерес не теряется — свяжитесь и
-          ведите заявку до закрытия.
+          Запросы и просмотры дизайнеров-партнёров. «Заявка» — явный запрос
+          объёма; «Интерес (посмотрел)» — открыл карточку, объём не заказывал.
+          Ни один интерес не теряется.
         </p>
       </header>
 
@@ -136,29 +145,42 @@ export default async function ZayavkiPage({
                         )}
                       </p>
                     </div>
-                    <Badge variant={STATUS_VARIANT[l.status]}>
-                      {LEAD_STATUS_RU[l.status]}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant={KIND_VARIANT[l.kind]}>
+                        {LEAD_KIND_RU[l.kind]}
+                      </Badge>
+                      <Badge variant={STATUS_VARIANT[l.status]}>
+                        {LEAD_STATUS_RU[l.status]}
+                      </Badge>
+                    </div>
                   </div>
 
                   <div className="mt-3 space-y-1 text-sm text-ink/70">
-                    <p>
-                      <span className="text-ink/55">Запрос:</span>{" "}
-                      {l.requestedSlabs === null && l.requestedAreaM2 === null ? (
-                        <span className="text-ink/50">объём не указан</span>
-                      ) : (
-                        [
-                          l.requestedSlabs !== null
-                            ? `${l.requestedSlabs} плит`
-                            : null,
-                          l.requestedAreaM2 !== null
-                            ? `≈${m2Fmt.format(Number(l.requestedAreaM2))} м²`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
-                      )}
-                    </p>
+                    {l.kind === "VIEW" ? (
+                      <p className="text-ink/60">
+                        Просмотр карточки — объём не запрашивал. Перезвоните:
+                        «Вы интересовались таким камнем?»
+                      </p>
+                    ) : (
+                      <p>
+                        <span className="text-ink/55">Запрос:</span>{" "}
+                        {l.requestedSlabs === null &&
+                        l.requestedAreaM2 === null ? (
+                          <span className="text-ink/50">объём не указан</span>
+                        ) : (
+                          [
+                            l.requestedSlabs !== null
+                              ? `${l.requestedSlabs} плит`
+                              : null,
+                            l.requestedAreaM2 !== null
+                              ? `≈${m2Fmt.format(Number(l.requestedAreaM2))} м²`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        )}
+                      </p>
+                    )}
                     {l.contact && (
                       <p>
                         <span className="text-ink/55">Контакт:</span> {l.contact}

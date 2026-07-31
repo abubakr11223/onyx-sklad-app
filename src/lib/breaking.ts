@@ -31,6 +31,7 @@ export type BreakErrorCode =
   | "BATCH_NOT_FOUND"
   | "NO_PIECES"
   | "INVALID_PIECE"
+  | "INVALID_CAUSE" // TZ §5.6: причина боя/распила
   | "INSUFFICIENT_REMAINDER"; // §3: свободный остаток ушёл бы в минус
 
 /** Ошибка домена «разбить камень» — код для бота/UI + русское сообщение. */
@@ -75,6 +76,85 @@ export function validateSidesMm(sides: unknown): sides is number[] {
     sides.every((s) => Number.isSafeInteger(s) && s > 0)
   );
 }
+
+// ───────────── TZ §5.6 «Причины» — taxonomy (metadata, not inventory) ─────────────
+// Spec examples (L185): «бой при перемещении, распил в цехе …, клиент порезал
+// … и т.п.» → fixed short list + OTHER. §9: one select > free text analytics.
+
+/** Max length for optional note when code = OTHER (phone-friendly). */
+export const BREAK_CAUSE_NOTE_MAX = 80;
+
+/**
+ * Fixed causes from §5.6 examples + OTHER for «и т.п.».
+ * Codes are stable for analytics; labelRu is what humans see.
+ */
+export const BREAK_CAUSES = [
+  { code: "MOVE_BREAK", labelRu: "Бой при перемещении" },
+  { code: "WORKSHOP_CUT", labelRu: "Распил в цехе (изделие)" },
+  { code: "CLIENT_CUT", labelRu: "Клиент порезал купленный камень" },
+  { code: "OTHER", labelRu: "Другое" },
+] as const;
+
+export type BreakCauseCode = (typeof BREAK_CAUSES)[number]["code"];
+
+export type BreakCause = {
+  code: BreakCauseCode;
+  labelRu: string;
+  /** Only meaningful for OTHER; otherwise null. */
+  otherNote: string | null;
+};
+
+const BREAK_CAUSE_BY_CODE: Record<BreakCauseCode, string> = Object.fromEntries(
+  BREAK_CAUSES.map((c) => [c.code, c.labelRu]),
+) as Record<BreakCauseCode, string>;
+
+export function isBreakCauseCode(v: string): v is BreakCauseCode {
+  return Object.prototype.hasOwnProperty.call(BREAK_CAUSE_BY_CODE, v);
+}
+
+/**
+ * Parse form/bot input. **Required** (empty → fail): analytics useless if blank,
+ * but list is 4 taps max (§9 simplicity). OTHER may carry a short optional note.
+ */
+export function parseBreakCause(
+  rawCode: string | null | undefined,
+  otherNote?: string | null,
+): { ok: true; cause: BreakCause } | { ok: false; message: string } {
+  const code = (rawCode ?? "").trim();
+  if (!code) {
+    return { ok: false, message: "Укажите причину (бой / распил / …)" };
+  }
+  if (!isBreakCauseCode(code)) {
+    return { ok: false, message: "Неизвестная причина — выберите из списка" };
+  }
+  const labelRu = BREAK_CAUSE_BY_CODE[code];
+  let note: string | null = null;
+  if (code === "OTHER") {
+    const t = (otherNote ?? "").trim();
+    if (t.length > BREAK_CAUSE_NOTE_MAX) {
+      return {
+        ok: false,
+        message: `Пояснение — не длиннее ${BREAK_CAUSE_NOTE_MAX} символов`,
+      };
+    }
+    note = t || null;
+  }
+  return { ok: true, cause: { code, labelRu, otherNote: note } };
+}
+
+/** AuditLog payload fields for BREAK/SPLIT (read-back + analytics). */
+export function breakCauseAuditFields(cause: BreakCause): {
+  breakReason: BreakCauseCode;
+  breakReasonLabel: string;
+  breakReasonNote: string | null;
+} {
+  return {
+    breakReason: cause.code,
+    breakReasonLabel: cause.labelRu,
+    breakReasonNote: cause.otherNote,
+  };
+}
+
 
 export type CanBreakResult =
   | { allowed: true; cancelsReservation: boolean }
@@ -384,6 +464,8 @@ export interface BreakSlabParams {
   slabId: string;
   pieces: PieceInput[];
   byUserId: string;
+  /** TZ §5.6 — required cause (metadata only; not inventory). */
+  cause: BreakCause;
 }
 
 export interface BreakSlabResult {
@@ -403,10 +485,18 @@ export async function breakSlab(params: BreakSlabParams): Promise<BreakSlabResul
     throw new BreakError("NO_PIECES", "Укажите хотя бы один кусок (бой/остаток)");
   }
   params.pieces.forEach(assertValidPieceInput);
+  if (!params.cause?.code || !isBreakCauseCode(params.cause.code)) {
+    throw new BreakError("INVALID_CAUSE", "Укажите причину (бой / распил / …)");
+  }
 
   return db.$transaction(async (tx) => {
     const { slab, previousStatus, cancelledReservationId } =
-      await transitionSlabToBroken(tx, params.slabId, params.byUserId, "камень разбит");
+      await transitionSlabToBroken(
+        tx,
+        params.slabId,
+        params.byUserId,
+        `камень разбит (${params.cause.labelRu})`,
+      );
 
     const pieceIds = await createSlabPieces(tx, slab, params.pieces, params.byUserId);
 
@@ -423,6 +513,7 @@ export async function breakSlab(params: BreakSlabParams): Promise<BreakSlabResul
           pieceIds,
           pieces: piecesPayload(params.pieces),
           cancelledReservationId,
+          ...breakCauseAuditFields(params.cause),
         },
       },
     });
@@ -453,6 +544,8 @@ export interface SplitSlabParams {
   soldPart?: SplitSoldPart;
   remainderPieces: PieceInput[];
   byUserId: string;
+  /** TZ §5.6 — required cause (metadata only). */
+  cause: BreakCause;
 }
 
 export interface SplitSlabResult extends BreakSlabResult {
@@ -481,11 +574,19 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
     );
   }
   params.remainderPieces.forEach(assertValidPieceInput);
+  if (!params.cause?.code || !isBreakCauseCode(params.cause.code)) {
+    throw new BreakError("INVALID_CAUSE", "Укажите причину (бой / распил / …)");
+  }
   const soldPart = params.soldPart ?? null;
 
   return db.$transaction(async (tx) => {
     const { slab, previousStatus, cancelledReservationId } =
-      await transitionSlabToBroken(tx, params.slabId, params.byUserId, "камень распилен");
+      await transitionSlabToBroken(
+        tx,
+        params.slabId,
+        params.byUserId,
+        `камень распилен (${params.cause.labelRu})`,
+      );
 
     const pieceIds = await createSlabPieces(
       tx,
@@ -533,6 +634,7 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
           pieceIds,
           pieces: piecesPayload(params.remainderPieces),
           cancelledReservationId,
+          ...breakCauseAuditFields(params.cause),
         },
       },
     });
@@ -562,6 +664,8 @@ export interface RegisterDirectPieceParams extends PieceInput {
   byUserId: string;
   /** §5.5b: AI-chertyoj (o'zi-yetarli SVG data-URI). Ixtiyoriy — default null. */
   drawingUrl?: string | null;
+  /** TZ §5.6 — required cause (metadata; same field as /razbit). */
+  cause: BreakCause;
 }
 
 export interface RegisterDirectPieceResult {
@@ -587,6 +691,9 @@ export async function registerDirectPiece(
   params: RegisterDirectPieceParams,
 ): Promise<RegisterDirectPieceResult> {
   assertValidPieceInput(params);
+  if (!params.cause?.code || !isBreakCauseCode(params.cause.code)) {
+    throw new BreakError("INVALID_CAUSE", "Укажите причину (бой / распил / …)");
+  }
 
   return db.$transaction(async (tx) => {
     // S2-conc: прямой Piece (originSlabId = null) — вход формулы §3 (−1 к
@@ -687,6 +794,7 @@ export async function registerDirectPiece(
           areaEstimated,
           slabsFreeAfter: after.slabsFree,
           areaFreeM2After: after.areaFreeM2,
+          ...breakCauseAuditFields(params.cause),
         },
       },
     });
@@ -712,6 +820,8 @@ export interface RegisterDirectPiecesManyParams {
   byUserId: string;
   /** §5.5b: AI-chertyoj — общий (обычно null для /razbit direct). */
   drawingUrl?: string | null;
+  /** TZ §5.6 — required cause (one cause for the whole multi-row submit). */
+  cause: BreakCause;
 }
 
 export interface RegisterDirectPiecesManyResult {
@@ -739,6 +849,9 @@ export async function registerDirectPiecesMany(
     throw new BreakError("NO_PIECES", "Укажите хотя бы один кусок (бой/остаток)");
   }
   params.rows.forEach(assertValidPieceInput);
+  if (!params.cause?.code || !isBreakCauseCode(params.cause.code)) {
+    throw new BreakError("INVALID_CAUSE", "Укажите причину (бой / распил / …)");
+  }
 
   return db.$transaction(async (tx) => {
     // S2-conc: замок на строку партии ПЕРВЫМ — до чтения счётчиков/плит/кусков.
@@ -845,6 +958,7 @@ export async function registerDirectPiecesMany(
             areaEstimated: pp.areaEstimated,
             slabsFreeAfter: after.slabsFree,
             areaFreeM2After: after.areaFreeM2,
+            ...breakCauseAuditFields(params.cause),
           },
         },
       });

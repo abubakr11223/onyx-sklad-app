@@ -1,15 +1,18 @@
 // «История» (TZ §8 + §3) — журнал действий: кто / что / когда. Читает AuditLog,
 // который пишется транзакционно вместе с каждой операцией (приёмка, продажа,
-// бронь, разбитие, перемещение…). До сих пор его НИКТО не показывал — здесь
-// первое чтение (кто / что / когда), простой список без фильтров (TZ §9).
+// бронь, разбитие, перемещение…).
 //
 // Ролевой гейт (defense-in-depth, как /karta-sklada): журнал видит ТОЛЬКО OWNER
 // (canSeeHistory) — «Владелец видит действия сотрудников» (TZ §3). Менеджер,
 // складчик и дизайнер-партнёр → <NoAccess/>.
 //
+// W8-B: архив продаж (фильтр + пагинация) живёт на /prodazha#sales — менеджер
+// видит свои, владелец — все. Здесь только явная ссылка (AuditLog ≠ SaleRecord).
+//
 // Server component; force-dynamic — всегда актуальное состояние журнала.
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDateTime } from "@/lib/datetime";
@@ -18,6 +21,7 @@ import type { Role } from "@/lib/permissions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
+import { buttonClass } from "@/components/ui/Button";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +142,11 @@ export default async function IstoriyaPage() {
         <p className="mt-1 text-sm text-ink/60">
           Кто что делал: приёмка, продажи, брони, разбитие и перемещения.
           Последние {HISTORY_LIMIT} действий, новые сверху.
+        </p>
+        <p className="mt-3">
+          <Link href="/prodazha#sales" className={buttonClass("secondary", "sm")}>
+            Архив продаж (фильтр по дате и клиенту) →
+          </Link>
         </p>
       </header>
 

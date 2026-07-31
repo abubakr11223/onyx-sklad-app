@@ -3,16 +3,55 @@
 import { describe, expect, it } from "vitest";
 import {
   BreakError,
+  BREAK_CAUSES,
+  BREAK_CAUSE_NOTE_MAX,
   MIN_SIDES,
   assertValidPieceInput,
   canBreak,
   estimatePieceAreaM2,
+  parseBreakCause,
   parsePieceRow,
   parseSidesMm,
   validateSidesMm,
   type PieceInput,
   type RawPieceRow,
 } from "@/lib/breaking";
+
+describe("parseBreakCause — TZ §5.6 taxonomy", () => {
+  it("empty → fail (required)", () => {
+    expect(parseBreakCause("").ok).toBe(false);
+    expect(parseBreakCause(null).ok).toBe(false);
+  });
+
+  it("spec example codes map to Russian labels", () => {
+    for (const c of BREAK_CAUSES) {
+      const r = parseBreakCause(c.code);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.cause.code).toBe(c.code);
+        expect(r.cause.labelRu).toBe(c.labelRu);
+      }
+    }
+  });
+
+  it("OTHER may carry optional note; note too long fails", () => {
+    const ok = parseBreakCause("OTHER", "  стеклопакет  ");
+    expect(ok).toEqual({
+      ok: true,
+      cause: {
+        code: "OTHER",
+        labelRu: "Другое",
+        otherNote: "стеклопакет",
+      },
+    });
+    const long = "x".repeat(BREAK_CAUSE_NOTE_MAX + 1);
+    expect(parseBreakCause("OTHER", long).ok).toBe(false);
+  });
+
+  it("unknown code → fail", () => {
+    expect(parseBreakCause("EXPLOSION").ok).toBe(false);
+  });
+});
 
 describe("parseSidesMm — «1180, 640, 950, 610» → [числа]", () => {
   it("парсит запятые с пробелами", () => {

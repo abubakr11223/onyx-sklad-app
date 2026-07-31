@@ -1,21 +1,28 @@
 // Страница «Продажа и списание» (S2-B; TZ §5.4, §6.1 шаг 8, §6.2, §7.6).
-// Server component: собирает продаваемые цели (плиты AVAILABLE/RESERVED,
-// куски AVAILABLE, объём партий со свободным остатком по ADR-005) и
-// последние 20 продаж. Флоу продажи — в клиентском SaleForm.
+// Server component: продаваемые цели + фильтруемая/пагинируемая история
+// продаж (W8-B). Флоу продажи — в клиентском SaleForm.
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import {
   EMPTY_AGGREGATE,
   freeRemainderFromAggregate,
   getBatchRemainders,
 } from "@/lib/batch-remainders";
+import {
+  SALE_HISTORY_PAGE_SIZE,
+  fetchSaleHistoryPage,
+  filtersFromSearchParams,
+  saleHistoryAccess,
+} from "@/lib/sale-history";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
+import { inputClass } from "@/components/ui/Field";
 import SaleForm, {
   type SaleFormInitialPick,
   type StoneTypeGroup,
@@ -83,7 +90,7 @@ export default async function ProdazhaPage({
   const preKind = preQ.slabId ? ("SLAB" as const) : preQ.pieceId ? ("PIECE" as const) : null;
   const preId = preQ.slabId ?? preQ.pieceId;
 
-  const [stoneTypesRaw, recentSales, actorId, preUnit] = await Promise.all([
+  const [stoneTypesRaw, actorId, preUnit] = await Promise.all([
     // BATCH-B (perf): весь склад больше не тянется. Для формулы §3 берём только
     // счётчики партий + агрегаты (getBatchRemainders ниже); для пикера — только
     // продаваемые плиты (AVAILABLE/RESERVED) и куски (AVAILABLE). SOLD/история
@@ -156,20 +163,6 @@ export default async function ProdazhaPage({
         },
       },
     }),
-    db.saleRecord.findMany({
-      orderBy: { soldAt: "desc" },
-      take: 20,
-      include: {
-        manager: { select: { name: true } },
-        slab: {
-          select: { id: true, label: true, status: true, stoneType: { select: { name: true } } },
-        },
-        piece: {
-          select: { id: true, kind: true, status: true, stoneType: { select: { name: true } } },
-        },
-        batch: { select: { stoneType: { select: { name: true } } } },
-      },
-    }),
     currentActorId(),
     preKind === "SLAB" && preId
       ? db.slab.findUnique({
@@ -207,6 +200,28 @@ export default async function ProdazhaPage({
           })
         : Promise.resolve(null),
   ]);
+
+  // W8-B — sotuv tarixi: keyset + filtr (SQL where). Rol: OWNER hammasi,
+  // MANAGER faqat o'ziniki (saleHistoryAccess).
+  const histAccess = saleHistoryAccess({
+    canSell: caps.canSell,
+    canSeeHistory: caps.canSeeHistory,
+    actorId,
+  });
+  const histFilters = histAccess.allowed
+    ? filtersFromSearchParams(sp, histAccess.managerId)
+    : null;
+  const histAfter = first(sp.after) ?? null;
+  const salesPage =
+    histFilters !== null
+      ? await fetchSaleHistoryPage(db, {
+          filters: histFilters,
+          after: histAfter,
+          pageSize: SALE_HISTORY_PAGE_SIZE,
+        })
+      : { rows: [], hasMore: false, nextCursor: null as string | null };
+  const recentSales = salesPage.rows;
+  const canSeeSalePrice = caps.canSeePrices;
 
   // Deep-link preselect (sof resolve). Parametr yo'q → form oddiy ochiladi.
   let initialPick: SaleFormInitialPick | null = null;
@@ -388,10 +403,79 @@ export default async function ProdazhaPage({
 
       <SaleForm stoneTypes={stoneTypes} initialPick={initialPick} />
 
-      <section className="mt-8">
-        <h2 className="text-lg font-bold text-ink">Последние продажи</h2>
+      {/* W8-B — архив продаж: фильтр + keyset (TZ §5.4 «история: что, когда, кому»). */}
+      <section id="sales" className="mt-8 scroll-mt-4">
+        <h2 className="text-lg font-bold text-ink">История продаж</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          {caps.canSeeHistory
+            ? "Все продажи склада (вы — владелец)."
+            : "Только ваши продажи."}{" "}
+          Фильтр по дате и клиенту; страницы без пропусков (keyset).
+        </p>
+
+        <form
+          method="get"
+          action="/prodazha"
+          className="mt-3 space-y-3 rounded-card border border-line bg-paper-2/40 p-3"
+        >
+          {/* Deep-link preselect saqlanmasin — filtr yangilansa toza tarix. */}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-sm text-ink/70">
+              С даты
+              <input
+                type="date"
+                name="from"
+                defaultValue={first(sp.from) ?? ""}
+                className={inputClass + " mt-1"}
+              />
+            </label>
+            <label className="block text-sm text-ink/70">
+              По дату
+              <input
+                type="date"
+                name="to"
+                defaultValue={first(sp.to) ?? ""}
+                className={inputClass + " mt-1"}
+              />
+            </label>
+          </div>
+          <label className="block text-sm text-ink/70">
+            Клиент
+            <input
+              type="search"
+              name="q"
+              defaultValue={first(sp.q) ?? ""}
+              placeholder="имя содержит…"
+              autoComplete="off"
+              className={inputClass + " mt-1"}
+            />
+          </label>
+          <label className="block text-sm text-ink/70">
+            Возврат
+            <select
+              name="returned"
+              defaultValue={first(sp.returned) ?? ""}
+              className={inputClass + " mt-1"}
+            >
+              <option value="">Все</option>
+              <option value="no">Без возврата</option>
+              <option value="yes">Только возвраты</option>
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="secondary" size="sm">
+              Показать
+            </Button>
+            <Link href="/prodazha#sales" className={buttonClass("ghost", "sm")}>
+              Сбросить
+            </Link>
+          </div>
+        </form>
+
         {recentSales.length === 0 ? (
-          <p className="mt-2 text-ink/60">Продаж пока не было.</p>
+          <p className="mt-3 text-ink/60">
+            По этим фильтрам продаж нет.
+          </p>
         ) : (
           <ul className="mt-3 space-y-2">
             {recentSales.map((s) => {
@@ -405,14 +489,13 @@ export default async function ProdazhaPage({
                 qty =
                   [
                     s.qtySlabs !== null && `${s.qtySlabs} плит`,
-                    s.qtyAreaM2 !== null && `${m2Fmt.format(Number(s.qtyAreaM2))} м²`,
+                    s.qtyAreaM2 !== null &&
+                      `${m2Fmt.format(Number(s.qtyAreaM2))} м²`,
                   ]
                     .filter(Boolean)
                     .join(" / ") || null;
               }
               const returned = s.returnedAt !== null;
-              // Единицу, вернувшуюся от клиента, можно подтвердить «в наличии»
-              // только пока она в статусе RETURNED (нужна проверка, TZ §4.3).
               const unitStatus = s.slab?.status ?? s.piece?.status ?? null;
               const awaitingCheck = returned && unitStatus === "RETURNED";
               const confirmTarget = s.slab
@@ -420,13 +503,13 @@ export default async function ProdazhaPage({
                 : s.piece
                   ? { type: "PIECE" as const, id: s.piece.id }
                   : null;
-              // Возврат доступен, только если продажу реально можно откатить:
-              // объёмная продажа (без slab/piece) ЛИБО единица ещё в статусе SOLD.
-              // Продажу из «разбить» (slab уже BROKEN_OFFCUT) вернуть нельзя —
-              // кнопку не показываем (иначе клик → CANNOT_RETURN).
               const returnable =
                 !returned &&
                 ((!s.slab && !s.piece) || unitStatus === "SOLD");
+              const priceStr =
+                canSeeSalePrice && s.price != null
+                  ? m2Fmt.format(Number(s.price.toString()))
+                  : null;
               return (
                 <li
                   key={s.id}
@@ -438,7 +521,9 @@ export default async function ProdazhaPage({
                 >
                   <div className="font-semibold text-ink">
                     {title}
-                    {qty && <span className="font-normal text-ink/70"> · {qty}</span>}
+                    {qty && (
+                      <span className="font-normal text-ink/70"> · {qty}</span>
+                    )}
                     {returned && (
                       <Badge variant="danger" className="ml-2 align-middle">
                         возврат
@@ -451,10 +536,14 @@ export default async function ProdazhaPage({
                   </div>
                   <div className="text-ink/60">
                     {s.manager.name} · {formatTashkentDateTime(s.soldAt)}
+                    {priceStr !== null && (
+                      <> · {priceStr} сум</>
+                    )}
                   </div>
                   {returned && s.returnedAt && (
                     <div className="mt-1 text-danger/80">
-                      Возврат оформлен: {formatTashkentDateTime(s.returnedAt)}
+                      Возврат оформлен:{" "}
+                      {formatTashkentDateTime(s.returnedAt)}
                     </div>
                   )}
 
@@ -469,8 +558,16 @@ export default async function ProdazhaPage({
 
                   {awaitingCheck && confirmTarget && (
                     <form action={confirmReturnAction} className="mt-2">
-                      <input type="hidden" name="targetType" value={confirmTarget.type} />
-                      <input type="hidden" name="unitId" value={confirmTarget.id} />
+                      <input
+                        type="hidden"
+                        name="targetType"
+                        value={confirmTarget.type}
+                      />
+                      <input
+                        type="hidden"
+                        name="unitId"
+                        value={confirmTarget.id}
+                      />
                       <Button type="submit" variant="secondary" size="sm">
                         Проверено — вернуть в наличие
                       </Button>
@@ -480,6 +577,29 @@ export default async function ProdazhaPage({
               );
             })}
           </ul>
+        )}
+
+        {salesPage.nextCursor && (
+          <div className="mt-4">
+            <Link
+              href={(() => {
+                const p = new URLSearchParams();
+                const from = first(sp.from);
+                const to = first(sp.to);
+                const q = first(sp.q);
+                const returned = first(sp.returned);
+                if (from) p.set("from", from);
+                if (to) p.set("to", to);
+                if (q) p.set("q", q);
+                if (returned) p.set("returned", returned);
+                p.set("after", salesPage.nextCursor!);
+                return `/prodazha?${p.toString()}#sales`;
+              })()}
+              className={buttonClass("secondary", "sm")}
+            >
+              Показать ещё →
+            </Link>
+          </div>
         )}
       </section>
     </main>

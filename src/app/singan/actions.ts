@@ -17,6 +17,7 @@ import { decodeShapeDraft } from "@/lib/singan";
 import { renderChertyoj } from "@/lib/chertyoj";
 import {
   BreakError,
+  parseBreakCause,
   registerDirectPiece,
   validateSidesMm,
 } from "@/lib/breaking";
@@ -90,6 +91,10 @@ export async function submitSingan(formData: FormData): Promise<void> {
   if (!landmark) fail("Укажите ориентир (например «2»)");
   const decrementSlabs = formData.get("decrementSlabs") === "1";
 
+  // TZ §5.6 — same cause taxonomy as /razbit (both paths must record it).
+  const causeParsed = parseBreakCause(str("breakCause"), str("breakCauseNote"));
+  if (!causeParsed.ok) fail(causeParsed.message);
+
   // Действующий пользователь — ДО транзакции (kamen/actions actorId uslubi).
   const byUserId = await currentActorId();
   if (!byUserId) {
@@ -127,6 +132,7 @@ export async function submitSingan(formData: FormData): Promise<void> {
       decrementSlabs,
       byUserId: byUserId as string,
       drawingUrl,
+      cause: causeParsed.cause,
     });
     pieceId = result.pieceId;
   } catch (e) {
@@ -152,5 +158,7 @@ export async function submitSingan(formData: FormData): Promise<void> {
     console.error("[singan] Photo yozuvi yaratilmadi (piece saqlangan):", err);
   }
 
-  redirect(`/singan?ok=1&stone=${encodeURIComponent(batch.stoneTypeId)}`);
+  redirect(
+    `/singan?ok=1&stone=${encodeURIComponent(batch.stoneTypeId)}&cause=${encodeURIComponent(causeParsed.cause.labelRu)}`,
+  );
 }

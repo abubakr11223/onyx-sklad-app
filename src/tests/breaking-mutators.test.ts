@@ -46,6 +46,7 @@ import {
   registerDirectPiece,
   registerDirectPiecesMany,
   BreakError,
+  type BreakCause,
   type PieceInput,
 } from "@/lib/breaking";
 
@@ -73,14 +74,26 @@ const PIECE: PieceInput = {
   landmark: "2",
 };
 
+/** TZ §5.6 cause — required metadata on every path. */
+const CAUSE: BreakCause = {
+  code: "MOVE_BREAK",
+  labelRu: "Бой при перемещении",
+  otherNote: null,
+};
+
 // ═══════════════ breakSlab ═══════════════
 
 describe("breakSlab — плита → BROKEN_OFFCUT + Piece[] + AuditLog (mock-tx)", () => {
-  const PARAMS = { slabId: "slab1", pieces: [PIECE], byUserId: "u1" };
+  const PARAMS = {
+    slabId: "slab1",
+    pieces: [PIECE],
+    byUserId: "u1",
+    cause: CAUSE,
+  };
 
   it("нет ни одного куска → NO_PIECES, БЕЗ transitionSlab", async () => {
     await expect(
-      breakSlab({ slabId: "slab1", pieces: [], byUserId: "u1" }),
+      breakSlab({ slabId: "slab1", pieces: [], byUserId: "u1", cause: CAUSE }),
     ).rejects.toMatchObject({ code: "NO_PIECES" });
     expect(M.slabFindUnique).not.toHaveBeenCalled();
     expect(M.pieceCreate).not.toHaveBeenCalled();
@@ -144,12 +157,31 @@ describe("breakSlab — плита → BROKEN_OFFCUT + Piece[] + AuditLog (mock-
       block: "А",
       landmark: "2",
     });
-    // Audit.
+    // Audit + §5.6 cause fields (metadata, not inventory).
     expect(M.auditCreate.mock.calls[0][0].data).toMatchObject({
       action: "BREAK",
       entityType: "Slab",
       entityId: "slab1",
+      payload: {
+        breakReason: "MOVE_BREAK",
+        breakReasonLabel: "Бой при перемещении",
+        breakReasonNote: null,
+      },
     });
+  });
+
+  it("причина с битым code → INVALID_CAUSE, учёт не тронут", async () => {
+    await expect(
+      breakSlab({
+        slabId: "slab1",
+        pieces: [PIECE],
+        byUserId: "u1",
+        // @ts-expect-error intentional bad code
+        cause: { code: "NOT_A_REASON", labelRu: "x", otherNote: null },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_CAUSE" });
+    expect(M.slabFindUnique).not.toHaveBeenCalled();
+    expect(M.auditCreate).not.toHaveBeenCalled();
   });
 
   it("RESERVED (canBreak.cancelsReservation) → бронь CANCELLED + Audit RESERVE_CANCEL + BREAK", async () => {
@@ -185,6 +217,12 @@ describe("breakSlab — плита → BROKEN_OFFCUT + Piece[] + AuditLog (mock-
 // ═══════════════ splitSlab ═══════════════
 
 describe("splitSlab — распил: часть клиенту + остатки (mock-tx)", () => {
+  const WORKSHOP: BreakCause = {
+    code: "WORKSHOP_CUT",
+    labelRu: "Распил в цехе (изделие)",
+    otherNote: null,
+  };
+
   it("пустые остатки → NO_PIECES, ни SaleRecord ни Piece не пишутся", async () => {
     await expect(
       splitSlab({
@@ -192,13 +230,14 @@ describe("splitSlab — распил: часть клиенту + остатки
         remainderPieces: [],
         byUserId: "u1",
         soldPart: { customerName: "K", price: 100 },
+        cause: WORKSHOP,
       }),
     ).rejects.toMatchObject({ code: "NO_PIECES" });
     expect(M.saleCreate).not.toHaveBeenCalled();
     expect(M.pieceCreate).not.toHaveBeenCalled();
   });
 
-  it("happy без sold: плита BROKEN_OFFCUT + Piece[]; SaleRecord НЕ создаётся", async () => {
+  it("happy без sold: плита BROKEN_OFFCUT + Piece[]; SaleRecord НЕ создаётся; cause в AuditLog", async () => {
     M.slabFindUnique.mockResolvedValue({
       id: "slab1",
       batchId: "b1",
@@ -211,6 +250,7 @@ describe("splitSlab — распил: часть клиенту + остатки
       slabId: "slab1",
       remainderPieces: [PIECE],
       byUserId: "u1",
+      cause: WORKSHOP,
     });
 
     expect(res.soldSaleId).toBeNull();
@@ -218,9 +258,14 @@ describe("splitSlab — распил: часть клиенту + остатки
     expect(M.pieceCreate).toHaveBeenCalledTimes(1);
     // Piece — с originSlabId (в §3 не участвует).
     expect(M.pieceCreate.mock.calls[0][0].data.originSlabId).toBe("slab1");
-    // Один AuditLog SPLIT.
-    const actions = M.auditCreate.mock.calls.map((c) => c[0].data.action);
-    expect(actions).toContain("SPLIT");
+    // Один AuditLog SPLIT + cause.
+    const splitAudit = M.auditCreate.mock.calls.find(
+      (c) => c[0].data.action === "SPLIT",
+    );
+    expect(splitAudit?.[0].data.payload).toMatchObject({
+      breakReason: "WORKSHOP_CUT",
+      breakReasonLabel: "Распил в цехе (изделие)",
+    });
   });
 
   it("happy с soldPart: SaleRecord(targetType:SLAB, slabId) создан ОДНОЙ транзакцией", async () => {
@@ -237,6 +282,7 @@ describe("splitSlab — распил: часть клиенту + остатки
       remainderPieces: [PIECE],
       byUserId: "u1",
       soldPart: { customerName: "K", price: 1500 },
+      cause: WORKSHOP,
     });
 
     expect(res.soldSaleId).toBe("sale1");
@@ -272,6 +318,7 @@ describe("registerDirectPiece — прямой бой (без плиты) + guar
     batchId: "b1",
     decrementSlabs: true,
     byUserId: "u1",
+    cause: CAUSE,
   };
 
   it("oversell: партия полностью распродана (free=0), decrementSlabs=true → INSUFFICIENT_REMAINDER; Piece НЕ пишется", async () => {
@@ -303,7 +350,12 @@ describe("registerDirectPiece — прямой бой (без плиты) + guar
     expect(M.auditCreate.mock.calls[0][0].data).toMatchObject({
       action: "BREAK",
       entityType: "Piece",
-      payload: expect.objectContaining({ direct: true, decrementSlabs: true }),
+      payload: expect.objectContaining({
+        direct: true,
+        decrementSlabs: true,
+        breakReason: "MOVE_BREAK",
+        breakReasonLabel: "Бой при перемещении",
+      }),
     });
   });
 
@@ -332,6 +384,7 @@ describe("registerDirectPiecesMany — многострочный бой, all-or
         batchId: "b1",
         decrementSlabs: false,
         byUserId: "u1",
+        cause: CAUSE,
       }),
     ).rejects.toBeInstanceOf(BreakError);
     // Даже первую (валидную) строку не сохранили.
@@ -348,12 +401,13 @@ describe("registerDirectPiecesMany — многострочный бой, all-or
         batchId: "b1",
         decrementSlabs: true,
         byUserId: "u1",
+        cause: CAUSE,
       }),
     ).rejects.toMatchObject({ code: "INSUFFICIENT_REMAINDER" });
     expect(M.pieceCreate).not.toHaveBeenCalled();
   });
 
-  it("happy: 3 строки в свободные 5 → 3 Piece + 1 AuditLog + slabsFreeAfter=2", async () => {
+  it("happy: 3 строки в свободные 5 → 3 Piece + AuditLog с cause + slabsFreeAfter=2", async () => {
     M.batchFindUnique.mockResolvedValue(batchRow({ slabsSoldDirect: 5 })); // free=5
 
     const res = await registerDirectPiecesMany({
@@ -361,6 +415,7 @@ describe("registerDirectPiecesMany — многострочный бой, all-or
       batchId: "b1",
       decrementSlabs: true,
       byUserId: "u1",
+      cause: CAUSE,
     });
 
     expect(res.pieceIds).toHaveLength(3);

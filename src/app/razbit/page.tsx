@@ -108,6 +108,7 @@ export default async function RazbitPage({
   const okText = OK_TEXT[first(sp.action) ?? ""];
   const pieceCount = first(sp.pieces);
   const label = first(sp.label);
+  const causeLabel = first(sp.cause);
   const reserveCancelled = first(sp.reserveCancelled) === "1";
 
   return (
@@ -130,9 +131,14 @@ export default async function RazbitPage({
             {label && `${label} — `}
             {pieceCount && `кусков: ${pieceCount}`}
           </p>
+          {causeLabel && (
+            <p className="mt-1 text-sm text-ink/70">
+              Причина: <span className="font-medium text-ink">{causeLabel}</span>
+            </p>
+          )}
           {reserveCancelled && (
             <p className="mt-1 font-medium text-warning">
-              Бронь на плиту снята — менеджер увидит причину в журнале.
+              Бронь на плиту снята — менеджер увидит в журнале.
             </p>
           )}
         </Alert>

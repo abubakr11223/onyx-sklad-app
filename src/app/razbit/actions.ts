@@ -9,6 +9,7 @@ import { getCapabilities, currentActorId } from "@/lib/session";
 import {
   BreakError,
   breakSlab,
+  parseBreakCause,
   parsePieceRow,
   registerDirectPiecesMany,
   splitSlab,
@@ -83,6 +84,12 @@ export async function submitBreak(
   const errors: BreakFormErrors = {};
   const pieces = parseRows(readPieceRows(formData), errors);
 
+  // TZ §5.6 — cause required (same taxonomy as /singan).
+  const causeParsed = parseBreakCause(str("breakCause"), str("breakCauseNote"));
+  if (!causeParsed.ok) {
+    errors.breakCause = causeParsed.message;
+  }
+
   const byUserId = await currentActorId();
   if (!byUserId) {
     return { errors: { form: "Складчик не найден в системе — обратитесь к администратору" } };
@@ -110,7 +117,7 @@ export async function submitBreak(
         }
       }
 
-      if (Object.keys(errors).length > 0) return { errors };
+      if (Object.keys(errors).length > 0 || !causeParsed.ok) return { errors };
 
       if (hasSoldPart) {
         const result = await splitSlab({
@@ -118,18 +125,40 @@ export async function submitBreak(
           soldPart: { customerName: soldCustomerName, price: soldPrice },
           remainderPieces: pieces,
           byUserId,
+          cause: causeParsed.cause,
         });
-        redirect(successUrl("split", result.slabLabel, result.pieceIds.length, result.cancelledReservationId));
+        redirect(
+          successUrl(
+            "split",
+            result.slabLabel,
+            result.pieceIds.length,
+            result.cancelledReservationId,
+            causeParsed.cause.labelRu,
+          ),
+        );
       } else {
-        const result = await breakSlab({ slabId, pieces, byUserId });
-        redirect(successUrl("break", result.slabLabel, result.pieceIds.length, result.cancelledReservationId));
+        const result = await breakSlab({
+          slabId,
+          pieces,
+          byUserId,
+          cause: causeParsed.cause,
+        });
+        redirect(
+          successUrl(
+            "break",
+            result.slabLabel,
+            result.pieceIds.length,
+            result.cancelledReservationId,
+            causeParsed.cause.labelRu,
+          ),
+        );
       }
     }
 
     if (mode === "direct") {
       const batchId = str("batchId");
       if (!batchId) errors.batchId = "Выберите партию";
-      if (Object.keys(errors).length > 0) return { errors };
+      if (Object.keys(errors).length > 0 || !causeParsed.ok) return { errors };
 
       const decrementSlabs = formData.get("decrementSlabs") === "1";
       // A4: все строки — ОДНОЙ атомарной транзакцией (registerDirectPiecesMany):
@@ -140,8 +169,17 @@ export async function submitBreak(
         batchId,
         decrementSlabs,
         byUserId,
+        cause: causeParsed.cause,
       });
-      redirect(successUrl("direct", null, result.pieceIds.length, null));
+      redirect(
+        successUrl(
+          "direct",
+          null,
+          result.pieceIds.length,
+          null,
+          causeParsed.cause.labelRu,
+        ),
+      );
     }
 
     return { errors: { form: "Неизвестный режим формы — обновите страницу" } };
@@ -158,8 +196,14 @@ function successUrl(
   label: string | null,
   pieceCount: number,
   cancelledReservationId: string | null,
+  causeLabel: string,
 ): string {
-  const params = new URLSearchParams({ ok: "1", action, pieces: String(pieceCount) });
+  const params = new URLSearchParams({
+    ok: "1",
+    action,
+    pieces: String(pieceCount),
+    cause: causeLabel,
+  });
   if (label) params.set("label", label);
   if (cancelledReservationId) params.set("reserveCancelled", "1");
   return `/razbit?${params.toString()}`;
