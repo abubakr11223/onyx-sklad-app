@@ -12,6 +12,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSell: true,
     canReserve: true,
     canRequestPhoto: true,
+    canViewPhotoTasks: true,
     canManageWarehouse: true,
     canSeeExactRemainder: true,
     canSeeAllReservations: true,
@@ -26,6 +27,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSell: true,
     canReserve: true,
     canRequestPhoto: true,
+    canViewPhotoTasks: true,
     canManageWarehouse: false,
     canSeeExactRemainder: true,
     canSeeAllReservations: false,
@@ -40,6 +42,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSell: false,
     canReserve: false,
     canRequestPhoto: false,
+    canViewPhotoTasks: true, // §3/§7/§5.9 — vazifalar ko'rinadi; CREATE yo'q
     canManageWarehouse: true,
     canSeeExactRemainder: true,
     canSeeAllReservations: false,
@@ -54,6 +57,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSell: false,
     canReserve: false,
     canRequestPhoto: false,
+    canViewPhotoTasks: false,
     canManageWarehouse: false,
     canSeeExactRemainder: false,
     canSeeAllReservations: false,
@@ -153,12 +157,35 @@ describe("Union'dan tashqari rol — deny-by-default (xavfsiz default)", () => {
     // to'liqligi uchun — qolgan maydonlar ham false
     expect(caps.canReserve).toBe(false);
     expect(caps.canRequestPhoto).toBe(false);
+    expect(caps.canViewPhotoTasks).toBe(false);
     expect(caps.canSeeExactRemainder).toBe(false);
     expect(caps.canSeeAllReservations).toBe(false);
     expect(caps.requestsRouteToManager).toBe(false);
     expect(caps.canSeeHistory).toBe(false);
     expect(caps.canManageAccounts).toBe(false);
     expect(caps.canSeeLeads).toBe(false);
+  });
+});
+
+describe("canViewPhotoTasks vs canRequestPhoto (W6-B, TZ §3/§5.3/§5.9)", () => {
+  it("WAREHOUSE: vazifalarni ko'radi, lekin so'rov YARATMAYDI/yopmaydi", () => {
+    const w = capabilitiesFor("WAREHOUSE", { canSeePurchasePrice: false });
+    expect(w.canViewPhotoTasks).toBe(true);
+    expect(w.canRequestPhoto).toBe(false);
+  });
+
+  it("OWNER/MANAGER: ikkalasi ham true (to'liq fotozapros boshqaruvi)", () => {
+    for (const role of ["OWNER", "MANAGER"] as Role[]) {
+      const c = capabilitiesFor(role, { canSeePurchasePrice: false });
+      expect(c.canViewPhotoTasks).toBe(true);
+      expect(c.canRequestPhoto).toBe(true);
+    }
+  });
+
+  it("PARTNER: ikkalasi false", () => {
+    const p = capabilitiesFor("PARTNER", { canSeePurchasePrice: false });
+    expect(p.canViewPhotoTasks).toBe(false);
+    expect(p.canRequestPhoto).toBe(false);
   });
 });
 

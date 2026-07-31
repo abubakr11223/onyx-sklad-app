@@ -481,3 +481,64 @@ export async function fetchPoiskTypesPage(
     truncated: true,
   };
 }
+
+// ──────────────────── W6-A — boy/qoldiq ranking (§6.5) ────────────────────
+
+/**
+ * Display/ranking key for «продать остатки первыми»: bounding rectangle area
+ * (mm²). Always defined — `boundingLengthMm` / `boundingWidthMm` are NOT NULL
+ * on Piece (schema.prisma). Independent of nullable `areaM2`.
+ */
+export function pieceBoundingAreaMm2(
+  boundingLengthMm: number,
+  boundingWidthMm: number,
+): number {
+  return boundingLengthMm * boundingWidthMm;
+}
+
+export interface RankablePiece {
+  id: string;
+  boundingLengthMm: number;
+  boundingWidthMm: number;
+}
+
+export interface RankAndCapResult<T> {
+  /** Top `max` by bounding area ASC (id tie-break) — display order. */
+  ranked: T[];
+  /** True iff input had more than `max` rows (some did not make the list). */
+  capped: boolean;
+  /** Full matching set size before cap. */
+  total: number;
+}
+
+/**
+ * W6-A / W6-A2 — rank pieces by the **display** key (L×W), then cap.
+ *
+ * Page query (W6-A2): SQL `ORDER BY boundingAreaMm2 ASC, id ASC`
+ * `take: max + 1` on the generated column (= L×W). This function re-applies
+ * the same key + id tie-break on that bounded prefix and sets `capped` from
+ * the +1 probe — so UI order matches SQL and behaviour stays stable if the
+ * caller ever passes an unsorted bag (unit tests).
+ *
+ * Do **not** pre-cap by `areaM2` (old bug): different key, NULLS LAST.
+ * `areaM2` is ignored here (nullable; real polygon area ≠ bounding box).
+ */
+export function rankAndCapFittingPieces<T extends RankablePiece>(
+  rows: readonly T[],
+  max: number,
+): RankAndCapResult<T> {
+  if (max < 0) {
+    throw new Error("rankAndCapFittingPieces: max must be ≥ 0");
+  }
+  const sorted = [...rows].sort((a, b) => {
+    const da = pieceBoundingAreaMm2(a.boundingLengthMm, a.boundingWidthMm);
+    const db = pieceBoundingAreaMm2(b.boundingLengthMm, b.boundingWidthMm);
+    return da - db || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  });
+  const capped = sorted.length > max;
+  return {
+    ranked: capped ? sorted.slice(0, max) : sorted,
+    capped,
+    total: sorted.length,
+  };
+}

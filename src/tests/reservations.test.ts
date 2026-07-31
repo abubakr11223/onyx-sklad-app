@@ -9,6 +9,7 @@ import {
   canReserveVolume,
   computeExpiresAt,
   parseReservationDaysConfig,
+  reservationListScope,
   resolveReservationDays,
   sumActiveVolumeHolds,
 } from "@/lib/reservations";
@@ -202,5 +203,45 @@ describe("canManageReservation — §2 o'tish №4/№5 (egasi yoki OWNER)", () 
     expect(
       canManageReservation({ id: "p1", role: "PARTNER" }, reservation),
     ).toBe(false);
+  });
+});
+
+describe("reservationListScope — /bron ro'yxat maxfiyligi (W5-B, TZ §4.4)", () => {
+  // Home KPI (page.tsx:59-63) va /bron findMany bir xil: OWNER hammasi,
+  // MANAGER faqat o'z managerId — boshqa menejerning customerName sizdirilmasin.
+
+  it("canSeeAllReservations → bo'sh scope (filtr yo'q = barcha qatorlar)", () => {
+    expect(
+      reservationListScope({
+        canSeeAllReservations: true,
+        actorId: "anyone",
+      }),
+    ).toEqual({});
+    // OWNER actorId null bo'lsa ham «hammasi» — capability ustun.
+    expect(
+      reservationListScope({
+        canSeeAllReservations: true,
+        actorId: null,
+      }),
+    ).toEqual({});
+  });
+
+  it("MANAGER (canSeeAll=false) → faqat o'z managerId", () => {
+    expect(
+      reservationListScope({
+        canSeeAllReservations: false,
+        actorId: "mgr-42",
+      }),
+    ).toEqual({ managerId: "mgr-42" });
+  });
+
+  it("canSeeAll=false va actor yo'q → hech narsa (boshqa odamlarning ro'yxati emas)", () => {
+    const scope = reservationListScope({
+      canSeeAllReservations: false,
+      actorId: null,
+    });
+    expect(scope).toEqual({ managerId: "__no_actor__" });
+    // «filtr yo'q» bo'lmasligi shart — aks holda barcha bronlar sizadi.
+    expect(scope).not.toEqual({});
   });
 });

@@ -15,14 +15,15 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     }
   });
 
-  it("WAREHOUSE — faqat Приёмка/Разбить (+ доим ochiqlar), qolgani yashirin", () => {
+  it("WAREHOUSE — Приёмка/Разбить/Фото-vazifalar (+ doim ochiqlar); sotuv yashirin", () => {
     const w = caps("WAREHOUSE");
     expect(canAccessNav("/priemka", w)).toBe(true);
     expect(canAccessNav("/razbit", w)).toBe(true);
     expect(canAccessNav("/poisk", w)).toBe(true);
+    // W6-B: canViewPhotoTasks — §3 «задачи на фото», §5.9 dual access
+    expect(canAccessNav("/fotozapros", w)).toBe(true);
     expect(canAccessNav("/bron", w)).toBe(false);
     expect(canAccessNav("/prodazha", w)).toBe(false);
-    expect(canAccessNav("/fotozapros", w)).toBe(false);
   });
 
   it("MANAGER — sotuv/bron/foto ochiq, ammo Приёмка/Разбить yopiq (TZ §3)", () => {

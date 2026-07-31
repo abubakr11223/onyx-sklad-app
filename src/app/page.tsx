@@ -8,6 +8,7 @@ import Link from "next/link";
 import { getCapabilities, getCurrentUser } from "@/lib/session";
 import type { Capabilities } from "@/lib/permissions";
 import { db } from "@/lib/db";
+import { photoTasksListWhere } from "@/lib/photo-requests";
 import { visibleNavItems, type NavItem } from "@/components/nav-items";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -33,11 +34,22 @@ async function loadStats(
 ): Promise<Stats> {
   const wantBatches = caps.canSeeExactRemainder; // OWNER/MANAGER/WAREHOUSE
   const wantNeedsCheck = caps.canManageWarehouse; // OWNER/WAREHOUSE
-  const wantPhotos = caps.canRequestPhoto || caps.canManageWarehouse; // OWNER/MANAGER/WAREHOUSE
+  // Foto KPI: canViewPhotoTasks (§3/§5.9). Scope = photoTasksListWhere
+  // (menejer — barcha PENDING; sklad — ochiq navbat + o'ziniki).
+  const wantPhotos = caps.canViewPhotoTasks;
   // Брони: OWNER — все; MANAGER — только свои (нужен managerId, иначе скрываем,
   // чтобы не показать чужие). PARTNER/WAREHOUSE — нет.
   const wantReservations =
     caps.canReserve && (caps.canSeeAllReservations || managerId != null);
+
+  const photoScope = photoTasksListWhere({
+    canRequestPhoto: caps.canRequestPhoto,
+    actorId: managerId,
+  });
+  // Menejer scope bo'sh → faqat PENDING; sklad scope allaqachon status:PENDING.
+  const photoWhere = caps.canRequestPhoto
+    ? { status: "PENDING" as const, ...photoScope }
+    : photoScope;
 
   try {
     const [batches, nBatch, nSlab, nPiece, photosPending, reservations] =
@@ -53,7 +65,7 @@ async function loadStats(
           ? db.piece.count({ where: { needsCheck: true } })
           : Promise.resolve(null),
         wantPhotos
-          ? db.photoRequest.count({ where: { status: "PENDING" } })
+          ? db.photoRequest.count({ where: photoWhere })
           : Promise.resolve(null),
         wantReservations
           ? db.reservation.count({

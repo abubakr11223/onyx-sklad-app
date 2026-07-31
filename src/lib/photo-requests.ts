@@ -47,6 +47,31 @@ export const REDISPATCH_WINDOW_MS = 24 * 60 * 60 * 1000;
  */
 export const REDISPATCH_BATCH_LIMIT = 50;
 
+// ───────────────────────── Ro'yxat scope (W6-B, /fotozapros) ─────────────────────────
+
+/**
+ * /fotozapros findMany `where` qo'shimchasi.
+ * - canRequestPhoto (menejer/egasi): filtr yo'q — barcha so'rovlar.
+ * - sklad (faqat canViewPhotoTasks): ochiq navbat (assigneeId null) + o'ziga
+ *   biriktirilgan PENDING — telegram claim OR bilan bir xil mantiq
+ *   (telegram-webhook.ts assignee OR). Yaratish huquqi YO'Q.
+ */
+export function photoTasksListWhere(args: {
+  canRequestPhoto: boolean;
+  actorId: string | null;
+}): {
+  status?: "PENDING";
+  OR?: Array<{ assigneeId: null } | { assigneeId: string }>;
+  id?: string;
+} {
+  if (args.canRequestPhoto) return {};
+  if (!args.actorId) return { id: "__no_actor__" };
+  return {
+    status: "PENDING",
+    OR: [{ assigneeId: null }, { assigneeId: args.actorId }],
+  };
+}
+
 // ───────────────────────── Deps (inyeksiya) ─────────────────────────
 // db'dan bizga kerak amallar. Prisma'ning to'liq tipini talab qilmaymiz —
 // testlar oson mock qilishi uchun minimal shakl.

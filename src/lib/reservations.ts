@@ -184,6 +184,24 @@ export function canManageReservation(
   return actor.role === "OWNER" || actor.id === reservation.managerId;
 }
 
+/**
+ * /bron ro'yxat filtri (TZ §4.4 «Владелец … видит все», §3 menejer o'z kesimi).
+ * Home KPI bilan bir xil: canSeeAllReservations → hammasi; aks holda faqat
+ * actorId ning bronlari. Actor yo'q bo'lsa — hech narsa (boshqa odamning
+ * mijoz ismlarini sizdirmaslik).
+ *
+ * Natija Prisma `where` ga yoyiladi: `{ status: "ACTIVE", ...scope }`.
+ */
+export function reservationListScope(args: {
+  canSeeAllReservations: boolean;
+  actorId: string | null;
+}): { managerId?: string } {
+  if (args.canSeeAllReservations) return {};
+  if (args.actorId) return { managerId: args.actorId };
+  // Hech qachon «filtr yo'q = hammasi» ga tushmasin.
+  return { managerId: "__no_actor__" };
+}
+
 // ─────────────────────────────── DB amallar ───────────────────────────────
 
 export interface ReserveUnitInput {

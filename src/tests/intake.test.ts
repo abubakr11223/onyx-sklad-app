@@ -19,6 +19,8 @@ function baseInput(overrides: Partial<IntakeInput> = {}): IntakeInput {
     newName: "",
     newRockType: "",
     newColor: "",
+    newDescription: "",
+    newBasePrice: "",
     slabsTotal: "40",
     areaTotalM2: "220",
     supplierNote: "",
@@ -167,7 +169,86 @@ describe("validateIntake — вид камня", () => {
         name: "Травертин Noce",
         rockType: "травертин",
         color: null,
+        description: null,
+        basePrice: null,
       });
+    }
+  });
+
+  // W6-C — опциональные «базовые свойства» (§5.1): description + basePrice.
+  it("новый вид: description и basePrice опциональны и нормализуются", () => {
+    const r = validateIntake(
+      baseInput({
+        newStoneType: true,
+        newName: "Оникс Медовый",
+        newRockType: "оникс",
+        newColor: "жёлтый",
+        newDescription: "  Тёплый рисунок  ",
+        newBasePrice: "95,50",
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.stoneType.kind === "new") {
+      expect(r.data.stoneType.description).toBe("Тёплый рисунок");
+      expect(r.data.stoneType.basePrice).toBe(95.5);
+    }
+  });
+
+  it("новый вид: пустые description/basePrice не блокируют приёмку", () => {
+    const r = validateIntake(
+      baseInput({
+        newStoneType: true,
+        newName: "Гранит Серый",
+        newRockType: "гранит",
+        newDescription: "   ",
+        newBasePrice: "",
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.stoneType.kind === "new") {
+      expect(r.data.stoneType.description).toBeNull();
+      expect(r.data.stoneType.basePrice).toBeNull();
+    }
+  });
+
+  it("новый вид: мусорная basePrice → ошибка newBasePrice, приёмка не проходит", () => {
+    const r = validateIntake(
+      baseInput({
+        newStoneType: true,
+        newName: "Мрамор",
+        newRockType: "мрамор",
+        newBasePrice: "abc",
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.newBasePrice).toMatch(/Цена/);
+  });
+
+  it("новый вид: basePrice выше Decimal(12,2) → ошибка (не 500)", () => {
+    const r = validateIntake(
+      baseInput({
+        newStoneType: true,
+        newName: "Мрамор",
+        newRockType: "мрамор",
+        newBasePrice: "10000000000", // > MAX_DECIMAL_12_2
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.newBasePrice).toBeTruthy();
+  });
+
+  it("новый вид: basePrice = 0 допустима (бесплатный прайс/заглушка)", () => {
+    const r = validateIntake(
+      baseInput({
+        newStoneType: true,
+        newName: "Демо",
+        newRockType: "мрамор",
+        newBasePrice: "0",
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok && r.data.stoneType.kind === "new") {
+      expect(r.data.stoneType.basePrice).toBe(0);
     }
   });
 

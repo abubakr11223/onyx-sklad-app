@@ -6,6 +6,7 @@ import {
   PhotoRequestError,
   buildTaskText,
   createAndDispatchPhotoRequest,
+  photoTasksListWhere,
   redispatchPendingPhotoRequests,
   type PhotoRequestDeps,
 } from "@/lib/photo-requests";
@@ -441,5 +442,28 @@ describe("buildTaskText", () => {
     expect(t).toContain("Мрамор");
     expect(t).toContain("Локация не указана");
     expect(t).not.toContain("Комментарий");
+  });
+});
+
+describe("photoTasksListWhere — /fotozapros scope (W6-B)", () => {
+  it("canRequestPhoto → bo'sh where (menejer barcha so'rovlarni ko'radi)", () => {
+    expect(
+      photoTasksListWhere({ canRequestPhoto: true, actorId: "mgr1" }),
+    ).toEqual({});
+  });
+
+  it("sklad → PENDING + umumiy navbat yoki o'z assigneeId", () => {
+    expect(
+      photoTasksListWhere({ canRequestPhoto: false, actorId: "wh1" }),
+    ).toEqual({
+      status: "PENDING",
+      OR: [{ assigneeId: null }, { assigneeId: "wh1" }],
+    });
+  });
+
+  it("sklad actor yo'q → hech narsa (sizib ketmasin)", () => {
+    const w = photoTasksListWhere({ canRequestPhoto: false, actorId: null });
+    expect(w).toEqual({ id: "__no_actor__" });
+    expect(w).not.toEqual({});
   });
 });

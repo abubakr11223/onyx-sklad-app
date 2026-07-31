@@ -1,11 +1,17 @@
-// TG-B1 — «Запросы на фото»: список фотозапросов для менеджера (TZ §5.3, §1.8).
-// Server component. Сами фото приходят в TG-B2 — здесь пока только статус.
+// TG-B1 / W6-B — «Запросы на фото» (TZ §5.3, §1.8, §3, §5.9, §7).
+// Server component.
+//  • Menejer/egasi (canRequestPhoto): barcha so'rovlar + «Готово» yopish.
+//  • Sklad (canViewPhotoTasks, canRequestPhoto=false): o'z navbati/biriktirilgan
+//    PENDING vazifalar (READ). Foto yuborish — Telegram (§5.3); CREATE yo'q.
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { sendMessage } from "@/lib/telegram";
-import { redispatchPendingPhotoRequests } from "@/lib/photo-requests";
+import {
+  photoTasksListWhere,
+  redispatchPendingPhotoRequests,
+} from "@/lib/photo-requests";
 import { closePhotoRequest } from "./actions";
-import { getCapabilities } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
@@ -56,9 +62,12 @@ const DELIVERY_VARIANT: Record<DeliveryState, BadgeVariant> = {
 };
 
 export default async function FotozaprosPage() {
-  // R2 — rol gate: фотозапросы у OWNER/MANAGER (canRequestPhoto). Складчик — <NoAccess/>.
-  const caps = await getCapabilities();
-  if (!caps.canRequestPhoto) {
+  // READ: canViewPhotoTasks (OWNER/MANAGER/WAREHOUSE). CREATE/close: canRequestPhoto.
+  const [caps, actor] = await Promise.all([
+    getCapabilities(),
+    getCurrentUser(),
+  ]);
+  if (!caps.canViewPhotoTasks) {
     return (
       <main className="mx-auto max-w-3xl p-4 sm:p-8">
         <NoAccess />
@@ -66,17 +75,27 @@ export default async function FotozaprosPage() {
     );
   }
 
-  // BUG-04 — lazy sweep (как /bron вызывает expireOverdueReservations на рендере):
-  // недоставленные недавние PENDING-запросы до-отправляются (в т.ч. складчику,
-  // который привязал Telegram уже ПОСЛЕ запроса). Cron не нужен. Сбой sweep не
-  // должен ронять страницу — она информационная.
-  try {
-    await redispatchPendingPhotoRequests({ db, sendMessage });
-  } catch (e) {
-    console.warn("[fotozapros] re-dispatch sweep xatosi (sahifa ochilaveradi):", e);
+  const canManageRequests = caps.canRequestPhoto;
+  const listWhere = photoTasksListWhere({
+    canRequestPhoto: canManageRequests,
+    actorId: actor?.id ?? null,
+  });
+
+  // BUG-04 — lazy sweep: faqat menejer/egasi sahifasida (dispatch nazorati).
+  // Sklad faqat o'qiydi; sweep ular uchun majburiy emas.
+  if (canManageRequests) {
+    try {
+      await redispatchPendingPhotoRequests({ db, sendMessage });
+    } catch (e) {
+      console.warn(
+        "[fotozapros] re-dispatch sweep xatosi (sahifa ochilaveradi):",
+        e,
+      );
+    }
   }
 
   const requests = await db.photoRequest.findMany({
+    where: listWhere,
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
@@ -97,15 +116,21 @@ export default async function FotozaprosPage() {
           Onyx · фото
         </p>
         <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
-          Запросы на фото
+          {canManageRequests ? "Запросы на фото" : "Задачи на фото"}
         </h1>
         <p className="mt-2 text-base text-ink/60">
-          Задачи складчикам сфотографировать камень. Фото приходят в Telegram.
+          {canManageRequests
+            ? "Задачи складчикам сфотографировать камень. Фото приходят в Telegram."
+            : "Ваши открытые задачи. Сфотографируйте камень и отправьте фото в Telegram-бот — на сайте загрузка не нужна (§5.3)."}
         </p>
       </header>
 
       {requests.length === 0 ? (
-        <Alert variant="info">Пока нет запросов на фото.</Alert>
+        <Alert variant="info">
+          {canManageRequests
+            ? "Пока нет запросов на фото."
+            : "Нет открытых задач на фото."}
+        </Alert>
       ) : (
         <ul className="space-y-3">
           {requests.map((r) => {
@@ -122,7 +147,7 @@ export default async function FotozaprosPage() {
                   <div className="flex flex-wrap items-baseline justify-between gap-x-2">
                     <h3 className="text-base font-bold text-ink">{stoneName}</h3>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {r.status === "PENDING" && (
+                      {r.status === "PENDING" && canManageRequests && (
                         <Badge variant={DELIVERY_VARIANT[delivery]}>
                           {DELIVERY_RU[delivery]}
                         </Badge>
@@ -156,9 +181,8 @@ export default async function FotozaprosPage() {
                       ))}
                     </div>
                   )}
-                  {/* §6.1 — запрос копит несколько плит (PENDING), пока менеджер
-                      не закроет его вручную. «Готово» → PENDING → DONE. */}
-                  {r.status === "PENDING" && (
+                  {/* §6.1 — «Готово» faqat menejer (canRequestPhoto). Sklad yopmaydi. */}
+                  {canManageRequests && r.status === "PENDING" && (
                     <form action={closePhotoRequest} className="mt-3">
                       <input type="hidden" name="id" value={r.id} />
                       <button

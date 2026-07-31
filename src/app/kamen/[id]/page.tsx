@@ -47,6 +47,7 @@ import {
 import Button from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
+import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 
 export const dynamic = "force-dynamic";
@@ -942,24 +943,33 @@ export default async function KamenPage({
                     {/* §6.1: фото выделенной плиты (Photo.slabId) — миниатюры под
                         ярлыком. Прокси /api/photo/[id] (тот же, что у галереи).
                         Клик открывает полный размер в новой вкладке. Нет фото —
-                        subtle «без фото» (частая ситуация до первой съёмки). */}
+                        subtle «без фото» (частая ситуация до первой съёмки).
+                        §6.1 шаг 7: canSell — «Клиенту» (Web Share / копия ссылки);
+                        URL открытый и отдаёт только байты картинки (см. api/photo). */}
                     {s.photos.length > 0 ? (
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {s.photos.map((ph) => (
-                          <a
-                            key={ph.id}
-                            href={"/api/photo/" + ph.id}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block h-16 w-16 overflow-hidden rounded-field border border-ink/10"
-                          >
-                            <img
-                              src={"/api/photo/" + ph.id}
-                              alt={"Фото — " + s.label}
-                              loading="lazy"
-                              className="h-full w-full object-cover"
-                            />
-                          </a>
+                          <div key={ph.id} className="flex w-16 flex-col gap-0.5">
+                            <a
+                              href={"/api/photo/" + ph.id}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block h-16 w-16 overflow-hidden rounded-field border border-ink/10"
+                            >
+                              <img
+                                src={"/api/photo/" + ph.id}
+                                alt={"Фото — " + s.label}
+                                loading="lazy"
+                                className="h-full w-full object-cover"
+                              />
+                            </a>
+                            {caps.canSell && (
+                              <SharePhotoButton
+                                photoId={ph.id}
+                                title={`${st.name} — ${s.label}`}
+                              />
+                            )}
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -967,6 +977,7 @@ export default async function KamenPage({
                         без фото
                       </span>
                     )}
+
                     {/* SK-1b (3): локацию плиты (block/landmark) правит склад. */}
                     {caps.canManageWarehouse && (
                       <SlabLocationForm

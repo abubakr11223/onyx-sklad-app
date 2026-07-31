@@ -86,7 +86,12 @@ export default async function PriemkaPage({
         </Alert>
       )}
 
-      <IntakeForm stoneTypes={stoneTypes} defaultDate={today} blocks={blocks} />
+      <IntakeForm
+        stoneTypes={stoneTypes}
+        defaultDate={today}
+        blocks={blocks}
+        canSeePrices={caps.canSeePrices}
+      />
     </main>
   );
 }

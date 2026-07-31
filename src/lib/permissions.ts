@@ -28,8 +28,15 @@ export interface Capabilities {
   canSell: boolean;
   /** Bron qo'yish (bron). TZ §3: OWNER/MANAGER. */
   canReserve: boolean;
-  /** Fotozapros yuborish. TZ §3: OWNER/MANAGER. */
+  /** Fotozapros yuborish (CREATE) va so'rovni «Готово» yopish. TZ §3/§5.3: OWNER/MANAGER. */
   canRequestPhoto: boolean;
+  /**
+   * Foto-vazifalar ro'yxatini ko'rish (READ). TZ §3 sklad «задачи на фото»,
+   * §7 «виден складчику», §5.9 dual site+TG. CREATE bilan aralashmasin:
+   * canRequestPhoto WAREHOUSE ga BERILMAYDI (menejer so'raydi; sklad bajaradi).
+   * OWNER/MANAGER/WAREHOUSE — true; PARTNER — false.
+   */
+  canViewPhotoTasks: boolean;
   /** Ombor amallari: приёмка/разбить/перемещение/съёмка. TZ §3: OWNER/WAREHOUSE. */
   canManageWarehouse: boolean;
   /** Aniq qoldiqlarni ko'rish (точные остатки). TZ §3: PARTNER'dan boshqa hammasi. */
@@ -69,6 +76,7 @@ export interface Capabilities {
  * | canSell                  | true  | true             | false     | false   |
  * | canReserve               | true  | true             | false     | false   |
  * | canRequestPhoto          | true  | true             | false     | false   |
+ * | canViewPhotoTasks        | true  | true             | true      | false   |
  * | canManageWarehouse       | true  | false            | true      | false   |
  * | canSeeExactRemainder     | true  | true             | true      | false   |
  * | canSeeAllReservations    | true  | false            | false     | false   |
@@ -93,6 +101,7 @@ const DENY_ALL: Capabilities = {
   canSell: false,
   canReserve: false,
   canRequestPhoto: false,
+  canViewPhotoTasks: false,
   canManageWarehouse: false,
   canSeeExactRemainder: false,
   canSeeAllReservations: false,
@@ -114,6 +123,7 @@ export function capabilitiesFor(
         canSell: true,
         canReserve: true,
         canRequestPhoto: true,
+        canViewPhotoTasks: true,
         canManageWarehouse: true,
         canSeeExactRemainder: true,
         canSeeAllReservations: true,
@@ -129,6 +139,7 @@ export function capabilitiesFor(
         canSell: true,
         canReserve: true,
         canRequestPhoto: true,
+        canViewPhotoTasks: true,
         canManageWarehouse: false,
         canSeeExactRemainder: true,
         canSeeAllReservations: false,
@@ -145,7 +156,8 @@ export function capabilitiesFor(
         canSeePurchasePrice: false,
         canSell: false,
         canReserve: false,
-        canRequestPhoto: false,
+        canRequestPhoto: false, // CREATE/close — menejer; bajarish — TG (§5.3)
+        canViewPhotoTasks: true, // §3/§7/§5.9: vazifalar saytda ko'rinsin
         canManageWarehouse: true,
         canSeeExactRemainder: true,
         canSeeAllReservations: false,
@@ -161,6 +173,7 @@ export function capabilitiesFor(
         canSell: false,
         canReserve: false,
         canRequestPhoto: false,
+        canViewPhotoTasks: false,
         canManageWarehouse: false,
         canSeeExactRemainder: false,
         canSeeAllReservations: false,

@@ -10,6 +10,11 @@
 // filtri + kursor) src/lib/poisk-query.ts ga ko'chirildi — sabab pastda,
 // fetchPoiskTypesPage chaqirig'i ustidagi izohda.
 //
+// W5-A (§3 / §4.6 / §5.2): aniq qoldiq va lokatsiya — faqat
+// canSeeExactRemainder (OWNER/MANAGER/WAREHOUSE). PARTNER ko'radi faqat
+// neytral «В наличии / Нет в наличии» (kamen/[id] L868–876 va /q pattern).
+// Xodimga vid kartochkasida BatchLocation[] ham chiqadi (multi-loc compact).
+//
 // CHEGARALAR (halol ro'yxat — yuqoridagi «xotiraga tortilmaydi» MUTLAQ emas):
 //   • sahifadagi har bir vid uchun `batches` select'ida `where` ham, `take` ham
 //     YO'Q — ya'ni butun sahifa vidlarining BARCHA partiya qatorlari o'qiladi,
@@ -20,15 +25,18 @@
 //     bo'laklab o'qiydi: odatdagi holatda AYNAN bitta so'rov (bugungidek), lekin
 //     ko'p vid «нет в наличии» bo'lsa POISK_MAX_SCAN_ROWS (1000) xom qatorgacha.
 //     Chegara urilsa natija to'liq emas va bu foydalanuvchiga aytiladi.
-//   • boy/qoldiq ro'yxati MAX_POISK_PIECES bilan SQL'da cap qilinadi va cap
-//     ba'zi mos qoldiqni ko'rsatmasdan tushirib qoldirishi MUMKIN — sabab va
-//     foydalanuvchiga ogohlantirish pastda (fittingPieces izohi).
+//   • boy/qoldiq (W6-A2): SQL ORDER BY boundingAreaMm2 (=L×W) + take MAX+1,
+//     so'ng rankAndCapFittingPieces (id tie-break + cap). Unbounded fetch YO'Q.
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { getCapabilities } from "@/lib/session";
 import { CUTTING_MARGIN_MM } from "@/lib/inventory";
 import { piecesWhere } from "@/lib/poisk-search";
-import { fetchPoiskTypesPage } from "@/lib/poisk-query";
+import {
+  fetchPoiskTypesPage,
+  rankAndCapFittingPieces,
+} from "@/lib/poisk-query";
 import Card from "@/components/ui/Card";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -45,13 +53,15 @@ export const dynamic = "force-dynamic";
 
 /** Bitta sahifada ko'rsatiladigan vidlar soni (qolgani «Показать ещё» orqali). */
 const PAGE_SIZE = 30;
-/** Аудит ТЗ №7 #31 — cap на in-memory сортировку gabarit-подходящих offcut'ов.
- *  Ordering по areaM2 asc в БД, окончательная сортировка по L*W в JS. */
+/** §6.5 — max offcuts shown; SQL take = MAX + 1 (probe for cap notice). */
 const MAX_POISK_PIECES = 500;
 /** Boy/qoldiq blokida BIR marta ko'rsatiladigan qator soni («Показать ещё» qadami).
  *  Vidlar (30) dan kichik: qoldiq kartochkasi 3 qatorli va bu blok «предложить
  *  первыми» — menejerga avval eng kichik bir nechtasi kerak, butun dumi emas. */
 const PIECES_PAGE_SIZE = 20;
+
+/** Vid kartochkasida bir qatorda ko'rsatiladigan unikal lokatsiyalar (keyin «и ещё N»). */
+const TYPE_LOCATIONS_MAX = 3;
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
@@ -113,12 +123,45 @@ function buildHref(base: {
   return "/poisk?" + sp.toString() + (base.hash ?? "");
 }
 
+/**
+ * W5-A — BatchLocation[] ni vid kartochkasiga yig'ish (kompakt).
+ * • Unikal (block, landmark) juftliklari (bir joy bir nechta partiyada bo'lishi mumkin).
+ * • Har bir joy: «Блок А, ор. 2» — kamen kartochkasi bilan bir xil leksika.
+ * • 3 tadan ortiq bo'lsa: dastlabki 3 + «и ещё N» (kartochkani shishirmaslik).
+ * Bo'sh ro'yxat → null (UI qatorni chizmaydi).
+ *
+ * Export — unit-test uchun (page.tsx Next module; test faqat sof funksiyani oladi).
+ */
+export function formatTypeLocations(
+  locs: ReadonlyArray<{ block: string; landmark: string }>,
+  maxPoints: number = TYPE_LOCATIONS_MAX,
+): string | null {
+  const seen = new Set<string>();
+  const unique: Array<{ block: string; landmark: string }> = [];
+  for (const loc of locs) {
+    const key = `${loc.block}\0${loc.landmark}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ block: loc.block, landmark: loc.landmark });
+  }
+  if (unique.length === 0) return null;
+
+  const labels = unique.map((l) => `Блок ${l.block}, ор. ${l.landmark}`);
+  if (labels.length <= maxPoints) return labels.join(" · ");
+  const rest = labels.length - maxPoints;
+  return `${labels.slice(0, maxPoints).join(" · ")} · и ещё ${rest}`;
+}
+
 export default async function PoiskPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, ParamValue>>;
 }) {
-  const params = await searchParams;
+  // §3 / §4.6 — aniq qoldiq va lokatsiya faqat canSeeExactRemainder.
+  // /q: isStaff = caps.canSeeExactRemainder; /kamen: !caps.canSeeExactRemainder → «В наличии».
+  const [params, caps] = await Promise.all([searchParams, getCapabilities()]);
+  const canSeeExact = caps.canSeeExactRemainder;
+
   const q = firstParam(params.q);
   const lenDim = parseDim(params.l);
   const widDim = parseDim(params.w);
@@ -185,93 +228,105 @@ export default async function PoiskPage({
   // qolmagan), shuning uchun u ogohlantirish EMAS, oddiy «Ничего не найдено.».
   const typesIncomplete = typesPage.truncated && nextCursor !== null;
 
-  // TZ §5.2 / §6.5: gabarit berilganda AVVAL boy va qoldiqlar. Old kod BARCHA mos
-  // boy'ni tortib bounding-maydon (bL*bW) o'sish tartibida saralagan — eng kichik
-  // maydonli qoldiq BIRINCHI («продать остатки первыми»). Endi filtr indeks bo'yicha
-  // SQL'da (status, boundingLengthMm, boundingWidthMm) — pieceFitsRequest mantig'i
-  // (dopusk + 90° burish) ekvivalent OR-shart bilan:
-  //   max(L,W) ≥ needMax ∧ min(L,W) ≥ needMin
-  //     ⇔ (L≥needMax ∧ W≥needMin) ∨ (L≥needMin ∧ W≥needMax).
-  // Yengil proyeksiya olinadi (int/decimal ustunlar — eski to'liq-include
-  // butun-ombor fetchidan ancha arzon), keyin JS'da bL*bW o'sish bo'yicha
-  // saralanadi. isArchived=false — arxiv vid boyi chiqmasin.
+  // TZ §5.2 / §6.5: gabarit berilganda AVVAL boy va qoldiqlar.
+  // Filtr SQL'da (status + bounding + material) — pieceFitsRequest OR.
   //
-  // OGOHLANTIRISH (612ce93 dan beri shunday, eski izoh buni inkor etardi):
-  // DB'da CAP BOR — `take: MAX_POISK_PIECES + 1` (probe: cap urilganini bilish
-  // uchun). Cap `areaM2 asc` bo'yicha, ekranda esa tartib bL*bW (bounding-
-  // maydon) bo'yicha — BU IKKI XIL KALIT, shuning uchun cap ko'rsatilishi kerak
-  // bo'lgan qoldiqni tushirib qoldirishi MUMKIN:
-  //   • areaM2 — haqiqiy yuza, bL*bW — gabarit to'rtburchak; noto'g'ri shakl
-  //     uchun areaM2 ≤ bL*bW, ya'ni kichik areaM2 kichik gabaritni ANGLATMAYDI.
-  //     500 ta «ingichka, katta gabaritli» qoldiq oldinga chiqib, gabariti eng
-  //     kichik mosni cap ortida qoldirishi mumkin;
-  //   • `areaM2` NULL bo'lishi mumkin (schema: Decimal?), Postgres'da ASC →
-  //     NULLS LAST, demak yuzasi noma'lum qoldiqlar cap'ning BIRINCHI qurboni —
-  //     gabariti qanchalik kichik bo'lishidan qat'i nazar.
-  // To'g'ri yechim — bounding-maydon bo'yicha indeks/generated ustun va shu
-  // ustunda keyset (bu yerda emas: prisma/ o'zgarishi kerak). Shu paytgacha cap
-  // urilgani foydalanuvchidan YASHIRILMAYDI — pastda ogohlantirish ko'rsatiladi.
-  // Cap signal: `length > MAX` (take+1 probe); aynan MAX bo'lsa — hammasi
-  // chiqdi, «часть не попала» yolg'on bo'lmasin.
+  // W6-A2 ranking: SQL `ORDER BY boundingAreaMm2 ASC, id ASC` + `take: MAX+1`
+  // (generated = L×W — display kaliti bilan bir xil). So'ng
+  // rankAndCapFittingPieces: xuddi shu kalit + id, cap probe.
+  // OLD: areaM2 pre-cap (noto'g'ri kalit) yoki unbounded full match fetch.
   const needMax = hasDims ? Math.max(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
   const needMin = hasDims ? Math.min(lenMm, widMm) + CUTTING_MARGIN_MM : 0;
-  const fittingPiecesRaw = hasDims
-    ? await db.piece.findMany({
-        // §5.2/§6.5: gabarit + MATERIAL filtri. `q` bo'sh bo'lsa material filtri
-        // qo'llanmaydi (barcha mos qoldiq); `q` bo'lsa — piece.stoneType relatsiyasi
-        // orqali name/rockType/color mos kelgan vid qoldiqlarigina (butun plita
-        // ro'yxati bilan AYNI filtr → boshqa vid boyi «предложить первыми»da chiqmaydi).
-        where: piecesWhere(q, needMax, needMin),
-        select: {
-          id: true,
-          kind: true,
-          needsCheck: true,
-          boundingLengthMm: true,
-          boundingWidthMm: true,
-          thicknessMm: true,
-          areaM2: true,
-          block: true,
-          landmark: true,
-          stoneType: { select: { name: true } },
-        },
-        // Аудит ТЗ №7 #31 — раньше take не было: результат ограничен лишь тем,
-        // сколько offcut'ов вообще проходят gabarit-фильтр. При росте склада это
-        // могло вырасти в тысячи строк, материализуемых и сортируемых per-request
-        // на force-dynamic странице. Ставим safety-cap: ORDER BY areaM2 ASC
-        // (мельче — предпочтительнее по TZ §6.5 «предлагать первыми»), take
-        // MAX_POISK_PIECES + 1 (probe). Индекса на bounding-area нет (см.
-        // комментарий выше), поэтому пред-cap-ранкинг делается по колонке
-        // areaM2, а окончательная сортировка по L*W — в JS на усечённом
-        // множестве (сначала trim до MAX, потом sort — tartib avvalgidek).
-        orderBy: { areaM2: "asc" },
-        take: MAX_POISK_PIECES + 1,
-      })
-    : [];
-  // Cap: faqat probe qator kelganda (501+). Aynan 500 → hammasi ro'yxatda.
-  // Trim sort DAN OLDIN: areaM2 prefiksi eski `take: MAX` bilan bir xil qoladi.
-  const piecesCapped = fittingPiecesRaw.length > MAX_POISK_PIECES;
-  const fittingPieces = piecesCapped
-    ? fittingPiecesRaw.slice(0, MAX_POISK_PIECES)
-    : fittingPiecesRaw;
-  // «Предложить первыми» — eng kichik bounding-maydon oldinda. TARTIB: bu saralash
-  // faqat CAP'DAN O'TGAN to'plamni tartiblaydi (yuqoridagi ogohlantirishga qarang) —
-  // «eng kichik mos hech qachon tushmaydi» degan KAFOLAT YO'Q.
-  // `id` — teng-maydonli qoldiqlar uchun tie-breaker: usiz Postgres teng `areaM2`
-  // qatorlarini ixtiyoriy tartibda qaytaradi va ro'yxat har so'rovda qayta
-  // aralashadi. `id` bilan tartib TO'LIQ va takrorlanadigan bo'ladi — «Показать
-  // ещё» (prefiks kengaytirish) shunga tayanadi.
-  fittingPieces.sort(
-    (a, b) =>
-      a.boundingLengthMm * a.boundingWidthMm -
-        b.boundingLengthMm * b.boundingWidthMm ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+
+  // Parallel: boy/qoldiq + (faqat xodim) sahifa vidlarining BatchLocation[].
+  // poisk-query.ts GA TEGMAYMIZ — lokatsiya presentation-layer so'rovi.
+  const batchIdsForLocs =
+    canSeeExact && visibleTypes.length > 0
+      ? visibleTypes.flatMap((t) => t.st.batches.map((b) => b.id))
+      : [];
+  const batchToStoneId = new Map<string, string>();
+  if (canSeeExact) {
+    for (const t of visibleTypes) {
+      for (const b of t.st.batches) batchToStoneId.set(b.id, t.st.id);
+    }
+  }
+
+  type FittingPieceRow = {
+    id: string;
+    kind: string;
+    needsCheck: boolean;
+    boundingLengthMm: number;
+    boundingWidthMm: number;
+    thicknessMm: number | null;
+    areaM2: { toString(): string } | null;
+    block: string;
+    landmark: string;
+    stoneType: { name: string };
+  };
+
+  const [fittingPiecesMatched, batchLocs] = await Promise.all([
+    hasDims
+      ? (db.piece.findMany({
+          // §5.2/§6.5: gabarit + MATERIAL filtri. `q` bo'sh bo'lsa material filtri
+          // qo'llanmaydi (barcha mos qoldiq); `q` bo'lsa — piece.stoneType relatsiyasi
+          // orqali name/rockType/color mos kelgan vid qoldiqlarigina (butun plita
+          // ro'yxati bilan AYNI filtr → boshqa vid boyi «предложить первыми»da chiqmaydi).
+          where: piecesWhere(q, needMax, needMin),
+          select: {
+            id: true,
+            kind: true,
+            needsCheck: true,
+            boundingLengthMm: true,
+            boundingWidthMm: true,
+            thicknessMm: true,
+            areaM2: true,
+            block: true,
+            landmark: true,
+            stoneType: { select: { name: true } },
+          },
+          // W6-A2: order by generated boundingAreaMm2 (= L×W, display key) + id.
+          // take MAX+1 probe — unbounded full-match fetch YO'Q.
+          orderBy: [{ boundingAreaMm2: "asc" }, { id: "asc" }],
+          take: MAX_POISK_PIECES + 1,
+        }) as Promise<FittingPieceRow[]>)
+      : Promise.resolve([] as FittingPieceRow[]),
+    batchIdsForLocs.length > 0
+      ? db.batchLocation.findMany({
+          where: { batchId: { in: batchIdsForLocs } },
+          select: { batchId: true, block: true, landmark: true },
+          orderBy: [{ block: "asc" }, { landmark: "asc" }],
+        })
+      : Promise.resolve(
+          [] as Array<{ batchId: string; block: string; landmark: string }>,
+        ),
+  ]);
+
+  // stoneTypeId → unikal lokatsiyalar (partiyalar bo'ylab yig'ilgan).
+  const locsByStoneId = new Map<
+    string,
+    Array<{ block: string; landmark: string }>
+  >();
+  for (const loc of batchLocs) {
+    const stoneId = batchToStoneId.get(loc.batchId);
+    if (!stoneId) continue;
+    const arr = locsByStoneId.get(stoneId) ?? [];
+    arr.push({ block: loc.block, landmark: loc.landmark });
+    locsByStoneId.set(stoneId, arr);
+  }
+
+  // §6.5: L×W + id (SQL bilan bir xil kalit); cap from take+1 probe.
+  const ranked = rankAndCapFittingPieces(
+    fittingPiecesMatched,
+    MAX_POISK_PIECES,
   );
+  const fittingPieces = ranked.ranked;
+  const piecesCapped = ranked.capped;
 
   // «Показать ещё» = ko'rsatilayotgan PREFIKSNI uzaytirish (offset-sahifa emas):
   // foydalanuvchi doim joriy tartibning [0, N) boshini ko'radi, shuning uchun
   // qator na tushib qoladi, na takrorlanadi — hatto ro'yxat so'rovlar orasida
-  // o'zgarsa ham. Keyset kursor bu yerda IMKONSIZ: tartib kaliti bL*bW — DB'da
-  // bunday ustun ham, indeks ham yo'q (yuqoridagi izoh).
+  // o'zgarsa ham. Keyset: tartib kaliti endi DB'da (boundingAreaMm2); UI
+  // prefiks kengayishi baribir pn orqali.
   const visiblePieces = fittingPieces.slice(0, shownPieces);
   const hasMorePieces = fittingPieces.length > visiblePieces.length;
 
@@ -372,7 +427,8 @@ export default async function PoiskPage({
           </h2>
           <p className="text-sm text-ink/70">
             Под размер {lenMm}×{widMm} мм (с запасом на рез)
-            {fittingPieces.length > 0 && (
+            {/* Aniq «N из M» — qoldiq inventar soni; PARTNER ga yopiq. */}
+            {canSeeExact && fittingPieces.length > 0 && (
               <>
                 {" "}
                 · показано {visiblePieces.length} из {fittingPieces.length}
@@ -396,26 +452,31 @@ export default async function PoiskPage({
                     <Badge variant="neutral">
                       {PIECE_KIND_RU[p.kind] ?? p.kind}
                     </Badge>
-                    {p.needsCheck && (
+                    {canSeeExact && p.needsCheck && (
                       <Badge variant="warning">требует проверки</Badge>
                     )}
                   </div>
                   <div className="text-sm text-ink/70">
                     Габарит {p.boundingLengthMm}×{p.boundingWidthMm} мм
-                    {p.thicknessMm !== null && <> · толщина {p.thicknessMm} мм</>}
-                    {p.areaM2 !== null && (
+                    {canSeeExact && p.thicknessMm !== null && (
+                      <> · толщина {p.thicknessMm} мм</>
+                    )}
+                    {canSeeExact && p.areaM2 !== null && (
                       <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
                     )}
                   </div>
-                  <div className="text-sm text-ink">
-                    Блок {p.block}, ориентир {p.landmark}
-                  </div>
+                  {/* §4.6 — lokatsiya faqat canSeeExactRemainder. */}
+                  {canSeeExact && (
+                    <div className="text-sm text-ink">
+                      Блок {p.block}, ориентир {p.landmark}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
           )}
 
-          {hasMorePieces && (
+          {canSeeExact && hasMorePieces && (
             <div className="mt-3">
               <Link
                 href={buildHref({
@@ -433,7 +494,7 @@ export default async function PoiskPage({
             </div>
           )}
 
-          {piecesCapped && (
+          {canSeeExact && piecesCapped && (
             <p className="mt-3 text-sm font-medium text-warning">
               Показаны первые {MAX_POISK_PIECES} подходящих — это предел выдачи,
               часть остатков в список не попала. Уточните размер или материал.
@@ -474,19 +535,38 @@ export default async function PoiskPage({
             {visibleTypes.map((t) => {
               // BUG-03: bron bo'lsa — всего/свободно/бронь ajratib ko'rsatiladi;
               // bronsiz — oldingidek bitta son (свободно = всего).
+              // Faqat canSeeExact — PARTNER ga aniq sonlar yopiq (§3 / §4.6).
               const totalParts: string[] = [];
-              if (t.slabsKnown)
-                totalParts.push(
-                  t.reservedSlabsSum > 0
-                    ? `плит: всего ~${t.slabsTotalSum}${t.slabsUnknown ? "+" : ""}, свободно ${t.slabsFreeSum}, в брони ${t.reservedSlabsSum}`
-                    : `плит ~${t.slabsFreeSum}${t.slabsUnknown ? "+" : ""}`,
-                );
-              if (t.areaKnown)
-                totalParts.push(
-                  t.reservedAreaSum > 0
-                    ? `≈${m2Fmt.format(t.areaTotalSum)} м² всего${t.areaUnknown ? "+" : ""}, свободно ${m2Fmt.format(t.areaFreeSum)}, в брони ${m2Fmt.format(t.reservedAreaSum)}`
-                    : `≈${m2Fmt.format(t.areaFreeSum)} м²${t.areaUnknown ? "+" : ""}`,
-                );
+              if (canSeeExact) {
+                if (t.slabsKnown)
+                  totalParts.push(
+                    t.reservedSlabsSum > 0
+                      ? `плит: всего ~${t.slabsTotalSum}${t.slabsUnknown ? "+" : ""}, свободно ${t.slabsFreeSum}, в брони ${t.reservedSlabsSum}`
+                      : `плит ~${t.slabsFreeSum}${t.slabsUnknown ? "+" : ""}`,
+                  );
+                if (t.areaKnown)
+                  totalParts.push(
+                    t.reservedAreaSum > 0
+                      ? `≈${m2Fmt.format(t.areaTotalSum)} м² всего${t.areaUnknown ? "+" : ""}, свободно ${m2Fmt.format(t.areaFreeSum)}, в брони ${m2Fmt.format(t.reservedAreaSum)}`
+                      : `≈${m2Fmt.format(t.areaFreeSum)} м²${t.areaUnknown ? "+" : ""}`,
+                  );
+              }
+              // §6.7 / kamen L868–876: PARTNER — faqat neytral «В наличии».
+              const stockLine = canSeeExact
+                ? t.hasAvailability
+                  ? totalParts.length > 0
+                    ? totalParts.join(" · ")
+                    : "данных по объёму нет"
+                  : "Нет в наличии"
+                : t.hasAvailability
+                  ? "В наличии"
+                  : "Нет в наличии";
+
+              const locLine =
+                canSeeExact
+                  ? formatTypeLocations(locsByStoneId.get(t.st.id) ?? [])
+                  : null;
+
               // Монограмма по породе (мрамор→М, гранит→Г…) — визуальный якорь
               // без выдуманного цвета (в БД нет hex). Fallback — первая буква вида.
               const monogram = (t.st.rockType || t.st.name)
@@ -519,21 +599,22 @@ export default async function PoiskPage({
                         </span>
                       </div>
                       <p className="tnum mt-1.5 text-sm text-ink/70">
-                        {t.hasAvailability
-                          ? totalParts.length > 0
-                            ? totalParts.join(" · ")
-                            : "данных по объёму нет"
-                          : "Нет в наличии"}
-                        {t.hasAvailability && t.countedSlabs > 0 && (
+                        {stockLine}
+                        {canSeeExact && t.hasAvailability && t.countedSlabs > 0 && (
                           <> · отдельных плит: {t.countedSlabs}</>
                         )}
-                        {t.hasAvailability && t.countedPieces > 0 && (
+                        {canSeeExact && t.hasAvailability && t.countedPieces > 0 && (
                           <> · боя и остатков: {t.countedPieces}</>
                         )}
-                        {t.patternsCount > 0 && (
+                        {canSeeExact && t.patternsCount > 0 && (
                           <> · узоров: {t.patternsCount}</>
                         )}
                       </p>
+                      {/* W5-A / §5.2 — menejer joyini shu yerda ko'radi (kamen'ga
+                          o'tmasdan). PARTNER ga chiqmaydi. */}
+                      {locLine && (
+                        <p className="mt-1 text-sm text-ink/60">{locLine}</p>
+                      )}
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1.5 self-center">

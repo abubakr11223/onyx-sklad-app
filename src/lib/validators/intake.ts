@@ -4,6 +4,7 @@
 
 import { normalizeBlockLetter } from "@/lib/block-letter";
 import { MAX_DECIMAL_12_3, parseBoundedDecimal } from "@/lib/decimal";
+import { parseMoneyField } from "@/lib/stone-edit";
 
 export interface IntakeLocationInput {
   block: string;
@@ -28,6 +29,14 @@ export interface IntakeInput {
   newName: string;
   newRockType: string;
   newColor: string;
+  /**
+   * W6-C / TZ §5.1 — опциональные «базовые свойства» нового вида.
+   * Пусто → null (не блокируют приёмку). Не спрашиваем purchasePrice/texture
+   * на складе (роль/скорость — §9).
+   */
+  newDescription: string;
+  /** Базовая цена продажи за м² (сырая); пусто = не задана. Decimal(12,2). */
+  newBasePrice: string;
   /** Число плит, сырая строка («40»); пусто = не указано */
   slabsTotal: string;
   /** Площадь м², сырая строка («220» или «12,5»); пусто = не указано */
@@ -59,7 +68,14 @@ export interface ValidIntakePattern {
 export interface ValidIntake {
   stoneType:
     | { kind: "existing"; id: string }
-    | { kind: "new"; name: string; rockType: string; color: string | null };
+    | {
+        kind: "new";
+        name: string;
+        rockType: string;
+        color: string | null;
+        description: string | null;
+        basePrice: number | null;
+      };
   slabsTotal: number | null;
   areaTotalM2: number | null;
   supplierNote: string | null;
@@ -158,8 +174,21 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     const color = input.newColor.trim();
     if (!name) errors.newName = "Укажите название нового вида";
     if (!rockType) errors.newRockType = "Укажите породу (мрамор, гранит…)";
-    if (name && rockType) {
-      stoneType = { kind: "new", name, rockType, color: color || null };
+    // basePrice: пусто OK; мусор/переполнение → ошибка поля (parseMoneyField /
+    // MAX_DECIMAL_12_2 — тот же путь, что editStoneType на /kamen).
+    const bp = parseMoneyField(input.newBasePrice ?? "");
+    if (!bp.ok) {
+      errors.newBasePrice = "Цена — число ≥ 0, например 95 или 95,50";
+    }
+    if (name && rockType && bp.ok) {
+      stoneType = {
+        kind: "new",
+        name,
+        rockType,
+        color: color || null,
+        description: (input.newDescription ?? "").trim() || null,
+        basePrice: bp.value,
+      };
     }
   } else {
     const id = input.stoneTypeId.trim();

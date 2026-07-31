@@ -282,6 +282,11 @@ model Piece {
   sidesMm          Json // har tomon uzunligi, mm: [1180, 640, 950, 610]
   boundingLengthMm Int // qidiruv shu bounding maydonlar bo'yicha
   boundingWidthMm  Int
+  // W6-A2 — STORED generated (migration SQL): L×W mm². /poisk §6.5 ranking key
+  // (display bilan bir xil). Prisma GENERATED ALWAYS yozmaydi — dbgenerated
+  // Client INSERT/UPDATE da maydonni yubormaydi; DB hisoblaydi.
+  // DDL: prisma/migrations/20260731102837_piece_bounding_area/migration.sql
+  boundingAreaMm2  Int        @default(dbgenerated("(\"boundingLengthMm\" * \"boundingWidthMm\")"))
   thicknessMm      Int?
   areaM2           Decimal?   @db.Decimal(12, 3)
   drawingUrl       String? // AI-chertyoj (TZ §5.5), S1 da bo'sh turadi
@@ -308,12 +313,11 @@ model Piece {
   // tashlandi (W2-C). Nested call-site'lar: bron/kamen/prodazha/q `pieces where
   // status [+ needsCheck]` stoneTypeId FK orqali.
   @@index([stoneTypeId, status, needsCheck])
-  // /poisk (page.tsx:306-307): `ORDER BY areaM2 ASC LIMIT 500`, where'da
-  // status='AVAILABLE' (poisk-search.ts:48). Faqat `areaM2` bo'yicha index EMAS:
-  // status tenglik-predikati oldinda tursa, planner `status` bo'yicha kirib
-  // areaM2 tartibida chiqa oladi va 500 qator topilgach to'xtaydi (gabarit OR +
-  // stoneType filtri residual bo'lib qoladi). areaM2 nullable — ASC'da NULL'lar
-  // oxirida, bu yerdagi «eng kichik maydon oldinda» tartibiga mos.
+  // W6-A2 /poisk: ORDER BY boundingAreaMm2 ASC LIMIT 501, status='AVAILABLE'.
+  // status tenglik + boundingArea tartibi — planner indeksdan LIMIT bilan chiqa oladi.
+  @@index([status, boundingAreaMm2])
+  // Legacy: areaM2 bo'yicha tartib (W6-A oldin /poisk shu yolg'on kalitdan foydalangan).
+  // Boshqa call-site bo'lmasa ham saqlanadi — DROP alohida task.
   @@index([status, areaM2])
   // batch-remainders.ts:139-144 — `batchId IN (…) AND originSlabId IS NULL`
   // (§3 formulasi: plitadan chiqqan boy hisobga KIRMAYDI). Yolg'iz

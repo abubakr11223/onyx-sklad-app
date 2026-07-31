@@ -79,6 +79,8 @@ function readInput(formData: FormData): IntakeInput {
     newName: str("newName"),
     newRockType: str("newRockType"),
     newColor: str("newColor"),
+    newDescription: str("newDescription"),
+    newBasePrice: str("newBasePrice"),
     slabsTotal: str("slabsTotal"),
     areaTotalM2: str("areaTotalM2"),
     supplierNote: str("supplierNote"),
@@ -105,7 +107,8 @@ export async function submitIntake(
 ): Promise<IntakeFormState> {
   // R2 — DEFENSE-IN-DEPTH: приёмку делает склад (canManageWarehouse: OWNER/WAREHOUSE).
   // TZ §3: MANAGER складом не управляет. Прямой POST блокируется на сервере.
-  if (!(await getCapabilities()).canManageWarehouse) {
+  const caps = await getCapabilities();
+  if (!caps.canManageWarehouse) {
     return { errors: { form: "Нет доступа: приёмку оформляет склад" } };
   }
 
@@ -137,8 +140,9 @@ export async function submitIntake(
         stoneTypeId = existing.id;
         stoneName = existing.name;
       } else {
+        const stNew = data.stoneType;
         const duplicate = await tx.stoneType.findUnique({
-          where: { name: data.stoneType.name },
+          where: { name: stNew.name },
           select: { id: true },
         });
         if (duplicate) {
@@ -149,12 +153,21 @@ export async function submitIntake(
         }
         // Случайный суффикс делает qrSlug практически уникальным;
         // остаточная коллизия уйдёт в общий catch P2002 ниже.
+        // W6-C: description всегда (опционально); basePrice только canSeePrices
+        // (WAREHOUSE не видит цен — подделка поля игнорируется). purchasePrice
+        // на приёмке НЕ пишем (§5.8 — карточка / canSeePurchasePrice).
+        const basePrice =
+          caps.canSeePrices && stNew.basePrice !== null
+            ? stNew.basePrice.toFixed(2)
+            : null;
         const created = await tx.stoneType.create({
           data: {
-            name: data.stoneType.name,
-            rockType: data.stoneType.rockType,
-            color: data.stoneType.color,
-            qrSlug: `${slugify(data.stoneType.name)}-${randomSuffix()}`,
+            name: stNew.name,
+            rockType: stNew.rockType,
+            color: stNew.color,
+            description: stNew.description,
+            basePrice,
+            qrSlug: `${slugify(stNew.name)}-${randomSuffix()}`,
           },
           select: { id: true, name: true },
         });

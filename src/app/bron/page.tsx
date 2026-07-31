@@ -14,8 +14,9 @@ import {
   RESERVATION_DAYS_KEY,
   expireOverdueReservations,
   parseReservationDaysConfig,
+  reservationListScope,
 } from "@/lib/reservations";
-import { getCapabilities } from "@/lib/session";
+import { getCapabilities, getCurrentUser } from "@/lib/session";
 import {
   endOfTashkentDay,
   formatTashkentDate,
@@ -103,7 +104,10 @@ export default async function BronPage({
   const params = await searchParams;
 
   // R2 — rol gate: бронь доступна OWNER/MANAGER (canReserve). Складчик — <NoAccess/>.
-  const caps = await getCapabilities();
+  const [caps, actor] = await Promise.all([
+    getCapabilities(),
+    getCurrentUser(),
+  ]);
   if (!caps.canReserve) {
     return (
       <main className="mx-auto max-w-3xl p-4 sm:p-8">
@@ -111,6 +115,15 @@ export default async function BronPage({
       </main>
     );
   }
+
+  // TZ §4.4 + permissions.canSeeAllReservations: OWNER — barcha faol/tarix;
+  // MANAGER — faqat o'z managerId (mijoz ismlari maxfiyligi). Home KPI
+  // (page.tsx:59-63) bilan bir xil scope. «Снять» serverda ham egasi/OWNER
+  // (cancelReservation + canManageReservation) — id taxminlab o'chirish yo'q.
+  const listScope = reservationListScope({
+    canSeeAllReservations: caps.canSeeAllReservations,
+    actorId: actor?.id ?? null,
+  });
 
   // Lazy sweep (ADR-003): muddati o'tganlar EXPIRED + birlik AVAILABLE.
   await expireOverdueReservations();
@@ -126,12 +139,15 @@ export default async function BronPage({
   // Promise.all (мигрируем разрозненный await в общую группу, как в /kamen).
   const [active, history, cfg, stoneTypes] = await Promise.all([
     db.reservation.findMany({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", ...listScope },
       orderBy: { expiresAt: "asc" },
       include: reservationInclude,
     }),
     db.reservation.findMany({
-      where: { status: { in: ["COMPLETED", "CANCELLED", "EXPIRED"] } },
+      where: {
+        status: { in: ["COMPLETED", "CANCELLED", "EXPIRED"] },
+        ...listScope,
+      },
       orderBy: { updatedAt: "desc" },
       take: 20,
       include: reservationInclude,

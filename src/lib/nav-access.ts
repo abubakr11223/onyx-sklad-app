@@ -16,7 +16,9 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/bron": "canReserve",
   "/prodazha": "canSell",
   "/razbit": "canManageWarehouse",
-  "/fotozapros": "canRequestPhoto",
+  // READ ro'yxat: canViewPhotoTasks (WAREHOUSE ham). CREATE — canRequestPhoto
+  // (sahifa/action ichida alohida).
+  "/fotozapros": "canViewPhotoTasks",
   "/karta": null,
   // «Карта склада» — точные локации: OWNER/MANAGER/WAREHOUSE, но НЕ PARTNER (TZ §3).
   "/karta-sklada": "canSeeExactRemainder",

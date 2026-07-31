@@ -84,11 +84,17 @@ export default function IntakeForm({
   stoneTypes,
   defaultDate,
   blocks = [],
+  canSeePrices = false,
 }: {
   stoneTypes: StoneTypeOption[];
   defaultDate: string;
   // ТЗ №6 §5.4 — сетка склада для подсказок блока/ориентира (datalist).
   blocks?: { letter: string; landmarks: string[] }[];
+  /**
+   * W6-C: базовая цена на «Новом виде» — только canSeePrices (OWNER/MANAGER).
+   * WAREHOUSE цен не видит (§3); сервер тоже игнорирует поле без этого флага.
+   */
+  canSeePrices?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(submitIntake, initialState);
   const [isNewType, setIsNewType] = useState(false);
@@ -101,6 +107,8 @@ export default function IntakeForm({
     newName: "",
     newRockType: "",
     newColor: "",
+    newDescription: "",
+    newBasePrice: "",
     slabsTotal: "",
     areaTotalM2: "",
     supplierNote: "",
@@ -221,7 +229,11 @@ export default function IntakeForm({
 
   const setField =
     (key: keyof typeof values) =>
-    (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    (
+      ev: React.ChangeEvent<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >,
+    ) =>
       setValues((v) => ({ ...v, [key]: ev.target.value }));
   const setLoc =
     (id: number, key: keyof LocValues) =>
@@ -285,6 +297,9 @@ export default function IntakeForm({
     newName: values.newName,
     newRockType: values.newRockType,
     newColor: values.newColor,
+    newDescription: values.newDescription,
+    // Без canSeePrices поле в UI нет — шлём пусто (сервер всё равно гейтит).
+    newBasePrice: canSeePrices ? values.newBasePrice : "",
     slabsTotal: values.slabsTotal,
     areaTotalM2: values.areaTotalM2,
     supplierNote: values.supplierNote,
@@ -296,7 +311,15 @@ export default function IntakeForm({
 
   // Первое проблемное поле (в порядке формы) → id DOM-элемента для фокуса.
   const firstErrorFieldId = (errs: IntakeErrors): string | null => {
-    const simple = ["stoneTypeId", "newName", "newRockType", "slabsTotal", "areaTotalM2"];
+    const simple = [
+      "stoneTypeId",
+      "newName",
+      "newRockType",
+      "newDescription",
+      "newBasePrice",
+      "slabsTotal",
+      "areaTotalM2",
+    ];
     for (const k of simple) if (errs[k]) return k;
     if (errs.quantity) return "slabsTotal";
     for (let i = 0; i < rowIds.length; i++) {
@@ -431,6 +454,38 @@ export default function IntakeForm({
               value={values.newColor}
               onChange={setField("newColor")}
             />
+            {/* W6-C / §5.1 — описание опционально: QR/шоу-рум не пустые, приёмка
+                не блокируется. Текстовая область — как на /kamen. */}
+            <Field
+              id="newDescription"
+              label="Описание"
+              hint="Необязательно. Коротко для каталога и QR-карточки."
+              error={e.newDescription}
+            >
+              <textarea
+                id="newDescription"
+                name="newDescription"
+                rows={3}
+                value={values.newDescription}
+                onChange={setField("newDescription")}
+                placeholder="Светлый травертин, мягкий рисунок…"
+                className={inputClass + " min-h-[5.5rem] py-2"}
+                aria-invalid={e.newDescription ? true : undefined}
+              />
+            </Field>
+            {canSeePrices && (
+              <Field
+                id="newBasePrice"
+                name="newBasePrice"
+                label="Базовая цена, $/м²"
+                placeholder="например 95"
+                inputMode="decimal"
+                value={values.newBasePrice}
+                onChange={setField("newBasePrice")}
+                error={e.newBasePrice}
+                hint="Необязательно. Закупочную цену на приёмке не спрашиваем."
+              />
+            )}
           </div>
         ) : (
           <Field id="stoneTypeId" label={<>Вид <Req /></>} error={e.stoneTypeId}>
