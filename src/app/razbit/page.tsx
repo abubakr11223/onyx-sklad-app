@@ -1,13 +1,20 @@
 // «Разбить камень» (TZ §5.6, §6.4) — server component: загружает плиты
 // (AVAILABLE/RESERVED — переходы 3 и 6, data-model.md §2) и партии для
 // прямого боя, показывает уведомление о результате.
+//
+// W10-A: §6.4 narrates one journey (mark broken → photo → AI outline → measure).
+// Product keeps AI+photo in Telegram (product decision 2026-07-15); this page
+// is the manual/split door. We connect both doors in copy + links — no AI move
+// into web, no changes to breaking.ts arithmetic.
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
+import Card from "@/components/ui/Card";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
 
 export const metadata: Metadata = {
@@ -125,6 +132,47 @@ export default async function RazbitPage({
         </p>
       </header>
 
+      {/* W10-A — two doors for §6.4 (photo+AI stays in Telegram; form below = manual). */}
+      <Card className="mb-6 border-gold/30">
+        <h2 className="text-base font-bold text-ink">Два пути (сценарий 6.4)</h2>
+        <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink/80">
+          <li>
+            <span className="font-semibold text-ink">
+              Бой с фото и чертежом ИИ
+            </span>
+            <p className="mt-1">
+              1) Откройте Telegram-бот Onyx. 2) Отправьте{" "}
+              <strong>фото</strong> битого камня и в подписи (caption) напишите{" "}
+              <strong>«бой»</strong> (или «singan»). 3) Бот пришлёт ссылку — на
+              странице «Бой по фото» введите размеры сторон по чертежу. ИИ только
+              обводит контур; рулеткой измеряете вы.
+            </p>
+            <p className="mt-2">
+              <Link
+                href="/singan"
+                className="font-semibold text-gold-deep underline"
+              >
+                Открыть «Бой по фото»
+              </Link>
+              <span className="text-ink/50">
+                {" "}
+                — без ссылки из бота форма размеров не откроется; страница
+                напомнит шаги.
+              </span>
+            </p>
+          </li>
+          <li>
+            <span className="font-semibold text-ink">
+              Вручную: плита → бой / распил / бой в партию
+            </span>
+            <p className="mt-1">
+              Форма ниже — без ИИ: выбрать плиту или партию, ввести габариты
+              кусков. Подходит, когда фото не нужно или бот недоступен.
+            </p>
+          </li>
+        </ol>
+      </Card>
+
       {ok && okText && (
         <Alert variant="success" title={okText} className="mb-6">
           <p>
@@ -141,6 +189,14 @@ export default async function RazbitPage({
               Бронь на плиту снята — менеджер увидит в журнале.
             </p>
           )}
+          <p className="mt-2 text-sm text-ink/70">
+            Нужен чертёж по фото? Отправьте фото куска в бот с подписью «бой» —
+            откроется{" "}
+            <Link href="/singan" className="font-semibold text-gold-deep underline">
+              Бой по фото
+            </Link>
+            .
+          </p>
         </Alert>
       )}
 

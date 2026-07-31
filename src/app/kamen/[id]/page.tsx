@@ -45,6 +45,7 @@ import {
   patternStatus,
   PATTERN_STATUS_RU,
 } from "@/lib/pattern-status";
+import { sortNeedsCheckLast } from "@/lib/checks";
 import Button from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
@@ -494,7 +495,8 @@ export default async function KamenPage({
       remainders.get(b.id) ?? EMPTY_AGGREGATE,
     );
     // b.slabs уже отфильтрованы до AVAILABLE в запросе — как в /poisk.
-    const availableSlabs = b.slabs;
+    // needsCheck sink to end (nit backlog).
+    const availableSlabs = sortNeedsCheckLast(b.slabs);
     return { batch: b, free, availableSlabs };
   });
   // Аудит ТЗ №7 #20 — узор-остаток на дисплее clamp'ится по свободному остатку
@@ -502,7 +504,7 @@ export default async function KamenPage({
   const batchFreeMap = new Map(batches.map((x) => [x.batch.id, x.free]));
 
   // Отдельные бой/остатки в наличии (st.pieces уже AVAILABLE в запросе).
-  const availablePieces = st.pieces;
+  const availablePieces = sortNeedsCheckLast(st.pieces);
 
   // BUG-03: slabsTotalSum/areaTotalSum = сумма §3 остатков (до вычета брони);
   // reserved* = сумма активных BATCH_VOLUME-бронь; свободно = max(0, всего − бронь)
@@ -531,9 +533,20 @@ export default async function KamenPage({
     }
   }
 
-  // Свободно = max(0, всего − бронь) — инвариант не даёт уйти в минус.
-  const slabsFreeSum = Math.max(0, slabsTotalSum - reservedSlabsSum);
-  const areaFreeSum = Math.max(0, areaTotalSum - reservedAreaSum);
+  // Свободно = max(0, всего − бронь). Manfiy unclamped → «требует проверки».
+  const unclampedSlabsFree = slabsTotalSum - reservedSlabsSum;
+  const unclampedAreaFree = areaTotalSum - reservedAreaSum;
+  let remainderNegative =
+    (slabsKnown && slabsTotalSum < 0) || (areaKnown && areaTotalSum < 0);
+  if (slabsKnown && unclampedSlabsFree < 0) remainderNegative = true;
+  if (areaKnown && unclampedAreaFree < 0) remainderNegative = true;
+  // Also flag per-batch §3 free that was already negative before sum.
+  for (const { free } of batches) {
+    if (free.slabsFree !== null && free.slabsFree < 0) remainderNegative = true;
+    if (free.areaFreeM2 !== null && free.areaFreeM2 < 0) remainderNegative = true;
+  }
+  const slabsFreeSum = Math.max(0, unclampedSlabsFree);
+  const areaFreeSum = Math.max(0, unclampedAreaFree);
 
   // BUG-03: есть бронь — показываем всего/свободно/в брони (как в /poisk);
   // брони нет — прежний единственный показатель (свободно = всего).
@@ -896,7 +909,9 @@ export default async function KamenPage({
             <>
               <span className="font-semibold text-success">Свободно:</span>{" "}
               {totalParts.join(" · ")}
-              {(slabsUnknown && !slabsKnown) || (areaUnknown && !areaKnown) ? (
+              {(slabsUnknown && !slabsKnown) ||
+              (areaUnknown && !areaKnown) ||
+              remainderNegative ? (
                 <NeedsCheckBadge />
               ) : null}
             </>
@@ -904,6 +919,11 @@ export default async function KamenPage({
             <span className="text-ink/50">Нет в наличии (по объёму партий)</span>
           )}
         </p>
+        {remainderNegative && (
+          <p className="mt-1 text-xs text-ink/55">
+            Свободный остаток ушёл в минус — данные требуют сверки.
+          </p>
+        )}
         {slabsUnknown && !slabsKnown && (
           <p className="mt-1 text-xs text-ink/55">
             Количество плит неизвестно — партия учтена только в м².

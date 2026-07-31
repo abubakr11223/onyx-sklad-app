@@ -107,6 +107,11 @@ export interface PoiskTypeRow {
   countedPieces: number;
   patternsCount: number;
   hasAvailability: boolean;
+  /**
+   * §3 remainder went negative (before display clamp) — data inconsistency.
+   * UI shows «требует проверки»; free numbers stay clamped ≥ 0.
+   */
+  remainderNegative: boolean;
 }
 
 export interface FetchPoiskTypesPageArgs {
@@ -239,6 +244,7 @@ export function buildTypeRows(
     let reservedAreaSum = 0;
     let areaKnown = false;
     let areaUnknown = false;
+    let remainderNegative = false;
     for (const b of st.batches) {
       const agg = remainders.get(b.id) ?? EMPTY_AGGREGATE;
       const hold = holds.get(b.id) ?? EMPTY_HOLD;
@@ -256,20 +262,26 @@ export function buildTypeRows(
       if (free.slabsFree === null) slabsUnknown = true;
       else {
         slabsKnown = true;
+        if (free.slabsFree < 0) remainderNegative = true;
         slabsTotalSum += free.slabsFree;
         reservedSlabsSum += hold.reservedSlabs;
       }
       if (free.areaFreeM2 === null) areaUnknown = true;
       else {
         areaKnown = true;
+        if (free.areaFreeM2 < 0) remainderNegative = true;
         areaTotalSum += free.areaFreeM2;
         reservedAreaSum += hold.reservedAreaM2;
       }
     }
 
     // Erkin = max(0, jami − band) — invariant buzilsa ham manfiy ko'rsatilmaydi.
-    const slabsFreeSum = Math.max(0, slabsTotalSum - reservedSlabsSum);
-    const areaFreeSum = Math.max(0, areaTotalSum - reservedAreaSum);
+    const unclampedSlabs = slabsTotalSum - reservedSlabsSum;
+    const unclampedArea = areaTotalSum - reservedAreaSum;
+    if (slabsKnown && unclampedSlabs < 0) remainderNegative = true;
+    if (areaKnown && unclampedArea < 0) remainderNegative = true;
+    const slabsFreeSum = Math.max(0, unclampedSlabs);
+    const areaFreeSum = Math.max(0, unclampedArea);
 
     // needsCheck birliklari sonlarga KIRMAYDI (TZ §7.4), lekin naliche summasida.
     const countedSlabs = slabCountMap.get(st.id) ?? 0;
@@ -303,6 +315,7 @@ export function buildTypeRows(
       countedPieces,
       patternsCount,
       hasAvailability,
+      remainderNegative,
     };
   });
 }

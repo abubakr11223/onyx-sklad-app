@@ -72,3 +72,26 @@ export async function pruneExpiredTelegramUpdateReceipts(
     return 0;
   }
 }
+
+/**
+ * W10-B — domain ish muvaffaqiyatsiz bo'lganda claim'ni olib tashlash.
+ * Aks holda: claim oldinda, separateSlab+photo yiqilsa → update_id qolib,
+ * Telegram retry = already_seen = no-op → foto abadiy yo'qoladi.
+ * Success pathda chaqirilMAYDI (replay himoyasi saqlanadi).
+ * Never throws.
+ */
+export async function releaseTelegramUpdateId(
+  updateId: number,
+): Promise<boolean> {
+  if (!Number.isFinite(updateId)) return false;
+  const id = String(Math.trunc(updateId));
+  try {
+    const res = await db.telegramWebhookReceipt.deleteMany({
+      where: { updateId: id },
+    });
+    return res.count > 0;
+  } catch (e) {
+    console.error("[telegram-update-receipt] releaseTelegramUpdateId xatosi:", e);
+    return false;
+  }
+}

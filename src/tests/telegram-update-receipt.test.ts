@@ -33,12 +33,20 @@ import {
   TELEGRAM_UPDATE_RECEIPT_TTL_MS,
   claimTelegramUpdateId,
   pruneExpiredTelegramUpdateReceipts,
+  releaseTelegramUpdateId,
 } from "@/lib/telegram-update-receipt";
 
 beforeEach(() => {
   M.store.clear();
   M.create.mockClear();
   M.deleteMany.mockClear();
+  M.deleteMany.mockImplementation(async (args: { where: { updateId?: string; expiresAt?: { lt: Date } } }) => {
+    if (args.where.updateId) {
+      const had = M.store.delete(args.where.updateId);
+      return { count: had ? 1 : 0 };
+    }
+    return { count: 0 };
+  });
 });
 
 const NOW = new Date("2026-07-31T12:00:00Z");
@@ -71,9 +79,23 @@ describe("claimTelegramUpdateId", () => {
 
 describe("pruneExpiredTelegramUpdateReceipts", () => {
   it("deletes only expiresAt < now", async () => {
+    M.deleteMany.mockImplementationOnce(async () => ({ count: 0 }));
     await pruneExpiredTelegramUpdateReceipts(NOW);
     expect(M.deleteMany).toHaveBeenCalledWith({
       where: { expiresAt: { lt: NOW } },
     });
+  });
+});
+
+describe("releaseTelegramUpdateId — W10-B domain-fail recovery", () => {
+  it("claim then release → same update_id can claim again", async () => {
+    expect(await claimTelegramUpdateId(99, NOW)).toBe("claimed");
+    expect(await claimTelegramUpdateId(99, NOW)).toBe("already_seen");
+    expect(await releaseTelegramUpdateId(99)).toBe(true);
+    expect(await claimTelegramUpdateId(99, NOW)).toBe("claimed");
+  });
+
+  it("release unknown id → false, no throw", async () => {
+    expect(await releaseTelegramUpdateId(404)).toBe(false);
   });
 });

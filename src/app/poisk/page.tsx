@@ -609,6 +609,13 @@ export default async function PoiskPage({
                         {canSeeExact && t.patternsCount > 0 && (
                           <> · узоров: {t.patternsCount}</>
                         )}
+                        {/* §3 manfiy qoldiq (clamp oldidan) — «требует проверки». */}
+                        {canSeeExact && t.remainderNegative && (
+                          <>
+                            {" "}
+                            <Badge variant="warning">требует проверки</Badge>
+                          </>
+                        )}
                       </p>
                       {/* W5-A / §5.2 — menejer joyini shu yerda ko'radi (kamen'ga
                           o'tmasdan). PARTNER ga chiqmaydi. */}

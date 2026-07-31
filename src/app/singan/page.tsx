@@ -1,10 +1,10 @@
-// §5.5b — «Бой по фото» (TZ §5.5): server component. Bot yuborgan havoladagi
-// `d` draft'ini (AI polygon + Telegram file_id) QATTIQ dekodlaydi, chertyojni
-// raqamlangan tomonlar bilan ko'rsatadi va skladchidan har tomonning REAL
-// o'lchamini so'raydi. Saqlash — ./actions.submitSingan (registerDirectPiece).
-// Web-UI tili — RUSCHA (faqat bot o'zbekcha).
-// C-pilot: разметка переведена на бренд-дизайн-систему (Button/Field/Card/Alert).
-// Поведение, имена полей, валидация и поток данных НЕ менялись.
+// §5.5b — «Бой по фото» (TZ §5.5 / §6.4 case A photo branch): server component.
+// Bot yuborgan havoladagi `d` draft'ini (AI polygon + Telegram file_id) QATTIQ
+// dekodlaydi, chertyojni raqamlangan tomonlar bilan ko'rsatadi va skladchidan
+// har tomonning REAL o'lchamini so'raydi. Saqlash — ./actions.submitSingan.
+// Web-UI tili — RUSCHA (bot caption o'zbek/rus).
+// W10-A: without `?d=` this is an instruction landing (reachable from /razbit),
+// not a dead end — AI still starts only in Telegram (product decision).
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -82,34 +82,73 @@ export default async function SinganPage({
               Причина: <span className="font-medium text-ink">{causeLabel}</span>
             </p>
           )}
-          {stoneId && (
-            <Link
-              href={`/kamen/${stoneId}`}
-              className={buttonClass("primary", "md", "mt-3")}
-            >
-              Открыть карточку камня
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            {stoneId && (
+              <Link
+                href={`/kamen/${stoneId}`}
+                className={buttonClass("primary", "md")}
+              >
+                Открыть карточку камня
+              </Link>
+            )}
+            <Link href="/razbit" className={buttonClass("secondary", "md")}>
+              Ещё бой / распил (/razbit)
             </Link>
-          )}
+          </div>
         </Alert>
       </main>
     );
   }
 
   // ── Draft: foydalanuvchi nazoratidagi URL ma'lumoti — QATTIQ dekodlash ──
+  // Without `d` (or broken d): honest landing — explain Telegram entry, link to
+  // manual /razbit. Cannot start AI drawing on the web (product decision).
   const draft = decodeShapeDraft(first(sp.d));
   if (!draft) {
+    const hadD = Boolean(first(sp.d));
     return (
       <main className="mx-auto max-w-xl p-4 pb-12">
-        <PageHeader />
-        <Alert variant="warning" title="Ссылка не открылась">
+        <PageHeader subtitle="Чертёж ИИ и ввод размеров по фото" />
+        <Alert
+          variant={hadD ? "warning" : "info"}
+          title={
+            hadD
+              ? "Ссылка повреждена или устарела"
+              : "Сначала фото в Telegram-боте"
+          }
+          className="mb-6"
+        >
           <p className="text-ink/70">
-            Ссылка повреждена или устарела. Отправьте фото со словом «singan» в
-            бот ещё раз — или введите бой вручную.
+            {hadD
+              ? "Откройте свежую ссылку из бота или начните заново:"
+              : "Эта страница открывается по ссылке из бота после распознавания формы. Так задумано: фото и ИИ — в Telegram, размеры — здесь."}
           </p>
-          <Link href="/razbit" className={buttonClass("primary", "md", "mt-3")}>
-            Ввести вручную (/razbit)
-          </Link>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink/80">
+            <li>Откройте Telegram-бот Onyx (тот же, что для фотозапросов).</li>
+            <li>
+              Отправьте <strong>фото</strong> куска; в подписи напишите{" "}
+              <strong>«бой»</strong> или <strong>«singan»</strong>.
+            </li>
+            <li>
+              Бот ответит ссылкой — по ней откроется чертёж и поля для сторон.
+            </li>
+          </ol>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Link href="/razbit" className={buttonClass("primary", "md")}>
+              Ввести бой вручную (/razbit)
+            </Link>
+            <Link href="/razbit" className={buttonClass("secondary", "md")}>
+              Распил плиты — тоже /razbit
+            </Link>
+          </div>
         </Alert>
+        <Card>
+          <p className="text-sm text-ink/60">
+            Команда бота <code className="text-ink">/singan</code> без фото
+            пришлёт ту же инструкцию. После сохранения куска его можно открыть
+            в карточке камня (поиск → вид).
+          </p>
+        </Card>
       </main>
     );
   }

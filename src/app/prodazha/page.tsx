@@ -10,6 +10,7 @@ import {
   freeRemainderFromAggregate,
   getBatchRemainders,
 } from "@/lib/batch-remainders";
+import { sortNeedsCheckLast } from "@/lib/checks";
 import {
   SALE_HISTORY_PAGE_SIZE,
   fetchSaleHistoryPage,
@@ -275,26 +276,29 @@ export default async function ProdazhaPage({
 
   const stoneTypes: StoneTypeGroup[] = stoneTypesRaw
     .map((st) => {
-      const slabs = st.batches
-        .flatMap((b) => b.slabs)
-        .filter((s) => s.status === "AVAILABLE" || s.status === "RESERVED")
-        .map((s) => ({
-          id: s.id,
-          label: s.label,
-          status: s.status as "AVAILABLE" | "RESERVED",
-          needsCheck: s.needsCheck,
-          detail: [
-            s.lengthMm !== null && s.widthMm !== null && `${s.lengthMm}×${s.widthMm} мм`,
-            s.areaM2 !== null &&
-              `${s.isAreaEstimated ? "≈" : ""}${m2Fmt.format(Number(s.areaM2))} м²`,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "размеры не указаны",
-          place: `Блок ${s.block}, ориентир ${s.landmark}`,
-          reservedBy: s.reservations[0]?.manager.name ?? null,
-        }));
+      const slabs = sortNeedsCheckLast(
+        st.batches
+          .flatMap((b) => b.slabs)
+          .filter((s) => s.status === "AVAILABLE" || s.status === "RESERVED")
+          .map((s) => ({
+            id: s.id,
+            label: s.label,
+            status: s.status as "AVAILABLE" | "RESERVED",
+            needsCheck: s.needsCheck,
+            detail: [
+              s.lengthMm !== null && s.widthMm !== null && `${s.lengthMm}×${s.widthMm} мм`,
+              s.areaM2 !== null &&
+                `${s.isAreaEstimated ? "≈" : ""}${m2Fmt.format(Number(s.areaM2))} м²`,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "размеры не указаны",
+            place: `Блок ${s.block}, ориентир ${s.landmark}`,
+            reservedBy: s.reservations[0]?.manager.name ?? null,
+          })),
+      );
 
-      const pieces = st.pieces.map((p) => ({
+      const pieces = sortNeedsCheckLast(
+        st.pieces.map((p) => ({
           id: p.id,
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
           needsCheck: p.needsCheck,
@@ -305,7 +309,8 @@ export default async function ProdazhaPage({
             .filter(Boolean)
             .join(" · "),
           place: `Блок ${p.block}, ориентир ${p.landmark}`,
-        }));
+        })),
+      );
 
       const batches = st.batches.map((b) => {
         // §3: те же числа, что и раньше, но через SQL-агрегат (плиты любого статуса

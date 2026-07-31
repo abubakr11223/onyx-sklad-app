@@ -61,6 +61,18 @@ describe("GET /api/photo/[id] — kind allowlist (ТЗ №7 #26)", () => {
     expect(res.headers.get("content-type")).toBe("image/jpeg");
   });
 
+  it("file_path .png → Content-Type image/png (not hardcoded jpeg)", async () => {
+    M.photoFindFirst.mockResolvedValue({ storageKey: "tg_file_png" });
+    M.getFile.mockResolvedValue({ file_path: "photos/stone.png" });
+    M.downloadFile.mockResolvedValue(new Uint8Array([0x89, 0x50]));
+
+    const res = await GET(new Request("https://onyx.test/api/photo/x"), {
+      params: params("x"),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+  });
+
   it("photo не найдено ИЛИ kind вне whitelist → 404 (не различается — не даём oracle)", async () => {
     // Case A: id вообще не существует.
     M.photoFindFirst.mockResolvedValue(null);

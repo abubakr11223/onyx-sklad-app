@@ -8,8 +8,11 @@ import { downloadFile, getFile, sendMessage } from "@/lib/telegram";
 import type { TgUpdate } from "@/lib/telegram";
 import { handleUpdate } from "@/lib/telegram-webhook";
 import { analyzeBrokenStoneShape } from "@/lib/ai-shape";
-import { separateSlabGuarded } from "@/lib/slab-separation";
-import { claimTelegramUpdateId } from "@/lib/telegram-update-receipt";
+import { separateSlabWithPhoto } from "@/lib/slab-separation";
+import {
+  claimTelegramUpdateId,
+  releaseTelegramUpdateId,
+} from "@/lib/telegram-update-receipt";
 
 export const dynamic = "force-dynamic";
 
@@ -79,10 +82,13 @@ export async function POST(req: Request) {
     downloadPhotoBase64,
     analyzeShape: (imageBase64, mediaType) =>
       analyzeBrokenStoneShape(imageBase64, mediaType),
-    // Аудит ТЗ №7 #1 — выделение плиты в транзакции с batch-lock + guard §3.
-    separateSlab: (input) => separateSlabGuarded(input),
+    // Аудит ТЗ №7 #1 + W10-B — Slab+Photo.SLAB bitta TX (batch-lock + guard §3).
+    separateSlabWithPhoto: (input, photo) =>
+      separateSlabWithPhoto(input, photo),
     // W9-D — update_id receipt (TelegramWebhookReceipt); replay = no-op.
     claimTelegramUpdate: (updateId) => claimTelegramUpdateId(updateId),
+    // W10-B — domain fail → release claim (retry ishlasin).
+    releaseTelegramUpdate: (updateId) => releaseTelegramUpdateId(updateId),
   });
   return Response.json({ ok: true });
 }

@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   separateSlabGuarded,
+  separateSlabWithPhoto,
   SlabSeparationError,
   type SeparateSlabInput,
 } from "@/lib/slab-separation";
@@ -48,15 +49,17 @@ function makeDb(batchOrNull: BatchState | null) {
   const queryRaw = vi.fn().mockResolvedValue([]); // lockBatchForUpdate
   const findUnique = vi.fn().mockResolvedValue(batchOrNull);
   const slabCreate = vi.fn().mockResolvedValue({ id: "slabNew" });
+  const photoCreate = vi.fn().mockResolvedValue({ id: "ph1" });
   const tx = {
     $queryRaw: (...a: unknown[]) => queryRaw(...a),
     batch: { findUnique: (...a: unknown[]) => findUnique(...a) },
     slab: { create: (...a: unknown[]) => slabCreate(...a) },
+    photo: { create: (...a: unknown[]) => photoCreate(...a) },
   };
   const db = {
     $transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
   } as unknown as Parameters<typeof separateSlabGuarded>[1];
-  return { db, queryRaw, findUnique, slabCreate };
+  return { db, queryRaw, findUnique, slabCreate, photoCreate };
 }
 
 describe("separateSlabGuarded — guard свободного остатка §3 (ТЗ №7 #1)", () => {
@@ -150,6 +153,47 @@ describe("separateSlabGuarded — guard свободного остатка §3 
       code: "BATCH_NOT_FOUND",
     });
     expect(slabCreate).not.toHaveBeenCalled();
+  });
+
+  it("W10-B separateSlabWithPhoto — slab + photo.SLAB bitta TX (atomik)", async () => {
+    const { db, slabCreate, photoCreate } = makeDb(
+      batch({ slabsTotal: 10, slabsSoldDirect: 0 }),
+    );
+
+    const id = await separateSlabWithPhoto(
+      INPUT,
+      { storageKey: "tg_file_abc", takenById: "w1" },
+      db,
+    );
+
+    expect(id).toBe("slabNew");
+    expect(slabCreate).toHaveBeenCalledTimes(1);
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    expect(photoCreate.mock.calls[0][0].data).toMatchObject({
+      storageKey: "tg_file_abc",
+      kind: "SLAB",
+      takenById: "w1",
+      stoneTypeId: "st1",
+      slabId: "slabNew",
+      photoRequestId: "req1",
+    });
+  });
+
+  it("W10-B photo.create yiqilsa → slab create chaqirilgan bo'lsa ham throw (TX rollback mock)", async () => {
+    // Real Postgres rolls back; mock runs sequential — we assert photo throw propagates
+    // so caller never treats separation as success without photo.
+    const { db, photoCreate } = makeDb(
+      batch({ slabsTotal: 10, slabsSoldDirect: 0 }),
+    );
+    photoCreate.mockRejectedValueOnce(new Error("photo write failed"));
+
+    await expect(
+      separateSlabWithPhoto(
+        INPUT,
+        { storageKey: "x", takenById: "w1" },
+        db,
+      ),
+    ).rejects.toThrow("photo write failed");
   });
 
   it("SlabSeparationError — инстанс с кодом (бот покажет своё сообщение)", () => {

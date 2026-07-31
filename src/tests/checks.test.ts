@@ -6,6 +6,7 @@ import {
   buildCheckPayload,
   isValidCheckEntity,
   parseCheckValue,
+  sortNeedsCheckLast,
 } from "@/lib/checks";
 
 describe("isValidCheckEntity — allowlist guard", () => {
@@ -46,6 +47,33 @@ describe("parseCheckValue — разбор булевого из формы", ()
     expect(parseCheckValue("yes")).toBe(false);
     expect(parseCheckValue(null)).toBe(false);
     expect(parseCheckValue(undefined)).toBe(false);
+  });
+});
+
+describe("sortNeedsCheckLast — needsCheck items sink", () => {
+  it("false first, true last; relative order among equals preserved", () => {
+    const items = [
+      { id: "a", needsCheck: true },
+      { id: "b", needsCheck: false },
+      { id: "c", needsCheck: true },
+      { id: "d", needsCheck: false },
+    ];
+    expect(sortNeedsCheckLast(items).map((x) => x.id)).toEqual([
+      "b",
+      "d",
+      "a",
+      "c",
+    ]);
+  });
+
+  it("empty / all clear → identity order", () => {
+    expect(sortNeedsCheckLast([])).toEqual([]);
+    expect(
+      sortNeedsCheckLast([
+        { id: "1", needsCheck: false },
+        { id: "2", needsCheck: false },
+      ]).map((x) => x.id),
+    ).toEqual(["1", "2"]);
   });
 });
 

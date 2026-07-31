@@ -39,6 +39,18 @@ export function parseCheckValue(raw: unknown): boolean {
 }
 
 /**
+ * List order: items needing check sink to the end (nit backlog).
+ * Stable for equal flags — preserves relative order among true/true or false/false.
+ */
+export function sortNeedsCheckLast<T extends { needsCheck: boolean }>(
+  items: readonly T[],
+): T[] {
+  return [...items].sort(
+    (a, b) => Number(a.needsCheck) - Number(b.needsCheck),
+  );
+}
+
+/**
  * Self-описывающий payload для аудита STATUS_CHANGE: фиксируем сущность и
  * переход флага `{ needsCheck: { from, to } }`. Показываем обе стороны всегда
  * (в отличие от MOVE-дельты) — это булев toggle, полный переход информативен.

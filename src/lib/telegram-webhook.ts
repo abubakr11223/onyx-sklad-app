@@ -165,11 +165,14 @@ export interface WebhookDeps {
     imageBase64: string,
     mediaType: "image/jpeg" | "image/png",
   ): Promise<{ sideCount: number; vertices: { x: number; y: number }[] } | null>;
-  // §4.1 L3 / §6.1 — выделение «Плиты №N». Транзакция с batch-lock'ом и guard'ом
-  // остатка §3 живёт в slab-separation.ts (нужен реальный db); handler остаётся
-  // DI-чистым (route инъектирует реальную реализацию, тест — мок). Возвращает id
-  // созданной плиты; кидает SlabSeparationError при исчерпании остатка.
-  separateSlab(input: SeparateSlabInput): Promise<string>;
+  // §4.1 L3 / §6.1 — выделение «Плиты №N» (+ Photo.SLAB, W10-B atomik).
+  // Транзакция с batch-lock'ом и guard'ом остатка §3 + photo.create bir TX
+  // (slab-separation.separateSlabWithPhoto). Handler DI-чистый; route inject.
+  // storageKey = Telegram file_id (fayl yuklash TX tashqarisida — yo'q).
+  separateSlabWithPhoto(
+    input: SeparateSlabInput,
+    photo: { storageKey: string; takenById: string },
+  ): Promise<string>;
   /**
    * W9-D — claim update_id before domain work (TelegramWebhookReceipt).
    * Injected so unit tests can assert replay without a real DB.
@@ -181,6 +184,11 @@ export interface WebhookDeps {
   claimTelegramUpdate(
     updateId: number,
   ): Promise<"claimed" | "already_seen" | "error">;
+  /**
+   * W10-B — domain throw bo'lsa claim'ni olib tashlash (Telegram retry ishlasin).
+   * Default: releaseTelegramUpdateId. Never throws.
+   */
+  releaseTelegramUpdate(updateId: number): Promise<boolean>;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -342,15 +350,20 @@ export async function handleUpdate(
   update: TgUpdate,
   deps: WebhookDeps,
 ): Promise<void> {
+  // W9-D / W10-B — claim before domain; on domain failure RELEASE so Telegram
+  // retry is not a permanent no-op (sharp edge: claim kept + TX rolled back
+  // would drop the photo forever).
+  let claimedUpdateId: number | null = null;
   try {
     // W9-D — update_id at-most-once. Telegram retries the same update when it
     // does not get a timely 200; without a claim, handlePhoto would
-    // separateSlab + photo.create again (duplicate slabs / SAMPLE photos).
+    // separateSlab + photo again (duplicate slabs / SAMPLE photos).
     // Claim BEFORE domain work. already_seen → full no-op. error → process
     // once (fail-open) so a receipt-table outage does not drop all updates.
     if (typeof update.update_id === "number") {
       const claim = await deps.claimTelegramUpdate(update.update_id);
       if (claim === "already_seen") return;
+      if (claim === "claimed") claimedUpdateId = update.update_id;
     }
 
     const message = update.message ?? update.edited_message;
@@ -411,6 +424,18 @@ export async function handleUpdate(
 
     // 5) Boshqa har qanday update — e'tiborsiz (xatosiz qaytamiz).
   } catch (err) {
+    // W10-B — domain yiqilsa claim'ni bo'shat: Telegram qayta yuborsa qayta urinadi.
+    // Success pathda claim qoladi (replay → already_seen).
+    if (claimedUpdateId !== null) {
+      try {
+        await deps.releaseTelegramUpdate(claimedUpdateId);
+      } catch (releaseErr) {
+        console.error(
+          "[telegram-webhook] releaseTelegramUpdate xatosi:",
+          releaseErr,
+        );
+      }
+    }
     // Webhook doim 200 qaytishi uchun xatoni yutamiz.
     console.error("[telegram-webhook] handleUpdate xatosi:", err);
   }
@@ -760,48 +785,47 @@ async function handlePhoto(
     return;
   }
 
-  // (5) §4.1 L3 / §6.1 — ajratilgan Slab. Yangi ajratishda (slabId==null) HAR foto
-  // bitta alohida «Плита №N» tug'diradi → klient «плиту №2»ni alohida sotib oladi.
-  // QAYTA suratga olishda (slabId to'la) YANGI slab YO'Q — mavjud plitaga bog'lanadi.
+  // (5) §4.1 L3 / §6.1 — Slab + Photo.
+  // Yangi ajratish (slabId==null): HAR foto → bitta «Плита №N» + Photo.SLAB
+  // BIR tranzaksiyada (W10-B separateSlabWithPhoto). Eski: separateSlab COMMIT
+  // so'ng photo.create yiqilsa → fotosiz plita + update_id claim → retry no-op.
+  // Qayta surat (slabId to'la): faqat Photo (yangi slab YO'Q).
   //
-  // Аудит ТЗ №7 #1: выделение теперь идёт через deps.separateSlab — ОДНА
-  // транзакция с batch-lock'ом и guard'ом свободного остатка §3 (slab-separation.ts),
-  // чтобы не увести остаток в минус (oversell). Слой webhook остаётся DI-чистым:
-  // реальная транзакция инъектируется в route, тест — мок. Photo пишется ПОСЛЕ
-  // (отдельно) — если оно упадёт, останется лишь «выделенная плита без фото»
-  // (не наоборот); полная атомарность Slab+Photo — TG-C follow-up (§9).
+  // Network: sendMessage TX DAN KEYIN (past). Fayl yuklash yo'q — faqat file_id.
   const loc = claimed.batchLocation;
-  const slabId =
-    claimed.slabId == null
-      ? await deps.separateSlab({
-          batchId: claimed.batchId,
-          stoneTypeId: claimed.batch.stoneTypeId,
-          photoRequestId: claimed.id,
-          block: loc?.block ?? "?",
-          landmark: loc?.landmark ?? "?",
-          needsCheck: loc == null,
-          separatedById: user.id,
-        })
-      : claimed.slabId;
+  if (claimed.slabId == null) {
+    await deps.separateSlabWithPhoto(
+      {
+        batchId: claimed.batchId,
+        stoneTypeId: claimed.batch.stoneTypeId,
+        photoRequestId: claimed.id,
+        block: loc?.block ?? "?",
+        landmark: loc?.landmark ?? "?",
+        needsCheck: loc == null,
+        separatedById: user.id,
+      },
+      { storageKey: largest.file_id, takenById: user.id },
+    );
+  } else {
+    await deps.db.photo.create({
+      data: {
+        storageKey: largest.file_id,
+        kind: "SLAB",
+        takenAt: new Date(),
+        takenById: user.id,
+        stoneTypeId: claimed.batch.stoneTypeId,
+        slabId: claimed.slabId,
+        photoRequestId: claimed.id,
+      },
+    });
+  }
 
-  // (6) Photo yozuvi — storageKey = Telegram file_id (Blob yo'q).
-  await deps.db.photo.create({
-    data: {
-      storageKey: largest.file_id,
-      kind: "SLAB",
-      takenAt: new Date(),
-      takenById: user.id,
-      stoneTypeId: claimed.batch.stoneTypeId,
-      slabId,
-      photoRequestId: claimed.id,
-    },
-  });
-
-  // (5) Skladchiga tasdiq.
+  // (6) Skladchiga tasdiq — DB TX tashqarisida (sekin tarmoq lock ushlamasin).
   await deps.sendMessage(chatId, MSG_PHOTO_SAVED);
 
-  // (6) Menejerni xabardor qilamiz — ALOHIDA try/catch: bu yiqilsa skladchining
-  // saqlash+javob oqimi buzilmasin.
+  // (7) Menejerni xabardor qilamiz — ALOHIDA try/catch: bu yiqilsa skladchining
+  // saqlash+javob oqimi buzilmasin. Muvaffaqiyatsizlik claim'ni BO'SHATMAYDI
+  // (slab+photo allaqachon commit).
   try {
     const manager = await deps.db.user.findUnique({
       where: { id: claimed.managerId },

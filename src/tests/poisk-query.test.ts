@@ -599,6 +599,20 @@ describe("buildTypeRows — «наличие» semantikasi page.tsx:231-235 bila
     // hasAvailability UNCLAMPED Σ ga bog'liq — shu juftlik sinishi kerak bo'lsa
     // test yiqiladi.
     expect(t.slabsFreeSum).toBe(0);
+    // W10-C: manfiy qoldiq → UI «требует проверки» (remainderNegative).
+    expect(t.remainderNegative).toBe(true);
+  });
+
+  it("musbat free → remainderNegative false", () => {
+    const [t] = buildTypeRows(
+      [row([batch()])],
+      new Map([["b-1", { ...EMPTY_AGGREGATE }]]),
+      new Map(),
+      new Map(),
+      new Map(),
+    );
+    expect(t.remainderNegative).toBe(false);
+    expect(t.slabsFreeSum).toBeGreaterThan(0);
   });
 
   it("bron (hold) hasAvailability'ga TA'SIR QILMAYDI — faqat raqamlarga", () => {
