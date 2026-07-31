@@ -39,6 +39,14 @@ export default function FlashToaster() {
 
     for (const r of hits) {
       const raw = sp.get(r.key) ?? "";
+      // W9-A: photo=nodelivery must not look like success (was fixed "отправлен").
+      if (r.key === "photo" && raw === "nodelivery") {
+        toast(
+          "Запрос создан, но в Telegram никому не доставлен — нет складчиков с привязанным Telegram. Откройте «Запросы на фото» или «Сотрудники».",
+          "danger",
+        );
+        continue;
+      }
       const msg = r.message === "@value" ? raw || "Ошибка" : r.message;
       toast(msg, r.variant);
     }

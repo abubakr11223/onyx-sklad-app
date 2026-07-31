@@ -1,12 +1,15 @@
-// TG-B1 / W6-B — «Запросы на фото» (TZ §5.3, §1.8, §3, §5.9, §7).
+// TG-B1 / W6-B / W9-A — «Запросы на фото» (TZ §5.3, §1.8, §3, §5.9, §7).
 // Server component.
-//  • Menejer/egasi (canRequestPhoto): barcha so'rovlar + «Готово» yopish.
-//  • Sklad (canViewPhotoTasks, canRequestPhoto=false): o'z navbati/biriktirilgan
-//    PENDING vazifalar (READ). Foto yuborish — Telegram (§5.3); CREATE yo'q.
+//  • Menejer/egasi (canRequestPhoto): barcha so'rovlar + «Готово» + kimga ketgani.
+//  • Sklad (canViewPhotoTasks): o'z navbati. Foto — Telegram.
+// W9-A: dispatch is a deliberate broadcast to every linked WAREHOUSE worker;
+// page shows WHO received Telegram delivery and which workers are TG-connected.
 import type { Metadata } from "next";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { sendMessage } from "@/lib/telegram";
 import {
+  isDemoWarehouseAccount,
   photoTasksListWhere,
   redispatchPendingPhotoRequests,
 } from "@/lib/photo-requests";
@@ -82,7 +85,6 @@ export default async function FotozaprosPage() {
   });
 
   // BUG-04 — lazy sweep: faqat menejer/egasi sahifasida (dispatch nazorati).
-  // Sklad faqat o'qiydi; sweep ular uchun majburiy emas.
   if (canManageRequests) {
     try {
       await redispatchPendingPhotoRequests({ db, sendMessage });
@@ -94,6 +96,30 @@ export default async function FotozaprosPage() {
     }
   }
 
+  // W9-A: warehouse TG connectivity (managers/owner only — operational control).
+  const warehouseUsers = canManageRequests
+    ? await db.user.findMany({
+        where: { role: "WAREHOUSE" },
+        orderBy: { name: "asc" },
+        take: 100,
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          telegramId: true,
+          isActive: true,
+        },
+      })
+    : [];
+
+  const linkedWorkers = warehouseUsers.filter(
+    (u) => u.isActive && u.telegramId,
+  );
+  const unlinkedActive = warehouseUsers.filter(
+    (u) => u.isActive && !u.telegramId,
+  );
+  const demoLinked = linkedWorkers.filter((u) => isDemoWarehouseAccount(u));
+
   const requests = await db.photoRequest.findMany({
     where: listWhere,
     orderBy: { createdAt: "desc" },
@@ -103,10 +129,21 @@ export default async function FotozaprosPage() {
       batchLocation: true,
       assignee: true,
       photos: { select: { id: true }, orderBy: { createdAt: "asc" } },
-      // BUG-04: статус доставки в Telegram (per-складчик записи).
-      dispatches: { select: { status: true } },
+      // W9-A: chatId → who was targeted (telegramId of worker).
+      dispatches: {
+        select: { status: true, chatId: true, attempts: true, lastError: true },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+      },
     },
   });
+
+  // Map telegram chatId → warehouse user for display names.
+  const tgToWorker = new Map(
+    warehouseUsers
+      .filter((u) => u.telegramId)
+      .map((u) => [u.telegramId as string, u]),
+  );
 
   return (
     <main className="mx-auto max-w-3xl p-4 sm:p-8">
@@ -120,10 +157,85 @@ export default async function FotozaprosPage() {
         </h1>
         <p className="mt-2 text-base text-ink/60">
           {canManageRequests
-            ? "Задачи складчикам сфотографировать камень. Фото приходят в Telegram."
+            ? "Задачи уходят всем активным складчикам с привязанным Telegram (общая очередь). Фото приходят в бот."
             : "Ваши открытые задачи. Сфотографируйте камень и отправьте фото в Telegram-бот — на сайте загрузка не нужна (§5.3)."}
         </p>
       </header>
+
+      {canManageRequests && (
+        <Card className="mb-6">
+          <h2 className="text-base font-bold text-ink">
+            Складчики и Telegram
+          </h2>
+          <p className="mt-1 text-sm text-ink/60">
+            Фотозапрос рассылается каждому <strong>активному</strong> складчику с
+            заполненным Telegram ID. Если в списке только демо-аккаунт или ваш
+            личный ID — задачи придут не тому человеку.
+          </p>
+          {linkedWorkers.length === 0 ? (
+            <Alert variant="danger" className="mt-3">
+              Нет складчиков с Telegram. Запросы{" "}
+              <strong>никуда не доставляются</strong>. Привяжите Telegram
+              складчику в{" "}
+              <Link href="/accounts" className="font-semibold underline">
+                Сотрудники
+              </Link>{" "}
+              или одобрите заявку с /start в боте (роль «Склад»).
+            </Alert>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {warehouseUsers.map((u) => {
+                const demo = isDemoWarehouseAccount(u);
+                const linked = Boolean(u.telegramId);
+                return (
+                  <li
+                    key={u.id}
+                    className="flex flex-wrap items-baseline justify-between gap-2 rounded-field border border-ink/10 bg-ink/[0.02] px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium text-ink">
+                      {u.name}
+                      {demo && (
+                        <span className="ml-1.5 text-warning">· демо</span>
+                      )}
+                      {!u.isActive && (
+                        <span className="ml-1.5 text-ink/40">· неактивен</span>
+                      )}
+                    </span>
+                    <span className="tnum text-ink/60">
+                      {linked ? (
+                        <>
+                          TG: {u.telegramId}
+                          {demo && linked && (
+                            <span className="ml-1 text-warning">
+                              (проверьте, не ваш ли это ID)
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-warning">Telegram не привязан</span>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {demoLinked.length > 0 && linkedWorkers.length === demoLinked.length && (
+            <Alert variant="warning" className="mt-3">
+              Единственный Telegram-получатель — демо-складчик. Если при seed
+              указали свой Telegram ID, задачи приходят вам. Привяжите реального
+              складчика в «Сотрудники» или через бот /start → одобрение.
+            </Alert>
+          )}
+          {unlinkedActive.length > 0 && linkedWorkers.length > 0 && (
+            <p className="mt-2 text-xs text-ink/50">
+              Без Telegram ({unlinkedActive.length}):{" "}
+              {unlinkedActive.map((u) => u.name).join(", ")} — им задачи не
+              приходят.
+            </p>
+          )}
+        </Card>
+      )}
 
       {requests.length === 0 ? (
         <Alert variant="info">
@@ -138,8 +250,6 @@ export default async function FotozaprosPage() {
             const loc = r.batchLocation
               ? `Блок ${r.batchLocation.block}, ориентир ${r.batchLocation.landmark}`
               : "локация не указана";
-            // BUG-04: статус доставки показываем только для активных (PENDING)
-            // запросов — по завершённым/отменённым он уже не важен.
             const delivery = deliveryOf(r.dispatches);
             return (
               <li key={r.id}>
@@ -167,6 +277,52 @@ export default async function FotozaprosPage() {
                     {formatTashkentDateTime(r.createdAt)}
                     {r.assignee ? ` · ${r.assignee.name}` : " · общая очередь"}
                   </p>
+
+                  {/* W9-A: who was targeted in Telegram (by chatId → user). */}
+                  {canManageRequests && r.dispatches.length > 0 && (
+                    <div className="mt-2 rounded-field border border-ink/10 bg-paper px-3 py-2 text-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                        Кому ушло в Telegram
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {r.dispatches.map((d) => {
+                          const worker = tgToWorker.get(d.chatId);
+                          const label = worker?.name ?? `TG ${d.chatId}`;
+                          const demo = worker
+                            ? isDemoWarehouseAccount(worker)
+                            : false;
+                          const st =
+                            d.status === "SENT"
+                              ? "доставлено"
+                              : d.status === "FAILED"
+                                ? "ошибка"
+                                : d.status;
+                          return (
+                            <li key={`${r.id}-${d.chatId}`} className="text-ink/80">
+                              <span className="font-medium">{label}</span>
+                              {demo && (
+                                <span className="text-warning"> · демо</span>
+                              )}
+                              <span className="text-ink/50">
+                                {" "}
+                                · {st}
+                                {d.lastError ? ` (${d.lastError})` : ""}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                  {canManageRequests &&
+                    r.status === "PENDING" &&
+                    r.dispatches.length === 0 && (
+                      <Alert variant="warning" className="mt-2">
+                        Нет записей доставки — складчики с Telegram не найдены
+                        или отправка не выполнялась.
+                      </Alert>
+                    )}
+
                   {r.photos.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {r.photos.map((photo) => (
@@ -181,7 +337,6 @@ export default async function FotozaprosPage() {
                       ))}
                     </div>
                   )}
-                  {/* §6.1 — «Готово» faqat menejer (canRequestPhoto). Sklad yopmaydi. */}
                   {canManageRequests && r.status === "PENDING" && (
                     <form action={closePhotoRequest} className="mt-3">
                       <input type="hidden" name="id" value={r.id} />

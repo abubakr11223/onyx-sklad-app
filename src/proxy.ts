@@ -1,4 +1,5 @@
-// R6 — Login-gate. Sessiyasiz so'rovlarni /login ga yo'naltiradi.
+// R6 — Login-gate (Next.js 16: proxy convention; was middleware.ts).
+// Sessiyasiz so'rovlarni /login ga yo'naltiradi.
 //
 // YENGIL & EDGE-XAVFSIZ: faqat session-cookie IMZOSINI tekshiradi
 // (verifySessionToken — Web Crypto, DB YO'Q, node:crypto YO'Q). Rol/huquq
@@ -8,16 +9,19 @@
 // matcher: /login, /login/tg, /q (§6.7 QR ochiq shou-room — mijoz login qilmagan)
 // va barcha /api, statik fayllar gate'DAN TASHQARIDA (/api'da o'z auth'i bor —
 // Telegram webhook secret, cron secret).
+//
+// W9-C: middleware → proxy rename only (Next 16 deprecation). Behaviour identical
+// to former src/middleware.ts — same verifySessionToken, redirect, matcher.
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   // Аудит ТЗ №7 #9 — verify возвращает { ok, userId?, tokenVersion? } / reason.
   // На Edge проверяем только подпись+срок; tokenVersion сверяется с БД в session.ts
   // (getRealSessionUser/getCurrentUser) — там же реализуется revoke на смене пароля.
-  // legacy / expired / badsig / malformed — все тянут на /login (qайta-login).
+  // legacy / expired / badsig / malformed — все тянут на /login (qайта-login).
   const res = token ? await verifySessionToken(token) : null;
   if (res?.ok) return NextResponse.next();
 
@@ -35,6 +39,9 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    // Identical to pre-W9-C middleware matcher (byte-for-byte):
+    // GATED: all app routes not listed in the negative lookahead.
+    // EXCLUDED: login, api, q/, tg, _next/static, _next/image, favicon.ico, *.*
     "/((?!login|api|q/|tg|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

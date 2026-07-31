@@ -9,6 +9,7 @@ import type { TgUpdate } from "@/lib/telegram";
 import { handleUpdate } from "@/lib/telegram-webhook";
 import { analyzeBrokenStoneShape } from "@/lib/ai-shape";
 import { separateSlabGuarded } from "@/lib/slab-separation";
+import { claimTelegramUpdateId } from "@/lib/telegram-update-receipt";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,8 @@ export async function POST(req: Request) {
       analyzeBrokenStoneShape(imageBase64, mediaType),
     // Аудит ТЗ №7 #1 — выделение плиты в транзакции с batch-lock + guard §3.
     separateSlab: (input) => separateSlabGuarded(input),
+    // W9-D — update_id receipt (TelegramWebhookReceipt); replay = no-op.
+    claimTelegramUpdate: (updateId) => claimTelegramUpdateId(updateId),
   });
   return Response.json({ ok: true });
 }

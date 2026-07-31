@@ -32,6 +32,12 @@ const signMagicLinkToken = vi.fn();
 const downloadPhotoBase64 = vi.fn();
 const analyzeShape = vi.fn();
 
+// W9-D — default claim always "claimed" so existing tests keep processing.
+const claimTelegramUpdate = vi.fn(
+  async (_id: number): Promise<"claimed" | "already_seen" | "error"> =>
+    "claimed",
+);
+
 function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
   return {
     db: {
@@ -62,6 +68,7 @@ function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
     downloadPhotoBase64: (...a: unknown[]) => downloadPhotoBase64(...a),
     analyzeShape: (...a: unknown[]) => analyzeShape(...a),
     separateSlab: (...a: unknown[]) => separateSlabMock(...a),
+    claimTelegramUpdate: (...a: unknown[]) => claimTelegramUpdate(...a),
     ...overrides,
   } as unknown as WebhookDeps;
 }
@@ -97,6 +104,8 @@ beforeEach(() => {
   analyzeShape.mockReset();
   downloadPhotoBase64.mockResolvedValue({ base64: "QUJD", mediaType: "image/jpeg" });
   analyzeShape.mockResolvedValue({ sideCount: 4, vertices: QUAD });
+  claimTelegramUpdate.mockReset();
+  claimTelegramUpdate.mockResolvedValue("claimed");
 });
 
 // §5.5b — mock AI qaytaradigan standart polygon.
@@ -320,13 +329,18 @@ function photoUpdate(opts?: {
   fileIds?: string[];
   caption?: string;
   replyToMessageId?: number;
+  /** Distinct per delivery — defaults to 5 for single-photo tests. */
+  updateId?: number;
+  messageId?: number;
+  /** Album: shared across several updates. */
+  mediaGroupId?: string;
 }): TgUpdate {
   const chatId = opts?.chatId ?? 555;
   const fileIds = opts?.fileIds ?? ["small_id", "large_id"];
   return {
-    update_id: 5,
+    update_id: opts?.updateId ?? 5,
     message: {
-      message_id: 20,
+      message_id: opts?.messageId ?? 20,
       from: { id: chatId },
       chat: { id: chatId },
       // Telegram o'sish tartibida beradi — oxirgisi eng katta.
@@ -337,6 +351,9 @@ function photoUpdate(opts?: {
         height: 100 * (i + 1),
       })),
       ...(opts?.caption !== undefined ? { caption: opts.caption } : {}),
+      ...(opts?.mediaGroupId !== undefined
+        ? { media_group_id: opts.mediaGroupId }
+        : {}),
       // §5.3 — skladchi bot yuborgan vazifa xabariga reply qilgan bo'lsa.
       ...(opts?.replyToMessageId !== undefined
         ? {
@@ -1044,5 +1061,99 @@ describe("kutilmagan update'lar", () => {
     await expect(
       handleUpdate(contactUpdate({ phone: "998901234567" }), makeDeps()),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ── W9-D — update_id idempotency + album (media_group_id) ──
+
+describe("W9-D update_id idempotency", () => {
+  it("same update_id replayed → claim already_seen → no second separateSlab/Photo", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabMock.mockResolvedValue("slabNew");
+
+    const upd = photoUpdate({
+      chatId: 999,
+      updateId: 9001,
+      fileIds: ["a", "b"],
+    });
+    // First delivery claims and processes.
+    claimTelegramUpdate.mockResolvedValueOnce("claimed");
+    await handleUpdate(upd, makeDeps());
+    expect(separateSlabMock).toHaveBeenCalledTimes(1);
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+
+    // Telegram retry: same update_id, already_seen → full domain no-op.
+    claimTelegramUpdate.mockResolvedValueOnce("already_seen");
+    await handleUpdate(upd, makeDeps());
+    expect(separateSlabMock).toHaveBeenCalledTimes(1);
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+    expect(claimTelegramUpdate).toHaveBeenCalledWith(9001);
+  });
+
+  it("claim error (receipt DB down) → fail-open still processes once", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabMock.mockResolvedValue("slabErr");
+    claimTelegramUpdate.mockResolvedValueOnce("error");
+
+    await handleUpdate(photoUpdate({ chatId: 999, updateId: 77 }), makeDeps());
+    expect(separateSlabMock).toHaveBeenCalledTimes(1);
+    expect(photoCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("W9-D album (media_group_id) — traced behaviour", () => {
+  it("3 album updates + 1 PENDING → 3 separateSlab (multi-slab §6.1; not only first)", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabMock
+      .mockResolvedValueOnce("s1")
+      .mockResolvedValueOnce("s2")
+      .mockResolvedValueOnce("s3");
+
+    const group = "album-xyz";
+    for (let i = 0; i < 3; i++) {
+      claimTelegramUpdate.mockResolvedValueOnce("claimed");
+      await handleUpdate(
+        photoUpdate({
+          chatId: 999,
+          updateId: 100 + i,
+          messageId: 200 + i,
+          mediaGroupId: group,
+          fileIds: [`f${i}_s`, `f${i}_l`],
+        }),
+        makeDeps(),
+      );
+    }
+    // Each album member is its own update — all attach when disambiguation allows.
+    expect(separateSlabMock).toHaveBeenCalledTimes(3);
+    expect(photoCreate).toHaveBeenCalledTimes(3);
+  });
+
+  it("album does NOT bypass 2+ PENDING disambiguation (each bare photo rejected)", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([
+      PENDING_REQUEST,
+      { ...PENDING_REQUEST, id: "req2", batchId: "b2" },
+    ]);
+
+    const group = "album-ambig";
+    for (let i = 0; i < 2; i++) {
+      claimTelegramUpdate.mockResolvedValueOnce("claimed");
+      await handleUpdate(
+        photoUpdate({
+          chatId: 999,
+          updateId: 300 + i,
+          messageId: 400 + i,
+          mediaGroupId: group,
+        }),
+        makeDeps(),
+      );
+    }
+    expect(separateSlabMock).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    // Ambiguous list sent per photo (existing 05ba2a3 behaviour).
+    expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

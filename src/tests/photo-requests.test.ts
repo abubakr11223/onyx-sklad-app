@@ -6,6 +6,7 @@ import {
   PhotoRequestError,
   buildTaskText,
   createAndDispatchPhotoRequest,
+  isDemoWarehouseAccount,
   photoTasksListWhere,
   redispatchPendingPhotoRequests,
   type PhotoRequestDeps,
@@ -60,8 +61,8 @@ beforeEach(() => {
     ...(args.data as Record<string, unknown>),
   }));
   userFindMany.mockResolvedValue([
-    { id: "w1", telegramId: "111" },
-    { id: "w2", telegramId: "222" },
+    { id: "w1", telegramId: "111", name: "Склад 1", phone: "+998901111111" },
+    { id: "w2", telegramId: "222", name: "Склад 2", phone: "+998902222222" },
   ]);
   photoDispatchUpsert.mockResolvedValue(undefined);
   auditLogCreate.mockResolvedValue(undefined);
@@ -126,6 +127,24 @@ describe("createAndDispatchPhotoRequest", () => {
     expect(res.request.assigneeId).toBeNull();
     expect(res.dispatchedTo).toBe(2);
     expect(res.noWorkers).toBe(false);
+    // W9-A: recipients list for UI audit (who was targeted).
+    expect(res.recipients).toHaveLength(2);
+    expect(res.recipients[0]).toMatchObject({
+      userId: "w1",
+      name: "Склад 1",
+      telegramId: "111",
+      delivered: true,
+      isDemoAccount: false,
+    });
+  });
+
+  it("W9-A: isDemoWarehouseAccount detects seed-demo markers", () => {
+    expect(
+      isDemoWarehouseAccount({ name: "Бахтиёр (демо)", phone: "+998900000002" }),
+    ).toBe(true);
+    expect(
+      isDemoWarehouseAccount({ name: "Реальный склад", phone: "+998901234567" }),
+    ).toBe(false);
   });
 
   it("§5.3: message_id из отправки сохраняется в PhotoDispatch (для reply-to привязки)", async () => {

@@ -170,6 +170,17 @@ export interface WebhookDeps {
   // DI-чистым (route инъектирует реальную реализацию, тест — мок). Возвращает id
   // созданной плиты; кидает SlabSeparationError при исчерпании остатка.
   separateSlab(input: SeparateSlabInput): Promise<string>;
+  /**
+   * W9-D — claim update_id before domain work (TelegramWebhookReceipt).
+   * Injected so unit tests can assert replay without a real DB.
+   * Default in route: claimTelegramUpdateId from telegram-update-receipt.ts.
+   *  • claimed      → process
+   *  • already_seen → no-op (no second Photo/slab)
+   *  • error        → process anyway (availability > silent drop; log upstream)
+   */
+  claimTelegramUpdate(
+    updateId: number,
+  ): Promise<"claimed" | "already_seen" | "error">;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -332,6 +343,16 @@ export async function handleUpdate(
   deps: WebhookDeps,
 ): Promise<void> {
   try {
+    // W9-D — update_id at-most-once. Telegram retries the same update when it
+    // does not get a timely 200; without a claim, handlePhoto would
+    // separateSlab + photo.create again (duplicate slabs / SAMPLE photos).
+    // Claim BEFORE domain work. already_seen → full no-op. error → process
+    // once (fail-open) so a receipt-table outage does not drop all updates.
+    if (typeof update.update_id === "number") {
+      const claim = await deps.claimTelegramUpdate(update.update_id);
+      if (claim === "already_seen") return;
+    }
+
     const message = update.message ?? update.edited_message;
     if (!message) return; // callback_query va h.k. — TG-A da e'tiborsiz.
 

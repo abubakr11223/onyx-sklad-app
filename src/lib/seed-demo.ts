@@ -66,15 +66,50 @@ export async function seedDemoData(
   }
 
   // ── 2) Skladchik — telegramId bilan (dispatch shunga boradi) ──
-  // telegramId @unique: agar bu id boshqa yozuvda bo'lsa — avval bo'shatamiz.
-  if (tgId) {
-    await db.user.updateMany({ where: { telegramId: tgId }, data: { telegramId: null } });
+  // W9-A: DEMO_WAREHOUSE_TELEGRAM_ID ko'pincha OWNER'ning shaxsiy TG'si bo'ladi
+  // (prod sinov). Eski kod HAR qanday userni (jumladan OWNER) shu id'dan
+  // bo'shatib demo-WAREHOUSE'ga yopishtirardi → barcha fotozaproslar egaga
+  // tushardi. Endi OWNER/MANAGER telegramId HECH QACHON olinmaydi; agar id
+  // shu rollarda bo'lsa — demo skladchiga YOZMASYZ (null qoldiramiz).
+  let warehouseTg: string | null = tgId;
+  if (warehouseTg) {
+    const holders = await db.user.findMany({
+      where: { telegramId: warehouseTg },
+      select: { id: true, role: true, name: true },
+    });
+    const protectedHolders = holders.filter(
+      (h) => h.role === "OWNER" || h.role === "MANAGER",
+    );
+    if (protectedHolders.length > 0) {
+      console.warn(
+        "[seed-demo] DEMO_WAREHOUSE_TELEGRAM_ID already on OWNER/MANAGER " +
+          `(${protectedHolders.map((h) => `${h.role}:${h.name}`).join(", ")}). ` +
+          "Not assigning to demo warehouse — fotozapros would land on the owner.",
+      );
+      warehouseTg = null;
+    } else if (holders.length > 0) {
+      // Faqat WAREHOUSE/PARTNER va h.k. — unique uchun bo'shatish mumkin.
+      await db.user.updateMany({
+        where: {
+          telegramId: warehouseTg,
+          role: { notIn: ["OWNER", "MANAGER"] },
+        },
+        data: { telegramId: null },
+      });
+    }
   }
   let warehouse = await db.user.findFirst({ where: { role: "WAREHOUSE" } });
   if (warehouse) {
     warehouse = await db.user.update({
       where: { id: warehouse.id },
-      data: { telegramId: tgId ?? warehouse.telegramId, isActive: true },
+      data: {
+        // Don't clobber an already-linked real worker with null if we refused steal.
+        telegramId:
+          warehouseTg !== null
+            ? warehouseTg
+            : warehouse.telegramId,
+        isActive: true,
+      },
     });
   } else {
     warehouse = await db.user.create({
@@ -82,7 +117,7 @@ export async function seedDemoData(
         name: "Бахтиёр (демо)",
         role: "WAREHOUSE",
         phone: "+998900000002",
-        telegramId: tgId,
+        telegramId: warehouseTg,
       },
     });
   }

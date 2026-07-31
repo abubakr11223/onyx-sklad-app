@@ -101,6 +101,29 @@ export interface PhotoRequestRecord {
 export interface PhotoRequestWorker {
   id: string;
   telegramId: string | null;
+  name?: string | null;
+  phone?: string | null;
+}
+
+/** W9-A — one Telegram recipient of a photo task (for UI audit). */
+export interface DispatchRecipient {
+  userId: string;
+  name: string;
+  telegramId: string;
+  delivered: boolean;
+  /** Demo seed warehouse (phone/name pattern) — owner should not use as sole worker. */
+  isDemoAccount: boolean;
+}
+
+/** Detect demo-seeded warehouse rows (seed-demo.ts phone / name markers). */
+export function isDemoWarehouseAccount(u: {
+  name?: string | null;
+  phone?: string | null;
+}): boolean {
+  const phone = (u.phone ?? "").replace(/\s/g, "");
+  if (phone === "+998900000002" || phone === "998900000002") return true;
+  const name = (u.name ?? "").toLowerCase();
+  return name.includes("(демо)") || name.includes("(demo)");
 }
 
 /** Bitta so'rov uchun mavjud yetkazilish yozuvi (redispatch qaror uchun). */
@@ -202,7 +225,12 @@ export interface PhotoRequestDeps {
           isActive: true;
           telegramId: { not: null };
         };
-        select: { id: true; telegramId: true };
+        select: {
+          id: true;
+          telegramId: true;
+          name: true;
+          phone: true;
+        };
       }): Promise<PhotoRequestWorker[]>;
     };
     photoDispatch: {
@@ -234,6 +262,8 @@ export interface CreatePhotoRequestResult {
   dispatchedTo: number;
   /** true = telegramId'li faol skladchi umuman yo'q (BUG-04 asosiy sabab). */
   noWorkers: boolean;
+  /** W9-A — who was targeted (broadcast list) and per-row delivery. */
+  recipients: DispatchRecipient[];
 }
 
 // ───────────────────────── Vazifa matni (ru) ─────────────────────────
@@ -377,9 +407,11 @@ export async function createAndDispatchPhotoRequest(
   });
 
   // (3) faol skladchilar — telegramId bilan bog'langanlari.
+  // DELIBERATE broadcast (shared queue): assigneeId stays null; every linked
+  // WAREHOUSE worker gets the Telegram task (L5–7 file header). Not targeted.
   const workers = await db.user.findMany({
     where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
-    select: { id: true, telegramId: true },
+    select: { id: true, telegramId: true, name: true, phone: true },
   });
 
   // BUG-04 asosiy sabab: telegramId'li skladchi yo'q → yuboradigan hech kim yo'q.
@@ -399,7 +431,7 @@ export async function createAndDispatchPhotoRequest(
         },
       },
     });
-    return { request, dispatchedTo: 0, noWorkers: true };
+    return { request, dispatchedTo: 0, noWorkers: true, recipients: [] };
   }
 
   // (4) vazifa matni. Lokatsiya berilmagan bo'lsa — partiyaning yagona bloki
@@ -412,17 +444,21 @@ export async function createAndDispatchPhotoRequest(
   // (5) har bir skladchiga yuboramiz — natija SENT/FAILED bo'lib yoziladi.
   // Ketma-ket (Promise.allSettled emas): DB yozuvlari tartibli, so'rov soni oz.
   let dispatchedTo = 0;
+  const recipients: DispatchRecipient[] = [];
   for (const w of workers) {
-    const ok = await dispatchAndRecord(
-      deps,
-      request.id,
-      w.telegramId as string,
-      text,
-    );
+    const chatId = w.telegramId as string;
+    const ok = await dispatchAndRecord(deps, request.id, chatId, text);
     if (ok) dispatchedTo += 1;
+    recipients.push({
+      userId: w.id,
+      name: w.name?.trim() || "складчик",
+      telegramId: chatId,
+      delivered: ok,
+      isDemoAccount: isDemoWarehouseAccount(w),
+    });
   }
 
-  return { request, dispatchedTo, noWorkers: false };
+  return { request, dispatchedTo, noWorkers: false, recipients };
 }
 
 // ───────────────────────── Lazy re-dispatch (BUG-04, §8 resilience) ─────────────────────────
@@ -464,7 +500,7 @@ export async function redispatchPendingPhotoRequests(
 
   const workers = await db.user.findMany({
     where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
-    select: { id: true, telegramId: true },
+    select: { id: true, telegramId: true, name: true, phone: true },
   });
   if (workers.length === 0) return { retried: 0, delivered: 0 };
 

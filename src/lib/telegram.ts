@@ -50,6 +50,13 @@ export interface TgMessage {
   /** Rasm/hujjat ostidagi izoh (§5.5b: «singan» marshrutlash shu orqali). */
   caption?: string;
   /**
+   * Album: Telegram delivers each photo as a separate update sharing this id.
+   * W9-D: not photo[] sizes — each message has its own photo[] of resolutions.
+   * Handler processes each update independently (multi-slab §6.1). Multi-pending
+   * bare-photo disambiguation (05ba2a3) still applies per update.
+   */
+  media_group_id?: string;
+  /**
    * §5.3 — skladchi qaysi vazifaga JAVOB (reply) berayotgani. Bot yuborgan
    * vazifa xabariga reply qilingan foto shu xabarning message_id'sini olib
    * keladi → aynan o'sha fotozaprosga biriktiriladi (FIFO'dan ustun turadi).
@@ -58,6 +65,7 @@ export interface TgMessage {
 }
 
 export interface TgUpdate {
+  /** Unique per delivery; Telegram may retry the same update_id if no timely 200. */
   update_id: number;
   message?: TgMessage;
   edited_message?: TgMessage;

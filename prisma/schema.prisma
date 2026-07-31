@@ -645,6 +645,18 @@ model MutationReceipt {
   @@index([userId, createdAt])
 }
 
+/// W9-D / TG-C-next — Telegram webhook update_id at-most-once.
+/// PK = String(update_id). First delivery INSERT; replay → P2002 → skip
+/// handleUpdate domain work (no second Photo / separateSlab / access request).
+/// expiresAt + lazy prune (7d) — unlike MutationReceipt, webhook volume needs TTL.
+model TelegramWebhookReceipt {
+  updateId  String   @id
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model WarehouseBlock {
   id        String   @id @default(cuid())
   letter    String   @unique // «А», «Б», «В»… — буква блока, уникальна
