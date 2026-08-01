@@ -1,88 +1,170 @@
 "use client";
 
-// TZ №8 v2 §6 — 3D lenta-globus sfera. FAQAT /login sahifasida ishlatiladi va
-// FAQAT `next/dynamic({ ssr: false })` orqali import qilinadi (SSR'da three
-// yuklanmasin). Fallback zanjiri LoginPageClient da: static → weak-device →
-// reduced-motion → noscript.
+// TZ №8 v3 — /login 3D "woven-ribbon sphere" (referens: onyx_login_3d_logo_preview.html).
+// Geometriya AYNAN referens'dagi kabi: 7 ta meridional lenta janubdan shimolga,
+// har biri cosine-twist bilan → to'qilgan koptok naqshi. Qo'shimcha 2 ta
+// ekvatorial oltin halqa. Orqada canvas-radial halo sprite. Nurlar va sparkles
+// ham referens'dagi qiymatlarda.
 //
-// Geometriya: 6 ta CatmullRomCurve (inclination 15°→90°), har biri TubeGeometry
-// bilan lentaga aylantiriladi. Material — MeshStandardMaterial oltin
-// (metalness 0.9, roughness 0.25). Yorug'lik — qo'lda light rig (Environment
-// preset yo'q — bundle budget uchun). Halo — ichkariga qaragan BackSide sfera.
-// Sparkles — drei @react-three/drei.
+// Faqat /login sahifasida `next/dynamic({ ssr: false })` orqali chaqiriladi.
+// Fallback zanjiri LoginPageClient'da: reduced-motion → weak-device → low-fps.
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Sparkles } from "@react-three/drei";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
-// TZ §6.2 — material parametrlari (AYNAN).
+// Referens ranglar.
 const GOLD_MAIN = 0xc9a55c;
 const GOLD_HIGHLIGHT = 0xe9cf8f;
-const GOLD_SPARKLE = 0xf5e7c0;
 
-// TZ §6.1 (v2 — spiral) — sfera yuzasini o'ragan SPIRAL lentalar ("o'ralgan ip
-// koptok" ta'siri, reference'ga mos). Har bir lenta janubiy qutbdan shimoliy
-// qutbga o'tayotganda Y-o'q atrofida bir necha marta aylanadi. Lentalar boshi
-// bir tekis (360/N) burchak farqi bilan siljigan — natijada ular sfera yuzasida
-// bir-birini kesib, "ip o'ragan koptok" naqshi hosil qiladi.
-//
-// Eski implementatsiya (3 latitude + 3 longitude) "qafas" ko'rinishida edi —
-// reference'dagi silliq spiral koptokga umuman o'xshamas edi.
-const BAND_COUNT = 8;         // 8 ta spiral lenta (reference'dagi ~8 loop bilan mos)
-const SPIRAL_TURNS = 1.5;      // har lenta 1.5 to'liq aylanadi (janubdan shimolgacha)
-const TUBE_RADIUS = 0.055;     // qalinroq lenta (avval 0.04 juda ingichka edi)
-
-interface BandSpec {
-  /** Boshlang'ich burchak (Y atrofida), radianga. */
-  startTheta: number;
-}
-
-// N ta lenta, har biri boshlang'ich burchak bilan farqlanadi.
-const BAND_SPECS: BandSpec[] = Array.from({ length: BAND_COUNT }, (_, i) => ({
-  startTheta: (i / BAND_COUNT) * Math.PI * 2,
-}));
+// Referens geometriya konstantalari.
+const BAND_COUNT = 7;
+const SPIRAL_TURNS = 1.0;      // referens'da `turns=1.0`
+const TUBE_RADIUS = 0.055;
+const SPHERE_R = 1.25;
+const RING_YS = [-0.35, 0.35]; // ekvator halqalari (referens'dagi kabi)
+const RING_TUBE = 0.05;
 
 /**
- * Spiral parametrik chiziq: t=0 (janubiy qutb, y=-1) → t=1 (shimoliy qutb, y=+1),
- * yo'lda Y-o'q atrofida SPIRAL_TURNS marta aylanadi. Natijada sfera yuzasida
- * qutbdan qutbga o'tuvchi lenta.
+ * Referens'dagi curve: qutbdan qutbga, cosine-twist bilan.
+ * `ang = t·π`, `r = sin(ang)·R`, `y = cos(ang)·R`,
+ * `twist = phase + cos(ang)·turns·π` — qutb yaqinida burilish tez, ekvatorda
+ * sekin → lentalar bir-birini kesib "to'qilgan" naqsh hosil qiladi.
  */
-function makeSpiralCurve(spec: BandSpec, points = 200): THREE.CatmullRomCurve3 {
+function makeWovenMeridian(phase: number, seg = 90): THREE.CatmullRomCurve3 {
   const pts: THREE.Vector3[] = [];
-  for (let i = 0; i <= points; i++) {
-    const t = i / points; // [0, 1]
-    // Latitude phi: -π/2 (janubiy qutb) → +π/2 (shimoliy qutb).
-    const phi = -Math.PI / 2 + t * Math.PI;
-    // Longitude theta: boshlang'ich burchakdan SPIRAL_TURNS*2π gacha.
-    const theta = spec.startTheta + t * SPIRAL_TURNS * Math.PI * 2;
-    const r = Math.cos(phi);
+  for (let s = 0; s <= seg; s++) {
+    const t = s / seg;
+    const ang = t * Math.PI;
+    const r = Math.sin(ang) * SPHERE_R;
+    const twist = phase + Math.cos(ang) * SPIRAL_TURNS * Math.PI;
     pts.push(
       new THREE.Vector3(
-        r * Math.cos(theta),
-        Math.sin(phi),
-        r * Math.sin(theta),
+        Math.cos(twist) * r,
+        Math.cos(ang) * SPHERE_R,
+        Math.sin(twist) * r,
       ),
     );
   }
-  // Yopilmagan chiziq (closed=false): qutblardan boshlanadi va tugaydi.
   return new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
 }
 
 interface RibbonBandProps {
-  spec: BandSpec;
+  phase: number;
   material: THREE.Material;
 }
 
-function RibbonBand({ spec, material }: RibbonBandProps) {
+function RibbonBand({ phase, material }: RibbonBandProps) {
   const geometry = useMemo(() => {
-    const curve = makeSpiralCurve(spec);
-    // Yopilmagan spiral chiziq uchun TubeGeometry: closed=false.
-    // tubularSegments=400 — silliq egri chiziqlar uchun yetadi.
-    return new THREE.TubeGeometry(curve, 400, TUBE_RADIUS, 12, false);
-  }, [spec]);
-
+    const curve = makeWovenMeridian(phase);
+    // Referens: TubeGeometry(curve, 120, 0.055, 8, false).
+    return new THREE.TubeGeometry(curve, 120, TUBE_RADIUS, 8, false);
+  }, [phase]);
   return <mesh geometry={geometry} material={material} />;
+}
+
+interface EquatorRingProps {
+  y: number;
+  material: THREE.Material;
+}
+
+function EquatorRing({ y, material }: EquatorRingProps) {
+  const geometry = useMemo(() => {
+    // Referens: rr = sqrt(R^2 - (y·R)^2) * 0.96, TorusGeometry(rr, 0.05, 10, 80).
+    const rr =
+      Math.sqrt(Math.max(0.001, SPHERE_R * SPHERE_R - (y * SPHERE_R) * (y * SPHERE_R))) *
+      0.96;
+    return new THREE.TorusGeometry(rr, RING_TUBE, 10, 80);
+  }, [y]);
+  return (
+    <mesh
+      geometry={geometry}
+      material={material}
+      rotation={[Math.PI / 2, 0, 0]}
+      position={[0, y * SPHERE_R, 0]}
+    />
+  );
+}
+
+/**
+ * Halo — orqa fondagi iliq oltin radial gradient sprite (referens'dagi kabi).
+ * `AdditiveBlending`, `depthWrite=false`, opacity `0.85 + sin(t·1.4)·0.15` bilan
+ * yumshoq nafas oladi.
+ */
+function HaloSprite() {
+  const spriteRef = useRef<THREE.Sprite>(null);
+  const material = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const ctx = c.getContext("2d")!;
+    const grd = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+    grd.addColorStop(0, "rgba(201,165,92,0.55)");
+    grd.addColorStop(0.4, "rgba(201,165,92,0.18)");
+    grd.addColorStop(1, "rgba(201,165,92,0)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, 256, 256);
+    const tex = new THREE.CanvasTexture(c);
+    return new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+  }, []);
+
+  useFrame((state) => {
+    const s = spriteRef.current;
+    if (!s) return;
+    const t = state.clock.getElapsedTime();
+    (s.material as THREE.SpriteMaterial).opacity = 0.85 + Math.sin(t * 1.4) * 0.15;
+  });
+
+  return (
+    <sprite ref={spriteRef} material={material} scale={[6, 6, 1]} position={[0, 0, -1]} />
+  );
+}
+
+/**
+ * Sparkles — 140 ta oltin nuqta, past→yuqori sekin harakat (referens'dagi kabi).
+ */
+function Sparkles140() {
+  const pointsRef = useRef<THREE.Points>(null);
+  const { geometry, material, speeds } = useMemo(() => {
+    const count = 140;
+    const positions = new Float32Array(count * 3);
+    const speeds = new Float32Array(count);
+    for (let p = 0; p < count; p++) {
+      positions[p * 3] = (Math.random() - 0.5) * 8;
+      positions[p * 3 + 1] = (Math.random() - 0.5) * 7;
+      positions[p * 3 + 2] = (Math.random() - 0.5) * 4;
+      speeds[p] = 0.002 + Math.random() * 0.006;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: GOLD_HIGHLIGHT,
+      size: 0.045,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    return { geometry: geo, material: mat, speeds };
+  }, []);
+
+  useFrame(() => {
+    const p = pointsRef.current;
+    if (!p) return;
+    const attr = p.geometry.attributes.position as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    for (let i = 0; i < speeds.length; i++) {
+      arr[i * 3 + 1] += speeds[i];
+      if (arr[i * 3 + 1] > 3.6) arr[i * 3 + 1] = -3.6;
+    }
+    attr.needsUpdate = true;
+  });
+
+  return <points ref={pointsRef} geometry={geometry} material={material} />;
 }
 
 interface SphereGroupProps {
@@ -93,80 +175,64 @@ interface SphereGroupProps {
 function SphereGroup({ hovered, tilt }: SphereGroupProps) {
   const groupRef = useRef<THREE.Group>(null);
 
-  // Reference'ga yaqinlashtirilgan material — MeshPhysicalMaterial + clearcoat.
-  // Iliq bronze emissive va yorqin oltin base — iliq fon ustida ham
-  // kontrastda qoladi.
+  // Referens material: MeshStandardMaterial oltin.
   const material = useMemo(() => {
-    return new THREE.MeshPhysicalMaterial({
-      color: GOLD_SPARKLE,       // eng yorqin oltin (avval HIGHLIGHT) — iliq fonda ham chiqadi
-      metalness: 0.92,
-      roughness: 0.2,
-      emissive: 0x5a3e1a,        // ochroq iliq oltin glow
-      emissiveIntensity: 0.55,
-      envMapIntensity: 2.2,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.12,
+    return new THREE.MeshStandardMaterial({
+      color: GOLD_MAIN,
+      metalness: 0.95,
+      roughness: 0.28,
+      emissive: 0x3a2a0c,
+      emissiveIntensity: 0.35,
     });
   }, []);
 
-  // Ikki qatlamli halo: (1) yorqin oltin (avvalgi) + (2) ichkariga qorong'i
-  // "vignette" — sfera ortidagi hudud sal qorong'iroq bo'lib, sfera aniq
-  // ajralib ko'rinsin. Vignette Radius 1.05 sferaga juda yaqin (BackSide),
-  // yorqin halo 1.25da tashqarida.
-  const haloMaterial = useMemo(() => {
-    return new THREE.MeshBasicMaterial({
-      color: GOLD_HIGHLIGHT,
-      transparent: true,
-      opacity: 0.22,
-      side: THREE.BackSide,
-    });
-  }, []);
-
-  // TZ §6.4 + §7.4 — idle aylanish: Y=0.15, X=0.05 rad/s. Hover'da 1.5x.
-  // Tilt: sichqoncha koordinatasi (normal [-1,1]) → ±0.3 rad, lerp 0.05.
-  // Idle aylanish + tilt qo'shiladi (tilt "yuza" burchak sifatida keladi:
-  // rotation'ga to'g'ridan qo'shsak, aylanish barbaqar ekvatordan siljiydi va
-  // qaytadi — bu keladigan burchak asosiy egilishni beradi).
+  // Idle aylanish + hover tilt. Referens loop:
+  //   rotation.y = dt·0.5, rotation.x = sin(dt·0.4)·0.09.
+  // Bizda `useFrame` delta-tayanchi bor: rotation.y ni monoton oshiramiz,
+  // rotation.x — clock asosida (sin) hisoblanadi.
+  const startTimeRef = useRef<number | null>(null);
   const rotOffset = useRef({ x: 0, y: 0 });
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const g = groupRef.current;
     if (!g) return;
+    if (startTimeRef.current == null) {
+      startTimeRef.current = state.clock.getElapsedTime();
+    }
+    const dt = state.clock.getElapsedTime() - startTimeRef.current;
     const factor = hovered.current ? 1.5 : 1;
-    g.rotation.y += 0.15 * delta * factor;
-    g.rotation.x += 0.05 * delta * factor;
+    g.rotation.y = dt * 0.5 * factor;
+    g.rotation.x = Math.sin(dt * 0.4 * factor) * 0.09;
 
-    // Tilt offset lerp — sichqoncha keskin harakat qilsa ham, sfera yumshoq
-    // egiladi. Target: mouseX/Y × 0.3. Lerp: 0.05 (5% har frame).
+    // Hover tilt (desktop only) — lerp qo'shiladi.
     const targetX = -tilt.current.y * 0.3;
     const targetY = tilt.current.x * 0.3;
     rotOffset.current.x += (targetX - rotOffset.current.x) * 0.05;
     rotOffset.current.y += (targetY - rotOffset.current.y) * 0.05;
-    g.rotation.x += rotOffset.current.x * delta * 4;
-    g.rotation.y += rotOffset.current.y * delta * 4;
+    g.rotation.x += rotOffset.current.x;
+    g.rotation.y += rotOffset.current.y;
+    void delta;
   });
 
   return (
-    <group ref={groupRef}>
-      {BAND_SPECS.map((spec, i) => (
-        <RibbonBand key={i} spec={spec} material={material} />
+    <group ref={groupRef} position={[0, 0, 0]}>
+      {Array.from({ length: BAND_COUNT }, (_, i) => {
+        const phase = (i / BAND_COUNT) * Math.PI * 2;
+        return <RibbonBand key={`b${i}`} phase={phase} material={material} />;
+      })}
+      {RING_YS.map((y, i) => (
+        <EquatorRing key={`r${i}`} y={y} material={material} />
       ))}
-      {/* Yorqin halo (BackSide) — tashqi yumshoq nur.
-          Vignette olib tashlandi: BackSide + transparent order xatosi tufayli
-          sfera bandslarini ham qoraytirar edi (dev'da tekshirilgan). */}
-      <mesh material={haloMaterial}>
-        <sphereGeometry args={[1.2, 32, 32]} />
-      </mesh>
     </group>
   );
 }
 
 interface LogoSphere3DProps {
-  /**
-   * FPS probe callback. Canvas mount bo'lgach 1 soniya davomida frame counter
-   * yuritiladi va FPS <45 bo'lsa `onLowFps()` chaqiriladi — LoginPageClient
-   * Canvas'ni unmount qilib statik logo'ga o'tadi (TZ §8.2b).
-   */
   onLowFps?: () => void;
+  /**
+   * Deprecated: sfera endi parent container'ni to'liq to'ldiradi (referens
+   * onyx_login_3d_logo_preview.html'dagi kabi `position:absolute; inset:0`).
+   * Prop faqat backward-compat uchun qoldirilgan — hech qanday effekt bermaydi.
+   */
   size?: number;
 }
 
@@ -186,21 +252,17 @@ function FpsMonitor({ onLowFps }: { onLowFps?: () => void }) {
     if (elapsed >= 1000) {
       const fps = (framesRef.current * 1000) / elapsed;
       reportedRef.current = true;
-      if (fps < 45 && onLowFps) onLowFps();
+      if (fps < 20 && onLowFps) onLowFps();
     }
   });
   return null;
 }
 
-export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps) {
+export default function LogoSphere3D({ onLowFps }: LogoSphere3DProps) {
   const hovered = useRef(false);
   const tilt = useRef({ x: 0, y: 0 });
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // TZ §7.4 — hover tilt FAQAT desktop'da (hover + fine pointer). Touch'da
-  // umuman ulanmaydi (mobil qurilma o'zining scroll/tap gestlarini erkin
-  // qilsin, sfera bezovta qilmasin). matchMedia SSR'da yo'q, shu sabab client-only
-  // (dynamic ssr:false garanti beradi, lekin defensivroq: window guard).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -210,7 +272,6 @@ export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps
 
     const onMove = (e: PointerEvent) => {
       const rect = el.getBoundingClientRect();
-      // Normal koordinata [-1, 1]: -1 chap/tepa, +1 o'ng/past.
       const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;
       tilt.current.x = Math.max(-1, Math.min(1, nx));
@@ -221,7 +282,6 @@ export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps
     };
     const onLeave = () => {
       hovered.current = false;
-      // Sfera markazga qaytsin (idle aylanish davom etadi).
       tilt.current.x = 0;
       tilt.current.y = 0;
     };
@@ -238,51 +298,24 @@ export default function LogoSphere3D({ onLowFps, size = 320 }: LogoSphere3DProps
   return (
     <div
       ref={wrapperRef}
-      style={{ width: size, height: size }}
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       aria-hidden
     >
       <Canvas
-        camera={{ fov: 45, position: [0, 0, 3.2] }}
+        camera={{ fov: 45, position: [0, 0, 6] }}
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
         frameloop="always"
-        onCreated={({ scene, gl }) => {
-          // Fonda "qora quyosh" o'rniga iliq radial rang — sfera bunga qarshi
-          // kontrastda chiqadi. Alpha=true sabab CSS ustidan ko'rinsin uchun
-          // scene.background berilmaydi; buning o'rniga tone-mapping exposure
-          // biroz ko'tarilib bandlar ustida yorug'lik yaqqol chiqadi.
-          gl.toneMappingExposure = 1.35;
-        }}
       >
-        {/* TZ §6.3 — qo'lda light rig. Metalness=0.9 material yaqindagi
-            yorug'likni juda ko'p qaytaradi, shu sabab yaqin va yorqin nurlar
-            berilgan (aks holda sfera qorong'i qora ko'rinadi — deploy'da shu
-            muammo bo'lgan edi). Ambient ham iliqroq. */}
-        {/* Ancha yorqinroq light rig — iliq fon ustida ham sfera aniq kontrast
-            beradi. 5 nur: key (yuqori-old), fill (chap-past), 2 rim (orqa),
-            ambient. Reference-darajali sheen uchun. */}
-        <ambientLight intensity={0.7} color={"#5A4530"} />
-        <directionalLight
-          position={[2, 4, 5]}
-          intensity={4.5}
-          color={"#FFF5E0"}
-        />
-        <pointLight position={[-3, 1, 3]} intensity={3.0} color={GOLD_HIGHLIGHT} />
-        <pointLight position={[0, -3, 3]} intensity={2.0} color={GOLD_SPARKLE} />
-        <pointLight position={[3, -1, 2]} intensity={2.5} color={"#FFF5E0"} />
-        {/* Rim-light orqadan — sfera silhuetini yorqinlashtiradi. */}
-        <pointLight position={[0, 0, -3]} intensity={2.0} color={GOLD_HIGHLIGHT} />
+        {/* Referens nurlar — 3 ta yumshoq (juda ko'p yorug'lik bermaymiz, aks
+            holda gold sheen yo'qoladi). */}
+        <ambientLight intensity={0.7} color={0x552f10} />
+        <pointLight position={[4, 5, 6]} intensity={1.6} distance={50} color={0xffe6a8} />
+        <pointLight position={[-5, -2, 3]} intensity={1.1} distance={50} color={GOLD_MAIN} />
 
+        <HaloSprite />
         <SphereGroup hovered={hovered} tilt={tilt} />
-
-        {/* TZ §6.3 — Sparkles (drei), oltin highlight. */}
-        <Sparkles
-          count={40}
-          scale={[3, 3, 3]}
-          size={2}
-          speed={0.3}
-          color={GOLD_SPARKLE}
-        />
+        <Sparkles140 />
 
         {onLowFps ? <FpsMonitor onLowFps={onLowFps} /> : null}
       </Canvas>
