@@ -63,8 +63,14 @@ import {
   ReservationError,
 } from "@/lib/reservations";
 
-const FUTURE = new Date("2026-08-01T00:00:00Z");
-const PAST = new Date("2026-07-01T00:00:00Z");
+// W11-C: product code compares expiresAt to wall-clock `new Date()` inside
+// reserveBatchVolume (sumActiveVolumeHolds). Absolute FUTURE="2026-08-01" expired
+// on that calendar day and made ACTIVE-hold fixtures look expired. Keep fixtures
+// relative to load-time NOW so they never cross "today".
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NOW = new Date();
+const FUTURE = new Date(NOW.getTime() + 7 * DAY_MS);
+const PAST = new Date(NOW.getTime() - 7 * DAY_MS);
 
 beforeEach(() => {
   Object.values(M).forEach((f) => f.mockReset());

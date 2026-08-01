@@ -12,13 +12,16 @@ import {
   isDemoWarehouseAccount,
   photoTasksListWhere,
   redispatchPendingPhotoRequests,
+  telegramIdMatchesOwner,
 } from "@/lib/photo-requests";
 import { closePhotoRequest } from "./actions";
+import { unlinkTelegram } from "@/app/accounts/actions";
 import { getCapabilities, getCurrentUser } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import Alert from "@/components/ui/Alert";
+import Button from "@/components/ui/Button";
 import { CameraIcon } from "@/components/ui/Icons";
 import { formatTashkentDateTime } from "@/lib/datetime";
 
@@ -64,7 +67,11 @@ const DELIVERY_VARIANT: Record<DeliveryState, BadgeVariant> = {
   waiting: "neutral",
 };
 
-export default async function FotozaprosPage() {
+export default async function FotozaprosPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tgUnlink?: string; tgErr?: string }>;
+}) {
   // READ: canViewPhotoTasks (OWNER/MANAGER/WAREHOUSE). CREATE/close: canRequestPhoto.
   const [caps, actor] = await Promise.all([
     getCapabilities(),
@@ -79,12 +86,16 @@ export default async function FotozaprosPage() {
   }
 
   const canManageRequests = caps.canRequestPhoto;
+  const isOwner = actor?.role === "OWNER";
   const listWhere = photoTasksListWhere({
     canRequestPhoto: canManageRequests,
     actorId: actor?.id ?? null,
   });
 
+  const sp = searchParams ? await searchParams : {};
+
   // BUG-04 — lazy sweep: faqat menejer/egasi sahifasida (dispatch nazorati).
+  // W11-A: redispatch also skips demo warehouse chats.
   if (canManageRequests) {
     try {
       await redispatchPendingPhotoRequests({ db, sendMessage });
@@ -96,7 +107,7 @@ export default async function FotozaprosPage() {
     }
   }
 
-  // W9-A: warehouse TG connectivity (managers/owner only — operational control).
+  // W9-A / W11-A: warehouse TG connectivity (managers/owner only).
   const warehouseUsers = canManageRequests
     ? await db.user.findMany({
         where: { role: "WAREHOUSE" },
@@ -112,13 +123,29 @@ export default async function FotozaprosPage() {
       })
     : [];
 
+  // Owner telegram ids for "this chat is yours" flag (unique constraint usually
+  // prevents dual attach; still useful after manual moves / display of me).
+  const ownerTelegramIds = canManageRequests
+    ? (
+        await db.user.findMany({
+          where: { role: "OWNER", telegramId: { not: null } },
+          select: { telegramId: true },
+          take: 10,
+        })
+      ).map((u) => u.telegramId)
+    : [];
+
   const linkedWorkers = warehouseUsers.filter(
     (u) => u.isActive && u.telegramId,
   );
+  const realLinked = linkedWorkers.filter((u) => !isDemoWarehouseAccount(u));
   const unlinkedActive = warehouseUsers.filter(
     (u) => u.isActive && !u.telegramId,
   );
   const demoLinked = linkedWorkers.filter((u) => isDemoWarehouseAccount(u));
+  const ownerChatOnWarehouse = linkedWorkers.filter((u) =>
+    telegramIdMatchesOwner(u.telegramId, ownerTelegramIds),
+  );
 
   const requests = await db.photoRequest.findMany({
     where: listWhere,
@@ -168,70 +195,113 @@ export default async function FotozaprosPage() {
             Складчики и Telegram
           </h2>
           <p className="mt-1 text-sm text-ink/60">
-            Фотозапрос рассылается каждому <strong>активному</strong> складчику с
-            заполненным Telegram ID. Если в списке только демо-аккаунт или ваш
-            личный ID — задачи придут не тому человеку.
+            Фотозапрос уходит каждому <strong>активному реальному</strong>{" "}
+            складчику с Telegram ID. Демо-аккаунты в рассылку{" "}
+            <strong>не входят</strong> (W11-A) — даже если у них ваш личный ID.
           </p>
-          {linkedWorkers.length === 0 ? (
+          {sp.tgUnlink === "ok" && (
+            <Alert variant="success" className="mt-3">
+              Telegram отвязан. Новые задачи этому чату не уйдут.
+            </Alert>
+          )}
+          {sp.tgErr && (
             <Alert variant="danger" className="mt-3">
-              Нет складчиков с Telegram. Запросы{" "}
-              <strong>никуда не доставляются</strong>. Привяжите Telegram
-              складчику в{" "}
+              Не удалось отвязать Telegram ({sp.tgErr}).
+            </Alert>
+          )}
+          {realLinked.length === 0 ? (
+            <Alert variant="danger" className="mt-3">
+              Нет <strong>реальных</strong> складчиков с Telegram. Запросы{" "}
+              <strong>никуда не доставляются</strong>
+              {demoLinked.length > 0
+                ? " (демо-аккаунт в списке есть, но рассылка на него отключена)"
+                : ""}
+              . Создайте складчика с телефоном в{" "}
               <Link href="/accounts" className="font-semibold underline">
                 Сотрудники
-              </Link>{" "}
-              или одобрите заявку с /start в боте (роль «Склад»).
+              </Link>
+              , пусть он /start в боте и поделится контактом.
             </Alert>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {warehouseUsers.map((u) => {
-                const demo = isDemoWarehouseAccount(u);
-                const linked = Boolean(u.telegramId);
-                return (
-                  <li
-                    key={u.id}
-                    className="flex flex-wrap items-baseline justify-between gap-2 rounded-field border border-ink/10 bg-ink/[0.02] px-3 py-2 text-sm"
-                  >
+          ) : null}
+          <ul className="mt-3 space-y-2">
+            {warehouseUsers.map((u) => {
+              const demo = isDemoWarehouseAccount(u);
+              const linked = Boolean(u.telegramId);
+              const isOwnerChat = telegramIdMatchesOwner(
+                u.telegramId,
+                ownerTelegramIds,
+              );
+              return (
+                <li
+                  key={u.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-ink/10 bg-ink/[0.02] px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
                     <span className="font-medium text-ink">
                       {u.name}
                       {demo && (
-                        <span className="ml-1.5 text-warning">· демо</span>
+                        <span className="ml-1.5 font-semibold text-warning">
+                          · демо
+                        </span>
                       )}
                       {!u.isActive && (
                         <span className="ml-1.5 text-ink/40">· неактивен</span>
                       )}
                     </span>
-                    <span className="tnum text-ink/60">
+                    <p className="tnum text-ink/60">
                       {linked ? (
                         <>
                           TG: {u.telegramId}
+                          {isOwnerChat && (
+                            <span className="ml-1 font-semibold text-danger">
+                              = ваш личный Telegram
+                            </span>
+                          )}
                           {demo && linked && (
                             <span className="ml-1 text-warning">
-                              (проверьте, не ваш ли это ID)
+                              · не получает задачи
                             </span>
                           )}
                         </>
                       ) : (
                         <span className="text-warning">Telegram не привязан</span>
                       )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {demoLinked.length > 0 && linkedWorkers.length === demoLinked.length && (
-            <Alert variant="warning" className="mt-3">
-              Единственный Telegram-получатель — демо-складчик. Если при seed
-              указали свой Telegram ID, задачи приходят вам. Привяжите реального
-              складчика в «Сотрудники» или через бот /start → одобрение.
+                    </p>
+                  </div>
+                  {isOwner && linked && u.isActive && (
+                    <form action={unlinkTelegram}>
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input type="hidden" name="next" value="/fotozapros" />
+                      <Button type="submit" variant="danger" size="sm">
+                        Отвязать
+                      </Button>
+                    </form>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {(demoLinked.length > 0 || ownerChatOnWarehouse.length > 0) && (
+            <Alert variant="danger" className="mt-3">
+              {ownerChatOnWarehouse.length > 0 ? (
+                <>
+                  Складчик с <strong>вашим</strong> Telegram ID. Нажмите
+                  «Отвязать» (владелец) или сделайте то же в «Сотрудники».
+                </>
+              ) : (
+                <>
+                  Демо-складчик с Telegram ID (часто личный чат владельца после
+                  seed). Рассылка на демо отключена; отвяжите ID и привяжите
+                  реального складчика.
+                </>
+              )}
             </Alert>
           )}
-          {unlinkedActive.length > 0 && linkedWorkers.length > 0 && (
+          {unlinkedActive.length > 0 && (
             <p className="mt-2 text-xs text-ink/50">
               Без Telegram ({unlinkedActive.length}):{" "}
               {unlinkedActive.map((u) => u.name).join(", ")} — им задачи не
-              приходят.
+              приходят. Нужен телефон в карточке + /start в боте.
             </p>
           )}
         </Card>

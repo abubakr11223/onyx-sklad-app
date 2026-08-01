@@ -91,9 +91,14 @@ beforeEach(() => {
   M.patternUpdate.mockResolvedValue({});
 });
 
-const NOW = new Date("2026-07-25T10:00:00Z");
-const FUTURE = new Date("2026-08-01T00:00:00Z");
-const PAST = new Date("2026-07-01T00:00:00Z");
+// W11-C: sellUnit / sellBatchVolume use wall-clock `new Date()` for
+// isHoldEffective(expiresAt, now). Absolute FUTURE="2026-08-01" became past on
+// that day → "active hold" fixtures expired and assertions inverted. Relative
+// to load-time NOW so holds stay active / past stays past forever.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NOW = new Date();
+const FUTURE = new Date(NOW.getTime() + 7 * DAY_MS);
+const PAST = new Date(NOW.getTime() - 7 * DAY_MS);
 
 // ═══════════════ sellUnit (SLAB) ═══════════════
 

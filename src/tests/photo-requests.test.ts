@@ -7,8 +7,10 @@ import {
   buildTaskText,
   createAndDispatchPhotoRequest,
   isDemoWarehouseAccount,
+  partitionDispatchWorkers,
   photoTasksListWhere,
   redispatchPendingPhotoRequests,
+  telegramIdMatchesOwner,
   type PhotoRequestDeps,
 } from "@/lib/photo-requests";
 
@@ -135,7 +137,9 @@ describe("createAndDispatchPhotoRequest", () => {
       telegramId: "111",
       delivered: true,
       isDemoAccount: false,
+      skipped: false,
     });
+    expect(res.skippedDemoCount).toBe(0);
   });
 
   it("W9-A: isDemoWarehouseAccount detects seed-demo markers", () => {
@@ -145,6 +149,101 @@ describe("createAndDispatchPhotoRequest", () => {
     expect(
       isDemoWarehouseAccount({ name: "Реальный склад", phone: "+998901234567" }),
     ).toBe(false);
+  });
+
+  it("W11-A: partitionDispatchWorkers splits demo vs real", () => {
+    const { eligible, skippedDemo } = partitionDispatchWorkers([
+      {
+        id: "d1",
+        telegramId: "999",
+        name: "Бахтиёр (демо)",
+        phone: "+998900000002",
+      },
+      {
+        id: "r1",
+        telegramId: "111",
+        name: "Реальный",
+        phone: "+998901111111",
+      },
+    ]);
+    expect(eligible.map((w) => w.id)).toEqual(["r1"]);
+    expect(skippedDemo.map((w) => w.id)).toEqual(["d1"]);
+  });
+
+  it("W11-A: telegramIdMatchesOwner compares chat ids", () => {
+    expect(telegramIdMatchesOwner("123", ["123", null])).toBe(true);
+    expect(telegramIdMatchesOwner("123", [null, "456"])).toBe(false);
+    expect(telegramIdMatchesOwner(null, ["123"])).toBe(false);
+  });
+
+  it("W11-A: demo-only warehouse → no sendMessage, noWorkers, skipped recipients", async () => {
+    userFindMany.mockResolvedValue([
+      {
+        id: "demo",
+        telegramId: "OWNER_CHAT",
+        name: "Бахтиёр (демо)",
+        phone: "+998900000002",
+      },
+    ]);
+
+    const res = await createAndDispatchPhotoRequest(
+      { managerId: "m1", batchId: "b1", batchLocationId: "loc1" },
+      makeDeps(),
+    );
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(res.noWorkers).toBe(true);
+    expect(res.dispatchedTo).toBe(0);
+    expect(res.skippedDemoCount).toBe(1);
+    expect(res.recipients).toEqual([
+      expect.objectContaining({
+        userId: "demo",
+        telegramId: "OWNER_CHAT",
+        delivered: false,
+        isDemoAccount: true,
+        skipped: true,
+      }),
+    ]);
+    // Audit notes skip reason.
+    expect(auditLogCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          payload: expect.objectContaining({
+            noWorkers: true,
+            skippedDemoCount: 1,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("W11-A: real + demo → only real gets sendMessage", async () => {
+    userFindMany.mockResolvedValue([
+      {
+        id: "demo",
+        telegramId: "OWNER_CHAT",
+        name: "Бахтиёр (демо)",
+        phone: "+998900000002",
+      },
+      {
+        id: "real",
+        telegramId: "555",
+        name: "Складчик",
+        phone: "+998905555555",
+      },
+    ]);
+
+    const res = await createAndDispatchPhotoRequest(
+      { managerId: "m1", batchId: "b1", batchLocationId: "loc1" },
+      makeDeps(),
+    );
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][0]).toBe("555");
+    expect(res.dispatchedTo).toBe(1);
+    expect(res.noWorkers).toBe(false);
+    expect(res.skippedDemoCount).toBe(1);
+    expect(res.recipients).toHaveLength(2);
   });
 
   it("§5.3: message_id из отправки сохраняется в PhotoDispatch (для reply-to привязки)", async () => {

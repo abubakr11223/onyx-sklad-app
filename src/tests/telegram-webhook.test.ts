@@ -5,6 +5,7 @@ import type { TgUpdate } from "@/lib/telegram";
 import {
   handleUpdate,
   normalizePhone,
+  phonesEqual,
   type WebhookDeps,
 } from "@/lib/telegram-webhook";
 import { decodeShapeDraft } from "@/lib/singan";
@@ -171,6 +172,35 @@ describe("normalizePhone", () => {
     expect(normalizePhone(null)).toBe("");
     expect(normalizePhone(undefined)).toBe("");
   });
+  // W11-B: UZ milliy 9 raqam va 00-prefix — avval jim non-match edi.
+  it("UZ 9-raqam (Telegram milliy) → 998… xalqaro", () => {
+    expect(normalizePhone("901234567")).toBe("998901234567");
+    expect(normalizePhone("90 123 45 67")).toBe("998901234567");
+    expect(normalizePhone("90-123-45-67")).toBe("998901234567");
+  });
+  it("00-prefix xalqaro → 00 olib tashlanadi", () => {
+    expect(normalizePhone("00998901234567")).toBe("998901234567");
+  });
+  it("ikki HAQIQIY turli raqam bir xil stringga tushmaydi", () => {
+    expect(normalizePhone("998901234567")).not.toBe(
+      normalizePhone("998901234568"),
+    );
+    // 8 raqam / boshqa uzunlik — 998 qo'shilmaydi
+    expect(normalizePhone("90123456")).toBe("90123456");
+    expect(normalizePhone("8901234567")).toBe("8901234567");
+  });
+});
+
+describe("phonesEqual", () => {
+  it("saqlangan +998… va Telegram 9-raqam bir xil", () => {
+    expect(phonesEqual("+998 90 123-45-67", "901234567")).toBe(true);
+    expect(phonesEqual("998901234567", "90 123 45 67")).toBe(true);
+  });
+  it("turli raqamlar → false; bo'sh → false", () => {
+    expect(phonesEqual("998901234567", "998901234568")).toBe(false);
+    expect(phonesEqual(null, "998901234567")).toBe(false);
+    expect(phonesEqual("", "")).toBe(false);
+  });
 });
 
 describe("/start — kontakt so'rovi", () => {
@@ -181,6 +211,9 @@ describe("/start — kontakt so'rovi", () => {
     const [chatId, text, opts] = sendMessage.mock.calls[0];
     expect(chatId).toBe(777);
     expect(typeof text).toBe("string");
+    // W11-B: aniq yo'riqnoma — tugma + nima bo'lishi.
+    expect(text).toContain("Поделиться номером");
+    expect(text).toContain("привязк");
     expect(opts.reply_markup.keyboard[0][0]).toMatchObject({
       request_contact: true,
     });
@@ -212,7 +245,7 @@ describe("/start — kontakt so'rovi", () => {
 describe("kontakt → foydalanuvchini bog'lash", () => {
   it("mos telefon (saqlangan +998 vs ulashgan 998) → telegramId = chat id, muvaffaqiyat", async () => {
     findMany.mockResolvedValue([
-      { id: "u1", name: "Ali", phone: "+998901234567" },
+      { id: "u1", name: "Ali", phone: "+998901234567", telegramId: null },
     ]);
     // ulashgan raqam `+` siz keladi — normalizatsiya mos qilishi kerak.
     await handleUpdate(
@@ -230,9 +263,25 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(sendMessage.mock.calls[0][1]).toContain("Ali");
   });
 
+  it("W11-B: saqlangan +998… vs Telegram 9-raqam milliy → bog'lanadi (jim non-match yo'q)", async () => {
+    findMany.mockResolvedValue([
+      { id: "u1", name: "Ali", phone: "+998901234567", telegramId: null },
+    ]);
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "901234567" }),
+      makeDeps(),
+    );
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { telegramId: "999" },
+    });
+    expect(tarUpsert).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][1]).toContain("Ali");
+  });
+
   it("mos telefon topilmadi → заявка на доступ (PENDING), аккаунт НЕ трогаем", async () => {
     findMany.mockResolvedValue([
-      { id: "u1", name: "Ali", phone: "+998901234567" },
+      { id: "u1", name: "Ali", phone: "+998901234567", telegramId: null },
     ]);
     await handleUpdate(
       contactUpdate({ chatId: 999, phone: "998900000000" }),
@@ -258,7 +307,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
 
   it("forward qilingan kontakt (contact.user_id !== from.id) → bog'lanmaydi", async () => {
     findMany.mockResolvedValue([
-      { id: "u1", name: "Ali", phone: "+998901234567" },
+      { id: "u1", name: "Ali", phone: "+998901234567", telegramId: null },
     ]);
     await handleUpdate(
       contactUpdate({
@@ -273,7 +322,8 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(update).not.toHaveBeenCalled();
     expect(findMany).not.toHaveBeenCalled(); // guard oldin ishlaydi
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("не найден");
+    // W11-B: aniq «o'z raqamingiz» (oldingi soqov «не найден» emas).
+    expect(sendMessage.mock.calls[0][1]).toContain("собственный");
   });
 
   it("contact.user_id yo'q (user_id undefined) → bog'lanmaydi", async () => {
@@ -284,10 +334,10 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("bir xil raqam 2 yozuvda (format farqi) → noaniq, bog'lanmaydi", async () => {
+  it("bir xil raqam 2 yozuvda → noaniq, bog'lanmaydi + owner PENDING ariza", async () => {
     findMany.mockResolvedValue([
-      { id: "u1", name: "Ali", phone: "+998901234567" },
-      { id: "u2", name: "Vali", phone: "998901234567" },
+      { id: "u1", name: "Ali", phone: "+998901234567", telegramId: null },
+      { id: "u2", name: "Vali", phone: "998901234567", telegramId: null },
     ]);
     await handleUpdate(
       contactUpdate({ chatId: 999, phone: "998901234567" }),
@@ -296,12 +346,25 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(update).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toContain("несколько");
+    // W11-B: owner /accounts da ko'rsin (worker-only dead-end emas).
+    expect(tarUpsert).toHaveBeenCalledTimes(1);
+    const arg = tarUpsert.mock.calls[0][0] as {
+      create: { name: string | null; phone: string | null };
+      update: { status: string };
+    };
+    expect(arg.create.name).toContain("⚠");
+    expect(arg.create.name).toContain("Ali");
+    expect(arg.create.name).toContain("Vali");
+    expect(arg.create.phone).toBe("998901234567");
+    expect(arg.update.status).toBe("PENDING");
   });
 
-  it("telegramId @unique to'qnashuvi (P2002) → soqov emas, xabar beriladi", async () => {
+  it("telegramId @unique race (P2002, holder topilmagan) → worker xabar + owner PENDING", async () => {
     findMany.mockResolvedValue([
-      { id: "u1", name: "Ali", phone: "+998901234567" },
+      { id: "u1", name: "Ali", phone: "+998901234567", telegramId: null },
     ]);
+    // findFirst holder topmadi (race: boshqa TX o'rtada yozdi).
+    userFindFirst.mockResolvedValue(null);
     update.mockRejectedValue(Object.assign(new Error("unique"), { code: "P2002" }));
     await handleUpdate(
       contactUpdate({ chatId: 999, phone: "998901234567" }),
@@ -309,7 +372,160 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     );
     expect(update).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(sendMessage.mock.calls[0][1]).toContain("уже");
+    expect(sendMessage.mock.calls[0][1]).toMatch(/уже привязан|конфликт/i);
+    expect(tarUpsert).toHaveBeenCalledTimes(1);
+    const arg = tarUpsert.mock.calls[0][0] as {
+      create: { name: string | null };
+      update: { status: string };
+    };
+    expect(arg.create.name).toContain("⚠");
+    expect(arg.create.name).toMatch(/Конфликт|конфликт/i);
+    expect(arg.update.status).toBe("PENDING");
+  });
+
+  it("W11-B reclaim: chat demo skladda → holder tozalanadi, match bog'lanadi, owner biladi", async () => {
+    // Ownerning TG chat'i demo WAREHOUSE qatorida; real ishchi o'z telefoni bilan keladi.
+    findMany.mockResolvedValue([
+      {
+        id: "demo-wh",
+        name: "Demo Sklad",
+        phone: "+998900000001",
+        telegramId: "999",
+      },
+      {
+        id: "real-wh",
+        name: "Real Worker",
+        phone: "+998901234567",
+        telegramId: null,
+      },
+    ]);
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "998901234567" }),
+      makeDeps(),
+    );
+
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenNthCalledWith(1, {
+      where: { id: "demo-wh" },
+      data: { telegramId: null },
+    });
+    expect(update).toHaveBeenNthCalledWith(2, {
+      where: { id: "real-wh" },
+      data: { telegramId: "999" },
+    });
+    expect(sendMessage.mock.calls[0][1]).toContain("Real Worker");
+    expect(sendMessage.mock.calls[0][1]).toContain("Demo Sklad");
+    expect(tarUpsert).toHaveBeenCalledTimes(1);
+    const arg = tarUpsert.mock.calls[0][0] as {
+      create: { name: string | null; phone: string | null };
+    };
+    expect(arg.create.name).toContain("⚠");
+    expect(arg.create.name).toContain("перепривязан");
+    expect(arg.create.name).toContain("Demo Sklad");
+    expect(arg.create.name).toContain("Real Worker");
+  });
+
+  it("W11-B reclaim: holder faqat findFirst orqali (inactive / phonesiz, findMany da yo'q)", async () => {
+    findMany.mockResolvedValue([
+      {
+        id: "real-wh",
+        name: "Real Worker",
+        phone: "+998901234567",
+        telegramId: null,
+      },
+    ]);
+    userFindFirst.mockResolvedValue({
+      id: "stale-demo",
+      name: "Stale Demo",
+      phone: null,
+      telegramId: "999",
+      role: "WAREHOUSE",
+    });
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "998901234567" }),
+      makeDeps(),
+    );
+    expect(userFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { telegramId: "999" },
+      }),
+    );
+    expect(update).toHaveBeenNthCalledWith(1, {
+      where: { id: "stale-demo" },
+      data: { telegramId: null },
+    });
+    expect(update).toHaveBeenNthCalledWith(2, {
+      where: { id: "real-wh" },
+      data: { telegramId: "999" },
+    });
+  });
+
+  it("allaqachon shu chat shu akkauntda → update YO'Q, success", async () => {
+    findMany.mockResolvedValue([
+      {
+        id: "u1",
+        name: "Ali",
+        phone: "+998901234567",
+        telegramId: "999",
+      },
+    ]);
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "998901234567" }),
+      makeDeps(),
+    );
+    expect(update).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][1]).toContain("Ali");
+  });
+
+  it("bir xil akkaunt boshqa chatga qayta bog'lanadi (o'z telegramId almashtirish)", async () => {
+    findMany.mockResolvedValue([
+      {
+        id: "u1",
+        name: "Ali",
+        phone: "+998901234567",
+        telegramId: "111", // eski chat
+      },
+    ]);
+    userFindFirst.mockResolvedValue(null); // yangi chat bo'sh
+    await handleUpdate(
+      contactUpdate({ chatId: 999, phone: "998901234567" }),
+      makeDeps(),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { telegramId: "999" },
+    });
+    // Boshqa akkauntdan o'g'irish emas — owner notice shart emas.
+    expect(tarUpsert).not.toHaveBeenCalled();
+  });
+
+  it("chatni boshqa akkauntdan jim o'g'irmaydi: telefon isbotisiz update YO'Q (forward guard)", async () => {
+    // Xavfsizlik: begona kontakt bilan boshqa userning chatini tortib bo'lmaydi.
+    findMany.mockResolvedValue([
+      {
+        id: "victim",
+        name: "Victim",
+        phone: "+998901111111",
+        telegramId: "999",
+      },
+      {
+        id: "attacker",
+        name: "Attacker",
+        phone: "+998902222222",
+        telegramId: null,
+      },
+    ]);
+    await handleUpdate(
+      contactUpdate({
+        chatId: 999,
+        fromId: 999,
+        contactUserId: 123, // begona kontakt
+        phone: "998902222222",
+      }),
+      makeDeps(),
+    );
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("faol bo'lmagan userlar findMany where'da filtrlanadi (isActive: true)", async () => {
@@ -321,6 +537,7 @@ describe("kontakt → foydalanuvchini bog'lash", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { isActive: true, phone: { not: null } },
+        select: expect.objectContaining({ telegramId: true }),
       }),
     );
     expect(update).not.toHaveBeenCalled();

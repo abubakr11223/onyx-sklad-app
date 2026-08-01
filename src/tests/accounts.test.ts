@@ -95,8 +95,12 @@ describe("validateNewAccount — to'liq oqim", () => {
     }
   });
 
-  it("yaroqli WAREHOUSE → ok", () => {
-    const res = validateNewAccount({ ...base, role: "WAREHOUSE" });
+  it("yaroqli WAREHOUSE + telefon → ok (W11-A: phone majburiy)", () => {
+    const res = validateNewAccount({
+      ...base,
+      role: "WAREHOUSE",
+      phone: "+998901234567",
+    });
     expect(res.ok).toBe(true);
   });
 
@@ -176,8 +180,14 @@ describe("validateNewAccount — telefon (skladchi Telegram bog'lanishi)", () =>
     password: "password1",
     role: "WAREHOUSE",
   };
-  it("telefonsiz → ok, phone=null (ixtiyoriy)", () => {
-    const res = validateNewAccount(base);
+  it("W11-A: WAREHOUSE telefonsiz → error: phone (majburiy)", () => {
+    expect(validateNewAccount(base)).toEqual({
+      ok: false,
+      error: "phone",
+    });
+  });
+  it("MANAGER telefonsiz → ok, phone=null (ixtiyoriy)", () => {
+    const res = validateNewAccount({ ...base, role: "MANAGER" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.phone).toBeNull();
   });

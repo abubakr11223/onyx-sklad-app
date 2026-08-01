@@ -78,7 +78,10 @@ export interface NewAccountInput {
   email: string;
   password: string;
   role: string;
-  /** Telefon ixtiyoriy (skladchi uchun kerak — Telegram bog'lanishi). */
+  /**
+   * Telefon: WAREHOUSE uchun majburiy (W11-A — bot handleContact shu raqam
+   * bo'yicha bog'laydi); MANAGER/PARTNER uchun ixtiyoriy.
+   */
   phone?: string;
 }
 
@@ -114,12 +117,17 @@ export function validateNewAccount(
   const password = input.password;
   if (!isValidPassword(password)) return { ok: false, error: "password" };
 
-  // Telefon ixtiyoriy: berilsa — maqbul bo'lishi va kanonik shaklда saqlanishi.
+  // Telefon: WAREHOUSE uchun MAJBURIY (W11-A) — handleContact normalizePhone
+  // bo'yicha bog'laydi; telefonsiz skladchi bot orqali hech qachon o'sha
+  // akkauntga yopishmaydi (access-request yangi qator ochadi).
+  // MANAGER/PARTNER uchun ixtiyoriy.
   const rawPhone = (input.phone ?? "").trim();
   let phone: string | null = null;
   if (rawPhone) {
     if (!isValidPhone(rawPhone)) return { ok: false, error: "phone" };
     phone = canonicalPhone(rawPhone);
+  } else if (input.role === "WAREHOUSE") {
+    return { ok: false, error: "phone" };
   }
 
   return { ok: true, value: { name, email, password, role: input.role, phone } };

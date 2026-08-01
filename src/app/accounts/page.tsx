@@ -22,10 +22,15 @@ import {
   changePhone,
   changeEmail,
   changeTelegramId,
+  unlinkTelegram,
   setCanSeePurchasePrice,
   approveTelegramRequest,
   rejectTelegramRequest,
 } from "./actions";
+import {
+  isDemoWarehouseAccount,
+  telegramIdMatchesOwner,
+} from "@/lib/photo-requests";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -47,7 +52,8 @@ const ERROR_RU: Record<string, string> = {
   email_taken: "Такой логин уже занят.",
   password: `Пароль слишком короткий (минимум ${MIN_PASSWORD_LENGTH} символов).`,
   role: "Недопустимая роль.",
-  phone: "Некорректный телефон (9–15 цифр).",
+  phone:
+    "Телефон: для роли «Склад» обязателен (9–15 цифр). Без него бот не привяжет аккаунт.",
   phone_taken: "Этот телефон уже привязан к другому аккаунту.",
   notfound: "Аккаунт не найден.",
   owner_protected: "Этот аккаунт защищён (владелец).",
@@ -106,6 +112,21 @@ export default async function AccountsPage({
   // Владелец сам есть в списке — его логин нужен для префилла блока «Мой аккаунт».
   const meRow = users.find((u) => u.id === me.id);
 
+  // W11-A — warehouse Telegram health (who gets photo tasks).
+  const ownerTelegramIds = users
+    .filter((u) => u.role === "OWNER" && u.telegramId)
+    .map((u) => u.telegramId);
+  const warehouseRows = users.filter((u) => u.role === "WAREHOUSE");
+  const linkedWarehouse = warehouseRows.filter(
+    (u) => u.isActive && u.telegramId,
+  );
+  const demoLinkedWarehouse = linkedWarehouse.filter((u) =>
+    isDemoWarehouseAccount(u),
+  );
+  const ownerChatOnWarehouse = linkedWarehouse.filter((u) =>
+    telegramIdMatchesOwner(u.telegramId, ownerTelegramIds),
+  );
+
   // Onboarding — заявки на доступ через Telegram (PENDING): человек нажал /start
   // и поделился контактом, но телефон не привязан ни к одному аккаунту.
   const tgRequests = await db.telegramAccessRequest.findMany({
@@ -134,6 +155,100 @@ export default async function AccountsPage({
           корневой аккаунт.
         </p>
       </header>
+
+      {/* W11-A — who receives photo tasks in Telegram (self-correcting panel). */}
+      <Card className="mb-6 border-gold/40">
+        <h2 className="mb-1 font-serif text-xl font-bold text-ink">
+          Telegram → фотозапросы
+        </h2>
+        <p className="mb-3 text-sm text-ink/60">
+          Задачи уходят <strong>всем активным складчикам</strong> с Telegram ID
+          (кроме демо-аккаунтов — их рассылка отключена). Если ваш личный чат
+          привязан к демо-складчику, отвяжите одним нажатием.
+        </p>
+        {linkedWarehouse.length === 0 ? (
+          <Alert variant="danger">
+            Нет складчиков с Telegram. Фотозапросы никому не приходят. Создайте
+            складчика с <strong>телефоном</strong>, затем пусть он в боте нажмёт
+            /start и поделится контактом — либо одобрите заявку ниже.
+          </Alert>
+        ) : (
+          <ul className="space-y-2">
+            {warehouseRows.map((u) => {
+              const demo = isDemoWarehouseAccount(u);
+              const linked = Boolean(u.telegramId);
+              const isOwnerChat = telegramIdMatchesOwner(
+                u.telegramId,
+                ownerTelegramIds,
+              );
+              return (
+                <li
+                  key={`tg-health-${u.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-ink/10 bg-ink/[0.02] px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <span className="font-medium text-ink">{u.name}</span>
+                    {demo && (
+                      <span className="ml-1.5 font-semibold text-warning">
+                        · демо
+                      </span>
+                    )}
+                    {!u.isActive && (
+                      <span className="ml-1.5 text-ink/40">· неактивен</span>
+                    )}
+                    <p className="tnum text-ink/60">
+                      {linked ? (
+                        <>
+                          TG: {u.telegramId}
+                          {isOwnerChat && (
+                            <span className="ml-1 font-semibold text-danger">
+                              = ваш личный Telegram
+                            </span>
+                          )}
+                          {demo && linked && !isOwnerChat && (
+                            <span className="ml-1 text-warning">
+                              (проверьте, не ваш ли ID)
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-warning">Telegram не привязан</span>
+                      )}
+                    </p>
+                  </div>
+                  {linked && u.isActive && (
+                    <form action={unlinkTelegram}>
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input type="hidden" name="next" value="/accounts" />
+                      <Button type="submit" variant="danger" size="sm">
+                        Отвязать Telegram
+                      </Button>
+                    </form>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {(demoLinkedWarehouse.length > 0 ||
+          ownerChatOnWarehouse.length > 0) && (
+          <Alert variant="danger" className="mt-3">
+            {ownerChatOnWarehouse.length > 0 ? (
+              <>
+                У складчика указан <strong>ваш</strong> Telegram ID — задачи
+                приходят вам. Нажмите «Отвязать Telegram» у этой строки, затем
+                привяжите реального складчика (телефон + /start в боте).
+              </>
+            ) : (
+              <>
+                Демо-складчик всё ещё с Telegram ID (часто это личный чат
+                владельца после seed). Рассылка на демо <strong>отключена</strong>
+                , но ID лучше отвязать. Привяжите реального складчика.
+              </>
+            )}
+          </Alert>
+        )}
+      </Card>
 
       {/* ── Короткая инструкция для владельца (передача проекта) ── */}
       <details className="mb-6 rounded-card border border-line bg-paper-2 p-4">
@@ -266,10 +381,19 @@ export default async function AccountsPage({
             </Button>
           </form>
           {meRow?.telegramId ? (
-            <p className="text-xs text-ink/50">
-              Текущий: {meRow.telegramId}. Очистите, если фотозапросы приходят
-              вам вместо складчика.
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-ink/50">
+                Текущий: {meRow.telegramId}. На владельце TG не получает
+                фотозадачи (роль не «Склад»), но менеджер-уведомления — да.
+              </p>
+              <form action={unlinkTelegram}>
+                <input type="hidden" name="userId" value={me.id} />
+                <input type="hidden" name="next" value="/accounts" />
+                <Button type="submit" variant="danger" size="sm">
+                  Отвязать мой Telegram
+                </Button>
+              </form>
+            </div>
           ) : null}
         </div>
       </Card>
@@ -321,7 +445,7 @@ export default async function AccountsPage({
             inputMode="tel"
             label="Телефон"
             placeholder="+998 90 123 45 67"
-            hint="Для складчика — по нему привязывается Telegram (/start). Необязательно."
+            hint="Для роли «Склад» — обязательно: бот связывает аккаунт по этому номеру (/start → контакт). Без телефона складчик не привяжется к этой учётке."
             autoComplete="off"
           />
           <Button type="submit" className="w-full sm:w-auto">
@@ -338,7 +462,11 @@ export default async function AccountsPage({
           </h2>
           <p className="mb-4 text-sm text-ink/60">
             Человек нажал /start в боте и ждёт доступа. Выберите роль и одобрите —
-            аккаунт создастся, а ему придёт уведомление в Telegram.
+            аккаунт создастся, а ему придёт уведомление в Telegram.{" "}
+            <strong className="text-ink">
+              Не одобряйте свою собственную заявку как «Склад» — иначе
+              фотозадачи пойдут в ваш личный чат.
+            </strong>
           </p>
           <ul className="space-y-3">
             {tgRequests.map((r) => (
@@ -445,6 +573,21 @@ export default async function AccountsPage({
                       {u.telegramId ? (
                         <span className="tnum text-ink/60">
                           ✈️ TG ID: {u.telegramId}
+                          {u.role === "WAREHOUSE" &&
+                            isDemoWarehouseAccount(u) && (
+                              <span className="ml-1 font-semibold text-warning">
+                                · демо
+                              </span>
+                            )}
+                          {u.role === "WAREHOUSE" &&
+                            telegramIdMatchesOwner(
+                              u.telegramId,
+                              ownerTelegramIds,
+                            ) && (
+                              <span className="ml-1 font-semibold text-danger">
+                                · ваш чат
+                              </span>
+                            )}
                         </span>
                       ) : u.role === "WAREHOUSE" ? (
                         <span className="text-warning">
@@ -464,6 +607,16 @@ export default async function AccountsPage({
                     )}
                   </div>
                 </div>
+                {/* W11-A one-click unlink on every linked non-owner card. */}
+                {u.isActive && isManageable && u.telegramId && (
+                  <form action={unlinkTelegram} className="mt-3">
+                    <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="next" value="/accounts" />
+                    <Button type="submit" variant="danger" size="sm">
+                      Отвязать Telegram
+                    </Button>
+                  </form>
+                )}
 
                 {/* Действия — только для активных не-владельцев. Свой аккаунт
                     (владелец) управляется в блоке «Мой аккаунт» вверху. */}

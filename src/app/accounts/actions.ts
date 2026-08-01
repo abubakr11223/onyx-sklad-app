@@ -373,7 +373,79 @@ export async function changeTelegramId(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/accounts");
+  revalidatePath("/fotozapros");
   redirect("/accounts?ok=telegram");
+}
+
+/**
+ * W11-A — one-click unlink: clear telegramId on a user (usually a wrong
+ * WAREHOUSE chat that is still receiving photo tasks). Same owner gate as
+ * changeTelegramId; empty-field form is still supported, this is the explicit
+ * «Отвязать» button path for /accounts and /fotozapros.
+ */
+export async function unlinkTelegram(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const userId = String(formData.get("userId") ?? "");
+  const nextRaw = String(formData.get("next") ?? "").trim();
+  // Only allow return to known owner-facing pages (open redirect guard).
+  const next =
+    nextRaw === "/fotozapros" || nextRaw.startsWith("/fotozapros?")
+      ? nextRaw.split("?")[0]
+      : "/accounts";
+
+  if (!userId) {
+    redirect(
+      next === "/fotozapros"
+        ? "/fotozapros?tgErr=notfound"
+        : "/accounts?error=notfound",
+    );
+  }
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, telegramId: true },
+  });
+  if (!target) {
+    redirect(
+      next === "/fotozapros"
+        ? "/fotozapros?tgErr=notfound"
+        : "/accounts?error=notfound",
+    );
+  }
+  if (target.role === "OWNER" && target.id !== actorId) {
+    redirect(
+      next === "/fotozapros"
+        ? "/fotozapros?tgErr=denied"
+        : "/accounts?error=owner_protected",
+    );
+  }
+
+  if (target.telegramId == null) {
+    redirect(
+      next === "/fotozapros"
+        ? "/fotozapros?tgUnlink=ok"
+        : "/accounts?ok=telegram",
+    );
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { telegramId: null },
+    });
+    await logAccountAction(tx, actorId, userId, {
+      kind: "account.telegram_unlink",
+      previousTelegramId: target.telegramId,
+    });
+  });
+
+  revalidatePath("/accounts");
+  revalidatePath("/fotozapros");
+  redirect(
+    next === "/fotozapros"
+      ? "/fotozapros?tgUnlink=ok"
+      : "/accounts?ok=telegram",
+  );
 }
 
 /**

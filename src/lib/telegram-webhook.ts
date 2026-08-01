@@ -37,22 +37,45 @@ interface PendingPhotoRequest {
   batchLocation: { block: string; landmark: string } | null;
 }
 
+/** Kontakt bog'lash uchun minimal User qatori (telefon + mavjud TG). */
+export type LinkUserRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  telegramId: string | null;
+};
+
 export interface WebhookDeps {
   db: {
     user: {
       findMany(args: {
         where: { isActive: boolean; phone: { not: null } };
-        select: { id: true; name: true; phone: true };
-      }): Promise<Array<{ id: string; name: string; phone: string | null }>>;
+        select: { id: true; name: true; phone: true; telegramId: true };
+      }): Promise<LinkUserRow[]>;
       update(args: {
         where: { id: string };
-        data: { telegramId: string };
+        data: { telegramId: string | null };
       }): Promise<unknown>;
       // Foto oqimi (TG-B2): yuboruvchini telegramId bo'yicha topish.
+      // W11-B: also used to find who currently holds a chat id (isActive any).
       findFirst(args: {
-        where: { telegramId: string; isActive: boolean };
-        select: { id: true; role: true };
-      }): Promise<{ id: string; role: string } | null>;
+        where:
+          | { telegramId: string; isActive: boolean }
+          | { telegramId: string };
+        select:
+          | { id: true; role: true }
+          | { id: true; name: true; phone: true; telegramId: true; role: true };
+      }): Promise<
+        | { id: string; role: string }
+        | {
+            id: string;
+            name: string;
+            phone: string | null;
+            telegramId: string | null;
+            role: string;
+          }
+        | null
+      >;
       // Menejerni xabardor qilish uchun telegramId'ni olish.
       findUnique(args: {
         where: { id: string };
@@ -61,6 +84,7 @@ export interface WebhookDeps {
     };
     // Onboarding — заявка на доступ через Telegram. Телефон не привязан ни к
     // одному аккаунту → создаём/обновляем PENDING-заявку (владелец одобрит в /accounts).
+    // W11-B: ambiguous phone / reclaim also create PENDING so owner sees them.
     telegramAccessRequest: {
       upsert(args: {
         where: { telegramId: string };
@@ -193,14 +217,25 @@ export interface WebhookDeps {
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
 
+// W11-B — /start aniq yo'riqnoma (bitta tugma → kontakt → bog'lanish).
 const MSG_ASK_CONTACT =
-  "Onyx bot. Для регистрации поделитесь своим номером телефона.";
+  "Onyx bot — привязка аккаунта.\n\n" +
+  "1) Нажмите кнопку «📱 Поделиться номером» ниже (свой контакт, не чужой).\n" +
+  "2) Если номер есть в списке сотрудников — Telegram привяжется сразу.\n" +
+  "3) Если нет — заявка уйдёт владельцу на одобрение.\n\n" +
+  "Фото-задания приходят только после привязки к складу.";
 const MSG_NOT_FOUND =
-  "Ваш номер телефона не найден в списке. Обратитесь к вашему менеджеру.";
+  "Ваш номер телефона не найден в списке сотрудников. " +
+  "Заявка владельцу уже может быть создана при повторной отправке контакта, " +
+  "или попросите владельца добавить ваш номер в «Сотрудники».";
 const MSG_AMBIGUOUS =
-  "По вашему номеру найдено несколько записей. Обратитесь к вашему менеджеру.";
+  "По вашему номеру в системе несколько сотрудников — автоматически привязать нельзя. " +
+  "Заявка с пометкой отправлена владельцу: он оставит один аккаунт с этим номером. " +
+  "Потом снова нажмите /start и «Поделиться номером».";
 const MSG_ALREADY_LINKED =
-  "Этот Telegram-аккаунт уже привязан к другому пользователю. Обратитесь к вашему менеджеру.";
+  "Этот Telegram уже привязан к другому сотруднику. " +
+  "Владельцу отправлена заявка «конфликт чата» — пусть в «Сотрудники» снимет старую привязку " +
+  "или подтвердит перенос. Потом повторите /start.";
 const MSG_TRY_LATER = "Произошла ошибка. Попробуйте ещё раз чуть позже.";
 // Onboarding — номер не привязан ни к одному аккаунту: создаём заявку на доступ,
 // её одобряет владелец в панели. Доступ НЕ выдаётся автоматически.
@@ -208,6 +243,10 @@ const MSG_ACCESS_REQUESTED =
   "Заявка на доступ отправлена. Как только владелец её одобрит, доступ откроется и вы получите сообщение.";
 const successMessage = (name: string) =>
   `Вы зарегистрированы, ${name}. Теперь фотозапросы будут приходить сюда.`;
+const reclaimSuccessMessage = (name: string, previousName: string) =>
+  `Вы зарегистрированы, ${name}. ` +
+  `Telegram раньше был привязан к «${previousName}» — та привязка снята (чат не может висеть на двух аккаунтах). ` +
+  `Владелец видит пометку в заявках.`;
 
 // Foto oqimi (TG-B2) matnlari — skladchi/menejer ruscha ko'radi.
 const MSG_PHOTO_NOT_REGISTERED =
@@ -288,13 +327,33 @@ const CONTACT_KEYBOARD: TgReplyKeyboardMarkup = {
 // ───────────────────────── Yordamchilar ─────────────────────────
 
 /**
- * Telefon raqamini FAQAT raqamlarga keltiradi: `+`, bo'shliq, tire, qavslar
- * olib tashlanadi. `+998 90 123-45-67` → `998901234567`. Solishtirish shu
- * normal shakl ustida bo'ladi (saqlangan `+998…` ham, ulashgan `998…` ham mos).
+ * Telefon → faqat raqamlar + UZ milliy formatni xalqaro 998… ga keltirish.
+ *
+ *  • `+998 90 123-45-67` / `998901234567` / `(998) 90…` → `998901234567`
+ *  • milliy 9 raqam `90 123 45 67` (Telegram ba'zan shunday) → `998901234567`
+ *  • `00998…` → `998…`
+ *
+ * Ikki HAQIQIY turli raqam bir xil stringga tushmaydi (faqat format farqlari
+ * birlashtiriladi). `90…` (9) va `99890…` (12) endi MOS — avval jim non-match
+ * access-request yo'liga tashlardi («регистрация не работает»).
  */
 export function normalizePhone(s: string | null | undefined): string {
   if (!s) return "";
-  return s.replace(/\D+/g, "");
+  let d = s.replace(/\D+/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  // UZ mobile: 9 digits starting with 9 (90/91/93/94/95/97/98/99…)
+  if (d.length === 9 && d.startsWith("9")) d = "998" + d;
+  return d;
+}
+
+/** Ikki saqlangan/yuborilgan telefon bir xil shaxsga tegishlimi (normalize keyin). */
+export function phonesEqual(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const na = normalizePhone(a);
+  const nb = normalizePhone(b);
+  return na.length > 0 && na === nb;
 }
 
 /**
@@ -545,6 +604,36 @@ async function handleBrokenStone(
   await deps.sendMessage(chatId, singanLinkMessage(shape.sideCount, url));
 }
 
+/**
+ * Owner panelida ko'rinadigan PENDING ariza (o1 /accounts). Bot UI qurmaydi —
+ * faqat TelegramAccessRequest yozadi.
+ */
+async function upsertOwnerVisibleRequest(
+  deps: WebhookDeps,
+  args: {
+    telegramId: string;
+    name: string | null;
+    username?: string | null;
+    phone: string | null;
+  },
+): Promise<void> {
+  await deps.db.telegramAccessRequest.upsert({
+    where: { telegramId: args.telegramId },
+    create: {
+      telegramId: args.telegramId,
+      name: args.name,
+      username: args.username ?? null,
+      phone: args.phone,
+    },
+    update: {
+      name: args.name,
+      username: args.username ?? null,
+      phone: args.phone,
+      status: "PENDING",
+    },
+  });
+}
+
 async function handleContact(
   contact: NonNullable<TgUpdate["message"]>["contact"],
   fromId: number | undefined,
@@ -557,7 +646,10 @@ async function handleContact(
   // Guard: faqat foydalanuvchining O'Z kontakti bog'lanadi (forward emas).
   // contact.user_id — kontakt egasi; from.id — xabar yuboruvchi.
   if (contact.user_id == null || fromId == null || contact.user_id !== fromId) {
-    await deps.sendMessage(chatId, MSG_NOT_FOUND);
+    await deps.sendMessage(
+      chatId,
+      "Нужен ваш собственный номер. Нажмите «📱 Поделиться номером» (не пересылайте чужой контакт).",
+    );
     return;
   }
 
@@ -567,33 +659,27 @@ async function handleContact(
     return;
   }
 
-  // Faol, telefonli userlarni olib, normal shakl bo'yicha solishtiramiz
-  // (saqlangan telefon formati har xil bo'lishi mumkin: `+998…`, `998…`).
+  const contactName =
+    [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() ||
+    null;
+  const chatKey = String(chatId);
+
+  // Faol, telefonli userlar — normal shakl bo'yicha solishtiramiz.
   const users = await deps.db.user.findMany({
     where: { isActive: true, phone: { not: null } },
-    select: { id: true, name: true, phone: true },
+    select: { id: true, name: true, phone: true, telegramId: true },
   });
 
-  const matches = users.filter((u) => normalizePhone(u.phone) === wanted);
+  const matches = users.filter((u) => phonesEqual(u.phone, wanted));
 
   if (matches.length === 0) {
     // Onboarding: телефон не привязан ни к одному аккаунту → это НОВЫЙ человек.
-    // Создаём/обновляем заявку на доступ (PENDING). Владелец одобрит в /accounts —
-    // доступ НЕ выдаётся автоматически (защита: нельзя самопривязаться к складу).
-    const name =
-      [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() ||
-      null;
     try {
-      await deps.db.telegramAccessRequest.upsert({
-        where: { telegramId: String(chatId) },
-        create: {
-          telegramId: String(chatId),
-          name,
-          username: username ?? null,
-          phone: wanted,
-        },
-        // Повторная заявка (напр. после отклонения) — обновляем и снова PENDING.
-        update: { name, username: username ?? null, phone: wanted, status: "PENDING" },
+      await upsertOwnerVisibleRequest(deps, {
+        telegramId: chatKey,
+        name: contactName,
+        username: username ?? null,
+        phone: wanted,
       });
       await deps.sendMessage(chatId, MSG_ACCESS_REQUESTED);
     } catch (err) {
@@ -602,26 +688,136 @@ async function handleContact(
     }
     return;
   }
+
   if (matches.length > 1) {
-    // Bir xil raqam bir nechta yozuvda (format farqi) — noaniq, tasodifiy
-    // birini tanlamaymiz; qo'lda hal qilinsin.
+    // Bir xil raqam bir nechta yozuvda — tasodifiy tanlamaymiz.
+    // Owner ko'rsin: PENDING ariza (o1 /accounts ro'yxati).
+    const names = matches.map((m) => m.name).join(", ");
+    try {
+      await upsertOwnerVisibleRequest(deps, {
+        telegramId: chatKey,
+        name: `⚠ Несколько аккаунтов с номером ${wanted}: ${names}`,
+        username: username ?? null,
+        phone: wanted,
+      });
+    } catch (err) {
+      console.error("[telegram-webhook] ambiguous access-request xatosi:", err);
+    }
     await deps.sendMessage(chatId, MSG_AMBIGUOUS);
     return;
   }
-  const match = matches[0];
 
+  const match = matches[0]!;
+
+  // Allaqachon shu chat shu akkauntga bog'langan — no-op success.
+  if (match.telegramId === chatKey) {
+    await deps.sendMessage(chatId, successMessage(match.name), {
+      reply_markup: { remove_keyboard: true },
+    });
+    return;
+  }
+
+  // Bu chat boshqa userga birikkanmi? (demo sklad / egasining TG — real hodisa).
+  // findMany faqat isActive+phone: inactive yoki phonesiz holderni o'tkazib
+  // yubormaslik uchun telegramId bo'yicha findFirst (isActive filter YO'Q).
+  let holder: LinkUserRow | null =
+    users.find((u) => u.telegramId === chatKey && u.id !== match.id) ?? null;
+  if (!holder) {
+    const anyHolder = await deps.db.user.findFirst({
+      where: { telegramId: chatKey },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        telegramId: true,
+        role: true,
+      },
+    });
+    if (anyHolder && anyHolder.id !== match.id && "name" in anyHolder) {
+      holder = {
+        id: anyHolder.id,
+        name: anyHolder.name,
+        phone: anyHolder.phone,
+        telegramId: anyHolder.telegramId,
+      };
+    }
+  }
+
+  if (holder) {
+    // W11-B reclaim: telefon isboti match foydasiga. Chat id jim o'tmaydi —
+    // holder'dan aniq tozalanadi + owner PENDING ariza + worker xabar.
+    try {
+      await deps.db.user.update({
+        where: { id: holder.id },
+        data: { telegramId: null },
+      });
+      await deps.db.user.update({
+        where: { id: match.id },
+        data: { telegramId: chatKey },
+      });
+      try {
+        await upsertOwnerVisibleRequest(deps, {
+          telegramId: chatKey,
+          name: `⚠ Telegram перепривязан: было «${holder.name}», стало «${match.name}» (телефон ${wanted})`,
+          username: username ?? null,
+          phone: wanted,
+        });
+      } catch (err) {
+        console.error("[telegram-webhook] reclaim notice upsert xatosi:", err);
+      }
+      await deps.sendMessage(
+        chatId,
+        reclaimSuccessMessage(match.name, holder.name),
+        { reply_markup: { remove_keyboard: true } },
+      );
+    } catch (err) {
+      console.error("[telegram-webhook] reclaim link xatosi:", err);
+      const code = (err as { code?: string })?.code;
+      if (code === "P2002") {
+        try {
+          await upsertOwnerVisibleRequest(deps, {
+            telegramId: chatKey,
+            name: `⚠ Конфликт Telegram-чата: не удалось привязать «${match.name}» (телефон ${wanted})`,
+            username: username ?? null,
+            phone: wanted,
+          });
+        } catch {
+          /* ignore */
+        }
+        await deps.sendMessage(chatId, MSG_ALREADY_LINKED);
+      } else {
+        await deps.sendMessage(chatId, MSG_TRY_LATER);
+      }
+    }
+    return;
+  }
+
+  // Oddiy bog'lash (chat bo'sh yoki faqat match o'zi eski chatni almashtiradi —
+  // bir xil akkauntning boshqa qurilmasidan qayta bog'lash). Boshqa akkauntdan
+  // chatni jim o'g'irlamaymiz: yuqoridagi holder yo'li majburiy.
   try {
     await deps.db.user.update({
       where: { id: match.id },
-      data: { telegramId: String(chatId) },
+      data: { telegramId: chatKey },
     });
   } catch (err) {
-    // telegramId @unique: bu chat allaqachon boshqa userga bog'langan → P2002.
+    // Race: boshqa yozuv shu payt chatni egallagan → P2002 (findFirst orasida).
     const code = (err as { code?: string })?.code;
-    await deps.sendMessage(
-      chatId,
-      code === "P2002" ? MSG_ALREADY_LINKED : MSG_TRY_LATER,
-    );
+    if (code === "P2002") {
+      try {
+        await upsertOwnerVisibleRequest(deps, {
+          telegramId: chatKey,
+          name: `⚠ Конфликт Telegram-чата: «${match.name}» / телефон ${wanted}`,
+          username: username ?? null,
+          phone: wanted,
+        });
+      } catch {
+        /* ignore */
+      }
+      await deps.sendMessage(chatId, MSG_ALREADY_LINKED);
+    } else {
+      await deps.sendMessage(chatId, MSG_TRY_LATER);
+    }
     return;
   }
   await deps.sendMessage(chatId, successMessage(match.name), {

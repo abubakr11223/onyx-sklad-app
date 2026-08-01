@@ -105,7 +105,7 @@ export interface PhotoRequestWorker {
   phone?: string | null;
 }
 
-/** W9-A — one Telegram recipient of a photo task (for UI audit). */
+/** W9-A / W11-A — one Telegram recipient of a photo task (for UI audit). */
 export interface DispatchRecipient {
   userId: string;
   name: string;
@@ -113,6 +113,11 @@ export interface DispatchRecipient {
   delivered: boolean;
   /** Demo seed warehouse (phone/name pattern) — owner should not use as sole worker. */
   isDemoAccount: boolean;
+  /**
+   * W11-A: true when we deliberately did NOT call sendMessage for this row
+   * (demo seed account — historical owner-TG steal target).
+   */
+  skipped: boolean;
 }
 
 /** Detect demo-seeded warehouse rows (seed-demo.ts phone / name markers). */
@@ -124,6 +129,38 @@ export function isDemoWarehouseAccount(u: {
   if (phone === "+998900000002" || phone === "998900000002") return true;
   const name = (u.name ?? "").toLowerCase();
   return name.includes("(демо)") || name.includes("(demo)");
+}
+
+/**
+ * W11-A — split linked WAREHOUSE workers into real dispatch targets vs demo seed
+ * rows. Demo rows historically received the owner's personal Telegram ID via
+ * seed-demo; broadcasting to them lands photo tasks in the wrong chat.
+ */
+export function partitionDispatchWorkers<T extends PhotoRequestWorker>(
+  workers: T[],
+): { eligible: T[]; skippedDemo: T[] } {
+  const eligible: T[] = [];
+  const skippedDemo: T[] = [];
+  for (const w of workers) {
+    if (isDemoWarehouseAccount(w)) skippedDemo.push(w);
+    else eligible.push(w);
+  }
+  return { eligible, skippedDemo };
+}
+
+/**
+ * W11-A UI flag: warehouse telegramId equals an OWNER row's telegramId.
+ * (Normally impossible under User.telegramId @unique once both are set; used
+ * when comparing a candidate id to the current session owner's id after a
+ * manual move, or for display of "this is your chat" when owner has TG set.)
+ */
+export function telegramIdMatchesOwner(
+  warehouseTelegramId: string | null | undefined,
+  ownerTelegramIds: ReadonlyArray<string | null | undefined>,
+): boolean {
+  const w = (warehouseTelegramId ?? "").trim();
+  if (!w) return false;
+  return ownerTelegramIds.some((o) => (o ?? "").trim() === w);
 }
 
 /** Bitta so'rov uchun mavjud yetkazilish yozuvi (redispatch qaror uchun). */
@@ -260,9 +297,14 @@ export interface CreatePhotoRequestResult {
   request: PhotoRequestRecord;
   /** Muvaffaqiyatli yetkazilgan skladchilar soni (haqiqiy — SENT'lar). */
   dispatchedTo: number;
-  /** true = telegramId'li faol skladchi umuman yo'q (BUG-04 asosiy sabab). */
+  /**
+   * true = no eligible real workers with telegramId (BUG-04 / W11-A).
+   * Demo-only linked warehouse does NOT count as a worker for delivery.
+   */
   noWorkers: boolean;
-  /** W9-A — who was targeted (broadcast list) and per-row delivery. */
+  /** W11-A — how many linked WAREHOUSE rows were skipped as demo seed. */
+  skippedDemoCount: number;
+  /** W9-A / W11-A — who was considered (incl. skipped demos) and delivery. */
   recipients: DispatchRecipient[];
 }
 
@@ -408,15 +450,24 @@ export async function createAndDispatchPhotoRequest(
 
   // (3) faol skladchilar — telegramId bilan bog'langanlari.
   // DELIBERATE broadcast (shared queue): assigneeId stays null; every linked
-  // WAREHOUSE worker gets the Telegram task (L5–7 file header). Not targeted.
+  // *real* WAREHOUSE worker gets the Telegram task. W11-A: demo seed rows are
+  // excluded — they often hold the owner's personal chat id after seed-demo.
   const workers = await db.user.findMany({
     where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
     select: { id: true, telegramId: true, name: true, phone: true },
   });
+  const { eligible, skippedDemo } = partitionDispatchWorkers(workers);
 
-  // BUG-04 asosiy sabab: telegramId'li skladchi yo'q → yuboradigan hech kim yo'q.
-  // JIM 0 emas — bu holni ochiq belgilaymiz va §8 История'ga yozamiz.
-  if (workers.length === 0) {
+  // BUG-04 / W11-A: no eligible real workers → do not send (even if demo linked).
+  if (eligible.length === 0) {
+    const recipients: DispatchRecipient[] = skippedDemo.map((w) => ({
+      userId: w.id,
+      name: w.name?.trim() || "складчик",
+      telegramId: w.telegramId as string,
+      delivered: false,
+      isDemoAccount: true,
+      skipped: true,
+    }));
     await db.auditLog.create({
       data: {
         userId: input.managerId,
@@ -427,11 +478,21 @@ export async function createAndDispatchPhotoRequest(
           event: "dispatch",
           noWorkers: true,
           delivered: 0,
-          note: "Нет складчиков с привязанным Telegram — запрос не доставлен",
+          skippedDemoCount: skippedDemo.length,
+          note:
+            skippedDemo.length > 0
+              ? "Только демо-складчик с Telegram — рассылка пропущена (W11-A); привяжите реального складчика"
+              : "Нет складчиков с привязанным Telegram — запрос не доставлен",
         },
       },
     });
-    return { request, dispatchedTo: 0, noWorkers: true, recipients: [] };
+    return {
+      request,
+      dispatchedTo: 0,
+      noWorkers: true,
+      skippedDemoCount: skippedDemo.length,
+      recipients,
+    };
   }
 
   // (4) vazifa matni. Lokatsiya berilmagan bo'lsa — partiyaning yagona bloki
@@ -441,11 +502,21 @@ export async function createAndDispatchPhotoRequest(
     chosen ?? (batch.locations.length === 1 ? batch.locations[0] : null);
   const text = buildTaskText(stoneName, locForText, comment);
 
-  // (5) har bir skladchiga yuboramiz — natija SENT/FAILED bo'lib yoziladi.
+  // (5) har bir haqiqiy skladchiga yuboramiz — natija SENT/FAILED bo'lib yoziladi.
   // Ketma-ket (Promise.allSettled emas): DB yozuvlari tartibli, so'rov soni oz.
   let dispatchedTo = 0;
   const recipients: DispatchRecipient[] = [];
-  for (const w of workers) {
+  for (const w of skippedDemo) {
+    recipients.push({
+      userId: w.id,
+      name: w.name?.trim() || "складчик",
+      telegramId: w.telegramId as string,
+      delivered: false,
+      isDemoAccount: true,
+      skipped: true,
+    });
+  }
+  for (const w of eligible) {
     const chatId = w.telegramId as string;
     const ok = await dispatchAndRecord(deps, request.id, chatId, text);
     if (ok) dispatchedTo += 1;
@@ -454,11 +525,18 @@ export async function createAndDispatchPhotoRequest(
       name: w.name?.trim() || "складчик",
       telegramId: chatId,
       delivered: ok,
-      isDemoAccount: isDemoWarehouseAccount(w),
+      isDemoAccount: false,
+      skipped: false,
     });
   }
 
-  return { request, dispatchedTo, noWorkers: false, recipients };
+  return {
+    request,
+    dispatchedTo,
+    noWorkers: false,
+    skippedDemoCount: skippedDemo.length,
+    recipients,
+  };
 }
 
 // ───────────────────────── Lazy re-dispatch (BUG-04, §8 resilience) ─────────────────────────
@@ -502,7 +580,9 @@ export async function redispatchPendingPhotoRequests(
     where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
     select: { id: true, telegramId: true, name: true, phone: true },
   });
-  if (workers.length === 0) return { retried: 0, delivered: 0 };
+  // W11-A: never re-nag demo seed chats (same wrong-chat risk as create).
+  const { eligible } = partitionDispatchWorkers(workers);
+  if (eligible.length === 0) return { retried: 0, delivered: 0 };
 
   let retried = 0;
   let delivered = 0;
@@ -519,7 +599,7 @@ export async function redispatchPendingPhotoRequests(
       (req.batch.locations.length === 1 ? req.batch.locations[0] : null);
     const text = buildTaskText(stoneName, locForText, req.comment);
 
-    for (const w of workers) {
+    for (const w of eligible) {
       const chatId = w.telegramId as string;
       const existing = req.dispatches.find((d) => d.chatId === chatId);
       // Yetkazilgan — tegmaymiz. Urinishlar tugagan — voz kechamiz (max chegara).
