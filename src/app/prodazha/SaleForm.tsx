@@ -7,7 +7,7 @@
 // BATCH-C: разметка переведена на бренд-дизайн-систему (Button/Field/Card/
 // Alert/Badge). Поведение, имена полей и контракт валидации НЕ менялись.
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -20,6 +20,7 @@ import {
   type PaymentMethod,
   type SaleCurrency,
 } from "@/lib/validators/sale-payment";
+import { formatVolumeQtyDisplay } from "@/lib/validators/volume-qty";
 
 export interface SlabOption {
   id: string;
@@ -166,6 +167,16 @@ export default function SaleForm({
   const [qtyAreaM2, setQtyAreaM2] = useState("");
   const e = state.errors;
   const isCredit = paymentMethod === "CREDIT";
+  const hasSubmitError =
+    Boolean(state.conflict) || Object.keys(state.errors).length > 0;
+
+  // After a rejected submit, stay on confirmation (step 4) so the error is
+  // where the user just pressed «Подтвердить». Controlled fields keep values.
+  useEffect(() => {
+    if (hasSubmitError && target) {
+      setConfirming(true);
+    }
+  }, [hasSubmitError, state.conflict, state.errors, target]);
 
   const pickTarget = (t: Target) => {
     setTarget(t);
@@ -394,14 +405,12 @@ export default function SaleForm({
 
   const isVolume =
     target.mode === "BATCH_VOLUME" || target.mode === "PATTERN_VOLUME";
-  const qtyText = [
-    qtySlabs.trim() && `${qtySlabs.trim()} плит`,
-    qtyAreaM2.trim() && `${qtyAreaM2.trim()} м²`,
-  ]
-    .filter(Boolean)
-    .join(" / ");
+  // Use " · " not " / " so "12 плит · 55 м²" cannot be misread as one number.
+  const qtyText = formatVolumeQtyDisplay(qtySlabs, qtyAreaM2);
 
   // ── Шаг 3: клиент + оплата (TZ9 §3) ──
+  // useEffect forces confirming=true after a failed submit so the user stays on
+  // step 4 with the error. «Изменить данные» sets confirming=false freely.
   if (!confirming) {
     const canProceed =
       customerName.trim() &&
@@ -433,10 +442,11 @@ export default function SaleForm({
               id="f-qtyArea"
               inputMode="decimal"
               label="Площадь, м²"
-              placeholder="55 или 12,5"
+              placeholder="12,5"
               value={qtyAreaM2}
               onChange={(ev) => setQtyAreaM2(ev.target.value)}
               error={e.qtyAreaM2}
+              hint="Одно число, без пробелов (дробь: 12,5)"
             />
             <div className="col-span-2">
               <FieldError msg={e.qty} />
@@ -612,38 +622,52 @@ export default function SaleForm({
   }
 
   // ── Шаг 4: подтверждение ──
+  const fieldErrorItems = [
+    e.form,
+    e.qty,
+    e.qtySlabs,
+    e.qtyAreaM2,
+    e.customerName,
+    e.customerContact,
+    e.paymentMethod,
+    e.price,
+    e.currency,
+    e.debtDueDate,
+    e.debtComment,
+  ].filter((msg): msg is string => Boolean(msg));
+
   return (
     <Card>
-      <BackButton onClick={() => setConfirming(false)} label="Изменить данные" />
-      <h2 className="mb-3 text-lg font-semibold text-ink">4. Подтверждение продажи</h2>
+      <BackButton
+        onClick={() => setConfirming(false)}
+        label="Изменить данные"
+      />
+      <h2 className="mb-3 text-lg font-semibold text-ink">
+        4. Подтверждение продажи
+      </h2>
 
+      {/* Domain conflict (INSUFFICIENT_REMAINDER, ALREADY_SOLD, …) — large, top. */}
       {state.conflict && (
         <Alert variant="danger" title="Продажа не прошла" className="mb-4">
-          <p>{state.conflict}</p>
+          <p className="text-base font-semibold">{state.conflict}</p>
           <p className="mt-2 text-sm">
-            Обновите страницу, чтобы увидеть актуальное наличие.
+            Данные формы сохранены. Исправьте объём или наличие («Изменить
+            данные») и подтвердите снова. При сомнении обновите страницу.
           </p>
         </Alert>
       )}
-      <FieldError msg={e.form} />
-      {/* Server re-validation (TZ9): полевые ошибки видны и на шаге подтверждения. */}
-      {(e.paymentMethod ||
-        e.price ||
-        e.currency ||
-        e.customerContact ||
-        e.customerName ||
-        e.debtDueDate) && (
-        <Alert variant="danger" title="Проверьте данные" className="mb-4">
+
+      {/* Field / form validation — MUST include qty* (salebug: silent reject). */}
+      {fieldErrorItems.length > 0 && (
+        <Alert variant="danger" title="Продажа не оформлена" className="mb-4">
           <ul className="list-disc space-y-1 pl-4 text-sm">
-            {e.customerName && <li>{e.customerName}</li>}
-            {e.customerContact && <li>{e.customerContact}</li>}
-            {e.paymentMethod && <li>{e.paymentMethod}</li>}
-            {e.price && <li>{e.price}</li>}
-            {e.currency && <li>{e.currency}</li>}
-            {e.debtDueDate && <li>{e.debtDueDate}</li>}
+            {fieldErrorItems.map((msg) => (
+              <li key={msg}>{msg}</li>
+            ))}
           </ul>
           <p className="mt-2 text-sm">
-            Нажмите «Изменить данные» и исправьте поля.
+            Нажмите «Изменить данные», исправьте поля — введённые значения не
+            сбрасываются.
           </p>
         </Alert>
       )}

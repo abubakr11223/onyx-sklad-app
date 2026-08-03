@@ -17,11 +17,8 @@ import {
   sellWholeBatch,
   type SaleError,
 } from "@/lib/sales";
-import {
-  parsePositiveDecimal,
-  parsePositiveInt,
-} from "@/lib/validators/intake";
 import { validateSalePayment } from "@/lib/validators/sale-payment";
+import { parseVolumeQtyFields } from "@/lib/validators/volume-qty";
 import { strOf } from "@/lib/form";
 
 export type SaleMode =
@@ -128,15 +125,14 @@ export async function submitSale(
   let qtySlabs: number | null = null;
   let qtyAreaM2: number | null = null;
   if (isVolume) {
-    const qs = parsePositiveInt(str("qtySlabs"));
-    const qa = parsePositiveDecimal(str("qtyAreaM2"));
-    if (qs === undefined) errors.qtySlabs = "Число плит — целое положительное число";
-    if (qa === undefined) errors.qtyAreaM2 = "Площадь — положительное число, например 12,5";
-    if (qs === null && qa === null) {
-      errors.qty = "Укажите объём: число плит и/или площадь (м²)";
+    // Reject "55 12.5" etc. — never strip spaces into 5512.5 (salebug / TZ9).
+    const vol = parseVolumeQtyFields(str("qtySlabs"), str("qtyAreaM2"));
+    if (!vol.ok) {
+      Object.assign(errors, vol.errors);
+    } else {
+      qtySlabs = vol.qtySlabs;
+      qtyAreaM2 = vol.qtyAreaM2;
     }
-    qtySlabs = qs ?? null;
-    qtyAreaM2 = qa ?? null;
   }
 
   const unitId = str("unitId");
