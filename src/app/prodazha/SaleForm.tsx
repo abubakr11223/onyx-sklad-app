@@ -7,11 +7,18 @@
 // BATCH-C: разметка переведена на бренд-дизайн-систему (Button/Field/Card/
 // Alert/Badge). Поведение, имена полей и контракт валидации НЕ менялись.
 
-import { useActionState, useEffect, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import Field from "@/components/ui/Field";
+import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import {
@@ -21,6 +28,11 @@ import {
   type SaleCurrency,
 } from "@/lib/validators/sale-payment";
 import { formatVolumeQtyDisplay } from "@/lib/validators/volume-qty";
+import {
+  applyMoneyInputChange,
+  formatMoneyGrouped,
+  normalizeMoneyForSubmit,
+} from "./money-input";
 
 export interface SlabOption {
   id: string;
@@ -157,7 +169,12 @@ export default function SaleForm({
   const [confirming, setConfirming] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerContact, setCustomerContact] = useState("");
-  const [price, setPrice] = useState("");
+  /** Display only — may contain grouping spaces («200 007 666»). */
+  const [priceDisplay, setPriceDisplay] = useState("");
+  /** Digits for validator / hidden name="price" — never grouped. */
+  const [priceSubmit, setPriceSubmit] = useState("");
+  const priceInputRef = useRef<HTMLInputElement>(null);
+  const priceCaretRef = useRef<number | null>(null);
   // TZ9-A: способ оплаты + валюта (CONTRACT: CASH|CARD|CREDIT, UZS|USD).
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [currency, setCurrency] = useState<SaleCurrency>("UZS");
@@ -177,6 +194,25 @@ export default function SaleForm({
       setConfirming(true);
     }
   }, [hasSubmitError, state.conflict, state.errors, target]);
+
+  // Restore caret after re-grouping (useLayoutEffect = before paint, less jump).
+  useLayoutEffect(() => {
+    const el = priceInputRef.current;
+    const c = priceCaretRef.current;
+    if (el && c !== null && document.activeElement === el) {
+      el.setSelectionRange(c, c);
+    }
+    priceCaretRef.current = null;
+  }, [priceDisplay]);
+
+  const onPriceChange = (ev: ChangeEvent<HTMLInputElement>) => {
+    const next = ev.target.value;
+    const sel = ev.target.selectionStart;
+    const { display, submit, caret } = applyMoneyInputChange(next, sel);
+    priceCaretRef.current = caret;
+    setPriceDisplay(display);
+    setPriceSubmit(submit);
+  };
 
   const pickTarget = (t: Target) => {
     setTarget(t);
@@ -415,7 +451,7 @@ export default function SaleForm({
     const canProceed =
       customerName.trim() &&
       paymentMethod !== "" &&
-      price.trim() &&
+      priceSubmit.trim() &&
       (!isCredit || customerContact.trim()) &&
       !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim());
 
@@ -536,17 +572,26 @@ export default function SaleForm({
           <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
             <Field
               id="f-price"
-              inputMode="decimal"
               label={
                 <>
                   Цена продажи <span className="text-danger">*</span>
                 </>
               }
-              placeholder="1500"
-              value={price}
-              onChange={(ev) => setPrice(ev.target.value)}
               error={e.price}
-            />
+              hint="Пробелы — только для чтения; отправляется число без них"
+            >
+              <input
+                ref={priceInputRef}
+                id="f-price"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="200 000"
+                value={priceDisplay}
+                onChange={onPriceChange}
+                aria-invalid={e.price ? true : undefined}
+                className={`${inputClass} tnum`}
+              />
+            </Field>
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-semibold text-ink">
                 Валюта <span className="text-danger">*</span>
@@ -714,7 +759,10 @@ export default function SaleForm({
         <div className="flex justify-between gap-3 py-1">
           <dt className="text-ink/60">Цена</dt>
           <dd className="tnum text-right font-semibold text-ink">
-            {price.trim() || "—"} {CURRENCY_LABEL[currency]}
+            {priceDisplay.trim()
+              ? formatMoneyGrouped(priceDisplay)
+              : "—"}{" "}
+            {CURRENCY_LABEL[currency]}
           </dd>
         </div>
         {isCredit && debtDueDate.trim() && (
@@ -742,7 +790,12 @@ export default function SaleForm({
         )}
         <input type="hidden" name="customerName" value={customerName} />
         <input type="hidden" name="customerContact" value={customerContact} />
-        <input type="hidden" name="price" value={price} />
+        {/* CRITICAL: never post grouped display — validators reject spaces. */}
+        <input
+          type="hidden"
+          name="price"
+          value={priceSubmit || normalizeMoneyForSubmit(priceDisplay)}
+        />
         <input type="hidden" name="paymentMethod" value={paymentMethod} />
         <input type="hidden" name="currency" value={currency} />
         <input type="hidden" name="debtDueDate" value={debtDueDate} />
