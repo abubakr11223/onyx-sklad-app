@@ -5,12 +5,13 @@
 // ru: Очистка тестовых/демо складских данных. По умолчанию DRY-RUN.
 //
 //   Dry-run:
-//     ONYX_PURGE_ALLOW=I_UNDERSTAND_IRREVERSIBLE npm run purge:inventory -- --scope=A
+//     ONYX_PURGE_ALLOW=I_UNDERSTAND_IRREVERSIBLE npm run purge:inventory -- --scope=P
 //   Execute:
-//     ONYX_PURGE_ALLOW=I_UNDERSTAND_IRREVERSIBLE npm run purge:inventory -- --scope=B --execute --yes
+//     ONYX_PURGE_ALLOW=I_UNDERSTAND_IRREVERSIBLE npm run purge:inventory -- --scope=P --execute --yes
 //
 // ⛔ DATABASE_URL often points at LIVE Neon. This tool never soft-deletes.
-//    There is no undo. Prefer scope A, then B. Scope C wipes /istoriya.
+//    There is no undo. Prefer scope P for stuck fotozapros; A then B for demo stock;
+//    C wipes /istoriya + debts.
 //
 // Does NOT open a connection until args + env gates pass.
 
@@ -38,7 +39,7 @@ async function main(): Promise<void> {
       );
     } else if (parsed.error === "scope") {
       console.error(
-        "⛔ --scope=A|B|C is required. No default scope that deletes.\n",
+        "⛔ --scope=A|B|C|P is required. No default scope that deletes.\n",
       );
     } else if (parsed.error === "confirm") {
       console.error(

@@ -4,9 +4,11 @@ import {
   PURGE_ALLOW_ENV,
   PURGE_ALLOW_VALUE,
   PURGE_DELETE_ORDER,
+  emptyPurgeCounts,
   executePurge,
   formatPlanReport,
   isDemoStoneType,
+  isPhotoQueueScope,
   parsePurgeArgs,
   planPurge,
   validatePurgeArgs,
@@ -100,6 +102,20 @@ describe("parsePurgeArgs / validatePurgeArgs — safety gates", () => {
       willWrite: true,
     });
   });
+
+  it("scope=P is valid photo-queue scope", () => {
+    const raw = parsePurgeArgs(["--scope=P"], {
+      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
+    });
+    expect(validatePurgeArgs(raw)).toEqual({
+      ok: true,
+      scope: "P",
+      execute: false,
+      willWrite: false,
+    });
+    expect(isPhotoQueueScope("P")).toBe(true);
+    expect(isPhotoQueueScope("B")).toBe(false);
+  });
 });
 
 /** In-memory rows for plan selection tests. */
@@ -168,7 +184,8 @@ function makeFakePurgeDb(seed: {
         if (
           where &&
           typeof where === "object" &&
-          "photoRequestId" in (where as object)
+          ("photoRequestId" in (where as object) ||
+            "photoRequest" in (where as object))
         ) {
           return countOf("slabsWithPhotoRequest", 0);
         }
@@ -212,7 +229,10 @@ function makeFakePurgeDb(seed: {
       },
     },
     photo: {
-      count: async () => countOf("photo", 0),
+      count: async ({ where } = {}) => {
+        calls.push({ model: "photo", op: "count", where });
+        return countOf("photo", 0);
+      },
       deleteMany: async ({ where } = {}) => {
         calls.push({ model: "photo", op: "deleteMany", where });
         return { count: countOf("photo", 0) };
@@ -220,6 +240,7 @@ function makeFakePurgeDb(seed: {
     },
     photoRequest: {
       count: async ({ where } = {}) => {
+        calls.push({ model: "photoRequest", op: "count", where });
         if (
           where &&
           typeof where === "object" &&
@@ -227,6 +248,7 @@ function makeFakePurgeDb(seed: {
         ) {
           return countOf("photoRequestsWithSlab", 0);
         }
+        // Scope P: status PENDING only — still return configured count.
         return countOf("photoRequest", 0);
       },
       updateMany: async ({ where } = {}) => {
@@ -239,7 +261,10 @@ function makeFakePurgeDb(seed: {
       },
     },
     photoDispatch: {
-      count: async () => countOf("photoDispatch", 0),
+      count: async ({ where } = {}) => {
+        calls.push({ model: "photoDispatch", op: "count", where });
+        return countOf("photoDispatch", 0);
+      },
       deleteMany: async ({ where } = {}) => {
         calls.push({ model: "photoDispatch", op: "deleteMany", where });
         return { count: countOf("photoDispatch", 0) };
@@ -379,6 +404,39 @@ describe("planPurge — scope selection (fake client)", () => {
     expect(debtIdx).toBeGreaterThanOrEqual(0);
     expect(saleIdx).toBeGreaterThan(debtIdx);
   });
+
+  it("scope P: only photo-queue counts; inventory zeros", async () => {
+    const { db } = makeFakePurgeDb({
+      stones: DEMO_STONES,
+      batches: BATCHES,
+      counts: {
+        photoRequest: 21,
+        photoDispatch: 37,
+        photo: 3,
+        slabsWithPhotoRequest: 2,
+        // inventory noise — must stay 0 in plan for P
+        debt: 99,
+        saleRecord: 99,
+        stoneType: 99,
+        batch: 99,
+      },
+    });
+    const plan = await planPurge(db, "P");
+    expect(plan.scope).toBe("P");
+    expect(plan.stoneTypeIds).toEqual([]);
+    expect(plan.batchIds).toEqual([]);
+    expect(plan.counts.photoRequests).toBe(21);
+    expect(plan.counts.photoDispatches).toBe(37);
+    expect(plan.counts.photos).toBe(3);
+    expect(plan.counts.slabsWithPhotoRequest).toBe(2);
+    expect(plan.counts.debts).toBe(0);
+    expect(plan.counts.saleRecords).toBe(0);
+    expect(plan.counts.stoneTypes).toBe(0);
+    expect(plan.preserved).toContain("Debt");
+    expect(plan.preserved).toContain("SaleRecord");
+    expect(formatPlanReport(plan)).toMatch(/PhotoRequest:\s+21/);
+    expect(formatPlanReport(plan)).toMatch(/Debt:\s+0/);
+  });
 });
 
 describe("executePurge — order and audit marker (fake client)", () => {
@@ -475,6 +533,74 @@ describe("executePurge — order and audit marker (fake client)", () => {
     expect(
       calls.filter((c) => c.op === "deleteMany" && c.model === "stoneType"),
     ).toHaveLength(0);
+  });
+
+  it("scope P: deletes PhotoDispatch → Photo → null slab PR → PhotoRequest; no sales/debts", async () => {
+    const { db, calls } = makeFakePurgeDb({
+      stones: DEMO_STONES,
+      batches: BATCHES,
+      counts: {
+        photoDispatch: 37,
+        photo: 3,
+        photoRequest: 21,
+        slabsWithPhotoRequest: 2,
+        debt: 5,
+        saleRecord: 5,
+      },
+    });
+
+    const result = await executePurge(db, "P", () => {});
+    expect(result.deleted.photoDispatches).toBe(37);
+    expect(result.deleted.photos).toBe(3);
+    expect(result.deleted.photoRequests).toBe(21);
+    expect(result.deleted.slabsWithPhotoRequest).toBe(2);
+    expect(result.deleted.debts).toBe(0);
+    expect(result.deleted.saleRecords).toBe(0);
+    expect(result.deleted.stoneTypes).toBe(0);
+
+    // Order on the execute path only (planPurge also logs counts first).
+    const execOps = calls.filter(
+      (c) =>
+        (c.op === "deleteMany" || c.op === "updateMany") &&
+        ["photoDispatch", "photo", "slab", "photoRequest"].includes(c.model),
+    );
+    // First occurrence of each execute step after plan counts:
+    const first = (model: string, op: string) =>
+      execOps.findIndex((c) => c.model === model && c.op === op);
+    // Prefer last photoDispatch delete (execute) — plan only counts.
+    const pdDel = calls.findIndex(
+      (c) => c.model === "photoDispatch" && c.op === "deleteMany",
+    );
+    const photoDel = calls.findIndex(
+      (c) => c.model === "photo" && c.op === "deleteMany",
+    );
+    const slabNull = calls.findIndex(
+      (c) => c.model === "slab" && c.op === "updateMany",
+    );
+    const prDel = calls.findIndex(
+      (c) => c.model === "photoRequest" && c.op === "deleteMany",
+    );
+    expect(pdDel).toBeGreaterThanOrEqual(0);
+    expect(photoDel).toBeGreaterThan(pdDel);
+    expect(slabNull).toBeGreaterThan(photoDel);
+    expect(prDel).toBeGreaterThan(slabNull);
+
+    const deleteModels = calls
+      .filter((c) => c.op === "deleteMany")
+      .map((c) => c.model);
+    // Never touch sales/debts/stones
+    expect(deleteModels).not.toContain("debt");
+    expect(deleteModels).not.toContain("saleRecord");
+    expect(deleteModels).not.toContain("stoneType");
+    expect(deleteModels).not.toContain("batch");
+    void first;
+  });
+});
+
+describe("emptyPurgeCounts", () => {
+  it("zeros all fields and merges overrides", () => {
+    expect(emptyPurgeCounts().debts).toBe(0);
+    expect(emptyPurgeCounts({ photoRequests: 7 }).photoRequests).toBe(7);
   });
 });
 

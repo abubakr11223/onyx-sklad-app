@@ -4,10 +4,13 @@
 # Nima qiladi: .env.production.local dan prod ulanishini oladi va purge CLI'ni
 # chaqiradi. Bayroqlarsiz — QURUQ YURGIZISH: faqat sanaydi, hech narsa o'chmaydi.
 #
-#   ./scripts/purge-prod.sh --scope=C                    ← quruq yurgizish
+#   ./scripts/purge-prod.sh --scope=P                    ← foto navbat (quruq)
+#   ./scripts/purge-prod.sh --scope=P --execute --yes    ← PENDING fotozapros o'chirish
+#   ./scripts/purge-prod.sh --scope=C                    ← quruq yurgizish (to'liq)
 #   ./scripts/purge-prod.sh --scope=C --execute --yes    ← HAQIQIY O'CHIRISH
 #
-# ⚠️  O'chirilgan ma'lumot QAYTMAYDI. Avval Neon'da zaxira branch yarating.
+# Scope P: faqat PENDING PhotoRequest + PhotoDispatch + bog'langan Photo.
+# Debt/sotuv/toshlarga tegmaydi. ⚠️  O'chirilgan ma'lumot QAYTMAYDI.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

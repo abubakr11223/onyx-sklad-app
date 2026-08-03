@@ -6,12 +6,13 @@
 //
 // ⛔ IRREVERSIBLE. Dry-run is the default. Execute needs:
 //   1) env ONYX_PURGE_ALLOW=I_UNDERSTAND_IRREVERSIBLE
-//   2) --scope=A|B|C
+//   2) --scope=A|B|C|P
 //   3) --execute
 //   4) --yes
 //
 // NEVER deletes: User, AppConfig, WarehouseBlock, WarehouseLandmark, KartaCell,
 // TelegramAccessRequest, ConsumedMagicLinkToken, TelegramWebhookReceipt.
+// Scope P never deletes StoneType/Batch/Slab/Piece/Sale/Debt either.
 
 import type { PrismaClient } from "@prisma/client";
 
@@ -19,9 +20,20 @@ import type { PrismaClient } from "@prisma/client";
 export const PURGE_ALLOW_ENV = "ONYX_PURGE_ALLOW";
 export const PURGE_ALLOW_VALUE = "I_UNDERSTAND_IRREVERSIBLE";
 
-export type PurgeScope = "A" | "B" | "C";
+/**
+ * A/B/C — inventory (see usageText).
+ * P — photo **queue** only: PENDING PhotoRequest + related PhotoDispatch +
+ *     Photos attached to those requests. Does not wipe DONE catalog photos
+ *     or inventory. Default for clearing the multi-pending Telegram dead-end.
+ */
+export type PurgeScope = "A" | "B" | "C" | "P";
 
-export const PURGE_SCOPES: readonly PurgeScope[] = ["A", "B", "C"] as const;
+export const PURGE_SCOPES: readonly PurgeScope[] = ["A", "B", "C", "P"] as const;
+
+/** True for photo-queue-only scope (no stones/sales/debts). */
+export function isPhotoQueueScope(scope: PurgeScope): boolean {
+  return scope === "P";
+}
 
 export interface RawPurgeArgs {
   scope: string | null;
@@ -101,11 +113,11 @@ export function validatePurgeArgs(raw: RawPurgeArgs): PurgeArgsResult {
 
 export function usageText(): string {
   return [
-    "Onyx inventory purge (IRREVERSIBLE on --execute).",
+    "Onyx inventory / photo-queue purge (IRREVERSIBLE on --execute).",
     "",
     "Safety gates (all required for a write):",
     `  1) ${PURGE_ALLOW_ENV}=${PURGE_ALLOW_VALUE}`,
-    "  2) --scope=A|B|C   (no default scope)",
+    "  2) --scope=A|B|C|P   (no default scope)",
     "  3) --execute       (without this: dry-run counts only)",
     "  4) --yes           (acknowledge the printed plan)",
     "",
@@ -117,15 +129,45 @@ export function usageText(): string {
     "  C  full inventory wipe + Debt + SaleRecord + Reservation + Photo + PhotoRequest +",
     "     PhotoDispatch + Lead + AuditLog + MutationReceipt. Keeps accounts,",
     "     AppConfig, warehouse grid, KartaCell, TG access / magic-link / webhook receipts.",
+    "  P  PHOTO QUEUE only (PENDING PhotoRequest + their PhotoDispatch + Photos",
+    "     linked to those requests). Nulls Slab.photoRequestId for those requests.",
+    "     Does NOT touch stones, sales, debts, users, grid. Safe default to clear",
+    "     the multi-pending Telegram dead-end without wiping acceptance debts.",
     "",
     "Dry-run (default, no write):",
-    `  ${PURGE_ALLOW_ENV}=${PURGE_ALLOW_VALUE} npm run purge:inventory -- --scope=B`,
+    `  ${PURGE_ALLOW_ENV}=${PURGE_ALLOW_VALUE} npm run purge:inventory -- --scope=P`,
     "",
     "Execute:",
-    `  ${PURGE_ALLOW_ENV}=${PURGE_ALLOW_VALUE} npm run purge:inventory -- --scope=B --execute --yes`,
+    `  ${PURGE_ALLOW_ENV}=${PURGE_ALLOW_VALUE} npm run purge:inventory -- --scope=P --execute --yes`,
     "",
-    "Cannot be undone. Prefer A, then B. C erases /istoriya content.",
+    "Cannot be undone. Prefer P for stuck fotozapros; A then B for demo stock; C last.",
   ].join("\n");
+}
+
+/** Empty inventory counts (scope P zeros these). */
+export function emptyPurgeCounts(
+  overrides: Partial<PurgePlanCounts> = {},
+): PurgePlanCounts {
+  return {
+    stoneTypes: 0,
+    batches: 0,
+    batchLocations: 0,
+    batchPatterns: 0,
+    slabs: 0,
+    pieces: 0,
+    reservations: 0,
+    debts: 0,
+    saleRecords: 0,
+    photos: 0,
+    photoRequests: 0,
+    photoDispatches: 0,
+    leads: 0,
+    auditLogs: 0,
+    mutationReceipts: 0,
+    slabsWithPhotoRequest: 0,
+    photoRequestsWithSlab: 0,
+    ...overrides,
+  };
 }
 
 // ───────────────────────── Count / plan types ─────────────────────────
@@ -319,6 +361,7 @@ async function resolveStoneTypeIds(
   db: PurgeDb,
   scope: PurgeScope,
 ): Promise<string[]> {
+  if (scope === "P") return [];
   if (scope === "C" || scope === "B") {
     const all = await db.stoneType.findMany({
       select: { id: true, name: true, qrSlug: true },
@@ -332,12 +375,133 @@ async function resolveStoneTypeIds(
   return all.filter(isDemoStoneType).map((s) => s.id);
 }
 
+/**
+ * Scope P — plan/delete only the open fotozapros queue.
+ * FK order (schema): PhotoDispatch CASCADE from PR; Photo Restrict on PR;
+ * Slab.photoRequestId Restrict → null first; then PhotoRequest.
+ * Filter: status = PENDING only (DONE keeps real attached catalog photos).
+ */
+async function planPhotoQueuePurge(db: PurgeDb): Promise<PurgePlan> {
+  const pendingWhere = { status: "PENDING" as const };
+  const [
+    photoRequests,
+    photoDispatches,
+    photos,
+    slabsWithPhotoRequest,
+    photoRequestsWithSlab,
+  ] = await Promise.all([
+    db.photoRequest.count({ where: pendingWhere }),
+    db.photoDispatch.count({
+      where: { photoRequest: pendingWhere },
+    }),
+    db.photo.count({
+      where: { photoRequest: pendingWhere },
+    }),
+    db.slab.count({
+      where: { photoRequest: pendingWhere },
+    }),
+    db.photoRequest.count({
+      where: { status: "PENDING", slabId: { not: null } },
+    }),
+  ]);
+
+  return {
+    scope: "P",
+    stoneTypeIds: [],
+    batchIds: [],
+    counts: emptyPurgeCounts({
+      photoRequests,
+      photoDispatches,
+      photos,
+      slabsWithPhotoRequest,
+      photoRequestsWithSlab,
+    }),
+    preserved: [
+      ...PRESERVED_ALWAYS,
+      "StoneType",
+      "Batch",
+      "BatchLocation",
+      "BatchPattern",
+      "Slab",
+      "Piece",
+      "SaleRecord",
+      "Debt",
+      "Reservation",
+      "Lead",
+      "AuditLog",
+      "MutationReceipt",
+      "Photo (without PENDING photoRequest — e.g. catalog)",
+      "PhotoRequest DONE/CANCELLED",
+    ],
+    notes: [
+      "Wipe is IRREVERSIBLE. There is no undo.",
+      "Scope P: PENDING PhotoRequest only (open queue that blocks bare Telegram photos when 2+).",
+      "Deletes: PhotoDispatch + Photo rows linked to those PENDING requests, then the requests.",
+      "Nulls Slab.photoRequestId pointing at PENDING requests (FK Restrict).",
+      "Does NOT delete DONE/CANCELLED requests or Photos without a PENDING parent.",
+      "Does NOT touch stones, sales, debts, users, warehouse grid.",
+    ],
+  };
+}
+
+async function executePhotoQueuePurge(
+  tx: PurgeDb,
+  log: Logger,
+): Promise<PurgePlanCounts> {
+  const pendingWhere = { status: "PENDING" as const };
+
+  // 1 PhotoDispatch for PENDING requests
+  const photoDispatches = (
+    await tx.photoDispatch.deleteMany({
+      where: { photoRequest: pendingWhere },
+    })
+  ).count;
+  log(`  PhotoDispatch deleted: ${photoDispatches}`);
+
+  // 2 Photos attached to PENDING requests (Restrict on photoRequestId)
+  const photos = (
+    await tx.photo.deleteMany({
+      where: { photoRequest: pendingWhere },
+    })
+  ).count;
+  log(`  Photo deleted: ${photos}`);
+
+  // 3 Break Slab → PhotoRequest Restrict
+  const slabsWithPhotoRequest = (
+    await tx.slab.updateMany({
+      where: { photoRequest: pendingWhere },
+      data: { photoRequestId: null },
+    })
+  ).count;
+  log(`  Slab.photoRequestId nulled: ${slabsWithPhotoRequest}`);
+
+  // 4 PENDING PhotoRequest (after children + slab FK clear)
+  // photoRequest.slabId is on the PR side — deleting PR does not need nulling slab.
+  const photoRequestsWithSlab = 0; // not used as a delete count for P
+  const photoRequests = (
+    await tx.photoRequest.deleteMany({ where: pendingWhere })
+  ).count;
+  log(`  PhotoRequest (PENDING) deleted: ${photoRequests}`);
+
+  return emptyPurgeCounts({
+    photoDispatches,
+    photos,
+    photoRequests,
+    slabsWithPhotoRequest,
+    photoRequestsWithSlab,
+  });
+}
+
 // ───────────────────────── Plan ─────────────────────────
 
 export async function planPurge(
   db: PurgeDb,
   scope: PurgeScope,
 ): Promise<PurgePlan> {
+  if (scope === "P") {
+    return planPhotoQueuePurge(db);
+  }
+
   const stoneTypeIds = await resolveStoneTypeIds(db, scope);
   const batches =
     stoneTypeIds.length === 0
@@ -632,6 +796,10 @@ export async function executePurge(
   log("EXECUTING wipe (irreversible)…");
 
   const run = async (tx: PurgeDb): Promise<PurgePlanCounts> => {
+    if (scope === "P") {
+      return executePhotoQueuePurge(tx, log);
+    }
+
     const stoneTypeIds = plan.stoneTypeIds;
     const noStones = stoneTypeIds.length === 0;
     const all = scope === "C"; // wipe every inventory row, not only matched stones
@@ -642,25 +810,7 @@ export async function executePurge(
         noStones || batchIds.length === 0 ? ["__purge_none__"] : batchIds,
     };
 
-    const zero: PurgePlanCounts = {
-      stoneTypes: 0,
-      batches: 0,
-      batchLocations: 0,
-      batchPatterns: 0,
-      slabs: 0,
-      pieces: 0,
-      reservations: 0,
-      debts: 0,
-      saleRecords: 0,
-      photos: 0,
-      photoRequests: 0,
-      photoDispatches: 0,
-      leads: 0,
-      auditLogs: 0,
-      mutationReceipts: 0,
-      slabsWithPhotoRequest: 0,
-      photoRequestsWithSlab: 0,
-    };
+    const zero = emptyPurgeCounts();
 
     // Scope A/B with no matching stones: nothing inventory-related to delete.
     if (!all && noStones) {
