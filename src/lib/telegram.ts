@@ -40,6 +40,21 @@ export interface TgPhotoSize {
   file_size?: number;
 }
 
+/**
+ * Hujjat («Send as File»). Rasm shu yo'l bilan ham kelishi mumkin
+ * (siqilmagan / iPhone HEIC / katta fayl) — webhook mime+size bo'yicha qabul
+ * yoki rad etadi. storageKey baribir file_id (model o'zgarmaydi).
+ */
+export interface TgDocument {
+  file_id: string;
+  file_unique_id: string;
+  file_name?: string;
+  mime_type?: string;
+  file_size?: number;
+  /** Thumbnail (ixtiyoriy) — biz ishlatmaymiz; faqat shakl to'liqligi uchun. */
+  thumb?: TgPhotoSize;
+}
+
 export interface TgMessage {
   message_id: number;
   from?: TgUser;
@@ -47,6 +62,18 @@ export interface TgMessage {
   text?: string;
   contact?: TgContact;
   photo?: TgPhotoSize[];
+  /** «Send as File» / uncompressed image yoki boshqa hujjat. */
+  document?: TgDocument;
+  /**
+   * Quyidagi maydonlar faqat «bot ishlata olmaydi → qisqa javob» uchun
+   * mavjudligini aniqlash (to'liq Bot API shakli emas).
+   */
+  video?: { file_id: string };
+  voice?: { file_id: string };
+  audio?: { file_id: string };
+  sticker?: { file_id: string };
+  animation?: { file_id: string };
+  video_note?: { file_id: string };
   /** Rasm/hujjat ostidagi izoh (§5.5b: «singan» marshrutlash shu orqali). */
   caption?: string;
   /**

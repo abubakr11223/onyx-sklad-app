@@ -8,12 +8,125 @@
 import type {
   SendMessageOptions,
   SendResult,
+  TgDocument,
   TgReplyKeyboardMarkup,
   TgUpdate,
 } from "@/lib/telegram";
 import { encodeShapeDraft } from "@/lib/singan";
 import { capabilitiesFor, type Role } from "@/lib/permissions";
 import type { SeparateSlabInput } from "@/lib/slab-separation";
+
+// ───────────────────────── Document image format control ─────────────────────────
+//
+// Telegram image ikki yo'l bilan keladi: message.photo[] (siqilgan) yoki
+// message.document (fayl / «Send as File»). Faqat photo[] ishlanganda skladchi
+// fayl yuborsa jimlik — 3 hafta ko'rinmas bug. Qabul qoidalari:
+//
+//  • mime: jpeg / png / webp — brauzer + /api/photo contentTypeFromPath ko'rsatadi
+//  • HEIC/HEIF: RAD — Chrome/Firefox desktop odatda ko'rsatmaydi; skladchiga
+//    «Фото» qilib yuborish yoki JPEG/PNG ga aylantirish aytiladi
+//  • size: 10 MiB — photo proksi serverless'da butun faylni buferlaydi; Bot API
+//    getFile max 20 MB, lekin ombor surati uchun 10 MB yetarli va xavfsizroq
+//  • storageKey = Telegram file_id (model o'zgarmaydi)
+
+/** Brauzerda ishonchli ko'rinadigan rasm MIME'lari (document orqali). */
+export const ACCEPTED_IMAGE_DOCUMENT_MIMES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+] as const;
+
+const ACCEPTED_IMAGE_MIME_SET = new Set<string>(ACCEPTED_IMAGE_DOCUMENT_MIMES);
+
+/** HEIC/HEIF — iPhone default; ko'p brauzerda render bo'lmaydi → rad. */
+const HEIC_MIME_SET = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+]);
+
+/** Document (Send as File) maksimal hajm — bayt. Photo[] siqilgan, limit yo'q. */
+export const MAX_IMAGE_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10 MiB
+
+/**
+ * Incoming image resolution (photo[] yoki image document).
+ * ok:true → file_id (storageKey); ok:false → worker'ga yuboriladigan javob.
+ * null → rasm/hujjat yo'q (boshqa media yoki matn).
+ */
+export type ResolveImageResult =
+  | { ok: true; fileId: string; source: "photo" | "document" }
+  | { ok: false; reply: string };
+
+/**
+ * message.photo[] yoki rasm-document'dan file_id ajratadi.
+ * Non-image document → rad matni. Pure — unit-test uchun export.
+ */
+export function resolveIncomingImage(
+  message: NonNullable<TgUpdate["message"]>,
+): ResolveImageResult | null {
+  // 1) Siqilgan photo[] — Telegram o'sish tartibi, oxirgisi eng katta.
+  if (Array.isArray(message.photo) && message.photo.length > 0) {
+    const largest = message.photo[message.photo.length - 1]!;
+    return { ok: true, fileId: largest.file_id, source: "photo" };
+  }
+
+  // 2) Document (Send as File).
+  const doc = message.document;
+  if (doc && typeof doc.file_id === "string" && doc.file_id.length > 0) {
+    return resolveImageDocument(doc);
+  }
+
+  return null;
+}
+
+/** Faqat document maydoni — mime + size + HEIC. Export unit-test. */
+export function resolveImageDocument(doc: TgDocument): ResolveImageResult {
+  const mime = (doc.mime_type ?? "").toLowerCase().trim();
+  const name = (doc.file_name ?? "").toLowerCase();
+
+  // HEIC: mime yoki kengaytma (ba'zi klientlar mime bermaydi).
+  const looksHeic =
+    HEIC_MIME_SET.has(mime) ||
+    name.endsWith(".heic") ||
+    name.endsWith(".heif");
+  if (looksHeic) {
+    return { ok: false, reply: MSG_DOCUMENT_HEIC };
+  }
+
+  const looksAcceptedExt =
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".png") ||
+    name.endsWith(".webp");
+  const mimeOk = mime.length > 0 && ACCEPTED_IMAGE_MIME_SET.has(mime);
+  // mime bo'sh bo'lsa (ba'zi Android klientlar) — faqat ishonchli kengaytma.
+  if (!mimeOk && !(mime === "" && looksAcceptedExt)) {
+    return { ok: false, reply: MSG_DOCUMENT_NOT_IMAGE };
+  }
+
+  const size = typeof doc.file_size === "number" ? doc.file_size : undefined;
+  if (size !== undefined && size > MAX_IMAGE_DOCUMENT_BYTES) {
+    return { ok: false, reply: MSG_DOCUMENT_TOO_LARGE };
+  }
+
+  return { ok: true, fileId: doc.file_id, source: "document" };
+}
+
+/**
+ * Bot ishlata olmaydigan media (video, ovoz, sticker, …) uchun qisqa javob.
+ * null → bunday media yo'q.
+ */
+export function unsupportedMediaReply(
+  message: NonNullable<TgUpdate["message"]>,
+): string | null {
+  if (message.video || message.video_note) return MSG_UNSUPPORTED_VIDEO;
+  if (message.voice || message.audio) return MSG_UNSUPPORTED_VOICE;
+  if (message.sticker) return MSG_UNSUPPORTED_STICKER;
+  if (message.animation) return MSG_UNSUPPORTED_ANIMATION;
+  return null;
+}
 
 // ───────────────────────── Deps (inyeksiya) ─────────────────────────
 
@@ -268,6 +381,29 @@ const MSG_PHOTO_AMBIGUOUS_HEADER =
 const managerNotifyMessage = (stoneTypeName: string) =>
   `📷 Фото готово: ${stoneTypeName}.`;
 
+// Document / unsupported media — hech qachon jimlik (3 haftalik «foto yo'q» bug).
+const MSG_DOCUMENT_NOT_IMAGE =
+  "Этот файл не является фото. Отправьте снимок как «Фото» (не «Файл») " +
+  "или пришлите jpeg/png/webp.";
+const MSG_DOCUMENT_HEIC =
+  "Формат HEIC/HEIF в браузере обычно не открывается. " +
+  "Отправьте снимок как «Фото» (не «Файл») — Telegram сожмёт в JPEG, " +
+  "или конвертируйте в JPEG/PNG.";
+const MSG_DOCUMENT_TOO_LARGE =
+  `Файл слишком большой (лимит ${Math.floor(MAX_IMAGE_DOCUMENT_BYTES / (1024 * 1024))} МБ). ` +
+  "Сожмите снимок или отправьте как «Фото» — Telegram уменьшит сам.";
+const MSG_UNSUPPORTED_VIDEO =
+  "Видео бот не принимает. Отправьте обычное фото камня (как «Фото»).";
+const MSG_UNSUPPORTED_VOICE =
+  "Голосовые и аудио бот не принимает. Отправьте фото по заданию.";
+const MSG_UNSUPPORTED_STICKER =
+  "Стикеры бот не принимает. Отправьте фото камня по заданию.";
+const MSG_UNSUPPORTED_ANIMATION =
+  "GIF/анимацию бот не принимает. Отправьте обычное фото.";
+const MSG_UNKNOWN_HELP =
+  "Onyx bot: отправьте фото по заданию (лучше ответом/reply на сообщение бота). " +
+  "/start — привязка номера. /login — вход на сайт. /singan — битый камень.";
+
 /** Bare-foto 2+ PENDING ro'yxati (batch/tosh nomi + lokatsiya). Export — unit-test. */
 export function buildPhotoAmbiguousMessage(
   pending: Array<{
@@ -426,7 +562,7 @@ export async function handleUpdate(
     }
 
     const message = update.message ?? update.edited_message;
-    if (!message) return; // callback_query va h.k. — TG-A da e'tiborsiz.
+    if (!message) return; // callback_query va h.k. — chat yo'q / e'tiborsiz.
 
     const chatId = message.chat.id;
 
@@ -442,25 +578,35 @@ export async function handleUpdate(
       return;
     }
 
-    // 2a) §5.5b: rasm + «singan»/«бой» izohi → AI-shakl oqimi. Izohsiz (yoki
-    //     boshqa izohli) rasm 2b'dagi ESKI PhotoRequest oqimida qoladi.
-    if (
-      Array.isArray(message.photo) &&
-      message.photo.length > 0 &&
-      typeof message.caption === "string" &&
-      isBrokenStoneCaption(message.caption)
-    ) {
-      await handleBrokenStone(message, deps);
+    // 2) Rasm: photo[] YOKI image document — bitta resolve → bitta claim/attach yo'li.
+    //    Document non-image / HEIC / oversized → darhol qisqa javob (jimlik YO'Q).
+    const image = resolveIncomingImage(message);
+    if (image) {
+      if (!image.ok) {
+        await deps.sendMessage(chatId, image.reply);
+        return;
+      }
+      // 2a) §5.5b: rasm + «singan»/«бой» izohi → AI-shakl oqimi.
+      if (
+        typeof message.caption === "string" &&
+        isBrokenStoneCaption(message.caption)
+      ) {
+        await handleBrokenStone(message, deps, image.fileId);
+        return;
+      }
+      // 2b) Fotozapros: PENDING claim + multi-pending 05ba2a3 + file_id storageKey.
+      await handlePhoto(message, deps, image.fileId);
       return;
     }
 
-    // 2b) Foto (TG-B2) → PENDING zaprosga biriktirish, DONE qilish, menejerni xabardor.
-    if (Array.isArray(message.photo) && message.photo.length > 0) {
-      await handlePhoto(message, deps);
+    // 2c) Video / voice / sticker / GIF — qisqa rad (jimlik bug'ini yopish).
+    const unsupported = unsupportedMediaReply(message);
+    if (unsupported) {
+      await deps.sendMessage(chatId, unsupported);
       return;
     }
 
-    // 2c) §5.5b: `/singan` matn buyrug'i (rasmsiz) → yo'riqnoma.
+    // 2d) §5.5b: `/singan` matn buyrug'i (rasmsiz) → yo'riqnoma.
     if (typeof message.text === "string" && isSinganCommand(message.text)) {
       await deps.sendMessage(chatId, MSG_SINGAN_INSTRUCTION);
       return;
@@ -481,7 +627,8 @@ export async function handleUpdate(
       return;
     }
 
-    // 5) Boshqa har qanday update — e'tiborsiz (xatosiz qaytamiz).
+    // 5) Boshqa matn / noma'lum xabar — qisqa yo'riqnoma (jimlik YO'Q).
+    await deps.sendMessage(chatId, MSG_UNKNOWN_HELP);
   } catch (err) {
     // W10-B — domain yiqilsa claim'ni bo'shat: Telegram qayta yuborsa qayta urinadi.
     // Success pathda claim qoladi (replay → already_seen).
@@ -544,6 +691,8 @@ async function handleLogin(chatId: number, deps: WebhookDeps): Promise<void> {
 async function handleBrokenStone(
   message: NonNullable<TgUpdate["message"]>,
   deps: WebhookDeps,
+  /** photo[] eng katta yoki image document file_id (resolveIncomingImage). */
+  fileId: string,
 ): Promise<void> {
   const chatId = message.chat.id;
 
@@ -578,11 +727,8 @@ async function handleBrokenStone(
     return;
   }
 
-  // (3) Eng katta o'lcham — massivning oxirgi elementi (Telegram o'sish tartibi).
-  const photos = message.photo!;
-  const largest = photos[photos.length - 1];
-
-  const downloaded = await deps.downloadPhotoBase64(largest.file_id);
+  // (3) file_id — photo[] yoki image document (resolveIncomingImage ajratgan).
+  const downloaded = await deps.downloadPhotoBase64(fileId);
   if (!downloaded) {
     await deps.sendMessage(chatId, MSG_SINGAN_DOWNLOAD_FAILED);
     return;
@@ -598,7 +744,7 @@ async function handleBrokenStone(
   // (5) Stateless draft: polygon + file_id → base64url → /singan?d=… havolasi.
   const draft = encodeShapeDraft({
     vertices: shape.vertices,
-    fileId: largest.file_id,
+    fileId,
   });
   const url = `${deps.appBaseUrl}/singan?d=${draft}`;
   await deps.sendMessage(chatId, singanLinkMessage(shape.sideCount, url));
@@ -837,6 +983,8 @@ async function handleContact(
 async function handlePhoto(
   message: NonNullable<TgUpdate["message"]>,
   deps: WebhookDeps,
+  /** photo[] eng katta yoki image document file_id (resolveIncomingImage). */
+  fileId: string,
 ): Promise<void> {
   const chatId = message.chat.id;
 
@@ -861,9 +1009,7 @@ async function handlePhoto(
     return;
   }
 
-  // (2) Eng katta o'lcham — massivning oxirgi elementi (Telegram o'sish tartibi).
-  const photos = message.photo!;
-  const largest = photos[photos.length - 1];
+  // (2) storageKey = file_id (photo[] yoki image document — resolveIncomingImage).
 
   const requestInclude = {
     batch: {
@@ -950,7 +1096,7 @@ async function handlePhoto(
   if (claimed.batchPatternId) {
     await deps.db.photo.create({
       data: {
-        storageKey: largest.file_id,
+        storageKey: fileId,
         kind: "SAMPLE", // vid/узор namunasi (плита EMAS)
         takenAt: new Date(),
         takenById: user.id,
@@ -1000,12 +1146,12 @@ async function handlePhoto(
         needsCheck: loc == null,
         separatedById: user.id,
       },
-      { storageKey: largest.file_id, takenById: user.id },
+      { storageKey: fileId, takenById: user.id },
     );
   } else {
     await deps.db.photo.create({
       data: {
-        storageKey: largest.file_id,
+        storageKey: fileId,
         kind: "SLAB",
         takenAt: new Date(),
         takenById: user.id,

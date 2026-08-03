@@ -6,6 +6,10 @@ import {
   handleUpdate,
   normalizePhone,
   phonesEqual,
+  resolveImageDocument,
+  resolveIncomingImage,
+  unsupportedMediaReply,
+  MAX_IMAGE_DOCUMENT_BYTES,
   type WebhookDeps,
 } from "@/lib/telegram-webhook";
 import { decodeShapeDraft } from "@/lib/singan";
@@ -234,11 +238,14 @@ describe("/start — kontakt so'rovi", () => {
     );
   });
 
-  it("/startfoo (yopishgan) → /start deb qabul QILINMAYDI", async () => {
+  it("/startfoo (yopishgan) → /start deb qabul QILINMAYDI (yo'riqnoma, jimlik YO'Q)", async () => {
     const upd = startUpdate(777);
     upd.message!.text = "/startfoo";
     await handleUpdate(upd, makeDeps());
-    expect(sendMessage).not.toHaveBeenCalled();
+    // Buyruq deb qabul qilinmaydi (kontakt klaviaturasi yo'q), lekin jim emas.
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot|фото|\/start/i);
+    expect(sendMessage.mock.calls[0][2]?.reply_markup).toBeUndefined();
   });
 });
 
@@ -576,6 +583,46 @@ function photoUpdate(opts?: {
         ? { media_group_id: opts.mediaGroupId }
         : {}),
       // §5.3 — skladchi bot yuborgan vazifa xabariga reply qilgan bo'lsa.
+      ...(opts?.replyToMessageId !== undefined
+        ? {
+            reply_to_message: {
+              message_id: opts.replyToMessageId,
+              chat: { id: chatId },
+            },
+          }
+        : {}),
+    },
+  };
+}
+
+/** Document (Send as File) update — rasm yoki boshqa fayl. */
+function documentUpdate(opts?: {
+  chatId?: number;
+  fileId?: string;
+  mimeType?: string;
+  fileName?: string;
+  fileSize?: number;
+  caption?: string;
+  replyToMessageId?: number;
+  updateId?: number;
+  messageId?: number;
+}): TgUpdate {
+  const chatId = opts?.chatId ?? 555;
+  const fileId = opts?.fileId ?? "doc_file_id";
+  return {
+    update_id: opts?.updateId ?? 50,
+    message: {
+      message_id: opts?.messageId ?? 50,
+      from: { id: chatId },
+      chat: { id: chatId },
+      document: {
+        file_id: fileId,
+        file_unique_id: `u_${fileId}`,
+        ...(opts?.mimeType !== undefined ? { mime_type: opts.mimeType } : {}),
+        ...(opts?.fileName !== undefined ? { file_name: opts.fileName } : {}),
+        ...(opts?.fileSize !== undefined ? { file_size: opts.fileSize } : {}),
+      },
+      ...(opts?.caption !== undefined ? { caption: opts.caption } : {}),
       ...(opts?.replyToMessageId !== undefined
         ? {
             reply_to_message: {
@@ -1175,13 +1222,16 @@ describe("singan tosh oqimi (§5.5b)", () => {
     expect(downloadPhotoBase64).not.toHaveBeenCalled();
   });
 
-  it("/singan@BotName ham yo'riqnoma beradi; /singanfoo — YO'Q", async () => {
+  it("/singan@BotName ham yo'riqnoma beradi; /singanfoo — buyruq emas (yo'riqnoma)", async () => {
     await handleUpdate(loginUpdate(999, "/singan@OnyxSkladBot"), makeDeps());
     expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toContain("бой");
 
     sendMessage.mockClear();
     await handleUpdate(loginUpdate(999, "/singanfoo"), makeDeps());
-    expect(sendMessage).not.toHaveBeenCalled();
+    // /singan deb qabul qilinmaydi; jim emas — umumiy yo'riqnoma.
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot|фото|\/start/i);
   });
 });
 
@@ -1254,25 +1304,27 @@ describe("/login — magic-link (SK-4b)", () => {
     expect(sendMessage.mock.calls[0][1]).toContain("войти не удалось");
   });
 
-  it("/loginfoo (yopishgan) → login deb qabul QILINMAYDI", async () => {
+  it("/loginfoo (yopishgan) → login deb qabul QILINMAYDI (yo'riqnoma, jimlik YO'Q)", async () => {
     await handleUpdate(loginUpdate(999, "/loginfoo"), makeDeps());
     expect(signMagicLinkToken).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot|фото|\/start/i);
   });
 });
 
 describe("kutilmagan update'lar", () => {
-  it("text ham, contact ham yo'q → e'tiborsiz, xatosiz", async () => {
+  it("text ham, contact ham yo'q → yo'riqnoma (jimlik YO'Q), xatosiz", async () => {
     const upd: TgUpdate = {
       update_id: 3,
       message: { message_id: 12, chat: { id: 1 } },
     };
     await expect(handleUpdate(upd, makeDeps())).resolves.toBeUndefined();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot|фото/i);
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("message umuman yo'q → e'tiborsiz", async () => {
+  it("message umuman yo'q → e'tiborsiz (chat yo'q)", async () => {
     await expect(
       handleUpdate({ update_id: 4 } as TgUpdate, makeDeps()),
     ).resolves.toBeUndefined();
@@ -1432,5 +1484,304 @@ describe("W9-D album (media_group_id) — traced behaviour", () => {
     expect(photoCreate).not.toHaveBeenCalled();
     // Ambiguous list sent per photo (existing 05ba2a3 behaviour).
     expect(sendMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── Image document (Send as File) + never-silent media ──
+
+describe("resolveImageDocument / resolveIncomingImage (pure)", () => {
+  it("jpeg/png/webp → ok fileId", () => {
+    for (const mime of ["image/jpeg", "image/png", "image/webp", "image/jpg"]) {
+      const r = resolveImageDocument({
+        file_id: "f1",
+        file_unique_id: "u1",
+        mime_type: mime,
+        file_size: 1000,
+      });
+      expect(r).toEqual({ ok: true, fileId: "f1", source: "document" });
+    }
+  });
+
+  it("HEIC by mime or extension → reject with HEIC reply", () => {
+    const byMime = resolveImageDocument({
+      file_id: "h1",
+      file_unique_id: "u",
+      mime_type: "image/heic",
+    });
+    expect(byMime.ok).toBe(false);
+    if (!byMime.ok) expect(byMime.reply).toMatch(/HEIC/i);
+
+    const byName = resolveImageDocument({
+      file_id: "h2",
+      file_unique_id: "u",
+      file_name: "IMG_0001.HEIC",
+    });
+    expect(byName.ok).toBe(false);
+    if (!byName.ok) expect(byName.reply).toMatch(/HEIC|Фото/i);
+  });
+
+  it("non-image document (pdf) → reject", () => {
+    const r = resolveImageDocument({
+      file_id: "p1",
+      file_unique_id: "u",
+      mime_type: "application/pdf",
+      file_name: "doc.pdf",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reply).toMatch(/не является фото|jpeg|png/i);
+  });
+
+  it("oversized image document → reject with size limit", () => {
+    const r = resolveImageDocument({
+      file_id: "big",
+      file_unique_id: "u",
+      mime_type: "image/jpeg",
+      file_size: MAX_IMAGE_DOCUMENT_BYTES + 1,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reply).toMatch(/слишком большой|МБ/i);
+  });
+
+  it("photo[] preferred over document; empty → null", () => {
+    const withPhoto = resolveIncomingImage({
+      message_id: 1,
+      chat: { id: 1 },
+      photo: [
+        {
+          file_id: "small",
+          file_unique_id: "us",
+          width: 10,
+          height: 10,
+        },
+        {
+          file_id: "large",
+          file_unique_id: "ul",
+          width: 100,
+          height: 100,
+        },
+      ],
+    });
+    expect(withPhoto).toEqual({
+      ok: true,
+      fileId: "large",
+      source: "photo",
+    });
+
+    expect(
+      resolveIncomingImage({ message_id: 1, chat: { id: 1 }, text: "hi" }),
+    ).toBeNull();
+  });
+
+  it("unsupportedMediaReply covers video/voice/sticker/animation", () => {
+    expect(
+      unsupportedMediaReply({
+        message_id: 1,
+        chat: { id: 1 },
+        video: { file_id: "v" },
+      }),
+    ).toMatch(/Видео/i);
+    expect(
+      unsupportedMediaReply({
+        message_id: 1,
+        chat: { id: 1 },
+        voice: { file_id: "vo" },
+      }),
+    ).toMatch(/Голосовые|аудио/i);
+    expect(
+      unsupportedMediaReply({
+        message_id: 1,
+        chat: { id: 1 },
+        sticker: { file_id: "s" },
+      }),
+    ).toMatch(/Стикер/i);
+    expect(
+      unsupportedMediaReply({ message_id: 1, chat: { id: 1 }, text: "x" }),
+    ).toBeNull();
+  });
+});
+
+describe("image document attaches like photo", () => {
+  it("image/jpeg document + 1 PENDING → separateSlabWithPhoto with document file_id", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabWithPhotoMock.mockResolvedValue("slabDoc");
+    userFindUnique.mockResolvedValue({ telegramId: "12345" });
+
+    await handleUpdate(
+      documentUpdate({
+        chatId: 999,
+        fileId: "doc_jpeg_id",
+        mimeType: "image/jpeg",
+        fileName: "slab.jpg",
+        fileSize: 500_000,
+      }),
+      makeDeps(),
+    );
+
+    expect(separateSlabWithPhotoMock).toHaveBeenCalledTimes(1);
+    expect(separateSlabWithPhotoMock.mock.calls[0][1]).toMatchObject({
+      storageKey: "doc_jpeg_id",
+      takenById: "w1",
+    });
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+  });
+
+  it("image/png document + reshoot (slabId set) → photo.create storageKey = file_id", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([
+      { ...PENDING_REQUEST, slabId: "existingSlab" },
+    ]);
+
+    await handleUpdate(
+      documentUpdate({
+        chatId: 999,
+        fileId: "png_id",
+        mimeType: "image/png",
+        fileSize: 1000,
+      }),
+      makeDeps(),
+    );
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(photoCreate.mock.calls[0][0].data.storageKey).toBe("png_id");
+    expect(sendMessage.mock.calls[0][1]).toContain("сохранено");
+  });
+
+  it("non-image document (pdf) → refused WITH reply; no Photo/Slab", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+
+    await handleUpdate(
+      documentUpdate({
+        chatId: 999,
+        fileId: "pdf1",
+        mimeType: "application/pdf",
+        fileName: "a.pdf",
+      }),
+      makeDeps(),
+    );
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(prFindMany).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/не является фото|jpeg|png/i);
+  });
+
+  it("oversized jpeg document → refused WITH reply; no attach", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+
+    await handleUpdate(
+      documentUpdate({
+        chatId: 999,
+        fileId: "huge",
+        mimeType: "image/jpeg",
+        fileSize: MAX_IMAGE_DOCUMENT_BYTES + 1,
+      }),
+      makeDeps(),
+    );
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(prFindMany).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/слишком большой|МБ/i);
+  });
+
+  it("HEIC document → refused WITH resend-as-photo reply", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+
+    await handleUpdate(
+      documentUpdate({
+        chatId: 999,
+        fileId: "heic1",
+        mimeType: "image/heic",
+        fileName: "IMG.HEIC",
+      }),
+      makeDeps(),
+    );
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/HEIC|Фото/i);
+  });
+
+  it("2+ PENDING bare image document → multi-pending rule (05ba2a3), no attach", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([
+      PENDING_REQUEST,
+      { ...PENDING_REQUEST, id: "req2", batchId: "b2" },
+    ]);
+
+    await handleUpdate(
+      documentUpdate({
+        chatId: 999,
+        fileId: "doc_ambig",
+        mimeType: "image/jpeg",
+        fileSize: 1000,
+      }),
+      makeDeps(),
+    );
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][1]).toMatch(/несколько/i);
+  });
+
+  it("replayed update_id for image document → no double-attach", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabWithPhotoMock.mockResolvedValue("slabR");
+
+    const upd = documentUpdate({
+      chatId: 999,
+      fileId: "doc_replay",
+      mimeType: "image/webp",
+      fileSize: 2000,
+      updateId: 7777,
+    });
+
+    claimTelegramUpdate.mockResolvedValueOnce("claimed");
+    await handleUpdate(upd, makeDeps());
+    expect(separateSlabWithPhotoMock).toHaveBeenCalledTimes(1);
+
+    claimTelegramUpdate.mockResolvedValueOnce("already_seen");
+    await handleUpdate(upd, makeDeps());
+    expect(separateSlabWithPhotoMock).toHaveBeenCalledTimes(1);
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(claimTelegramUpdate).toHaveBeenCalledWith(7777);
+  });
+
+  it("video message → refuse WITH reply (never silent)", async () => {
+    const upd: TgUpdate = {
+      update_id: 60,
+      message: {
+        message_id: 60,
+        from: { id: 999 },
+        chat: { id: 999 },
+        video: { file_id: "vid1" },
+      },
+    };
+    await handleUpdate(upd, makeDeps());
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Видео/i);
+  });
+
+  it("sticker → refuse WITH reply", async () => {
+    const upd: TgUpdate = {
+      update_id: 61,
+      message: {
+        message_id: 61,
+        chat: { id: 999 },
+        sticker: { file_id: "st1" },
+      },
+    };
+    await handleUpdate(upd, makeDeps());
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Стикер/i);
   });
 });
