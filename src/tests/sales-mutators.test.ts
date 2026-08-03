@@ -31,6 +31,10 @@ const M = vi.hoisted(() => {
     // db.batchPattern (для полноты — sellPatternVolume не тестируем здесь)
     patternFindUnique: fn(),
     patternUpdate: fn(),
+    // TZ №9 — Debt (returnSale cancel; credit create)
+    debtFindUnique: fn(),
+    debtCreate: fn(),
+    debtUpdateMany: fn(),
     // $queryRaw — lockBatchForUpdate
     queryRaw: fn(),
     // db.auditLog
@@ -56,6 +60,11 @@ const tx = {
     updateMany: M.saleUpdateMany,
   },
   batchPattern: { findUnique: M.patternFindUnique, update: M.patternUpdate },
+  debt: {
+    findUnique: M.debtFindUnique,
+    create: M.debtCreate,
+    updateMany: M.debtUpdateMany,
+  },
   auditLog: { create: M.auditCreate },
   $queryRaw: M.queryRaw,
 };
@@ -89,6 +98,10 @@ beforeEach(() => {
   M.auditCreate.mockResolvedValue({});
   M.queryRaw.mockResolvedValue([]);
   M.patternUpdate.mockResolvedValue({});
+  // TZ №9: no debt by default (cash/legacy sales; return with no debt).
+  M.debtFindUnique.mockResolvedValue(null);
+  M.debtCreate.mockResolvedValue({ id: "debt1" });
+  M.debtUpdateMany.mockResolvedValue({ count: 1 });
 });
 
 // W11-C: sellUnit / sellBatchVolume use wall-clock `new Date()` for
@@ -192,6 +205,183 @@ describe("sellUnit — единичная продажа плиты (mock-tx)", 
     expect(M.reservationUpdateMany.mock.calls[0][0]).toMatchObject({
       where: { id: "myR", status: "ACTIVE" },
       data: expect.objectContaining({ status: "COMPLETED" }),
+    });
+  });
+
+  // ── TZ №9 payment / debt ──
+
+  it("TZ9: CASH → SaleRecord with paymentMethod, no Debt", async () => {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      reservations: [],
+    });
+    const res = await sellUnit({
+      ...INPUT,
+      price: 100,
+      paymentMethod: "CASH",
+      currency: "UZS",
+      customerContact: "+99890",
+    });
+    expect(res.ok).toBe(true);
+    expect(M.debtCreate).not.toHaveBeenCalled();
+    expect(M.saleCreate.mock.calls[0][0].data).toMatchObject({
+      paymentMethod: "CASH",
+      currency: "UZS",
+      price: "100.00",
+    });
+  });
+
+  it("TZ9: CARD → no Debt", async () => {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      reservations: [],
+    });
+    await sellUnit({
+      ...INPUT,
+      price: 50,
+      paymentMethod: "CARD",
+      currency: "USD",
+    });
+    expect(M.debtCreate).not.toHaveBeenCalled();
+  });
+
+  it("TZ9: CREDIT → exactly one Debt with sale amount + currency", async () => {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      reservations: [],
+    });
+    const due = new Date(NOW.getTime() + 3 * DAY_MS);
+    const res = await sellUnit({
+      ...INPUT,
+      price: 2500.5,
+      paymentMethod: "CREDIT",
+      currency: "USD",
+      customerContact: "+998901112233",
+      debtDueDate: due,
+      debtComment: "до пятницы",
+    });
+    expect(res.ok).toBe(true);
+    expect(M.debtCreate).toHaveBeenCalledTimes(1);
+    const d = M.debtCreate.mock.calls[0][0].data;
+    expect(d.saleRecordId).toBe("sale1");
+    expect(d.currency).toBe("USD");
+    expect(d.status).toBe("ACTIVE");
+    expect(d.amount.toString()).toBe("2500.5");
+    // dueDate normalized to end of Asia/Tashkent day (not bare Date).
+    expect(d.dueDate).toBeInstanceOf(Date);
+    expect(d.dueDate.getTime()).toBeGreaterThan(due.getTime() - DAY_MS);
+  });
+
+  it("TZ9: CREDIT without phone → INVALID_INPUT, no sale/debt", async () => {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      reservations: [],
+    });
+    const res = await sellUnit({
+      ...INPUT,
+      price: 10,
+      paymentMethod: "CREDIT",
+      currency: "UZS",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("INVALID_INPUT");
+    expect(M.saleCreate).not.toHaveBeenCalled();
+    expect(M.debtCreate).not.toHaveBeenCalled();
+  });
+
+  it("TZ9: debt create failure after saleCreate → throws (tx rolls back in real Prisma)", async () => {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      reservations: [],
+    });
+    M.debtCreate.mockRejectedValue(new Error("db down"));
+    await expect(
+      sellUnit({
+        ...INPUT,
+        price: 10,
+        paymentMethod: "CREDIT",
+        currency: "UZS",
+        customerContact: "+1",
+      }),
+    ).rejects.toThrow("db down");
+    expect(M.saleCreate).toHaveBeenCalled();
+    expect(M.debtCreate).toHaveBeenCalled();
+  });
+
+  it("TZ9: returnSale cancels ACTIVE debt", async () => {
+    M.saleFindUnique.mockResolvedValue({
+      id: "sale1",
+      targetType: "SLAB",
+      slabId: "slab1",
+      pieceId: null,
+      batchId: null,
+      batchPatternId: null,
+      qtySlabs: null,
+      qtyAreaM2: null,
+      returnedAt: null,
+      paymentMethod: "CREDIT",
+    });
+    M.debtFindUnique.mockResolvedValue({ id: "debt1", status: "ACTIVE" });
+    M.debtUpdateMany.mockResolvedValue({ count: 1 });
+
+    const res = await returnSale({ saleRecordId: "sale1", managerId: "mgr1" });
+    expect(res.ok).toBe(true);
+    expect(M.debtUpdateMany).toHaveBeenCalledWith({
+      where: { id: "debt1", status: "ACTIVE" },
+      data: { status: "CANCELLED" },
+    });
+  });
+
+  it("TZ9: returnSale leaves REPAID debt (scenario A — money collected)", async () => {
+    M.saleFindUnique.mockResolvedValue({
+      id: "sale1",
+      targetType: "SLAB",
+      slabId: "slab1",
+      pieceId: null,
+      batchId: null,
+      batchPatternId: null,
+      qtySlabs: null,
+      qtyAreaM2: null,
+      returnedAt: null,
+      paymentMethod: "CREDIT",
+    });
+    M.debtFindUnique.mockResolvedValue({ id: "debt1", status: "REPAID" });
+
+    const res = await returnSale({ saleRecordId: "sale1", managerId: "mgr1" });
+    expect(res.ok).toBe(true);
+    // Must NOT flip REPAID → CANCELLED / ACTIVE
+    expect(M.debtUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("TZ9: executeVolumeSale CREDIT path creates debt (B2B not invisible)", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow());
+    const res = await sellBatchVolume({
+      batchId: "b1",
+      qtySlabs: 2,
+      qtyAreaM2: null,
+      customerName: "Опт",
+      customerContact: "+99890",
+      price: 5000,
+      paymentMethod: "CREDIT",
+      currency: "UZS",
+      managerId: "mgr1",
+    });
+    expect(res.ok).toBe(true);
+    expect(M.debtCreate).toHaveBeenCalledTimes(1);
+    expect(M.debtCreate.mock.calls[0][0].data).toMatchObject({
+      saleRecordId: "sale1",
+      currency: "UZS",
+      status: "ACTIVE",
     });
   });
 });

@@ -14,6 +14,12 @@ import Card from "@/components/ui/Card";
 import Field from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
+import {
+  CURRENCY_LABEL,
+  PAYMENT_METHOD_LABEL,
+  type PaymentMethod,
+  type SaleCurrency,
+} from "@/lib/validators/sale-payment";
 
 export interface SlabOption {
   id: string;
@@ -151,9 +157,15 @@ export default function SaleForm({
   const [customerName, setCustomerName] = useState("");
   const [customerContact, setCustomerContact] = useState("");
   const [price, setPrice] = useState("");
+  // TZ9-A: способ оплаты + валюта (CONTRACT: CASH|CARD|CREDIT, UZS|USD).
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
+  const [currency, setCurrency] = useState<SaleCurrency>("UZS");
+  const [debtDueDate, setDebtDueDate] = useState("");
+  const [debtComment, setDebtComment] = useState("");
   const [qtySlabs, setQtySlabs] = useState("");
   const [qtyAreaM2, setQtyAreaM2] = useState("");
   const e = state.errors;
+  const isCredit = paymentMethod === "CREDIT";
 
   const pickTarget = (t: Target) => {
     setTarget(t);
@@ -389,12 +401,19 @@ export default function SaleForm({
     .filter(Boolean)
     .join(" / ");
 
-  // ── Шаг 3: клиент и цена ──
+  // ── Шаг 3: клиент + оплата (TZ9 §3) ──
   if (!confirming) {
+    const canProceed =
+      customerName.trim() &&
+      paymentMethod !== "" &&
+      price.trim() &&
+      (!isCredit || customerContact.trim()) &&
+      !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim());
+
     return (
       <Card>
         <BackButton onClick={() => setTarget(null)} label="Выбор камня" />
-        <h2 className="mb-1 text-lg font-semibold text-ink">3. Клиент и цена</h2>
+        <h2 className="mb-1 text-lg font-semibold text-ink">3. Клиент и оплата</h2>
         <p className="mb-3 text-sm text-ink/70">
           {target.title} · {target.subtitle}
         </p>
@@ -437,29 +456,153 @@ export default function SaleForm({
             value={customerName}
             onChange={(ev) => setCustomerName(ev.target.value)}
             error={e.customerName}
+            autoComplete="name"
           />
           <Field
             id="f-contact"
-            label="Контакт"
+            inputMode="tel"
+            label={
+              isCredit ? (
+                <>
+                  Телефон <span className="text-danger">*</span>
+                </>
+              ) : (
+                "Телефон"
+              )
+            }
             placeholder="+998 90 …"
             value={customerContact}
             onChange={(ev) => setCustomerContact(ev.target.value)}
-          />
-          <Field
-            id="f-price"
-            inputMode="decimal"
-            label="Цена (необязательно)"
-            placeholder="1500"
-            value={price}
-            onChange={(ev) => setPrice(ev.target.value)}
-            error={e.price}
+            error={e.customerContact}
+            autoComplete="tel"
           />
         </div>
+
+        {/* TZ9-A — блок «Оплата»: способ + цена + валюта; долг → срок/коммент. */}
+        <fieldset className="mt-4 rounded-card border border-line bg-paper p-3">
+          <legend className="px-1 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+            Оплата
+          </legend>
+
+          <div className="mt-1">
+            <p className="mb-2 text-sm font-semibold text-ink">
+              Способ оплаты <span className="text-danger">*</span>
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["CASH", PAYMENT_METHOD_LABEL.CASH],
+                  ["CARD", PAYMENT_METHOD_LABEL.CARD],
+                  ["CREDIT", PAYMENT_METHOD_LABEL.CREDIT],
+                ] as const
+              ).map(([value, label]) => {
+                const selected = paymentMethod === value;
+                return (
+                  <label
+                    key={value}
+                    className={
+                      "flex min-h-11 cursor-pointer items-center justify-center rounded-field border px-1 text-center text-sm font-semibold transition " +
+                      (selected
+                        ? "border-gold bg-gold/15 text-ink shadow-card"
+                        : "border-line bg-paper-2 text-ink/80 active:bg-gold/10")
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethodUi"
+                      value={value}
+                      checked={selected}
+                      onChange={() => setPaymentMethod(value)}
+                      className="sr-only"
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+            <FieldError msg={e.paymentMethod} />
+          </div>
+
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <Field
+              id="f-price"
+              inputMode="decimal"
+              label={
+                <>
+                  Цена продажи <span className="text-danger">*</span>
+                </>
+              }
+              placeholder="1500"
+              value={price}
+              onChange={(ev) => setPrice(ev.target.value)}
+              error={e.price}
+            />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-semibold text-ink">
+                Валюта <span className="text-danger">*</span>
+              </span>
+              <div className="flex min-h-11 gap-1">
+                {(
+                  [
+                    ["UZS", "сум"],
+                    ["USD", "$"],
+                  ] as const
+                ).map(([value, label]) => {
+                  const selected = currency === value;
+                  return (
+                    <label
+                      key={value}
+                      className={
+                        "flex min-h-11 min-w-12 cursor-pointer items-center justify-center rounded-field border px-2 text-sm font-bold transition " +
+                        (selected
+                          ? "border-gold bg-gold/15 text-ink"
+                          : "border-line bg-paper-2 text-ink/70")
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="currencyUi"
+                        value={value}
+                        checked={selected}
+                        onChange={() => setCurrency(value)}
+                        className="sr-only"
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+              <FieldError msg={e.currency} />
+            </div>
+          </div>
+
+          {isCredit && (
+            <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
+              <Field
+                id="f-debtDue"
+                type="date"
+                label="Срок возврата долга"
+                value={debtDueDate}
+                onChange={(ev) => setDebtDueDate(ev.target.value)}
+                error={e.debtDueDate}
+                hint="Необязательно, но желательно"
+              />
+              <Field
+                id="f-debtComment"
+                label="Комментарий к долгу"
+                placeholder="Например: доставка через неделю"
+                value={debtComment}
+                onChange={(ev) => setDebtComment(ev.target.value)}
+                error={e.debtComment}
+              />
+            </div>
+          )}
+        </fieldset>
 
         <Button
           type="button"
           onClick={() => setConfirming(true)}
-          disabled={!customerName.trim() || (isVolume && !qtySlabs.trim() && !qtyAreaM2.trim())}
+          disabled={!canProceed}
           className="mt-4 min-h-14 w-full text-lg font-bold"
         >
           Далее — подтверждение
@@ -483,6 +626,27 @@ export default function SaleForm({
         </Alert>
       )}
       <FieldError msg={e.form} />
+      {/* Server re-validation (TZ9): полевые ошибки видны и на шаге подтверждения. */}
+      {(e.paymentMethod ||
+        e.price ||
+        e.currency ||
+        e.customerContact ||
+        e.customerName ||
+        e.debtDueDate) && (
+        <Alert variant="danger" title="Проверьте данные" className="mb-4">
+          <ul className="list-disc space-y-1 pl-4 text-sm">
+            {e.customerName && <li>{e.customerName}</li>}
+            {e.customerContact && <li>{e.customerContact}</li>}
+            {e.paymentMethod && <li>{e.paymentMethod}</li>}
+            {e.price && <li>{e.price}</li>}
+            {e.currency && <li>{e.currency}</li>}
+            {e.debtDueDate && <li>{e.debtDueDate}</li>}
+          </ul>
+          <p className="mt-2 text-sm">
+            Нажмите «Изменить данные» и исправьте поля.
+          </p>
+        </Alert>
+      )}
 
       <dl className="rounded-card border border-ink/10 bg-paper p-4 text-base">
         <div className="flex justify-between gap-3 py-1">
@@ -511,14 +675,34 @@ export default function SaleForm({
         </div>
         {customerContact.trim() && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Контакт</dt>
+            <dt className="text-ink/60">Телефон</dt>
             <dd className="text-right text-ink">{customerContact}</dd>
           </div>
         )}
-        {price.trim() && (
+        <div className="flex justify-between gap-3 py-1">
+          <dt className="text-ink/60">Оплата</dt>
+          <dd className="text-right font-semibold text-ink">
+            {paymentMethod
+              ? PAYMENT_METHOD_LABEL[paymentMethod]
+              : "—"}
+          </dd>
+        </div>
+        <div className="flex justify-between gap-3 py-1">
+          <dt className="text-ink/60">Цена</dt>
+          <dd className="tnum text-right font-semibold text-ink">
+            {price.trim() || "—"} {CURRENCY_LABEL[currency]}
+          </dd>
+        </div>
+        {isCredit && debtDueDate.trim() && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Цена</dt>
-            <dd className="text-right font-semibold text-ink">{price}</dd>
+            <dt className="text-ink/60">Срок долга</dt>
+            <dd className="text-right text-ink">{debtDueDate}</dd>
+          </div>
+        )}
+        {isCredit && debtComment.trim() && (
+          <div className="flex justify-between gap-3 py-1">
+            <dt className="text-ink/60">Коммент. к долгу</dt>
+            <dd className="text-right text-sm text-ink/80">{debtComment}</dd>
           </div>
         )}
       </dl>
@@ -535,6 +719,10 @@ export default function SaleForm({
         <input type="hidden" name="customerName" value={customerName} />
         <input type="hidden" name="customerContact" value={customerContact} />
         <input type="hidden" name="price" value={price} />
+        <input type="hidden" name="paymentMethod" value={paymentMethod} />
+        <input type="hidden" name="currency" value={currency} />
+        <input type="hidden" name="debtDueDate" value={debtDueDate} />
+        <input type="hidden" name="debtComment" value={debtComment} />
         {isVolume && <input type="hidden" name="qtySlabs" value={qtySlabs} />}
         {isVolume && <input type="hidden" name="qtyAreaM2" value={qtyAreaM2} />}
         <Button
@@ -547,6 +735,7 @@ export default function SaleForm({
       </form>
       <p className="mt-2 text-center text-sm text-ink/60">
         Камень списывается из наличия сразу в момент продажи (TZ §5.4).
+        Способ оплаты на списание не влияет.
       </p>
     </Card>
   );

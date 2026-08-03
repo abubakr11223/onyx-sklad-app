@@ -64,6 +64,12 @@ export interface Capabilities {
    * но чужих не видит).
    */
   canSeeLeads: boolean;
+  /**
+   * Раздел «Должники» (TZ №9 §5) — активные/погашенные долги, погашение.
+   * FAQAT OWNER (как «Сотрудники» / canManageAccounts). Менеджер долги оформляет
+   * при продаже, но список и погашение — только владелец.
+   */
+  canSeeDebts: boolean;
 }
 
 /**
@@ -84,6 +90,7 @@ export interface Capabilities {
  * | canSeeHistory            | true  | false            | false     | false   |
  * | canManageAccounts        | true  | false            | false     | false   |
  * | canSeeLeads              | true  | true             | false     | false   |
+ * | canSeeDebts              | true  | false            | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -109,6 +116,7 @@ const DENY_ALL: Capabilities = {
   canSeeHistory: false,
   canManageAccounts: false,
   canSeeLeads: false,
+  canSeeDebts: false,
 };
 
 export function capabilitiesFor(
@@ -131,6 +139,7 @@ export function capabilitiesFor(
         canSeeHistory: true,
         canManageAccounts: true, // OWN-03: только Владелец управляет аккаунтами
         canSeeLeads: true, // A1: владелец видит заявки партнёров
+        canSeeDebts: true, // TZ №9: «Должники» — только владелец
       };
     case "MANAGER":
       return {
@@ -149,6 +158,7 @@ export function capabilitiesFor(
         canSeeHistory: false,
         canManageAccounts: false,
         canSeeLeads: true, // A1: менеджер обрабатывает заявки партнёров
+        canSeeDebts: false, // TZ №9 §5: раздел только OWNER
       };
     case "WAREHOUSE":
       return {
@@ -165,6 +175,7 @@ export function capabilitiesFor(
         canSeeHistory: false,
         canManageAccounts: false,
         canSeeLeads: false, // склад не работает с заявками партнёров
+        canSeeDebts: false,
       };
     case "PARTNER":
       return {
@@ -181,6 +192,7 @@ export function capabilitiesFor(
         canSeeHistory: false,
         canManageAccounts: false,
         canSeeLeads: false, // партнёр СОЗДАЁТ заявки, но чужих не видит
+        canSeeDebts: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

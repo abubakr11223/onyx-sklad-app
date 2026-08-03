@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   PURGE_ALLOW_ENV,
   PURGE_ALLOW_VALUE,
+  PURGE_DELETE_ORDER,
   executePurge,
   formatPlanReport,
   isDemoStoneType,
@@ -203,6 +204,13 @@ function makeFakePurgeDb(seed: {
         return { count: countOf("saleRecord", 0) };
       },
     },
+    debt: {
+      count: async () => countOf("debt", 0),
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "debt", op: "deleteMany", where });
+        return { count: countOf("debt", 0) };
+      },
+    },
     photo: {
       count: async () => countOf("photo", 0),
       deleteMany: async ({ where } = {}) => {
@@ -306,7 +314,8 @@ describe("planPurge — scope selection (fake client)", () => {
         photo: 2,
         photoRequest: 1,
         photoDispatch: 1,
-        saleRecord: 0,
+        debt: 3,
+        saleRecord: 2,
         reservation: 0,
         lead: 0,
         batchLocation: 2,
@@ -320,18 +329,21 @@ describe("planPurge — scope selection (fake client)", () => {
     expect(plan.stoneTypeIds.sort()).toEqual(["st-demo-1", "st-demo-2"]);
     expect(plan.batchIds).toEqual(["b-demo"]);
     expect(plan.counts.stoneTypes).toBe(2);
+    expect(plan.counts.debts).toBe(3);
+    expect(plan.counts.saleRecords).toBe(2);
     // Scope A does not count AuditLog for deletion
     expect(plan.counts.auditLogs).toBe(0);
     expect(plan.preserved).toContain("User");
     expect(plan.preserved).toContain("WarehouseBlock");
     expect(formatPlanReport(plan)).toContain("scope=A");
+    expect(formatPlanReport(plan)).toMatch(/Debt:\s+3/);
   });
 
   it("scope B: all stone types", async () => {
     const { db } = makeFakePurgeDb({
       stones: DEMO_STONES,
       batches: BATCHES,
-      counts: { batch: 2 },
+      counts: { batch: 2, debt: 5 },
     });
     const plan = await planPurge(db, "B");
     expect(plan.stoneTypeIds.sort()).toEqual([
@@ -341,22 +353,31 @@ describe("planPurge — scope selection (fake client)", () => {
     ]);
     expect(plan.batchIds.sort()).toEqual(["b-demo", "b-real"]);
     expect(plan.counts.auditLogs).toBe(0);
+    expect(plan.counts.debts).toBe(5);
   });
 
-  it("scope C: plans AuditLog + all leads wipe", async () => {
+  it("scope C: plans AuditLog + all leads + all debts wipe", async () => {
     const { db, calls } = makeFakePurgeDb({
       stones: DEMO_STONES,
       batches: BATCHES,
-      counts: { auditLog: 50, lead: 7 },
+      counts: { auditLog: 50, lead: 7, debt: 12 },
     });
     const plan = await planPurge(db, "C");
     expect(plan.counts.auditLogs).toBe(50);
     expect(plan.counts.leads).toBe(7);
+    expect(plan.counts.debts).toBe(12);
     // lead.count called without stone filter for C
     const leadCount = calls.find(
       (c) => c.model === "lead" && c.op === "count",
     );
     expect(leadCount).toBeTruthy();
+  });
+
+  it("PURGE_DELETE_ORDER: Debt before SaleRecord (RESTRICT FK)", () => {
+    const debtIdx = PURGE_DELETE_ORDER.indexOf("debt");
+    const saleIdx = PURGE_DELETE_ORDER.indexOf("saleRecord");
+    expect(debtIdx).toBeGreaterThanOrEqual(0);
+    expect(saleIdx).toBeGreaterThan(debtIdx);
   });
 });
 
@@ -368,6 +389,7 @@ describe("executePurge — order and audit marker (fake client)", () => {
       counts: {
         photoDispatch: 1,
         photo: 2,
+        debt: 2,
         saleRecord: 1,
         reservation: 1,
         lead: 1,
@@ -387,6 +409,8 @@ describe("executePurge — order and audit marker (fake client)", () => {
     const result = await executePurge(db, "A", () => {});
     expect(result.auditLogged).toBe(true);
     expect(result.deleted.stoneTypes).toBe(2);
+    expect(result.deleted.debts).toBe(2);
+    expect(result.deleted.saleRecords).toBe(1);
 
     const deleteModels = calls
       .filter((c) => c.op === "deleteMany")
@@ -396,6 +420,7 @@ describe("executePurge — order and audit marker (fake client)", () => {
     const idx = (m: string) => deleteModels.indexOf(m);
     expect(idx("photoDispatch")).toBeLessThan(idx("photo"));
     expect(idx("photo")).toBeLessThan(idx("photoRequest"));
+    expect(idx("debt")).toBeLessThan(idx("saleRecord"));
     expect(idx("piece")).toBeLessThan(idx("slab"));
     expect(idx("slab")).toBeLessThan(idx("batch"));
     expect(idx("batch")).toBeLessThan(idx("stoneType"));

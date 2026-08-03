@@ -35,6 +35,7 @@ import {
   salePreselectAlert,
   type SalePreselectUnitRow,
 } from "./sale-preselect";
+import { formatSaleListPrice } from "./format-sale-price";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -511,10 +512,12 @@ export default async function ProdazhaPage({
               const returnable =
                 !returned &&
                 ((!s.slab && !s.piece) || unitStatus === "SOLD");
-              const priceStr =
-                canSeeSalePrice && s.price != null
-                  ? m2Fmt.format(Number(s.price.toString()))
-                  : null;
+              // TZ9: amount + sale's own currency. Prisma returns SaleRecord
+              // scalars (incl. currency) even when SaleHistoryRow type omits it.
+              const saleCurrency = (s as { currency?: string | null }).currency;
+              const priceStr = canSeeSalePrice
+                ? formatSaleListPrice(s.price, saleCurrency, m2Fmt)
+                : null;
               return (
                 <li
                   key={s.id}
@@ -541,9 +544,7 @@ export default async function ProdazhaPage({
                   </div>
                   <div className="text-ink/60">
                     {s.manager.name} · {formatTashkentDateTime(s.soldAt)}
-                    {priceStr !== null && (
-                      <> · {priceStr} сум</>
-                    )}
+                    {priceStr !== null && <> · {priceStr}</>}
                   </div>
                   {returned && s.returnedAt && (
                     <div className="mt-1 text-danger/80">

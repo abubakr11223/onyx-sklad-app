@@ -28,6 +28,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/accounts": "canManageAccounts",
   // «Заявки» — лиды дизайнера/партнёра (A1, TZ §6.8): OWNER/MANAGER.
   "/zayavki": "canSeeLeads",
+  // «Должники» — активные/погашенные долги (TZ №9 §5): только OWNER.
+  "/dolzhniki": "canSeeDebts",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

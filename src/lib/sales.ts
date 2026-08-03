@@ -11,7 +11,13 @@ import { db } from "./db";
 import { computeFreeRemainder, type FreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
 import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "./validators/intake";
-import type { Prisma } from "@prisma/client";
+import { MAX_DECIMAL_14_2 } from "./decimal";
+import {
+  cancelDebtForReturnedSale,
+  createDebtForSale,
+  DebtLogicError,
+} from "./debts";
+import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
 
@@ -449,6 +455,13 @@ function validateCustomer(customerName: string): string {
   return name;
 }
 
+/**
+ * Legacy price gate: null still allowed when paymentMethod is omitted
+ * (old callers / history-only paths). When paymentMethod is set,
+ * validateSalePayment requires a positive price. o2 form uses sale-payment.ts
+ * which always requires price — but any direct sell* call without paymentMethod
+ * can still write SaleRecord.price = null (QA flag / dual-validator risk).
+ */
 function validatePrice(price: number | null | undefined): number | null {
   if (price === null || price === undefined) return null;
   if (!Number.isFinite(price) || price <= 0) {
@@ -457,10 +470,123 @@ function validatePrice(price: number | null | undefined): number | null {
       message: "Цена — положительное число",
     });
   }
+  // Sale total — Decimal(14,2), not area MAX_DECIMAL_FIELD (12,3).
+  if (price > MAX_DECIMAL_14_2) {
+    throw new SaleLogicError({
+      code: "INVALID_INPUT",
+      message: "Цена слишком велика",
+    });
+  }
   return price;
 }
 
-export interface SellUnitInput {
+/** TZ №9 — payment fields. When paymentMethod is set, currency + price required. */
+export interface SalePaymentFields {
+  paymentMethod?: PaymentMethod | null;
+  currency?: Currency | null;
+  /** Due date for CREDIT debts (optional). */
+  debtDueDate?: Date | null;
+  debtComment?: string | null;
+}
+
+export interface ValidatedSalePayment {
+  paymentMethod: PaymentMethod | null;
+  currency: Currency | null;
+  debtDueDate: Date | null;
+  debtComment: string | null;
+}
+
+/**
+ * TZ №9 validation. Legacy callers omit paymentMethod → nulls (no debt).
+ * New UI always passes paymentMethod; then price + currency are required.
+ * CREDIT also requires customer phone (customerContact).
+ */
+export function validateSalePayment(
+  fields: SalePaymentFields,
+  price: number | null,
+  customerContact: string | null,
+): ValidatedSalePayment {
+  const method = fields.paymentMethod ?? null;
+  if (method == null) {
+    return {
+      paymentMethod: null,
+      currency: null,
+      debtDueDate: null,
+      debtComment: null,
+    };
+  }
+  if (method !== "CASH" && method !== "CARD" && method !== "CREDIT") {
+    throw new SaleLogicError({
+      code: "INVALID_INPUT",
+      message: "Способ оплаты: наличные, карта или в долг",
+    });
+  }
+  if (price === null) {
+    throw new SaleLogicError({
+      code: "INVALID_INPUT",
+      message: "Укажите цену продажи",
+    });
+  }
+  const currency = fields.currency ?? null;
+  if (currency !== "UZS" && currency !== "USD") {
+    throw new SaleLogicError({
+      code: "INVALID_INPUT",
+      message: "Укажите валюту: сум (UZS) или доллар (USD)",
+    });
+  }
+  if (method === "CREDIT") {
+    const phone = customerContact?.trim() ?? "";
+    if (!phone) {
+      throw new SaleLogicError({
+        code: "INVALID_INPUT",
+        message: "Для продажи в долг укажите телефон клиента",
+      });
+    }
+  }
+  return {
+    paymentMethod: method,
+    currency,
+    debtDueDate: fields.debtDueDate ?? null,
+    debtComment: fields.debtComment?.trim() || null,
+  };
+}
+
+/** After saleRecord.create — open Debt when CREDIT (same tx). */
+async function maybeCreateDebtForCreditSale(
+  tx: Prisma.TransactionClient,
+  args: {
+    saleId: string;
+    payment: ValidatedSalePayment;
+    price: number | null;
+  },
+): Promise<void> {
+  if (args.payment.paymentMethod !== "CREDIT") return;
+  if (args.price === null || args.payment.currency == null) {
+    throw new SaleLogicError({
+      code: "INVALID_INPUT",
+      message: "Продажа в долг требует цену и валюту",
+    });
+  }
+  try {
+    await createDebtForSale(tx, {
+      saleRecordId: args.saleId,
+      amount: args.price.toFixed(2),
+      currency: args.payment.currency,
+      dueDate: args.payment.debtDueDate,
+      comment: args.payment.debtComment,
+    });
+  } catch (e) {
+    if (e instanceof DebtLogicError) {
+      // Map debt codes into SaleError surface (same INVALID_INPUT / NOT_FOUND).
+      const code =
+        e.debtError.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT";
+      throw new SaleLogicError({ code, message: e.debtError.message });
+    }
+    throw e;
+  }
+}
+
+export interface SellUnitInput extends SalePaymentFields {
   targetType: "SLAB" | "PIECE";
   unitId: string;
   customerName: string;
@@ -490,6 +616,8 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
+      const customerContact = input.customerContact?.trim() || null;
+      const payment = validateSalePayment(input, price, customerContact);
 
       const now = new Date();
       const unitSelect = {
@@ -578,14 +706,23 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         data: {
           managerId: actor.id,
           customerName,
-          customerContact: input.customerContact?.trim() || null,
+          customerContact,
           targetType: input.targetType,
           slabId: input.targetType === "SLAB" ? unit.id : null,
           pieceId: input.targetType === "PIECE" ? unit.id : null,
           price: price === null ? null : price.toFixed(2),
-          soldAt: new Date(),
+          paymentMethod: payment.paymentMethod,
+          currency: payment.currency,
+          soldAt: now,
         },
         select: { id: true },
+      });
+
+      // TZ №9 — CREDIT: Debt in the SAME transaction as SaleRecord.
+      await maybeCreateDebtForCreditSale(tx, {
+        saleId: sale.id,
+        payment,
+        price,
       });
 
       await tx.auditLog.create({
@@ -597,8 +734,10 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
           payload: {
             saleId: sale.id,
             customerName,
-            customerContact: input.customerContact?.trim() || null,
+            customerContact,
             price,
+            paymentMethod: payment.paymentMethod,
+            currency: payment.currency,
             prevStatus: unit.status,
             newStatus: "SOLD",
             viaReservation: decision.viaReservation,
@@ -621,7 +760,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
   }
 }
 
-export interface SellBatchVolumeInput {
+export interface SellBatchVolumeInput extends SalePaymentFields {
   batchId: string;
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
@@ -754,9 +893,17 @@ export async function executeVolumeSale(
     now: Date;
     // ТЗ №3 — продажа ИЗ УЗОРА (иначе null → обычная batch-volume продажа).
     pattern?: PatternForSale | null;
+    /** TZ №9 — already validated payment (null method = legacy). */
+    payment?: ValidatedSalePayment;
   },
 ): Promise<SellVolumeOk> {
   const { actor, batch, free, qtySlabs, qtyAreaM2, now } = params;
+  const payment: ValidatedSalePayment = params.payment ?? {
+    paymentMethod: null,
+    currency: null,
+    debtDueDate: null,
+    debtComment: null,
+  };
 
   // A2: brони приводим к number и фильтруем истёкшие в чистых хелперах.
   const holds: VolumeHoldRow[] = batch.reservations.map((r) => ({
@@ -866,9 +1013,18 @@ export async function executeVolumeSale(
       qtySlabs,
       qtyAreaM2: qtyAreaM2 === null ? null : qtyAreaM2.toFixed(3),
       price: params.price === null ? null : params.price.toFixed(2),
-      soldAt: new Date(),
+      paymentMethod: payment.paymentMethod,
+      currency: payment.currency,
+      soldAt: now,
     },
     select: { id: true },
+  });
+
+  // TZ №9 — CREDIT debt same tx as volume sale.
+  await maybeCreateDebtForCreditSale(tx, {
+    saleId: sale.id,
+    payment,
+    price: params.price,
   });
 
   await tx.auditLog.create({
@@ -882,6 +1038,8 @@ export async function executeVolumeSale(
         customerName: params.customerName,
         customerContact: params.customerContact,
         price: params.price,
+        paymentMethod: payment.paymentMethod,
+        currency: payment.currency,
         qtySlabs,
         qtyAreaM2,
         wholeBatch: params.wholeBatch,
@@ -921,6 +1079,8 @@ export async function sellBatchVolume(
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
+      const customerContact = input.customerContact?.trim() || null;
+      const payment = validateSalePayment(input, price, customerContact);
       const batch = await loadBatchForVolume(tx, input.batchId);
       const free = batchFreeRemainder(batch);
       return executeVolumeSale(tx, {
@@ -930,10 +1090,11 @@ export async function sellBatchVolume(
         qtySlabs: input.qtySlabs ?? null,
         qtyAreaM2: input.qtyAreaM2 ?? null,
         customerName,
-        customerContact: input.customerContact?.trim() || null,
+        customerContact,
         price,
         wholeBatch: false,
         now,
+        payment,
       });
     });
   } catch (e) {
@@ -942,7 +1103,7 @@ export async function sellBatchVolume(
   }
 }
 
-export interface SellPatternVolumeInput {
+export interface SellPatternVolumeInput extends SalePaymentFields {
   batchPatternId: string;
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
@@ -986,6 +1147,8 @@ export async function sellPatternVolume(
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
+      const customerContact = input.customerContact?.trim() || null;
+      const payment = validateSalePayment(input, price, customerContact);
       const batch = await loadBatchForVolume(tx, pat.batchId);
       const free = batchFreeRemainder(batch);
       return executeVolumeSale(tx, {
@@ -995,10 +1158,11 @@ export async function sellPatternVolume(
         qtySlabs: input.qtySlabs ?? null,
         qtyAreaM2: input.qtyAreaM2 ?? null,
         customerName,
-        customerContact: input.customerContact?.trim() || null,
+        customerContact,
         price,
         wholeBatch: false,
         now,
+        payment,
         pattern: {
           id: pat.id,
           slabsCount: pat.slabsCount,
@@ -1014,7 +1178,7 @@ export async function sellPatternVolume(
   }
 }
 
-export interface SellWholeBatchInput {
+export interface SellWholeBatchInput extends SalePaymentFields {
   batchId: string;
   customerName: string;
   customerContact?: string | null;
@@ -1038,6 +1202,8 @@ export async function sellWholeBatch(
       const actor = await loadActor(tx, input.managerId);
       const customerName = validateCustomer(input.customerName);
       const price = validatePrice(input.price);
+      const customerContact = input.customerContact?.trim() || null;
+      const payment = validateSalePayment(input, price, customerContact);
       const batch = await loadBatchForVolume(tx, input.batchId);
       const free = batchFreeRemainder(batch);
       const whole = computeWholeBatchSale(free);
@@ -1049,10 +1215,11 @@ export async function sellWholeBatch(
         qtySlabs: whole.qtySlabs,
         qtyAreaM2: whole.qtyAreaM2,
         customerName,
-        customerContact: input.customerContact?.trim() || null,
+        customerContact,
         price,
         wholeBatch: true,
         now,
+        payment,
       });
     });
   } catch (e) {
@@ -1097,6 +1264,7 @@ export async function returnSale(
   try {
     return await db.$transaction(async (tx) => {
       const actor = await loadActor(tx, input.managerId);
+      const now = new Date();
 
       const sale = await tx.saleRecord.findUnique({
         where: { id: input.saleRecordId },
@@ -1110,6 +1278,7 @@ export async function returnSale(
           qtySlabs: true,
           qtyAreaM2: true,
           returnedAt: true,
+          paymentMethod: true,
         },
       });
       if (!sale) {
@@ -1125,7 +1294,7 @@ export async function returnSale(
       // Идемпотентность: условная пометка returnedAt (гонка/повтор → 0 строк).
       const marked = await tx.saleRecord.updateMany({
         where: { id: sale.id, returnedAt: null },
-        data: { returnedAt: new Date() },
+        data: { returnedAt: now },
       });
       if (marked.count === 0) {
         throw new SaleLogicError({
@@ -1133,6 +1302,13 @@ export async function returnSale(
           message: "Возврат уже оформлен параллельно — обновите страницу",
         });
       }
+
+      // TZ №9 — credit sale: close ACTIVE debt (REPAID left as REPAID).
+      const debtCancel = await cancelDebtForReturnedSale(tx, {
+        saleRecordId: sale.id,
+        actorId: actor.id,
+        now,
+      });
 
       if (sale.targetType === "SLAB" || sale.targetType === "PIECE") {
         const unitId = sale.targetType === "SLAB" ? sale.slabId : sale.pieceId;
@@ -1216,6 +1392,9 @@ export async function returnSale(
             qtySlabs: sale.qtySlabs,
             qtyAreaM2: sale.qtyAreaM2 === null ? null : Number(sale.qtyAreaM2.toString()),
             needsCheck: true,
+            paymentMethod: sale.paymentMethod,
+            debtCancelOutcome: debtCancel.outcome,
+            debtId: debtCancel.debtId,
           },
         },
       });
@@ -1252,6 +1431,9 @@ export interface ConfirmReturnedUnitOk {
  * RETURNED + needsCheck снимаются, единица снова AVAILABLE. Условный UPDATE
  * WHERE status = RETURNED (0 строк ⇒ уже не в возврате — NOT_RETURNED). Прямой
  * путь RETURNED → AVAILABLE существует ТОЛЬКО здесь (в обход проверки нельзя).
+ *
+ * TZ №9 / QA #3: does NOT touch Debt. Money was already settled in returnSale
+ * (cancelDebtForReturnedSale). Cancelling again here would corrupt the ledger.
  */
 export async function confirmReturnedUnit(
   input: ConfirmReturnedUnitInput,

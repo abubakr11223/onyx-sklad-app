@@ -10,8 +10,18 @@
 
 /** Decimal(12,3) — площади, объёмы. Максимум = 999 999 999.999. */
 export const MAX_DECIMAL_12_3 = 999_999_999.999;
-/** Decimal(12,2) — денежные поля. Максимум = 9 999 999 999.99. */
+/**
+ * Decimal(12,2) — **unit / catalog** money (StoneType.basePrice, purchasePrice).
+ * Max = 9 999 999 999.99. NOT for SaleRecord.price totals (see MAX_DECIMAL_14_2).
+ */
 export const MAX_DECIMAL_12_2 = 9_999_999_999.99;
+/**
+ * Decimal(14,2) — **sale totals** (SaleRecord.price, Debt.amount, repaidAmount).
+ * Max = 999 999 999 999.99 (~1e12). Needed so a large B2B batch priced in so'm
+ * does not hit the ~10B so'm ceiling of Decimal(12,2). Still within JS Number
+ * safe range for validation. TZ9: Debt and SaleRecord.price MUST share this.
+ */
+export const MAX_DECIMAL_14_2 = 999_999_999_999.99;
 
 export interface BoundedDecimalOpts {
   /** Верхняя граница включительно. Значение выше → { ok:false, reason:'overflow' }. */

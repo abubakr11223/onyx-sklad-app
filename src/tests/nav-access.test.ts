@@ -66,6 +66,13 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     expect(canAccessNav("/accounts", caps("PARTNER"))).toBe(false);
   });
 
+  it("Должники (/dolzhniki) — только OWNER (TZ №9 §5), менеджер/склад/партнёр нет", () => {
+    expect(canAccessNav("/dolzhniki", caps("OWNER"))).toBe(true);
+    expect(canAccessNav("/dolzhniki", caps("MANAGER"))).toBe(false);
+    expect(canAccessNav("/dolzhniki", caps("WAREHOUSE"))).toBe(false);
+    expect(canAccessNav("/dolzhniki", caps("PARTNER"))).toBe(false);
+  });
+
   it("Заявки (/zayavki) — OWNER/MANAGER ko'radi, WAREHOUSE/PARTNER yo'q (A1, §6.8)", () => {
     // Лиды партнёров — canSeeLeads: OWNER/MANAGER обрабатывают.
     expect(canAccessNav("/zayavki", caps("OWNER"))).toBe(true);

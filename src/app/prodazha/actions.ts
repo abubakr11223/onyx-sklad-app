@@ -21,6 +21,7 @@ import {
   parsePositiveDecimal,
   parsePositiveInt,
 } from "@/lib/validators/intake";
+import { validateSalePayment } from "@/lib/validators/sale-payment";
 import { strOf } from "@/lib/form";
 
 export type SaleMode =
@@ -107,10 +108,21 @@ export async function submitSale(
 
   const customerName = str("customerName");
   if (!customerName) errors.customerName = "Укажите клиента — обязательное поле";
-  const customerContact = str("customerContact") || null;
 
-  const price = parsePositiveDecimal(str("price"));
-  if (price === undefined) errors.price = "Цена — положительное число, например 1500";
+  // TZ9-A / CONTRACT: способ оплаты, валюта, цена (>0), для CREDIT — телефон.
+  // Валидация только на сервере недостаточна? Нет — форма тоже гейтит, но
+  // прямой POST без UI обязан отсекаться здесь (defense-in-depth).
+  const payment = validateSalePayment({
+    paymentMethod: str("paymentMethod"),
+    currency: str("currency"),
+    price: str("price"),
+    customerContact: str("customerContact"),
+    debtDueDate: str("debtDueDate"),
+    debtComment: str("debtComment"),
+  });
+  if (!payment.ok) {
+    Object.assign(errors, payment.errors);
+  }
 
   const isVolume = mode === "BATCH_VOLUME" || mode === "PATTERN_VOLUME";
   let qtySlabs: number | null = null;
@@ -140,7 +152,12 @@ export async function submitSale(
     errors.form = "Не выбран узор — вернитесь на шаг выбора";
   }
 
-  if (Object.keys(errors).length > 0) return { errors, conflict: null };
+  if (Object.keys(errors).length > 0 || !payment.ok) {
+    return { errors, conflict: null };
+  }
+
+  const pay = payment.data;
+  const customerContact = pay.customerContact;
 
   const managerId = await currentActorId();
   if (!managerId) {
@@ -150,7 +167,18 @@ export async function submitSale(
     };
   }
 
-  const common = { customerName, customerContact, price: price ?? null, managerId };
+  // o1 domain layer picks up paymentMethod/currency/debt* when ready (CONTRACT).
+  // Until then excess fields are harmless on the sell* inputs (spread).
+  const common = {
+    customerName,
+    customerContact,
+    price: pay.price,
+    managerId,
+    paymentMethod: pay.paymentMethod,
+    currency: pay.currency,
+    debtDueDate: pay.debtDueDate,
+    debtComment: pay.debtComment,
+  };
   const result =
     mode === "SLAB" || mode === "PIECE"
       ? await sellUnit({ targetType: mode, unitId, ...common })

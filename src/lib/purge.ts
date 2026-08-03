@@ -112,9 +112,9 @@ export function usageText(): string {
     "Scopes:",
     "  A  demo-marked StoneTypes only (name (демо)/(demo) or qrSlug demo-*)",
     "     + everything hanging off those types. Users never deleted.",
-    "  B  ALL StoneTypes + inventory hang-offs (sales/reservations/photos/leads",
+    "  B  ALL StoneTypes + inventory hang-offs (sales/debts/reservations/photos/leads",
     "     on those stones). Keeps AuditLog (orphaned soft refs). Users/grid/config.",
-    "  C  full inventory wipe + SaleRecord + Reservation + Photo + PhotoRequest +",
+    "  C  full inventory wipe + Debt + SaleRecord + Reservation + Photo + PhotoRequest +",
     "     PhotoDispatch + Lead + AuditLog + MutationReceipt. Keeps accounts,",
     "     AppConfig, warehouse grid, KartaCell, TG access / magic-link / webhook receipts.",
     "",
@@ -133,6 +133,7 @@ export function usageText(): string {
 export type PurgeTableKey =
   | "photoDispatch"
   | "photo"
+  | "debt" // TZ9: before SaleRecord — Debt.saleRecordId ON DELETE RESTRICT
   | "saleRecord"
   | "reservation"
   | "lead"
@@ -148,10 +149,14 @@ export type PurgeTableKey =
   | "slabPhotoRequestNull"
   | "photoRequestSlabNull";
 
-/** Deletion order (children first). Restrict FKs require this exact sequence. */
+/**
+ * Deletion order (children first). Restrict FKs require this exact sequence.
+ * TZ9: Debt → SaleRecord (schema Debt.saleRecordId onDelete Restrict).
+ */
 export const PURGE_DELETE_ORDER: readonly PurgeTableKey[] = [
   "photoDispatch",
   "photo",
+  "debt",
   "saleRecord",
   "reservation",
   "lead",
@@ -176,6 +181,8 @@ export interface PurgePlanCounts {
   slabs: number;
   pieces: number;
   reservations: number;
+  /** TZ9 credit debts on sales being wiped (A/B scoped; C = all). */
+  debts: number;
   saleRecords: number;
   photos: number;
   photoRequests: number;
@@ -256,6 +263,10 @@ export interface PurgeDb {
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
   saleRecord: {
+    count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  debt: {
     count(args?: { where?: unknown }): Promise<number>;
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
@@ -362,6 +373,8 @@ export async function planPurge(
       { batchPattern: { batch: { stoneTypeId: stIn } } },
     ],
   };
+  // Debt hangs off SaleRecord (Restrict). Same sale scope as saleWhere.
+  const debtWhere = { saleRecord: saleWhere };
   const photoWhere = {
     OR: [
       { stoneTypeId: stIn },
@@ -398,6 +411,7 @@ export async function planPurge(
     slabs,
     pieces,
     reservations,
+    debts,
     saleRecords,
     photos,
     photoRequests,
@@ -443,6 +457,11 @@ export async function planPurge(
       : noStones
         ? Promise.resolve(0)
         : db.reservation.count({ where: reservationWhere }),
+    all
+      ? db.debt.count()
+      : noStones
+        ? Promise.resolve(0)
+        : db.debt.count({ where: debtWhere }),
     all
       ? db.saleRecord.count()
       : noStones
@@ -499,20 +518,23 @@ export async function planPurge(
       "Scope A: only StoneTypes matching seed-demo markers (name contains (демо)/(demo) or qrSlug starts with demo-).",
     );
     notes.push(
+      "Debts on sales of those stones are deleted BEFORE SaleRecord (Debt→SaleRecord RESTRICT).",
+    );
+    notes.push(
       "AuditLog rows are kept; /istoriya may show orphan entityIds for deleted demo entities.",
     );
   }
   if (scope === "B") {
     notes.push(
-      "Scope B: every StoneType and inventory hang-offs (incl. sales/reservations/photos/leads on those stones).",
+      "Scope B: every StoneType and inventory hang-offs (incl. sales/reservations/photos/leads/debts on those stones).",
     );
     notes.push(
-      "AuditLog kept (soft refs break). MutationReceipt for deleted Batch ids removed.",
+      "Debt deleted before SaleRecord. AuditLog kept (soft refs break). MutationReceipt for deleted Batch ids removed.",
     );
   }
   if (scope === "C") {
     notes.push(
-      "Scope C: full inventory + all SaleRecord, Reservation, Photo*, Lead, AuditLog, MutationReceipt.",
+      "Scope C: full inventory + all Debt + SaleRecord + Reservation + Photo* + Lead + AuditLog + MutationReceipt.",
     );
     notes.push(
       "/istoriya will be empty after C (AuditLog wiped). One ADJUSTMENT audit row is written after wipe.",
@@ -534,6 +556,7 @@ export async function planPurge(
       slabs,
       pieces,
       reservations,
+      debts,
       saleRecords,
       photos,
       photoRequests,
@@ -559,6 +582,7 @@ export function formatPlanReport(plan: PurgePlan): string {
     "Counts that WOULD be deleted / nulled:",
     `  PhotoDispatch:     ${c.photoDispatches}`,
     `  Photo:             ${c.photos}`,
+    `  Debt:              ${c.debts}`,
     `  SaleRecord:        ${c.saleRecords}`,
     `  Reservation:       ${c.reservations}`,
     `  Lead:              ${c.leads}`,
@@ -626,6 +650,7 @@ export async function executePurge(
       slabs: 0,
       pieces: 0,
       reservations: 0,
+      debts: 0,
       saleRecords: 0,
       photos: 0,
       photoRequests: 0,
@@ -666,6 +691,7 @@ export async function executePurge(
             { batchPattern: { batch: { stoneTypeId: stIn } } },
           ],
         };
+    const debtWhere = all ? {} : { saleRecord: saleWhere };
     const photoWhere = all
       ? {}
       : {
@@ -692,12 +718,16 @@ export async function executePurge(
     const photos = (await tx.photo.deleteMany({ where: photoWhere })).count;
     log(`  Photo deleted: ${photos}`);
 
-    // 3 SaleRecord
+    // 3 Debt BEFORE SaleRecord (Debt.saleRecordId ON DELETE RESTRICT — TZ9)
+    const debts = (await tx.debt.deleteMany({ where: debtWhere })).count;
+    log(`  Debt deleted: ${debts}`);
+
+    // 4 SaleRecord
     const saleRecords = (await tx.saleRecord.deleteMany({ where: saleWhere }))
       .count;
     log(`  SaleRecord deleted: ${saleRecords}`);
 
-    // 4 Reservation
+    // 5 Reservation
     const reservations = (
       await tx.reservation.deleteMany({ where: reservationWhere })
     ).count;
@@ -794,6 +824,7 @@ export async function executePurge(
       slabs,
       pieces,
       reservations,
+      debts,
       saleRecords,
       photos,
       photoRequests,
