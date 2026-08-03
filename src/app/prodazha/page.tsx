@@ -214,14 +214,27 @@ export default async function ProdazhaPage({
     ? filtersFromSearchParams(sp, histAccess.managerId)
     : null;
   const histAfter = first(sp.after) ?? null;
-  const salesPage =
+  const batchIdsForRemainders = stoneTypesRaw.flatMap((st) =>
+    st.batches.map((b) => b.id),
+  );
+
+  // History + remainder aggregates are independent after stoneTypesRaw — one RTT.
+  const [salesPage, remainders] = await Promise.all([
     histFilters !== null
-      ? await fetchSaleHistoryPage(db, {
+      ? fetchSaleHistoryPage(db, {
           filters: histFilters,
           after: histAfter,
           pageSize: SALE_HISTORY_PAGE_SIZE,
         })
-      : { rows: [], hasMore: false, nextCursor: null as string | null };
+      : Promise.resolve({
+          rows: [] as Awaited<
+            ReturnType<typeof fetchSaleHistoryPage>
+          >["rows"],
+          hasMore: false,
+          nextCursor: null as string | null,
+        }),
+    getBatchRemainders(db, batchIdsForRemainders),
+  ]);
   const recentSales = salesPage.rows;
   const canSeeSalePrice = caps.canSeePrices;
 
@@ -268,12 +281,6 @@ export default async function ProdazhaPage({
       };
     }
   }
-
-  // §3 формула: свободный остаток партий по SQL-агрегатам (весь склад не тянем).
-  const remainders = await getBatchRemainders(
-    db,
-    stoneTypesRaw.flatMap((st) => st.batches.map((b) => b.id)),
-  );
 
   const stoneTypes: StoneTypeGroup[] = stoneTypesRaw
     .map((st) => {

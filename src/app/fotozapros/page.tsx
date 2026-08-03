@@ -15,6 +15,8 @@ import {
   telegramIdMatchesOwner,
 } from "@/lib/photo-requests";
 import { closePhotoRequest } from "./actions";
+import { BULK_CLOSE_DEFAULT_DAYS } from "./bulk-close";
+import BulkClosePanel from "./BulkClosePanel";
 import { unlinkTelegram } from "@/app/accounts/actions";
 import { getCapabilities, getCurrentUser } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
@@ -67,10 +69,16 @@ const DELIVERY_VARIANT: Record<DeliveryState, BadgeVariant> = {
   waiting: "neutral",
 };
 
+function first(
+  v: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 export default async function FotozaprosPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tgUnlink?: string; tgErr?: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // READ: canViewPhotoTasks (OWNER/MANAGER/WAREHOUSE). CREATE/close: canRequestPhoto.
   const [caps, actor] = await Promise.all([
@@ -92,10 +100,19 @@ export default async function FotozaprosPage({
     actorId: actor?.id ?? null,
   });
 
-  const sp = searchParams ? await searchParams : {};
+  const spRaw = searchParams ? await searchParams : {};
+  const sp = {
+    tgUnlink: first(spRaw.tgUnlink),
+    tgErr: first(spRaw.tgErr),
+    closed: first(spRaw.closed),
+    closeErr: first(spRaw.closeErr),
+    n: first(spRaw.n),
+    scope: first(spRaw.scope),
+  };
 
   // BUG-04 — lazy sweep: faqat menejer/egasi sahifasida (dispatch nazorati).
   // W11-A: redispatch also skips demo warehouse chats.
+  // Must finish before reading requests/dispatches (sweep mutates dispatch rows).
   if (canManageRequests) {
     try {
       await redispatchPendingPhotoRequests({ db, sendMessage });
@@ -107,33 +124,75 @@ export default async function FotozaprosPage({
     }
   }
 
-  // W9-A / W11-A: warehouse TG connectivity (managers/owner only).
-  const warehouseUsers = canManageRequests
-    ? await db.user.findMany({
-        where: { role: "WAREHOUSE" },
-        orderBy: { name: "asc" },
-        take: 100,
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          telegramId: true,
-          isActive: true,
-        },
-      })
-    : [];
+  const olderCutoff = new Date(
+    Date.now() - BULK_CLOSE_DEFAULT_DAYS * 24 * 60 * 60 * 1000,
+  );
 
-  // Owner telegram ids for "this chat is yours" flag (unique constraint usually
-  // prevents dual attach; still useful after manual moves / display of me).
-  const ownerTelegramIds = canManageRequests
-    ? (
-        await db.user.findMany({
-          where: { role: "OWNER", telegramId: { not: null } },
-          select: { telegramId: true },
-          take: 10,
-        })
-      ).map((u) => u.telegramId)
-    : [];
+  // After sweep: warehouse panel + request list + bulk counts are independent —
+  // parallelize (region RTT multiplies sequential cost).
+  const [warehouseUsers, ownerTelegramRows, requests, pendingAll, pendingOlder] =
+    await Promise.all([
+      canManageRequests
+        ? db.user.findMany({
+            where: { role: "WAREHOUSE" },
+            orderBy: { name: "asc" },
+            take: 100,
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              telegramId: true,
+              isActive: true,
+            },
+          })
+        : Promise.resolve(
+            [] as Array<{
+              id: string;
+              name: string;
+              phone: string | null;
+              telegramId: string | null;
+              isActive: boolean;
+            }>,
+          ),
+      canManageRequests
+        ? db.user.findMany({
+            where: { role: "OWNER", telegramId: { not: null } },
+            select: { telegramId: true },
+            take: 10,
+          })
+        : Promise.resolve([] as Array<{ telegramId: string | null }>),
+      db.photoRequest.findMany({
+        where: listWhere,
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          batch: { include: { stoneType: true } },
+          batchLocation: true,
+          assignee: true,
+          photos: { select: { id: true }, orderBy: { createdAt: "asc" } },
+          dispatches: {
+            select: {
+              status: true,
+              chatId: true,
+              attempts: true,
+              lastError: true,
+            },
+            orderBy: { createdAt: "asc" },
+            take: 50,
+          },
+        },
+      }),
+      canManageRequests
+        ? db.photoRequest.count({ where: { status: "PENDING" } })
+        : Promise.resolve(0),
+      canManageRequests
+        ? db.photoRequest.count({
+            where: { status: "PENDING", createdAt: { lt: olderCutoff } },
+          })
+        : Promise.resolve(0),
+    ]);
+
+  const ownerTelegramIds = ownerTelegramRows.map((u) => u.telegramId);
 
   const linkedWorkers = warehouseUsers.filter(
     (u) => u.isActive && u.telegramId,
@@ -146,24 +205,6 @@ export default async function FotozaprosPage({
   const ownerChatOnWarehouse = linkedWorkers.filter((u) =>
     telegramIdMatchesOwner(u.telegramId, ownerTelegramIds),
   );
-
-  const requests = await db.photoRequest.findMany({
-    where: listWhere,
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    include: {
-      batch: { include: { stoneType: true } },
-      batchLocation: true,
-      assignee: true,
-      photos: { select: { id: true }, orderBy: { createdAt: "asc" } },
-      // W9-A: chatId → who was targeted (telegramId of worker).
-      dispatches: {
-        select: { status: true, chatId: true, attempts: true, lastError: true },
-        orderBy: { createdAt: "asc" },
-        take: 50,
-      },
-    },
-  });
 
   // Map telegram chatId → warehouse user for display names.
   const tgToWorker = new Map(
@@ -188,6 +229,37 @@ export default async function FotozaprosPage({
             : "Ваши открытые задачи. Сфотографируйте камень и отправьте фото в Telegram-бот — на сайте загрузка не нужна (§5.3)."}
         </p>
       </header>
+
+      {sp.closed === "ok" && (
+        <Alert variant="success" className="mb-4">
+          Запрос закрыт.
+        </Alert>
+      )}
+      {sp.closed === "bulk" && (
+        <Alert variant="success" className="mb-4">
+          Закрыто запросов:{" "}
+          <strong className="tnum">{sp.n ?? "0"}</strong>
+          {sp.scope === "older"
+            ? ` (старше ${BULK_CLOSE_DEFAULT_DAYS} дн.)`
+            : sp.scope === "all"
+              ? " (все открытые)"
+              : ""}
+          . Статус «готово», записи не удалялись.
+        </Alert>
+      )}
+      {sp.closeErr && (
+        <Alert variant="danger" className="mb-4">
+          {sp.closeErr}
+        </Alert>
+      )}
+
+      {canManageRequests && pendingAll > 0 && (
+        <BulkClosePanel
+          pendingAll={pendingAll}
+          pendingOlder={pendingOlder}
+          defaultDays={BULK_CLOSE_DEFAULT_DAYS}
+        />
+      )}
 
       {canManageRequests && (
         <Card className="mb-6">
