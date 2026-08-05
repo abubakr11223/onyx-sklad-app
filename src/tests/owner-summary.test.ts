@@ -294,3 +294,43 @@ describe("computeOwnerSummary integration", () => {
     expect(s.saleCount).toBe(2);
   });
 });
+
+
+describe("no silent truncation — totals match full enumeration", () => {
+  it("5500 sales (above old take:5000) → grand total = exact sum", () => {
+    // Old loadOwnerSummary used take:5000 and silently dropped the rest.
+    // computeOwnerSummary + full list must never drop rows.
+    const n = 5500;
+    const sales: OwnerSummarySale[] = [];
+    for (let i = 0; i < n; i++) {
+      sales.push(
+        sale({
+          id: `s${i}`,
+          soldAt: new Date("2026-08-10T12:00:00.000Z"),
+          price: "1",
+          currency: "UZS",
+          clientId: i % 2 === 0 ? "c-even" : "c-odd",
+          clientName: i % 2 === 0 ? "Even" : "Odd",
+        }),
+      );
+    }
+    const summary = computeOwnerSummary(sales, AUG, 10);
+    expect(summary.saleCount).toBe(n);
+    expect(summary.grandTotals).toEqual([
+      { currency: "UZS", amount: "5500.00", count: n },
+    ]);
+    // Both clients present in ranks (top by equal UZS uses saleCount tie-break)
+    const ids = new Set(summary.topClients.map((c) => c.clientId));
+    expect(ids.has("c-even")).toBe(true);
+    expect(ids.has("c-odd")).toBe(true);
+    const even = summary.topClients.find((c) => c.clientId === "c-even")!;
+    expect(even.totals[0].amount).toBe("2750.00");
+  });
+
+  it("OWNER_SUMMARY_PAGE_SIZE is a page size, not a hard max", async () => {
+    const { OWNER_SUMMARY_PAGE_SIZE } = await import("@/lib/owner-summary");
+    expect(OWNER_SUMMARY_PAGE_SIZE).toBeGreaterThan(0);
+    expect(OWNER_SUMMARY_PAGE_SIZE).toBeLessThanOrEqual(5000);
+  });
+});
+

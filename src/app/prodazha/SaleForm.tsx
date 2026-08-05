@@ -16,6 +16,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
+import { fieldErrorItems as buildFieldErrorItems } from "./sale-form-errors";
 import { issueSampleAction } from "@/app/obraztsy/actions";
 import {
   createClientForSale,
@@ -1128,21 +1129,7 @@ export default function SaleForm({
   }
 
   // ── Шаг 4: подтверждение ──
-  const fieldErrorItems = [
-    e.form,
-    e.qty,
-    e.qtySlabs,
-    e.qtyAreaM2,
-    e.clientId,
-    e.customerName,
-    e.customerContact,
-    e.siteId,
-    e.paymentMethod,
-    e.price,
-    e.currency,
-    e.debtDueDate,
-    e.debtComment,
-  ].filter((msg): msg is string => Boolean(msg));
+  const fieldErrorItems = buildFieldErrorItems(e);
 
   return (
     <Card>

@@ -624,7 +624,7 @@ describe("executeVolumeSale — продажа из узора (интеграц
 describe("decideUnitSale — SAMPLE (TZ №10)", () => {
   it("камень на образце нельзя продать обычной продажей", () => {
     const d = decideUnitSale(
-      baseInput({ unitStatus: "SAMPLE" as never }),
+      baseInput({ unitStatus: "SAMPLE" }),
     );
     expect(d.ok).toBe(false);
     if (!d.ok) expect(d.error.code).toBe("INVALID_STATUS");

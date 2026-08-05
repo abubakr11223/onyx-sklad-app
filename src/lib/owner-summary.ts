@@ -276,7 +276,12 @@ export function computeOwnerSummary(
   };
 }
 
-/** Load sales for period from DB and compute summary. */
+/** Load sales for period from DB and compute summary.
+ *
+ * NO silent take-limit. Rows are loaded in pages (cursor) until exhausted so
+ * tops/totals always match a full enumeration of the period. Aggregation is
+ * then pure (`computeOwnerSummary`) — same path as unit tests.
+ */
 export async function loadOwnerSummary(
   db: Db,
   args: {
@@ -292,45 +297,92 @@ export async function loadOwnerSummary(
     args.now ?? new Date(),
   );
 
-  const rows = await db.saleRecord.findMany({
-    where: {
-      soldAt: { gte: period.from, lte: period.to },
-      // Include returned for pure filter consistency; filter in compute.
-      // Actually we can exclude returned in SQL for efficiency:
-      returnedAt: null,
-    },
-    select: {
-      id: true,
-      soldAt: true,
-      returnedAt: true,
-      price: true,
-      currency: true,
-      qtySlabs: true,
-      qtyAreaM2: true,
-      clientId: true,
-      siteId: true,
-      customerName: true,
-      client: { select: { name: true, type: true } },
-      site: { select: { name: true } },
-    },
-    orderBy: { soldAt: "desc" },
-    take: 5000,
-  });
-
-  const sales: OwnerSummarySale[] = rows.map((r) => ({
-    id: r.id,
-    soldAt: r.soldAt,
-    returnedAt: r.returnedAt,
-    price: r.price?.toString() ?? null,
-    currency: (r.currency as MoneyCurrency | null) ?? null,
-    qtySlabs: r.qtySlabs,
-    qtyAreaM2: r.qtyAreaM2?.toString() ?? null,
-    clientId: r.clientId,
-    siteId: r.siteId,
-    clientType: (r.client?.type as "B2B" | "B2C" | undefined) ?? null,
-    clientName: r.client?.name ?? r.customerName,
-    siteName: r.site?.name ?? null,
-  }));
-
+  const sales = await loadAllPeriodSales(db, period);
   return computeOwnerSummary(sales, period, args.limit ?? 10);
+}
+
+/** Page size for cursor load only — not a max cap on total sales. */
+export const OWNER_SUMMARY_PAGE_SIZE = 1000;
+
+/**
+ * Load every non-returned sale in period (cursor by soldAt,id).
+ * Completeness: loop until a short page; never truncates with a hard max.
+ */
+export async function loadAllPeriodSales(
+  db: Db,
+  period: PeriodBounds,
+): Promise<OwnerSummarySale[]> {
+  const out: OwnerSummarySale[] = [];
+  let cursor: { soldAt: Date; id: string } | null = null;
+
+  type SaleRow = {
+    id: string;
+    soldAt: Date;
+    returnedAt: Date | null;
+    price: { toString(): string } | null;
+    currency: string | null;
+    qtySlabs: number | null;
+    qtyAreaM2: { toString(): string } | null;
+    clientId: string | null;
+    siteId: string | null;
+    customerName: string;
+    client: { name: string; type: string } | null;
+    site: { name: string } | null;
+  };
+
+  for (;;) {
+    const rows: SaleRow[] = await db.saleRecord.findMany({
+      where: {
+        soldAt: { gte: period.from, lte: period.to },
+        returnedAt: null,
+        ...(cursor
+          ? {
+              OR: [
+                { soldAt: { lt: cursor.soldAt } },
+                { soldAt: cursor.soldAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ soldAt: "desc" }, { id: "desc" }],
+      take: OWNER_SUMMARY_PAGE_SIZE,
+      select: {
+        id: true,
+        soldAt: true,
+        returnedAt: true,
+        price: true,
+        currency: true,
+        qtySlabs: true,
+        qtyAreaM2: true,
+        clientId: true,
+        siteId: true,
+        customerName: true,
+        client: { select: { name: true, type: true } },
+        site: { select: { name: true } },
+      },
+    });
+
+    for (const r of rows) {
+      out.push({
+        id: r.id,
+        soldAt: r.soldAt,
+        returnedAt: r.returnedAt,
+        price: r.price?.toString() ?? null,
+        currency: (r.currency as MoneyCurrency | null) ?? null,
+        qtySlabs: r.qtySlabs,
+        qtyAreaM2: r.qtyAreaM2?.toString() ?? null,
+        clientId: r.clientId,
+        siteId: r.siteId,
+        clientType: (r.client?.type as "B2B" | "B2C" | undefined) ?? null,
+        clientName: r.client?.name ?? r.customerName,
+        siteName: r.site?.name ?? null,
+      });
+    }
+
+    if (rows.length < OWNER_SUMMARY_PAGE_SIZE) break;
+    const last = rows[rows.length - 1];
+    cursor = { soldAt: last.soldAt, id: last.id };
+  }
+
+  return out;
 }

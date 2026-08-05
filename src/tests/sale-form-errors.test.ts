@@ -1,30 +1,18 @@
 // Salebug — confirmation step must list qty errors (previously silent).
-// Pure contract of which keys the UI must treat as submit failures.
+// MUST import production helper — a local copy would not catch SaleForm drift.
 import { describe, expect, it } from "vitest";
-
-/**
- * Mirrors SaleForm step-4 fieldErrorItems construction.
- * Regression: qty / qtySlabs / qtyAreaM2 were omitted → owner saw nothing.
- */
-function fieldErrorItems(errors: Record<string, string>): string[] {
-  return [
-    errors.form,
-    errors.qty,
-    errors.qtySlabs,
-    errors.qtyAreaM2,
-    errors.clientId,
-    errors.customerName,
-    errors.customerContact,
-    errors.siteId,
-    errors.paymentMethod,
-    errors.price,
-    errors.currency,
-    errors.debtDueDate,
-    errors.debtComment,
-  ].filter((msg): msg is string => Boolean(msg));
-}
+import {
+  fieldErrorItems,
+  SALE_FORM_ERROR_KEYS,
+} from "@/app/prodazha/sale-form-errors";
 
 describe("SaleForm confirmation error surface", () => {
+  it("exports keys that include clientId and qty* (production contract)", () => {
+    expect(SALE_FORM_ERROR_KEYS).toContain("clientId");
+    expect(SALE_FORM_ERROR_KEYS).toContain("qtyAreaM2");
+    expect(SALE_FORM_ERROR_KEYS).toContain("qtySlabs");
+  });
+
   it("includes qtyAreaM2 validation error (space in area field)", () => {
     const items = fieldErrorItems({
       qtyAreaM2:
@@ -49,5 +37,16 @@ describe("SaleForm confirmation error surface", () => {
 
   it("empty errors → no banner items", () => {
     expect(fieldErrorItems({})).toEqual([]);
+  });
+
+  it("omitting a production key from the map drops that message (wire to SALE_FORM_ERROR_KEYS)", () => {
+    // If SALE_FORM_ERROR_KEYS lost clientId, this would still pass with a local
+    // copy — so we assert the production array is what drives the helper.
+    const withClient = fieldErrorItems({ clientId: "need client" });
+    expect(withClient).toEqual(["need client"]);
+    // Sanity: unknown keys are ignored (not in production list)
+    expect(fieldErrorItems({ totallyUnknown: "x" } as Record<string, string>)).toEqual(
+      [],
+    );
   });
 });

@@ -112,6 +112,15 @@ describe("canBreak — data-model.md §2, переходы 3/6/9 и запрет
     expect(r.allowed).toBe(false);
     if (!r.allowed) expect(r.code).toBe("SLAB_ALREADY_BROKEN");
   });
+
+  it("SAMPLE → запрет (TZ №10: плита у клиента как образец)", () => {
+    const r = canBreak("SAMPLE");
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) {
+      expect(r.code).toBe("SLAB_IN_SAMPLE");
+      expect(r.message).toMatch(/образец/i);
+    }
+  });
 });
 
 describe("estimatePieceAreaM2 — средняя плита партии (§3)", () => {

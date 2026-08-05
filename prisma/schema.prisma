@@ -581,6 +581,15 @@ model AppConfig {
 /// TZ №10+11 §3 — справочник клиентов (частник / компания).
 /// Старые SaleRecord остаются с текстовым customerName; clientId nullable.
 
+/// TZ №10 — образец на руках у клиента.
+///
+/// ⚠️ PARTIAL UNIQUE INDEXES (не выражаются в Prisma schema — только SQL):
+///   migration `20260804160000_tz10_sample`:
+///     - sample_active_slab_uniq  ON ("slabId")  WHERE status='ACTIVE' AND slabId  IS NOT NULL
+///     - sample_active_piece_uniq ON ("pieceId") WHERE status='ACTIVE' AND pieceId IS NOT NULL
+///   `prisma db push` их НЕ создаст. Только `prisma migrate deploy`.
+///   Без них возможна двойная выдача одной плиты двумя менеджерами.
+///
 model Sample {
   id                 String       @id @default(cuid())
   targetType         SaleTarget

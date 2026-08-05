@@ -4,6 +4,9 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
+import { lockBatchForUpdate } from "@/lib/batch-lock";
+import { computeFreeRemainder } from "@/lib/inventory";
+import { checkVolumeSaleGuard } from "@/lib/sales";
 import {
   createDebtForSale,
   DebtLogicError,
@@ -51,6 +54,55 @@ export function isSampleOverdue(
     sample.returnDueDate.getTime() < now.getTime()
   );
 }
+
+
+/**
+ * Pure: free volume left after other holds (reservations + other active samples).
+ * Used by issueSample BATCH_VOLUME guard (unit-tested without DB).
+ */
+export function checkSampleVolumeAgainstFree(args: {
+  freeSlabs: number | null;
+  freeAreaM2: number | null;
+  holdSlabs: number;
+  holdAreaM2: number;
+  qtySlabs: number | null;
+  qtyAreaM2: number | null;
+}): { ok: true } | { ok: false; message: string } {
+  const qs = args.qtySlabs;
+  const qa = args.qtyAreaM2;
+  if ((qs == null || qs <= 0) && (qa == null || qa <= 0)) {
+    return { ok: false, message: "Укажите объём образца (плиты или м²)" };
+  }
+  if (qs != null && qs > 0 && args.freeSlabs != null) {
+    const avail = args.freeSlabs - args.holdSlabs;
+    if (qs > avail) {
+      return {
+        ok: false,
+        message:
+          `В партии столько нет для образца: свободно ${Math.max(0, avail)} плит` +
+          (args.holdSlabs > 0
+            ? ` (ещё ${args.holdSlabs} в брони/других образцах)`
+            : ""),
+      };
+    }
+  }
+  if (qa != null && qa > 0 && args.freeAreaM2 != null) {
+    const avail = args.freeAreaM2 - args.holdAreaM2;
+    if (qa > avail + 1e-6) {
+      const freeTxt = Math.max(0, avail).toFixed(3).replace(/\.?0+$/, "");
+      return {
+        ok: false,
+        message:
+          `В партии столько нет для образца: свободно ≈${freeTxt} м²` +
+          (args.holdAreaM2 > 0
+            ? ` (часть в брони/других образцах)`
+            : ""),
+      };
+    }
+  }
+  return { ok: true };
+}
+
 
 /** Owner all / manager own — same as clients. */
 export function sampleListScope(args: {
@@ -267,7 +319,7 @@ export async function issueSample(
         if (input.targetType === "SLAB") slabId = unitId;
         else pieceId = unitId;
       } else {
-        // BATCH_VOLUME — hold via Sample row only (like reservation holds)
+        // BATCH_VOLUME — lock batch, check free − holds, then Sample row holds qty
         const bid = input.batchId?.trim();
         if (!bid) {
           throw new SampleLogicError({
@@ -283,6 +335,118 @@ export async function issueSample(
             message: "Укажите объём образца (плиты или м²)",
           });
         }
+
+        await lockBatchForUpdate(tx, bid);
+        const batch = await tx.batch.findUnique({
+          where: { id: bid },
+          select: {
+            id: true,
+            needsCheck: true,
+            slabsTotal: true,
+            areaTotalM2: true,
+            slabsAdjusted: true,
+            areaAdjustedM2: true,
+            slabsSoldDirect: true,
+            areaSoldDirectM2: true,
+            slabs: { select: { areaM2: true } },
+            pieces: {
+              where: { originSlabId: null },
+              select: { areaM2: true },
+            },
+          },
+        });
+        if (!batch) {
+          throw new SampleLogicError({
+            code: "NOT_FOUND",
+            message: "Партия не найдена",
+          });
+        }
+        if (batch.needsCheck) {
+          throw new SampleLogicError({
+            code: "UNIT_UNAVAILABLE",
+            message: "Партия помечена «проверить» — образец заблокирован",
+          });
+        }
+
+        const free = computeFreeRemainder(
+          {
+            slabsTotal: batch.slabsTotal,
+            areaTotalM2:
+              batch.areaTotalM2 == null
+                ? null
+                : Number(batch.areaTotalM2.toString()),
+            slabsAdjusted: batch.slabsAdjusted,
+            areaAdjustedM2: Number(batch.areaAdjustedM2.toString()),
+            slabsSoldDirect: batch.slabsSoldDirect,
+            areaSoldDirectM2: Number(batch.areaSoldDirectM2.toString()),
+          },
+          batch.slabs.map((s) => ({
+            areaM2: s.areaM2 == null ? null : Number(s.areaM2.toString()),
+          })),
+          batch.pieces.map((p) => ({
+            areaM2: p.areaM2 == null ? null : Number(p.areaM2.toString()),
+          })),
+        );
+
+        const now = new Date();
+        const resHolds = await tx.reservation.findMany({
+          where: {
+            status: "ACTIVE",
+            targetType: "BATCH_VOLUME",
+            batchId: bid,
+            expiresAt: { gt: now },
+          },
+          select: { qtySlabs: true, qtyAreaM2: true },
+        });
+        const sampleHolds = await tx.sample.findMany({
+          where: {
+            status: "ACTIVE",
+            targetType: "BATCH_VOLUME",
+            batchId: bid,
+          },
+          select: { qtySlabs: true, qtyAreaM2: true },
+        });
+        let holdSlabs = 0;
+        let holdArea = 0;
+        for (const h of resHolds) {
+          holdSlabs += h.qtySlabs ?? 0;
+          holdArea += h.qtyAreaM2 == null ? 0 : Number(h.qtyAreaM2.toString());
+        }
+        for (const h of sampleHolds) {
+          holdSlabs += h.qtySlabs ?? 0;
+          holdArea += h.qtyAreaM2 == null ? 0 : Number(h.qtyAreaM2.toString());
+        }
+
+        const guard = checkSampleVolumeAgainstFree({
+          freeSlabs: free.slabsFree,
+          freeAreaM2: free.areaFreeM2,
+          holdSlabs,
+          holdAreaM2: holdArea,
+          qtySlabs: qs != null && qs > 0 ? qs : null,
+          qtyAreaM2: qa != null && qa > 0 ? qa : null,
+        });
+        if (!guard.ok) {
+          throw new SampleLogicError({
+            code: "INSUFFICIENT_REMAINDER",
+            message: guard.message,
+          });
+        }
+
+        // Also run sales guard shape (same numbers) for consistent messages
+        const saleGuard = checkVolumeSaleGuard({
+          free,
+          othersReservedSlabs: holdSlabs,
+          othersReservedAreaM2: holdArea,
+          qtySlabs: qs != null && qs > 0 ? qs : null,
+          qtyAreaM2: qa != null && qa > 0 ? qa : null,
+        });
+        if (!saleGuard.ok) {
+          throw new SampleLogicError({
+            code: "INSUFFICIENT_REMAINDER",
+            message: saleGuard.error.message,
+          });
+        }
+
         batchId = bid;
         qtySlabs = qs != null && qs > 0 ? qs : null;
         qtyAreaM2 = qa != null && qa > 0 ? qa.toFixed(3) : null;
@@ -564,7 +728,8 @@ export async function sellSample(
         }
       }
       if (sample.targetType === "BATCH_VOLUME" && sample.batchId) {
-        // Increment sold counters (best-effort single update; race via WHERE counters not locked)
+        // Lock + optimistic WHERE on sold counters (same pattern as sellBatchVolume)
+        await lockBatchForUpdate(tx, sample.batchId);
         const batch = await tx.batch.findUnique({
           where: { id: sample.batchId },
           select: {
@@ -589,10 +754,21 @@ export async function sellSample(
             increment: sample.qtyAreaM2.toString(),
           };
         }
-        await tx.batch.updateMany({
-          where: { id: batch.id },
+        const upd = await tx.batch.updateMany({
+          where: {
+            id: batch.id,
+            slabsSoldDirect: batch.slabsSoldDirect,
+            areaSoldDirectM2: batch.areaSoldDirectM2.toString(),
+          },
           data,
         });
+        if (upd.count === 0) {
+          throw new SampleLogicError({
+            code: "CONFLICT",
+            message:
+              "Остаток партии изменился параллельно — обновите и повторите",
+          });
+        }
       }
 
       const sale = await tx.saleRecord.create({

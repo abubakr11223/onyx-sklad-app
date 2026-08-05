@@ -27,6 +27,7 @@ export type BreakErrorCode =
   | "SLAB_NOT_FOUND"
   | "SLAB_SOLD" // §2: SOLD → BROKEN_OFFCUT запрещён
   | "SLAB_ALREADY_BROKEN" // §2: BROKEN_OFFCUT — терминал
+  | "SLAB_IN_SAMPLE" // TZ №10: SAMPLE — камень у клиента
   | "SLAB_STATUS_CHANGED" // гонка: условный UPDATE не нашёл ожидаемый статус
   | "BATCH_NOT_FOUND"
   | "NO_PIECES"
@@ -158,12 +159,12 @@ export function breakCauseAuditFields(cause: BreakCause): {
 
 export type CanBreakResult =
   | { allowed: true; cancelsReservation: boolean }
-  | { allowed: false; code: "SLAB_SOLD" | "SLAB_ALREADY_BROKEN"; message: string };
+  | { allowed: false; code: "SLAB_SOLD" | "SLAB_ALREADY_BROKEN" | "SLAB_IN_SAMPLE"; message: string };
 
 /**
  * Решение «можно ли разбить плиту» — data-model.md §2:
  * переходы 3 (AVAILABLE), 6 (RESERVED, бронь авто-CANCELLED) и
- * 9 (RETURNED — вернулся битым). SOLD и BROKEN_OFFCUT — явный запрет.
+ * 9 (RETURNED — вернулся битым). SOLD, BROKEN_OFFCUT и SAMPLE (TZ №10) — явный запрет.
  */
 export function canBreak(status: UnitStatus): CanBreakResult {
   switch (status) {
@@ -183,6 +184,13 @@ export function canBreak(status: UnitStatus): CanBreakResult {
         allowed: false,
         code: "SLAB_ALREADY_BROKEN",
         message: "Плита уже переведена в бой/остаток",
+      };
+    case "SAMPLE":
+      return {
+        allowed: false,
+        code: "SLAB_IN_SAMPLE",
+        message:
+          "Плита выдана как образец — сначала оформите возврат образца",
       };
   }
 }

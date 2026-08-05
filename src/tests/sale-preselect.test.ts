@@ -171,6 +171,21 @@ describe("resolveSalePreselect — status branches", () => {
     if (!r.ok) expect(r.reason).toBe("unavailable");
   });
 
+  it("SAMPLE → sample (TZ №10: clear message, not generic unavailable)", () => {
+    const r = resolveSalePreselect({
+      canSell: true,
+      actorId: "mgr1",
+      kind: "SLAB",
+      requestedId: "slab1",
+      unit: baseUnit({ status: "SAMPLE" }),
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("sample");
+      expect(r.message ?? "").toMatch(/образец/i);
+    }
+  });
+
   it("PIECE AVAILABLE → ok", () => {
     const r = resolveSalePreselect({
       canSell: true,

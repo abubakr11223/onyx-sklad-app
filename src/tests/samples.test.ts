@@ -19,6 +19,8 @@ const M = vi.hoisted(() => {
     auditCreate: fn(),
     batchFindUnique: fn(),
     batchUpdateMany: fn(),
+    queryRaw: fn(),
+    reservationFindMany: fn(),
   };
 });
 
@@ -37,6 +39,8 @@ const tx = {
   debt: { create: M.debtCreate },
   auditLog: { create: M.auditCreate },
   batch: { findUnique: M.batchFindUnique, updateMany: M.batchUpdateMany },
+  reservation: { findMany: M.reservationFindMany },
+  $queryRaw: M.queryRaw,
 };
 
 vi.mock("@/lib/db", () => ({
@@ -55,6 +59,7 @@ import {
   sampleListScope,
   sumDepositsByCurrency,
   sampleHoldsFromRows,
+  checkSampleVolumeAgainstFree,
 } from "@/lib/samples";
 
 beforeEach(() => {
@@ -340,3 +345,115 @@ describe("stone on sample is not AVAILABLE — search contract", () => {
     expect(data.status).not.toBe("AVAILABLE");
   });
 });
+
+
+describe("checkSampleVolumeAgainstFree — BATCH_VOLUME remainder", () => {
+  it("rejects issue when qtySlabs exceeds free − holds", () => {
+    const r = checkSampleVolumeAgainstFree({
+      freeSlabs: 10,
+      freeAreaM2: 100,
+      holdSlabs: 8,
+      holdAreaM2: 0,
+      qtySlabs: 3,
+      qtyAreaM2: null,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/нет/i);
+  });
+
+  it("allows issue when free after holds is enough", () => {
+    const r = checkSampleVolumeAgainstFree({
+      freeSlabs: 10,
+      freeAreaM2: 100,
+      holdSlabs: 2,
+      holdAreaM2: 10,
+      qtySlabs: 3,
+      qtyAreaM2: 5,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects area oversell", () => {
+    const r = checkSampleVolumeAgainstFree({
+      freeSlabs: null,
+      freeAreaM2: 12.5,
+      holdSlabs: 0,
+      holdAreaM2: 10,
+      qtySlabs: null,
+      qtyAreaM2: 3,
+    });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("sellSample BATCH_VOLUME — concurrent counter conflict", () => {
+  it("updateMany count 0 → CONFLICT (second parallel sale)", async () => {
+    M.sampleFindUnique.mockResolvedValue({
+      id: "samp1",
+      status: "ACTIVE",
+      targetType: "BATCH_VOLUME",
+      slabId: null,
+      pieceId: null,
+      batchId: "b1",
+      qtySlabs: 2,
+      qtyAreaM2: null,
+      clientId: "c1",
+      depositAmount: null,
+      depositCurrency: null,
+      client: { name: "ООО", phone: "+99890" },
+    });
+    M.queryRaw.mockResolvedValue([]);
+    M.batchFindUnique.mockResolvedValue({
+      id: "b1",
+      slabsSoldDirect: 0,
+      areaSoldDirectM2: { toString: () => "0" },
+      needsCheck: false,
+    });
+    M.batchUpdateMany.mockResolvedValue({ count: 0 });
+
+    const res = await sellSample({
+      sampleId: "samp1",
+      managerId: "mgr1",
+      price: 100,
+      paymentMethod: "CASH",
+      currency: "UZS",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("CONFLICT");
+    expect(M.saleCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("issueSample BATCH_VOLUME — oversell remainder", () => {
+  it("insufficient free after holds → INSUFFICIENT_REMAINDER", async () => {
+    M.queryRaw.mockResolvedValue([]);
+    M.batchFindUnique.mockResolvedValue({
+      id: "b1",
+      needsCheck: false,
+      slabsTotal: 5,
+      areaTotalM2: null,
+      slabsAdjusted: 0,
+      areaAdjustedM2: { toString: () => "0" },
+      slabsSoldDirect: 0,
+      areaSoldDirectM2: { toString: () => "0" },
+      slabs: [],
+      pieces: [],
+    });
+    M.reservationFindMany.mockResolvedValue([]);
+    // 4 already on sample holds → free 5, request 2 → only 1 free → fail
+    M.sampleFindMany.mockResolvedValue([{ qtySlabs: 4, qtyAreaM2: null }]);
+
+    const res = await issueSample({
+      targetType: "BATCH_VOLUME",
+      batchId: "b1",
+      qtySlabs: 2,
+      clientId: "c1",
+      managerId: "mgr1",
+      returnDueDate: DUE,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("INSUFFICIENT_REMAINDER");
+    expect(M.sampleCreate).not.toHaveBeenCalled();
+  });
+});
+

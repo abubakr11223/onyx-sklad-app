@@ -40,6 +40,7 @@ export type SalePreselectFailReason =
   | "sold"
   | "reserved_other"
   | "needs_check"
+  | "sample" // TZ №10: UnitStatus SAMPLE
   | "unavailable"; // BROKEN_OFFCUT / RETURNED / boshqa
 
 export type SalePreselectResult =
@@ -128,6 +129,13 @@ export function resolveSalePreselect(args: {
       };
     }
     // O'z bronim yoki RESERVED lekin hold yo'q (edge) — ruxsat.
+  } else if (unit.status === "SAMPLE") {
+    return {
+      ok: false,
+      reason: "sample",
+      message:
+        "Камень выдан как образец — продажа через «Образцы» (оформить продажу) или сначала верните образец.",
+    };
   } else if (unit.status !== "AVAILABLE") {
     return {
       ok: false,
