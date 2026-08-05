@@ -16,6 +16,15 @@ import {
   type ChangeEvent,
 } from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
+import { issueSampleAction } from "@/app/obraztsy/actions";
+import {
+  createClientForSale,
+  createSiteForSale,
+  listSitesForClient,
+  searchClientsForSale,
+  type ClientHit,
+  type SiteHit,
+} from "./client-actions";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -27,6 +36,12 @@ import {
   type PaymentMethod,
   type SaleCurrency,
 } from "@/lib/validators/sale-payment";
+import {
+  CLIENT_TYPE_LABELS,
+  SITE_TYPE_LABELS,
+  type ClientType,
+  type SiteType,
+} from "@/lib/clients";
 import { formatVolumeQtyDisplay } from "@/lib/validators/volume-qty";
 import {
   applyMoneyInputChange,
@@ -167,8 +182,30 @@ export default function SaleForm({
   const [stone, setStone] = useState<StoneTypeGroup | null>(boot.stone);
   const [target, setTarget] = useState<Target | null>(boot.target);
   const [confirming, setConfirming] = useState(false);
-  const [customerName, setCustomerName] = useState("");
-  const [customerContact, setCustomerContact] = useState("");
+  // TZ №10+11 §6 — клиент из справочника (не свободный текст).
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientHits, setClientHits] = useState<ClientHit[]>([]);
+  const [clientSearchBusy, setClientSearchBusy] = useState(false);
+  const [clientSearchError, setClientSearchError] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<ClientHit | null>(null);
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientType, setNewClientType] = useState<ClientType>("B2C");
+  const [newClientPhone, setNewClientPhone] = useState("");
+  const [newClientBusy, setNewClientBusy] = useState(false);
+  const [newClientError, setNewClientError] = useState<string | null>(null);
+  const [dupHint, setDupHint] = useState<ClientHit | null>(null);
+  // Объект (необязательно)
+  const [siteMode, setSiteMode] = useState<"none" | "existing" | "new">("none");
+  const [sites, setSites] = useState<SiteHit[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState("");
+  const [showNewSite, setShowNewSite] = useState(false);
+  const [newSiteName, setNewSiteName] = useState("");
+  const [newSiteType, setNewSiteType] = useState<SiteType>("RESIDENTIAL");
+  const [newSiteAddress, setNewSiteAddress] = useState("");
+  const [newSiteContact, setNewSiteContact] = useState("");
+  const [newSiteBusy, setNewSiteBusy] = useState(false);
+  const [newSiteError, setNewSiteError] = useState<string | null>(null);
   /** Display only — may contain grouping spaces («200 007 666»). */
   const [priceDisplay, setPriceDisplay] = useState("");
   /** Digits for validator / hidden name="price" — never grouped. */
@@ -177,6 +214,11 @@ export default function SaleForm({
   const priceCaretRef = useRef<number | null>(null);
   // TZ9-A: способ оплаты + валюта (CONTRACT: CASH|CARD|CREDIT, UZS|USD).
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
+  const [issueAsSample, setIssueAsSample] = useState(false);
+  const [returnDueDateSample, setReturnDueDateSample] = useState("");
+  const [depositAmount, setDepositAmount] = useState("");
+  const [sampleComment, setSampleComment] = useState("");
+  const [sampleState, sampleAction, samplePending] = useActionState(issueSampleAction, { errors: {}, conflict: null });
   const [currency, setCurrency] = useState<SaleCurrency>("UZS");
   const [debtDueDate, setDebtDueDate] = useState("");
   const [debtComment, setDebtComment] = useState("");
@@ -184,6 +226,8 @@ export default function SaleForm({
   const [qtyAreaM2, setQtyAreaM2] = useState("");
   const e = state.errors;
   const isCredit = paymentMethod === "CREDIT";
+  const customerName = selectedClient?.name ?? "";
+  const customerContact = selectedClient?.phone ?? "";
   const hasSubmitError =
     Boolean(state.conflict) || Object.keys(state.errors).length > 0;
 
@@ -217,6 +261,107 @@ export default function SaleForm({
   const pickTarget = (t: Target) => {
     setTarget(t);
     setConfirming(false);
+  };
+
+  const clearClient = () => {
+    setSelectedClient(null);
+    setSites([]);
+    setSelectedSiteId("");
+    setSiteMode("none");
+    setShowNewSite(false);
+    setDupHint(null);
+  };
+
+  const selectClient = async (c: ClientHit) => {
+    setSelectedClient(c);
+    setShowNewClient(false);
+    setDupHint(null);
+    setClientHits([]);
+    setClientQuery("");
+    setClientSearchError(null);
+    setNewClientError(null);
+    setSiteMode("none");
+    setSelectedSiteId("");
+    setShowNewSite(false);
+    const res = await listSitesForClient(c.id);
+    if (res.ok) setSites(res.sites);
+    else setSites([]);
+  };
+
+  const runClientSearch = async () => {
+    setClientSearchBusy(true);
+    setClientSearchError(null);
+    setDupHint(null);
+    try {
+      const res = await searchClientsForSale(clientQuery);
+      if (!res.ok) {
+        setClientSearchError(res.error);
+        setClientHits([]);
+      } else {
+        setClientHits(res.clients);
+        if (res.clients.length === 0) {
+          setClientSearchError("Никого не найдено — создайте нового клиента");
+        }
+      }
+    } finally {
+      setClientSearchBusy(false);
+    }
+  };
+
+  const submitNewClient = async () => {
+    setNewClientBusy(true);
+    setNewClientError(null);
+    setDupHint(null);
+    try {
+      const res = await createClientForSale({
+        name: newClientName,
+        type: newClientType,
+        phone: newClientPhone,
+      });
+      if (res.ok) {
+        await selectClient(res.client);
+        setNewClientName("");
+        setNewClientPhone("");
+        setNewClientType("B2C");
+        return;
+      }
+      if (res.reason === "duplicate") {
+        setDupHint(res.existing);
+        setNewClientError(res.error);
+        return;
+      }
+      setNewClientError(res.error);
+    } finally {
+      setNewClientBusy(false);
+    }
+  };
+
+  const submitNewSite = async () => {
+    if (!selectedClient) return;
+    setNewSiteBusy(true);
+    setNewSiteError(null);
+    try {
+      const res = await createSiteForSale({
+        clientId: selectedClient.id,
+        name: newSiteName,
+        type: newSiteType,
+        address: newSiteAddress,
+        contactPerson: newSiteContact,
+      });
+      if (!res.ok) {
+        setNewSiteError(res.error);
+        return;
+      }
+      setSites((prev) => [...prev, res.site]);
+      setSelectedSiteId(res.site.id);
+      setSiteMode("existing");
+      setShowNewSite(false);
+      setNewSiteName("");
+      setNewSiteAddress("");
+      setNewSiteContact("");
+    } finally {
+      setNewSiteBusy(false);
+    }
   };
 
   // ── Шаг 1: вид камня ──
@@ -449,11 +594,12 @@ export default function SaleForm({
   // step 4 with the error. «Изменить данные» sets confirming=false freely.
   if (!confirming) {
     const canProceed =
-      customerName.trim() &&
+      Boolean(selectedClient) &&
       paymentMethod !== "" &&
       priceSubmit.trim() &&
-      (!isCredit || customerContact.trim()) &&
-      !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim());
+      (!isCredit || (selectedClient?.phone ?? "").trim()) &&
+      !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim()) &&
+      !(siteMode === "existing" && !selectedSiteId);
 
     return (
       <Card>
@@ -490,38 +636,303 @@ export default function SaleForm({
           </div>
         )}
 
+        {/* TZ №10+11 §6 — клиент из справочника + объект (опц.) */}
         <div className="flex flex-col gap-3">
-          <Field
-            id="f-customer"
-            label={
+          <div>
+            <p className="mb-1.5 text-sm font-semibold text-ink">
+              Клиент <span className="text-danger">*</span>
+            </p>
+            {selectedClient ? (
+              <div className="rounded-field border border-gold/40 bg-gold/10 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-ink">{selectedClient.name}</p>
+                    <p className="text-sm text-ink/70">
+                      {CLIENT_TYPE_LABELS[selectedClient.type]} · {selectedClient.phone}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearClient}
+                  >
+                    Сменить
+                  </Button>
+                </div>
+              </div>
+            ) : (
               <>
-                Клиент <span className="text-danger">*</span>
+                <div className="flex gap-2">
+                  <input
+                    id="f-client-search"
+                    className={inputClass}
+                    placeholder="Поиск по имени или телефону…"
+                    value={clientQuery}
+                    onChange={(ev) => setClientQuery(ev.target.value)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter") {
+                        ev.preventDefault();
+                        void runClientSearch();
+                      }
+                    }}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={clientSearchBusy || !clientQuery.trim()}
+                    onClick={() => void runClientSearch()}
+                    className="shrink-0"
+                  >
+                    {clientSearchBusy ? "…" : "Найти"}
+                  </Button>
+                </div>
+                <FieldError msg={e.clientId ?? clientSearchError ?? undefined} />
+                {clientHits.length > 0 && (
+                  <ul className="mt-2 max-h-48 overflow-auto rounded-field border border-line bg-paper">
+                    {clientHits.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="w-full border-b border-line px-3 py-2.5 text-left last:border-0 active:bg-gold/10"
+                          onClick={() => void selectClient(c)}
+                        >
+                          <span className="font-semibold text-ink">{c.name}</span>
+                          <span className="mt-0.5 block text-sm text-ink/65">
+                            {CLIENT_TYPE_LABELS[c.type]} · {c.phone}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    setShowNewClient((v) => !v);
+                    setDupHint(null);
+                    setNewClientError(null);
+                  }}
+                >
+                  {showNewClient ? "Скрыть форму" : "+ Новый клиент"}
+                </Button>
               </>
-            }
-            placeholder="Иван Петров / ООО «Стройка»"
-            value={customerName}
-            onChange={(ev) => setCustomerName(ev.target.value)}
-            error={e.customerName}
-            autoComplete="name"
-          />
-          <Field
-            id="f-contact"
-            inputMode="tel"
-            label={
-              isCredit ? (
-                <>
-                  Телефон <span className="text-danger">*</span>
-                </>
-              ) : (
-                "Телефон"
-              )
-            }
-            placeholder="+998 90 …"
-            value={customerContact}
-            onChange={(ev) => setCustomerContact(ev.target.value)}
-            error={e.customerContact}
-            autoComplete="tel"
-          />
+            )}
+            <FieldError msg={e.customerName} />
+          </div>
+
+          {showNewClient && !selectedClient && (
+            <div className="rounded-card border border-line bg-paper-2 p-3">
+              <p className="mb-2 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+                Новый клиент
+              </p>
+              <div className="flex flex-col gap-2">
+                <Field
+                  id="f-new-name"
+                  label="Имя / название"
+                  placeholder="Иван Петров / ООО «Стройка»"
+                  value={newClientName}
+                  onChange={(ev) => setNewClientName(ev.target.value)}
+                  error={e.newClientName}
+                />
+                <div>
+                  <p className="mb-1.5 text-sm font-semibold text-ink">Тип</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["B2C", "B2B"] as const).map((tp) => (
+                      <label
+                        key={tp}
+                        className={
+                          "flex min-h-11 cursor-pointer items-center justify-center rounded-field border text-sm font-semibold " +
+                          (newClientType === tp
+                            ? "border-gold bg-gold/15"
+                            : "border-line bg-paper")
+                        }
+                      >
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          checked={newClientType === tp}
+                          onChange={() => setNewClientType(tp)}
+                        />
+                        {CLIENT_TYPE_LABELS[tp]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <Field
+                  id="f-new-phone"
+                  inputMode="tel"
+                  label="Телефон"
+                  placeholder="+998 90 …"
+                  value={newClientPhone}
+                  onChange={(ev) => setNewClientPhone(ev.target.value)}
+                  error={e.newClientPhone}
+                  autoComplete="tel"
+                />
+                {dupHint && (
+                  <Alert variant="warning" title="Такой телефон уже есть" className="mt-1">
+                    <p className="text-sm">
+                      {dupHint.name} · {dupHint.phone}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => void selectClient(dupHint)}
+                    >
+                      Выбрать этого клиента
+                    </Button>
+                  </Alert>
+                )}
+                <FieldError msg={newClientError ?? undefined} />
+                <Button
+                  type="button"
+                  disabled={newClientBusy}
+                  onClick={() => void submitNewClient()}
+                  className="mt-1"
+                >
+                  {newClientBusy ? "Сохранение…" : "Сохранить клиента"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {selectedClient && (
+            <div className="rounded-card border border-line bg-paper p-3">
+              <p className="mb-2 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+                Объект <span className="font-normal normal-case tracking-normal text-ink/50">(необязательно)</span>
+              </p>
+              <div className="flex flex-col gap-2">
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border border-line px-3">
+                  <input
+                    type="radio"
+                    name="siteModeUi"
+                    checked={siteMode === "none"}
+                    onChange={() => {
+                      setSiteMode("none");
+                      setSelectedSiteId("");
+                      setShowNewSite(false);
+                    }}
+                  />
+                  <span className="text-sm font-semibold">Без объекта (частная продажа)</span>
+                </label>
+                <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border border-line px-3">
+                  <input
+                    type="radio"
+                    name="siteModeUi"
+                    checked={siteMode === "existing"}
+                    onChange={() => {
+                      setSiteMode("existing");
+                      setShowNewSite(false);
+                    }}
+                  />
+                  <span className="text-sm font-semibold">Выбрать объект клиента</span>
+                </label>
+                {siteMode === "existing" && (
+                  <Field
+                    id="f-site"
+                    label="Объект"
+                    error={e.siteId}
+                  >
+                    <select
+                      id="f-site"
+                      className={inputClass}
+                      value={selectedSiteId}
+                      onChange={(ev) => setSelectedSiteId(ev.target.value)}
+                      aria-invalid={e.siteId ? true : undefined}
+                    >
+                      <option value="">— выберите —</option>
+                      {sites.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                          {s.status === "COMPLETED" ? " (завершён)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowNewSite((v) => !v);
+                    if (!showNewSite) setSiteMode("new");
+                  }}
+                >
+                  {showNewSite ? "Скрыть" : "+ Новый объект"}
+                </Button>
+                {showNewSite && (
+                  <div className="flex flex-col gap-2 border-t border-line pt-2">
+                    <Field
+                      id="f-new-site-name"
+                      label="Название объекта"
+                      placeholder="ЖК Ривьера"
+                      value={newSiteName}
+                      onChange={(ev) => setNewSiteName(ev.target.value)}
+                      error={e.newSiteName}
+                    />
+                    <div>
+                      <p className="mb-1.5 text-sm font-semibold text-ink">Тип</p>
+                      <div className="grid grid-cols-3 gap-1">
+                        {(
+                          [
+                            ["RESIDENTIAL", SITE_TYPE_LABELS.RESIDENTIAL],
+                            ["COMMERCIAL", SITE_TYPE_LABELS.COMMERCIAL],
+                            ["OTHER", SITE_TYPE_LABELS.OTHER],
+                          ] as const
+                        ).map(([tp, label]) => (
+                          <label
+                            key={tp}
+                            className={
+                              "flex min-h-11 cursor-pointer items-center justify-center rounded-field border px-1 text-center text-xs font-semibold " +
+                              (newSiteType === tp
+                                ? "border-gold bg-gold/15"
+                                : "border-line bg-paper")
+                            }
+                          >
+                            <input
+                              type="radio"
+                              className="sr-only"
+                              checked={newSiteType === tp}
+                              onChange={() => setNewSiteType(tp)}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <Field
+                      id="f-new-site-addr"
+                      label="Адрес"
+                      placeholder="необязательно"
+                      value={newSiteAddress}
+                      onChange={(ev) => setNewSiteAddress(ev.target.value)}
+                    />
+                    <Field
+                      id="f-new-site-contact"
+                      label="Контакт на объекте (прораб)"
+                      placeholder="необязательно"
+                      value={newSiteContact}
+                      onChange={(ev) => setNewSiteContact(ev.target.value)}
+                    />
+                    <FieldError msg={newSiteError ?? undefined} />
+                    <Button
+                      type="button"
+                      disabled={newSiteBusy || !newSiteName.trim()}
+                      onClick={() => void submitNewSite()}
+                    >
+                      {newSiteBusy ? "Сохранение…" : "Сохранить объект"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* TZ9-A — блок «Оплата»: способ + цена + валюта; долг → срок/коммент. */}
@@ -654,13 +1065,63 @@ export default function SaleForm({
           )}
         </fieldset>
 
+        <div className="mt-4 rounded-card border border-line bg-paper-2 p-3">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={issueAsSample}
+              onChange={(ev) => setIssueAsSample(ev.target.checked)}
+            />
+            <span className="text-sm font-semibold text-ink">
+              Выдать как образец (не продажа)
+            </span>
+          </label>
+          {issueAsSample && (
+            <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2">
+              <Field
+                id="f-sample-due"
+                type="date"
+                label={
+                  <>
+                    Срок возврата образца <span className="text-danger">*</span>
+                  </>
+                }
+                value={returnDueDateSample}
+                onChange={(ev) => setReturnDueDateSample(ev.target.value)}
+                error={sampleState.errors.returnDueDate}
+              />
+              <Field
+                id="f-deposit"
+                inputMode="decimal"
+                label="Залог (необязательно)"
+                value={depositAmount}
+                onChange={(ev) => setDepositAmount(ev.target.value)}
+                placeholder="0"
+              />
+              <Field
+                id="f-sample-comment"
+                label="Комментарий"
+                value={sampleComment}
+                onChange={(ev) => setSampleComment(ev.target.value)}
+              />
+              <p className="text-xs text-ink/55">
+                Камень спишется со склада как «образец» и исчезнет из поиска.
+              </p>
+            </div>
+          )}
+        </div>
+
         <Button
           type="button"
           onClick={() => setConfirming(true)}
-          disabled={!canProceed}
+          disabled={
+            issueAsSample
+              ? !(selectedClient && returnDueDateSample)
+              : !canProceed
+          }
           className="mt-4 min-h-14 w-full text-lg font-bold"
         >
-          Далее — подтверждение
+          {issueAsSample ? "Далее — выдача образца" : "Далее — подтверждение"}
         </Button>
       </Card>
     );
@@ -672,8 +1133,10 @@ export default function SaleForm({
     e.qty,
     e.qtySlabs,
     e.qtyAreaM2,
+    e.clientId,
     e.customerName,
     e.customerContact,
+    e.siteId,
     e.paymentMethod,
     e.price,
     e.currency,
@@ -740,14 +1203,24 @@ export default function SaleForm({
         )}
         <div className="flex justify-between gap-3 py-1">
           <dt className="text-ink/60">Клиент</dt>
-          <dd className="text-right font-semibold text-ink">{customerName}</dd>
+          <dd className="text-right font-semibold text-ink">
+            {selectedClient ? selectedClient.name : "—"}
+          </dd>
         </div>
-        {customerContact.trim() && (
+        {selectedClient && (
           <div className="flex justify-between gap-3 py-1">
             <dt className="text-ink/60">Телефон</dt>
-            <dd className="text-right text-ink">{customerContact}</dd>
+            <dd className="text-right text-ink">{selectedClient.phone}</dd>
           </div>
         )}
+        <div className="flex justify-between gap-3 py-1">
+          <dt className="text-ink/60">Объект</dt>
+          <dd className="text-right text-ink">
+            {siteMode === "existing" && selectedSiteId
+              ? (sites.find((s) => s.id === selectedSiteId)?.name ?? "—")
+              : "Без объекта"}
+          </dd>
+        </div>
         <div className="flex justify-between gap-3 py-1">
           <dt className="text-ink/60">Оплата</dt>
           <dd className="text-right font-semibold text-ink">
@@ -779,7 +1252,7 @@ export default function SaleForm({
         )}
       </dl>
 
-      <form action={formAction}>
+      <form action={issueAsSample ? sampleAction : formAction}>
         <input type="hidden" name="mode" value={target.mode} />
         {target.mode === "SLAB" || target.mode === "PIECE" ? (
           <input type="hidden" name="unitId" value={target.id} />
@@ -788,28 +1261,64 @@ export default function SaleForm({
         ) : (
           <input type="hidden" name="batchId" value={target.id} />
         )}
-        <input type="hidden" name="customerName" value={customerName} />
-        <input type="hidden" name="customerContact" value={customerContact} />
-        {/* CRITICAL: never post grouped display — validators reject spaces. */}
+        <input type="hidden" name="clientId" value={selectedClient?.id ?? ""} />
         <input
           type="hidden"
-          name="price"
-          value={priceSubmit || normalizeMoneyForSubmit(priceDisplay)}
+          name="siteId"
+          value={siteMode === "existing" ? selectedSiteId : ""}
         />
-        <input type="hidden" name="paymentMethod" value={paymentMethod} />
-        <input type="hidden" name="currency" value={currency} />
-        <input type="hidden" name="debtDueDate" value={debtDueDate} />
-        <input type="hidden" name="debtComment" value={debtComment} />
+        <input
+          type="hidden"
+          name="siteMode"
+          value={siteMode === "existing" && selectedSiteId ? "existing" : "none"}
+        />
+        <input type="hidden" name="customerName" value={selectedClient?.name ?? ""} />
+        <input
+          type="hidden"
+          name="customerContact"
+          value={selectedClient?.phone ?? ""}
+        />
+        {issueAsSample ? (
+          <>
+            <input type="hidden" name="returnDueDate" value={returnDueDateSample} />
+            <input type="hidden" name="depositAmount" value={depositAmount} />
+            <input type="hidden" name="depositCurrency" value={currency} />
+            <input type="hidden" name="sampleComment" value={sampleComment} />
+          </>
+        ) : (
+          <>
+            <input
+              type="hidden"
+              name="price"
+              value={priceSubmit || normalizeMoneyForSubmit(priceDisplay)}
+            />
+            <input type="hidden" name="paymentMethod" value={paymentMethod} />
+            <input type="hidden" name="currency" value={currency} />
+            <input type="hidden" name="debtDueDate" value={debtDueDate} />
+            <input type="hidden" name="debtComment" value={debtComment} />
+          </>
+        )}
         {isVolume && <input type="hidden" name="qtySlabs" value={qtySlabs} />}
         {isVolume && <input type="hidden" name="qtyAreaM2" value={qtyAreaM2} />}
         <Button
           type="submit"
-          disabled={pending}
+          disabled={issueAsSample ? samplePending : pending}
           className="mt-4 min-h-16 w-full text-xl font-bold"
         >
-          {pending ? "Оформление…" : "Подтвердить продажу"}
+          {issueAsSample
+            ? samplePending
+              ? "Выдача…"
+              : "Подтвердить выдачу образца"
+            : pending
+              ? "Оформление…"
+              : "Подтвердить продажу"}
         </Button>
       </form>
+      {(sampleState.conflict || sampleState.errors.form) && (
+        <Alert variant="danger" title="Образец не выдан" className="mt-3">
+          {sampleState.conflict || sampleState.errors.form}
+        </Alert>
+      )}
       <p className="mt-2 text-center text-sm text-ink/60">
         Камень списывается из наличия сразу в момент продажи (TZ §5.4).
         Способ оплаты на списание не влияет.

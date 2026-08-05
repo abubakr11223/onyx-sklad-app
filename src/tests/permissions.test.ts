@@ -21,6 +21,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canManageAccounts: true,
     canSeeLeads: true,
     canSeeDebts: true, // TZ №9 — Должники: только OWNER
+    canSeeClients: true, // TZ №10+11
+    canSeeAllClients: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -37,6 +39,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canManageAccounts: false,
     canSeeLeads: true,
     canSeeDebts: false,
+    canSeeClients: true, // TZ №10+11 — свои
+    canSeeAllClients: false,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -53,6 +57,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canManageAccounts: false,
     canSeeLeads: false,
     canSeeDebts: false,
+    canSeeClients: false,
+    canSeeAllClients: false,
   },
   PARTNER: {
     canSeePrices: false,
@@ -69,6 +75,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canManageAccounts: false,
     canSeeLeads: false,
     canSeeDebts: false,
+    canSeeClients: false,
+    canSeeAllClients: false,
   },
 };
 
@@ -168,6 +176,9 @@ describe("Union'dan tashqari rol — deny-by-default (xavfsiz default)", () => {
     expect(caps.canSeeHistory).toBe(false);
     expect(caps.canManageAccounts).toBe(false);
     expect(caps.canSeeLeads).toBe(false);
+    expect(caps.canSeeDebts).toBe(false);
+    expect(caps.canSeeClients).toBe(false);
+    expect(caps.canSeeAllClients).toBe(false);
   });
 });
 
@@ -260,3 +271,26 @@ describe("OWNER va MANAGER — narx/sotuv/бронь-vidimost farqlari (TZ §3)"
     expect(manager.canManageWarehouse).toBe(false);
   });
 });
+
+describe("canSeeClients / canSeeAllClients — справочники (TZ №10+11 §7/§12)", () => {
+  it("OWNER: canSeeClients + canSeeAllClients — true (все клиенты/объекты)", () => {
+    const c = capabilitiesFor("OWNER", { canSeePurchasePrice: false });
+    expect(c.canSeeClients).toBe(true);
+    expect(c.canSeeAllClients).toBe(true);
+  });
+
+  it("MANAGER: canSeeClients true, canSeeAllClients false (только свои)", () => {
+    const c = capabilitiesFor("MANAGER", { canSeePurchasePrice: false });
+    expect(c.canSeeClients).toBe(true);
+    expect(c.canSeeAllClients).toBe(false);
+  });
+
+  it("WAREHOUSE/PARTNER: оба false (не работают со справочниками)", () => {
+    for (const role of ["WAREHOUSE", "PARTNER"] as Role[]) {
+      const c = capabilitiesFor(role, { canSeePurchasePrice: false });
+      expect(c.canSeeClients).toBe(false);
+      expect(c.canSeeAllClients).toBe(false);
+    }
+  });
+});
+

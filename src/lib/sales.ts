@@ -62,7 +62,8 @@ export type SellableUnitStatus =
   | "RESERVED"
   | "SOLD"
   | "BROKEN_OFFCUT"
-  | "RETURNED";
+  | "RETURNED"
+  | "SAMPLE";
 
 export interface UnitSaleDecisionInput {
   unitStatus: SellableUnitStatus;
@@ -149,6 +150,11 @@ export function decideUnitSale(input: UnitSaleDecisionInput): UnitSaleDecision {
       return fail(
         "INVALID_STATUS",
         "Камень в статусе «возврат» — сначала проверка и возврат в наличие",
+      );
+    case "SAMPLE":
+      return fail(
+        "INVALID_STATUS",
+        "Камень выдан как образец — оформите через раздел «Образцы»",
       );
   }
 }
@@ -489,6 +495,12 @@ export interface SalePaymentFields {
   debtComment?: string | null;
 }
 
+/** TZ №10+11 — optional directory links (nullable for legacy / pre-directory rows). */
+export interface SaleClientFields {
+  clientId?: string | null;
+  siteId?: string | null;
+}
+
 export interface ValidatedSalePayment {
   paymentMethod: PaymentMethod | null;
   currency: Currency | null;
@@ -558,6 +570,7 @@ async function maybeCreateDebtForCreditSale(
     saleId: string;
     payment: ValidatedSalePayment;
     price: number | null;
+    clientId?: string | null;
   },
 ): Promise<void> {
   if (args.payment.paymentMethod !== "CREDIT") return;
@@ -574,6 +587,7 @@ async function maybeCreateDebtForCreditSale(
       currency: args.payment.currency,
       dueDate: args.payment.debtDueDate,
       comment: args.payment.debtComment,
+      clientId: args.clientId ?? null,
     });
   } catch (e) {
     if (e instanceof DebtLogicError) {
@@ -586,7 +600,7 @@ async function maybeCreateDebtForCreditSale(
   }
 }
 
-export interface SellUnitInput extends SalePaymentFields {
+export interface SellUnitInput extends SalePaymentFields, SaleClientFields {
   targetType: "SLAB" | "PIECE";
   unitId: string;
   customerName: string;
@@ -702,6 +716,9 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         });
       }
 
+      const clientId = input.clientId?.trim() || null;
+      const siteId = input.siteId?.trim() || null;
+
       const sale = await tx.saleRecord.create({
         data: {
           managerId: actor.id,
@@ -713,6 +730,8 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
           price: price === null ? null : price.toFixed(2),
           paymentMethod: payment.paymentMethod,
           currency: payment.currency,
+          clientId,
+          siteId,
           soldAt: now,
         },
         select: { id: true },
@@ -723,6 +742,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         saleId: sale.id,
         payment,
         price,
+        clientId,
       });
 
       await tx.auditLog.create({
@@ -760,7 +780,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
   }
 }
 
-export interface SellBatchVolumeInput extends SalePaymentFields {
+export interface SellBatchVolumeInput extends SalePaymentFields, SaleClientFields {
   batchId: string;
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
@@ -895,6 +915,9 @@ export async function executeVolumeSale(
     pattern?: PatternForSale | null;
     /** TZ №9 — already validated payment (null method = legacy). */
     payment?: ValidatedSalePayment;
+    /** TZ №10+11 — directory links (optional / legacy null). */
+    clientId?: string | null;
+    siteId?: string | null;
   },
 ): Promise<SellVolumeOk> {
   const { actor, batch, free, qtySlabs, qtyAreaM2, now } = params;
@@ -1002,6 +1025,9 @@ export async function executeVolumeSale(
     });
   }
 
+  const clientId = params.clientId?.trim() || null;
+  const siteId = params.siteId?.trim() || null;
+
   const sale = await tx.saleRecord.create({
     data: {
       managerId: actor.id,
@@ -1015,6 +1041,8 @@ export async function executeVolumeSale(
       price: params.price === null ? null : params.price.toFixed(2),
       paymentMethod: payment.paymentMethod,
       currency: payment.currency,
+      clientId,
+      siteId,
       soldAt: now,
     },
     select: { id: true },
@@ -1025,6 +1053,7 @@ export async function executeVolumeSale(
     saleId: sale.id,
     payment,
     price: params.price,
+    clientId,
   });
 
   await tx.auditLog.create({
@@ -1095,6 +1124,8 @@ export async function sellBatchVolume(
         wholeBatch: false,
         now,
         payment,
+        clientId: input.clientId,
+        siteId: input.siteId,
       });
     });
   } catch (e) {
@@ -1103,7 +1134,7 @@ export async function sellBatchVolume(
   }
 }
 
-export interface SellPatternVolumeInput extends SalePaymentFields {
+export interface SellPatternVolumeInput extends SalePaymentFields, SaleClientFields {
   batchPatternId: string;
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
@@ -1163,6 +1194,8 @@ export async function sellPatternVolume(
         wholeBatch: false,
         now,
         payment,
+        clientId: input.clientId,
+        siteId: input.siteId,
         pattern: {
           id: pat.id,
           slabsCount: pat.slabsCount,
@@ -1178,7 +1211,7 @@ export async function sellPatternVolume(
   }
 }
 
-export interface SellWholeBatchInput extends SalePaymentFields {
+export interface SellWholeBatchInput extends SalePaymentFields, SaleClientFields {
   batchId: string;
   customerName: string;
   customerContact?: string | null;
@@ -1220,6 +1253,8 @@ export async function sellWholeBatch(
         wholeBatch: true,
         now,
         payment,
+        clientId: input.clientId,
+        siteId: input.siteId,
       });
     });
   } catch (e) {

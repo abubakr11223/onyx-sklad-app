@@ -240,7 +240,7 @@ export async function getBatchReservationHolds(
     select: { batchId: true, qtySlabs: true, qtyAreaM2: true, expiresAt: true },
   });
 
-  return reservationHoldsFromRows(
+  const resHolds = reservationHoldsFromRows(
     rows.map((r) => ({
       batchId: r.batchId,
       qtySlabs: r.qtySlabs,
@@ -249,4 +249,50 @@ export async function getBatchReservationHolds(
     })),
     now,
   );
+
+  // TZ №10: active BATCH_VOLUME samples hold free stock like reservations.
+  // Sample model may be absent on old clients — optional chaining via try.
+  let sampleHolds = new Map<string, BatchReservationHold>();
+  try {
+    const samples = await db.sample.findMany({
+      where: {
+        status: "ACTIVE",
+        targetType: "BATCH_VOLUME",
+        batchId: { in: batchIds },
+      },
+      select: { batchId: true, qtySlabs: true, qtyAreaM2: true },
+    });
+    sampleHolds = reservationHoldsFromRows(
+      samples.map((s) => ({
+        batchId: s.batchId,
+        qtySlabs: s.qtySlabs,
+        qtyAreaM2: decToNum(s.qtyAreaM2),
+        expiresAt: new Date(now.getTime() + 86400000), // never expire as hold
+      })),
+      now,
+    );
+  } catch {
+    // prisma client without Sample (pre-generate) — ignore
+  }
+
+  return mergeVolumeHolds(resHolds, sampleHolds);
+}
+
+
+/** Merge reservation holds + sample holds (same shape). */
+export function mergeVolumeHolds(
+  a: ReadonlyMap<string, BatchReservationHold>,
+  b: ReadonlyMap<string, { reservedSlabs: number; reservedAreaM2: number }>,
+): Map<string, BatchReservationHold> {
+  const out = new Map<string, BatchReservationHold>();
+  const keys = new Set<string>([...a.keys(), ...b.keys()]);
+  for (const id of keys) {
+    const x = a.get(id) ?? EMPTY_HOLD;
+    const y = b.get(id) ?? EMPTY_HOLD;
+    out.set(id, {
+      reservedSlabs: x.reservedSlabs + y.reservedSlabs,
+      reservedAreaM2: x.reservedAreaM2 + y.reservedAreaM2,
+    });
+  }
+  return out;
 }

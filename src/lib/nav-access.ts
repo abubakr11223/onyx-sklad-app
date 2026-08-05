@@ -30,6 +30,12 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/zayavki": "canSeeLeads",
   // «Должники» — активные/погашенные долги (TZ №9 §5): только OWNER.
   "/dolzhniki": "canSeeDebts",
+  // «Клиенты» / «Объекты» (TZ №10+11 §7): OWNER/MANAGER (canSeeClients).
+  "/klienty": "canSeeClients",
+  "/obekty": "canSeeClients",
+  "/obraztsy": "canSell",
+  // «Сводка» владельца (TZ №10+11 §9): только OWNER.
+  "/svodka": "canSeeHistory",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

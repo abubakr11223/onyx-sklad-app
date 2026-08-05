@@ -620,3 +620,14 @@ describe("executeVolumeSale — продажа из узора (интеграц
     expect(saleArg.data.batchPatternId).toBeNull();
   });
 })
+
+describe("decideUnitSale — SAMPLE (TZ №10)", () => {
+  it("камень на образце нельзя продать обычной продажей", () => {
+    const d = decideUnitSale(
+      baseInput({ unitStatus: "SAMPLE" as never }),
+    );
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.error.code).toBe("INVALID_STATUS");
+  });
+});
+

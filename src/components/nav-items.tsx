@@ -125,6 +125,81 @@ function WalletIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
+
+// «Клиенты» / «Объекты» (TZ №10+11) — локальные иконки.
+function ClientsIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={20}
+      height={20}
+      aria-hidden="true"
+      className={className}
+      {...props}
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function SitesIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={20}
+      height={20}
+      aria-hidden="true"
+      className={className}
+      {...props}
+    >
+      <path d="M3 21h18" />
+      <path d="M5 21V7l7-4 7 4v14" />
+      <path d="M9 21v-6h6v6" />
+    </svg>
+  );
+}
+
+function SamplesIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      width={20} height={20} aria-hidden="true" className={className} {...props}>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function SummaryIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      width={20} height={20} aria-hidden="true" className={className} {...props}>
+      <path d="M3 3v18h18" />
+      <path d="M7 16v-5" />
+      <path d="M12 16V8" />
+      <path d="M17 16v-9" />
+    </svg>
+  );
+}
+
 export type NavItem = {
   href: string;
   label: string;
@@ -223,6 +298,34 @@ export const NAV_ITEMS: NavItem[] = [
     short: "Долги",
     description: "Кто должен за камень, просрочки, погашение",
     Icon: WalletIcon,
+  },
+  {
+    href: "/klienty",
+    label: "Клиенты",
+    short: "Клиенты",
+    description: "Справочник клиентов: продажи, долги, объекты",
+    Icon: ClientsIcon,
+  },
+  {
+    href: "/obekty",
+    label: "Объекты",
+    short: "Объекты",
+    description: "Стройки: отгрузки, суммы, статус",
+    Icon: SitesIcon,
+  },
+  {
+    href: "/obraztsy",
+    label: "Образцы",
+    short: "Образцы",
+    description: "Камень на руках у клиента",
+    Icon: SamplesIcon,
+  },
+  {
+    href: "/svodka",
+    label: "Сводка",
+    short: "Сводка",
+    description: "Топ клиентов и объектов, B2B vs B2C",
+    Icon: SummaryIcon,
   },
 ];
 

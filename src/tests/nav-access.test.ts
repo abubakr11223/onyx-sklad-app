@@ -85,3 +85,43 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     expect(canAccessNav("/kakoy-to-put", caps("PARTNER"))).toBe(true);
   });
 });
+
+describe("Клиенты / Объекты — canSeeClients (TZ №10+11 §7)", () => {
+  it("OWNER/MANAGER → /klienty и /obekty открыты", () => {
+    for (const role of ["OWNER", "MANAGER"] as Role[]) {
+      expect(canAccessNav("/klienty", caps(role))).toBe(true);
+      expect(canAccessNav("/obekty", caps(role))).toBe(true);
+    }
+  });
+  it("WAREHOUSE/PARTNER → закрыты", () => {
+    for (const role of ["WAREHOUSE", "PARTNER"] as Role[]) {
+      expect(canAccessNav("/klienty", caps(role))).toBe(false);
+      expect(canAccessNav("/obekty", caps(role))).toBe(false);
+    }
+  });
+});
+
+describe("Образцы /obraztsy — canSell (TZ №10)", () => {
+  it("OWNER/MANAGER open", () => {
+    for (const role of ["OWNER", "MANAGER"] as Role[]) {
+      expect(canAccessNav("/obraztsy", caps(role))).toBe(true);
+    }
+  });
+  it("WAREHOUSE/PARTNER closed", () => {
+    for (const role of ["WAREHOUSE", "PARTNER"] as Role[]) {
+      expect(canAccessNav("/obraztsy", caps(role))).toBe(false);
+    }
+  });
+});
+
+describe("Сводка /svodka — только OWNER (TZ №10+11 §9)", () => {
+  it("OWNER → open", () => {
+    expect(canAccessNav("/svodka", caps("OWNER"))).toBe(true);
+  });
+  it("MANAGER/WAREHOUSE/PARTNER → closed", () => {
+    for (const role of ["MANAGER", "WAREHOUSE", "PARTNER"] as Role[]) {
+      expect(canAccessNav("/svodka", caps(role))).toBe(false);
+    }
+  });
+});
+

@@ -623,3 +623,122 @@ describe("confirmReturnedUnit — подтверждение возврата (m
     expect(M.auditCreate).toHaveBeenCalledTimes(1);
   });
 });
+
+
+// ═══════════════ TZ №10+11 Этап 2 — clientId / siteId ═══════════════
+
+describe("sellUnit — client directory links (TZ №10+11 §6)", () => {
+  const BASE = {
+    targetType: "SLAB" as const,
+    unitId: "slab1",
+    customerName: "Иван",
+    managerId: "mgr1",
+    price: 100,
+    paymentMethod: "CASH" as const,
+    currency: "UZS" as const,
+    customerContact: "+998901234567",
+  };
+
+  function availableSlab() {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      reservations: [],
+    });
+  }
+
+  it("selected client, no site → SaleRecord.clientId set, siteId null", async () => {
+    availableSlab();
+    const res = await sellUnit({
+      ...BASE,
+      clientId: "client-1",
+      siteId: null,
+    });
+    expect(res.ok).toBe(true);
+    const data = M.saleCreate.mock.calls[0][0].data;
+    expect(data.clientId).toBe("client-1");
+    expect(data.siteId).toBeNull();
+    expect(data.customerName).toBe("Иван");
+  });
+
+  it("selected client + site → both FKs written", async () => {
+    availableSlab();
+    const res = await sellUnit({
+      ...BASE,
+      clientId: "client-1",
+      siteId: "site-9",
+    });
+    expect(res.ok).toBe(true);
+    const data = M.saleCreate.mock.calls[0][0].data;
+    expect(data.clientId).toBe("client-1");
+    expect(data.siteId).toBe("site-9");
+  });
+
+  it("legacy sale without clientId still works (nullable compatibility)", async () => {
+    availableSlab();
+    const res = await sellUnit({
+      targetType: "SLAB",
+      unitId: "slab1",
+      customerName: "Старый текст",
+      managerId: "mgr1",
+    });
+    expect(res.ok).toBe(true);
+    const data = M.saleCreate.mock.calls[0][0].data;
+    expect(data.clientId).toBeNull();
+    expect(data.siteId).toBeNull();
+    expect(data.customerName).toBe("Старый текст");
+  });
+
+  it("CREDIT + clientId → Debt gets clientId denormalized", async () => {
+    availableSlab();
+    const res = await sellUnit({
+      ...BASE,
+      paymentMethod: "CREDIT",
+      currency: "USD",
+      price: 50,
+      clientId: "client-debt",
+      customerContact: "+998901112233",
+    });
+    expect(res.ok).toBe(true);
+    expect(M.debtCreate).toHaveBeenCalledTimes(1);
+    expect(M.debtCreate.mock.calls[0][0].data.clientId).toBe("client-debt");
+  });
+
+  it("empty customerName still rejected (history invariant)", async () => {
+    availableSlab();
+    const res = await sellUnit({
+      targetType: "SLAB",
+      unitId: "slab1",
+      customerName: "   ",
+      managerId: "mgr1",
+      clientId: "c1",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("INVALID_INPUT");
+    expect(M.saleCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("sellBatchVolume — clientId/siteId passthrough", () => {
+  it("volume sale stores client + site", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow());
+    M.batchUpdateMany.mockResolvedValue({ count: 1 });
+    const res = await sellBatchVolume({
+      batchId: "b1",
+      qtySlabs: 2,
+      qtyAreaM2: null,
+      customerName: "ООО Строй",
+      managerId: "mgr1",
+      price: 1000,
+      paymentMethod: "CARD",
+      currency: "UZS",
+      clientId: "c-b2b",
+      siteId: "s-riviera",
+    });
+    expect(res.ok).toBe(true);
+    const data = M.saleCreate.mock.calls[0][0].data;
+    expect(data.clientId).toBe("c-b2b");
+    expect(data.siteId).toBe("s-riviera");
+  });
+});

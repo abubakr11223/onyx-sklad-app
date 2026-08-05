@@ -111,6 +111,8 @@ export interface CreateDebtForSaleInput {
   currency: Currency;
   dueDate?: Date | null;
   comment?: string | null;
+  /** TZ №10+11 — denormalized client link for client card (nullable). */
+  clientId?: string | null;
 }
 
 export interface RepayDebtInput {
@@ -309,6 +311,7 @@ export async function createDebtForSale(
         status: "ACTIVE",
         dueDate,
         comment,
+        clientId: input.clientId?.trim() || null,
       },
       select: { id: true },
     });

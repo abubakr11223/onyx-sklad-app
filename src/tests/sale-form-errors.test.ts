@@ -12,8 +12,10 @@ function fieldErrorItems(errors: Record<string, string>): string[] {
     errors.qty,
     errors.qtySlabs,
     errors.qtyAreaM2,
+    errors.clientId,
     errors.customerName,
     errors.customerContact,
+    errors.siteId,
     errors.paymentMethod,
     errors.price,
     errors.currency,
@@ -35,6 +37,14 @@ describe("SaleForm confirmation error surface", () => {
   it("includes form-level error", () => {
     const items = fieldErrorItems({ form: "Нет доступа" });
     expect(items).toContain("Нет доступа");
+  });
+
+  it("includes clientId validation error (TZ №10+11 §6)", () => {
+    const items = fieldErrorItems({
+      clientId: "Выберите или создайте клиента — обязательное поле",
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatch(/клиент/i);
   });
 
   it("empty errors → no banner items", () => {

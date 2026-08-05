@@ -18,6 +18,7 @@ import {
   type SaleError,
 } from "@/lib/sales";
 import { validateSalePayment } from "@/lib/validators/sale-payment";
+import { validateSaleClientLink } from "@/lib/validators/sale-client";
 import { parseVolumeQtyFields } from "@/lib/validators/volume-qty";
 import { strOf } from "@/lib/form";
 
@@ -103,12 +104,21 @@ export async function submitSale(
     return { errors: { form: "Неизвестный тип продажи — обновите страницу" }, conflict: null };
   }
 
-  const customerName = str("customerName");
-  if (!customerName) errors.customerName = "Укажите клиента — обязательное поле";
+  // TZ №10+11 §6 — клиент из справочника обязателен (clientId).
+  // customerName/contact берутся с карточки; legacy text-only POST отсекается.
+  const clientLink = validateSaleClientLink({
+    clientId: str("clientId"),
+    siteId: str("siteId"),
+    siteMode: str("siteMode"),
+  });
+  if (!clientLink.ok) {
+    Object.assign(errors, clientLink.errors);
+  }
 
   // TZ9-A / CONTRACT: способ оплаты, валюта, цена (>0), для CREDIT — телефон.
   // Валидация только на сервере недостаточна? Нет — форма тоже гейтит, но
   // прямой POST без UI обязан отсекаться здесь (defense-in-depth).
+  // customerContact: form may send phone; for CREDIT we prefer Client.phone.
   const payment = validateSalePayment({
     paymentMethod: str("paymentMethod"),
     currency: str("currency"),
@@ -148,12 +158,12 @@ export async function submitSale(
     errors.form = "Не выбран узор — вернитесь на шаг выбора";
   }
 
-  if (Object.keys(errors).length > 0 || !payment.ok) {
+  if (Object.keys(errors).length > 0 || !payment.ok || !clientLink.ok) {
     return { errors, conflict: null };
   }
 
   const pay = payment.data;
-  const customerContact = pay.customerContact;
+  const link = clientLink.data;
 
   const managerId = await currentActorId();
   if (!managerId) {
@@ -163,8 +173,48 @@ export async function submitSale(
     };
   }
 
-  // o1 domain layer picks up paymentMethod/currency/debt* when ready (CONTRACT).
-  // Until then excess fields are harmless on the sell* inputs (spread).
+  // Resolve directory row — defense-in-depth if clientId was forged/stale.
+  const client = await db.client.findUnique({
+    where: { id: link.clientId },
+    select: { id: true, name: true, phone: true },
+  });
+  if (!client) {
+    return {
+      errors: { clientId: "Клиент не найден — выберите или создайте заново" },
+      conflict: null,
+    };
+  }
+
+  let siteId: string | null = link.siteId;
+  if (siteId) {
+    const site = await db.site.findUnique({
+      where: { id: siteId },
+      select: { id: true, clientId: true },
+    });
+    if (!site || site.clientId !== client.id) {
+      return {
+        errors: { siteId: "Объект не принадлежит выбранному клиенту" },
+        conflict: null,
+      };
+    }
+  }
+
+  // Denormalized text for history / legacy screens (customerName still filled).
+  const customerName = client.name;
+  // Prefer form contact if provided; else client phone (CREDIT needs a phone).
+  const customerContact =
+    pay.customerContact?.trim() || client.phone.trim() || null;
+
+  // Re-check CREDIT phone after resolving client card.
+  if (pay.paymentMethod === "CREDIT" && !customerContact) {
+    return {
+      errors: {
+        customerContact: "Для продажи в долг укажите телефон клиента",
+      },
+      conflict: null,
+    };
+  }
+
   const common = {
     customerName,
     customerContact,
@@ -174,6 +224,8 @@ export async function submitSale(
     currency: pay.currency,
     debtDueDate: pay.debtDueDate,
     debtComment: pay.debtComment,
+    clientId: client.id,
+    siteId,
   };
   const result =
     mode === "SLAB" || mode === "PIECE"

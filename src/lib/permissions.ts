@@ -70,6 +70,18 @@ export interface Capabilities {
    * при продаже, но список и погашение — только владелец.
    */
   canSeeDebts: boolean;
+  /**
+   * Справочники «Клиенты» / «Объекты» (TZ №10+11 §7, §12).
+   * OWNER и MANAGER — true (работают с клиентами при продаже и в разделах).
+   * WAREHOUSE/PARTNER — false.
+   */
+  canSeeClients: boolean;
+  /**
+   * Видеть ВСЕХ клиентов/объектов, не только своих (TZ №10+11 §12).
+   * OWNER — true; MANAGER — false (только managerId = actor).
+   * Аналог canSeeAllReservations.
+   */
+  canSeeAllClients: boolean;
 }
 
 /**
@@ -91,6 +103,8 @@ export interface Capabilities {
  * | canManageAccounts        | true  | false            | false     | false   |
  * | canSeeLeads              | true  | true             | false     | false   |
  * | canSeeDebts              | true  | false            | false     | false   |
+ * | canSeeClients            | true  | true             | false     | false   |
+ * | canSeeAllClients         | true  | false            | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -117,6 +131,8 @@ const DENY_ALL: Capabilities = {
   canManageAccounts: false,
   canSeeLeads: false,
   canSeeDebts: false,
+  canSeeClients: false,
+  canSeeAllClients: false,
 };
 
 export function capabilitiesFor(
@@ -140,6 +156,8 @@ export function capabilitiesFor(
         canManageAccounts: true, // OWN-03: только Владелец управляет аккаунтами
         canSeeLeads: true, // A1: владелец видит заявки партнёров
         canSeeDebts: true, // TZ №9: «Должники» — только владелец
+        canSeeClients: true, // TZ №10+11: справочники клиентов/объектов
+        canSeeAllClients: true, // владелец видит всех
       };
     case "MANAGER":
       return {
@@ -159,6 +177,8 @@ export function capabilitiesFor(
         canManageAccounts: false,
         canSeeLeads: true, // A1: менеджер обрабатывает заявки партнёров
         canSeeDebts: false, // TZ №9 §5: раздел только OWNER
+        canSeeClients: true, // TZ №10+11: свои клиенты/объекты
+        canSeeAllClients: false, // только managerId = actor
       };
     case "WAREHOUSE":
       return {
@@ -176,6 +196,8 @@ export function capabilitiesFor(
         canManageAccounts: false,
         canSeeLeads: false, // склад не работает с заявками партнёров
         canSeeDebts: false,
+        canSeeClients: false,
+        canSeeAllClients: false,
       };
     case "PARTNER":
       return {
@@ -193,6 +215,8 @@ export function capabilitiesFor(
         canManageAccounts: false,
         canSeeLeads: false, // партнёр СОЗДАЁТ заявки, но чужих не видит
         canSeeDebts: false,
+        canSeeClients: false,
+        canSeeAllClients: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —
