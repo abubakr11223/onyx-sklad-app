@@ -31,6 +31,7 @@ export interface SlabOption {
   widthMm?: number | null;
   thicknessMm?: number | null;
   areaM2?: number | null;
+  photoId?: string | null;
 }
 
 export interface BatchOption {
@@ -241,20 +242,37 @@ export default function BreakForm({
             </select>
           </Field>
           {selectedSlab && (
-            <div className="mt-3 rounded-card border border-ink/10 bg-paper p-3 text-sm text-ink">
-              <p className="font-semibold">{selectedSlab.stoneName}</p>
-              <p className="mt-1 text-ink/70">
-                Габарит: {formatGabarit(selectedSlab.lengthMm, selectedSlab.widthMm, selectedSlab.thicknessMm)}
-                {selectedSlab.areaM2 != null
-                  ? ` · ${selectedSlab.areaM2.toFixed(2)} м²`
-                  : ""}
-              </p>
-              <p className="mt-1 text-ink/70">
-                Локация: блок {selectedSlab.block}, ориентир {selectedSlab.landmark}
-              </p>
-              {selectedSlab.reserved && (
-                <p className="mt-1 font-medium text-warning">Есть бронь — менеджер будет уведомлён</p>
+            <div className="mt-3 flex gap-3 rounded-card border border-ink/10 bg-paper p-3 text-sm text-ink">
+              {selectedSlab.photoId ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={"/api/photo/" + selectedSlab.photoId}
+                  alt={selectedSlab.label}
+                  className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                />
+              ) : (
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-ink/[0.04] text-center text-[10px] text-ink/40">
+                  нет фото
+                </div>
               )}
+              <div className="min-w-0">
+                <p className="font-semibold">{selectedSlab.stoneName}</p>
+                <p className="mt-1 text-ink/70">
+                  {selectedSlab.label}
+                </p>
+                <p className="mt-1 text-ink/70">
+                  Габарит: {formatGabarit(selectedSlab.lengthMm, selectedSlab.widthMm, selectedSlab.thicknessMm)}
+                  {selectedSlab.areaM2 != null
+                    ? ` · ${selectedSlab.areaM2.toFixed(2)} м²`
+                    : ""}
+                </p>
+                <p className="mt-1 text-ink/70">
+                  Локация: блок {selectedSlab.block}, ориентир {selectedSlab.landmark}
+                </p>
+                {selectedSlab.reserved && (
+                  <p className="mt-1 font-medium text-warning">Есть бронь — менеджер будет уведомлён</p>
+                )}
+              </div>
             </div>
           )}
             </>

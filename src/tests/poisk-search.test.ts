@@ -2,7 +2,12 @@
 // BUG-FIX §5.2/§6.5: «предложить первыми» boy bloki material (вид/тип/цвет)
 // filtrini ham qo'llashi kerak — boshqa vid qoldiqlari chiqmasligi shart.
 import { describe, expect, it } from "vitest";
-import { materialWhere, piecesWhere } from "@/lib/poisk-search";
+import {
+  materialWhere,
+  piecesWhere,
+  slabsWhere,
+  batchesPlateWhere,
+} from "@/lib/poisk-search";
 
 describe("materialWhere — вид/тип/цвет OR-filtri", () => {
   it("bo'sh so'rov → null (filtr yo'q)", () => {
@@ -149,5 +154,41 @@ describe("piecesWhere — filtr xatti-harakati (material bo'yicha ajratish)", ()
     expect(ids).not.toContain("marble-archived");
     expect(ids).not.toContain("marble-reserved");
     expect(ids).not.toContain("marble-small");
+  });
+});
+
+
+describe("slabsWhere — целые плиты под размер (ТЗ №12)", () => {
+  const needMax = 122;
+  const needMin = 72;
+
+  it("AVAILABLE + needsCheck false + gabarit OR", () => {
+    const w = slabsWhere("", needMax, needMin);
+    expect(w.status).toBe("AVAILABLE");
+    expect(w.needsCheck).toBe(false);
+    expect(w.OR).toEqual([
+      { lengthMm: { gte: needMax }, widthMm: { gte: needMin } },
+      { lengthMm: { gte: needMin }, widthMm: { gte: needMax } },
+    ]);
+  });
+
+  it("material q — stoneType OR", () => {
+    const w = slabsWhere("мрамор", needMax, needMin);
+    expect(w.stoneType).toMatchObject({
+      isArchived: false,
+      OR: expect.any(Array),
+    });
+  });
+});
+
+describe("batchesPlateWhere — формат плиты партии (ТЗ №12)", () => {
+  const needMax = 122;
+  const needMin = 72;
+
+  it("batch L×W OR pattern L×W", () => {
+    const w = batchesPlateWhere("", needMax, needMin);
+    expect(w.OR).toBeDefined();
+    expect(Array.isArray(w.OR)).toBe(true);
+    expect((w.OR as unknown[]).length).toBe(2);
   });
 });

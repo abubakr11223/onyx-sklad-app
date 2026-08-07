@@ -32,7 +32,11 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { CUTTING_MARGIN_MM } from "@/lib/inventory";
-import { piecesWhere } from "@/lib/poisk-search";
+import {
+  piecesWhere,
+  slabsWhere,
+  batchesPlateWhere,
+} from "@/lib/poisk-search";
 import {
   fetchPoiskTypesPage,
   rankAndCapFittingPieces,
@@ -264,42 +268,124 @@ export default async function PoiskPage({
     stoneType: { name: string };
   };
 
-  const [fittingPiecesMatched, batchLocs] = await Promise.all([
-    hasDims
-      ? (db.piece.findMany({
-          // §5.2/§6.5: gabarit + MATERIAL filtri. `q` bo'sh bo'lsa material filtri
-          // qo'llanmaydi (barcha mos qoldiq); `q` bo'lsa — piece.stoneType relatsiyasi
-          // orqali name/rockType/color mos kelgan vid qoldiqlarigina (butun plita
-          // ro'yxati bilan AYNI filtr → boshqa vid boyi «предложить первыми»da chiqmaydi).
-          where: piecesWhere(q, needMax, needMin),
-          select: {
-            id: true,
-            kind: true,
-            needsCheck: true,
-            boundingLengthMm: true,
-            boundingWidthMm: true,
-            thicknessMm: true,
-            areaM2: true,
-            block: true,
-            landmark: true,
-            stoneType: { select: { name: true } },
-          },
-          // W6-A2: order by generated boundingAreaMm2 (= L×W, display key) + id.
-          // take MAX+1 probe — unbounded full-match fetch YO'Q.
-          orderBy: [{ boundingAreaMm2: "asc" }, { id: "asc" }],
-          take: MAX_POISK_PIECES + 1,
-        }) as Promise<FittingPieceRow[]>)
-      : Promise.resolve([] as FittingPieceRow[]),
-    batchIdsForLocs.length > 0
-      ? db.batchLocation.findMany({
-          where: { batchId: { in: batchIdsForLocs } },
-          select: { batchId: true, block: true, landmark: true },
-          orderBy: [{ block: "asc" }, { landmark: "asc" }],
-        })
-      : Promise.resolve(
-          [] as Array<{ batchId: string; block: string; landmark: string }>,
-        ),
-  ]);
+  type FittingSlabRow = {
+    id: string;
+    label: string;
+    lengthMm: number | null;
+    widthMm: number | null;
+    thicknessMm: number | null;
+    areaM2: { toString(): string } | null;
+    block: string;
+    landmark: string;
+    stoneType: { id: string; name: string };
+  };
+  type FittingBatchRow = {
+    id: string;
+    lengthMm: number | null;
+    widthMm: number | null;
+    thicknessMm: number | null;
+    arrivedAt: Date;
+    slabsTotal: number | null;
+    areaTotalM2: { toString(): string } | null;
+    stoneType: { id: string; name: string };
+    patterns: Array<{
+      lengthMm: number | null;
+      widthMm: number | null;
+      thicknessMm: number | null;
+      description: string;
+    }>;
+  };
+
+  const [fittingPiecesMatched, fittingSlabsMatched, fittingBatchesMatched, batchLocs] =
+    await Promise.all([
+      hasDims
+        ? (db.piece.findMany({
+            where: piecesWhere(q, needMax, needMin),
+            select: {
+              id: true,
+              kind: true,
+              needsCheck: true,
+              boundingLengthMm: true,
+              boundingWidthMm: true,
+              thicknessMm: true,
+              areaM2: true,
+              block: true,
+              landmark: true,
+              stoneType: { select: { name: true } },
+            },
+            orderBy: [{ boundingAreaMm2: "asc" }, { id: "asc" }],
+            take: MAX_POISK_PIECES + 1,
+          }) as Promise<FittingPieceRow[]>)
+        : Promise.resolve([] as FittingPieceRow[]),
+      // ТЗ №12: целые плиты под размер (именованные Slab).
+      hasDims
+        ? (db.slab.findMany({
+            where: slabsWhere(q, needMax, needMin),
+            select: {
+              id: true,
+              label: true,
+              lengthMm: true,
+              widthMm: true,
+              thicknessMm: true,
+              areaM2: true,
+              block: true,
+              landmark: true,
+              stoneType: { select: { id: true, name: true } },
+            },
+            orderBy: [{ lengthMm: "asc" }, { widthMm: "asc" }, { id: "asc" }],
+            take: MAX_POISK_PIECES + 1,
+          }) as Promise<FittingSlabRow[]>)
+        : Promise.resolve([] as FittingSlabRow[]),
+      // ТЗ №12: партии с форматом плиты L×W (Batch / Pattern).
+      hasDims
+        ? (db.batch.findMany({
+            where: batchesPlateWhere(q, needMax, needMin),
+            select: {
+              id: true,
+              lengthMm: true,
+              widthMm: true,
+              thicknessMm: true,
+              arrivedAt: true,
+              slabsTotal: true,
+              areaTotalM2: true,
+              stoneType: { select: { id: true, name: true } },
+              patterns: {
+                select: {
+                  lengthMm: true,
+                  widthMm: true,
+                  thicknessMm: true,
+                  description: true,
+                },
+              },
+            },
+            orderBy: [{ arrivedAt: "desc" }],
+            take: MAX_POISK_PIECES + 1,
+          }) as Promise<FittingBatchRow[]>)
+        : Promise.resolve([] as FittingBatchRow[]),
+      batchIdsForLocs.length > 0
+        ? db.batchLocation.findMany({
+            where: { batchId: { in: batchIdsForLocs } },
+            select: { batchId: true, block: true, landmark: true },
+            orderBy: [{ block: "asc" }, { landmark: "asc" }],
+          })
+        : Promise.resolve(
+            [] as Array<{ batchId: string; block: string; landmark: string }>,
+          ),
+    ]);
+
+  const slabsCapped = fittingSlabsMatched.length > MAX_POISK_PIECES;
+  const fittingSlabs = slabsCapped
+    ? fittingSlabsMatched.slice(0, MAX_POISK_PIECES)
+    : fittingSlabsMatched;
+  const batchesCapped = fittingBatchesMatched.length > MAX_POISK_PIECES;
+  const fittingBatches = batchesCapped
+    ? fittingBatchesMatched.slice(0, MAX_POISK_PIECES)
+    : fittingBatchesMatched;
+
+  // Камни, у которых есть целая плита/партия под размер (для фильтра списка видов).
+  const plateFitStoneIds = new Set<string>();
+  for (const s of fittingSlabs) plateFitStoneIds.add(s.stoneType.id);
+  for (const b of fittingBatches) plateFitStoneIds.add(b.stoneType.id);
 
   // stoneTypeId → unikal lokatsiyalar (partiyalar bo'ylab yig'ilgan).
   const locsByStoneId = new Map<
@@ -321,6 +407,12 @@ export default async function PoiskPage({
   );
   const fittingPieces = ranked.ranked;
   const piecesCapped = ranked.capped;
+
+  // ТЗ №12: при поиске по размеру в «Целые плиты и партии» — только виды,
+  // у которых есть партия/плита под габарит (иначе список снова «все подряд»).
+  const visibleTypesForDims = hasDims
+    ? visibleTypes.filter((row) => plateFitStoneIds.has(row.st.id))
+    : visibleTypes;
 
   // «Показать ещё» = ko'rsatilayotgan PREFIKSNI uzaytirish (offset-sahifa emas):
   // foydalanuvchi doim joriy tartibning [0, N) boshini ko'radi, shuning uchun
@@ -503,6 +595,116 @@ export default async function PoiskPage({
         </section>
       )}
 
+      {/* ТЗ №12: именованные плиты под размер */}
+      {hasDims && (
+        <section className="mt-6 rounded-card border border-gold/30 bg-gold/5 p-4">
+          <h2 className="text-lg font-bold text-ink">Целые плиты под размер</h2>
+          <p className="text-sm text-ink/70">
+            Именованные плиты {lenMm}×{widMm} см (с запасом на рез)
+            {canSeeExact && fittingSlabs.length > 0 && (
+              <> · показано {fittingSlabs.length}{slabsCapped ? "+" : ""}</>
+            )}
+          </p>
+          {fittingSlabs.length === 0 ? (
+            <p className="mt-3 text-sm text-ink/70">
+              Именованных плит под размер нет — ниже партии с форматом плиты, если есть.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {fittingSlabs.map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-card border border-ink/10 bg-paper p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 font-medium text-ink">
+                    <Link
+                      href={"/kamen/" + s.stoneType.id}
+                      className="text-gold-deep hover:underline"
+                    >
+                      {s.stoneType.name}
+                    </Link>
+                    <Badge variant="neutral">{s.label}</Badge>
+                  </div>
+                  <div className="text-sm text-ink/70">
+                    Габарит {s.lengthMm}×{s.widthMm} см
+                    {canSeeExact && s.thicknessMm != null && (
+                      <> · толщина {s.thicknessMm} см</>
+                    )}
+                    {canSeeExact && s.areaM2 != null && (
+                      <> · ≈{m2Fmt.format(Number(s.areaM2))} м²</>
+                    )}
+                  </div>
+                  {canSeeExact && (
+                    <div className="text-sm text-ink">
+                      Блок {s.block}, ориентир {s.landmark}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canSeeExact && slabsCapped && (
+            <p className="mt-3 text-sm font-medium text-warning">
+              Показаны первые {MAX_POISK_PIECES} плит — уточните размер или материал.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* ТЗ №12: партии с известным форматом плиты */}
+      {hasDims && fittingBatches.length > 0 && (
+        <section className="mt-6 rounded-card border border-line bg-paper-2 p-4">
+          <h2 className="text-lg font-bold text-ink">Партии — формат плиты под размер</h2>
+          <p className="text-sm text-ink/70">
+            Партии, где длина×ширина плиты подходит под запрос (см)
+            {canSeeExact && (
+              <> · показано {fittingBatches.length}{batchesCapped ? "+" : ""}</>
+            )}
+          </p>
+          <ul className="mt-3 space-y-2">
+            {fittingBatches.map((b) => {
+              const fmt =
+                b.lengthMm != null && b.widthMm != null
+                  ? `${b.lengthMm}×${b.widthMm}${b.thicknessMm != null ? `×${b.thicknessMm}` : ""} см`
+                  : b.patterns
+                      .filter((p) => p.lengthMm != null && p.widthMm != null)
+                      .map(
+                        (p) =>
+                          `${p.description}: ${p.lengthMm}×${p.widthMm}${p.thicknessMm != null ? `×${p.thicknessMm}` : ""} см`,
+                      )
+                      .join("; ") || "—";
+              return (
+                <li
+                  key={b.id}
+                  className="rounded-card border border-ink/10 bg-paper p-3"
+                >
+                  <Link
+                    href={"/kamen/" + b.stoneType.id}
+                    className="font-medium text-gold-deep hover:underline"
+                  >
+                    {b.stoneType.name}
+                  </Link>
+                  <div className="text-sm text-ink/70">
+                    Плита: {fmt}
+                    {canSeeExact && b.slabsTotal != null && (
+                      <> · {b.slabsTotal} плит</>
+                    )}
+                    {canSeeExact && b.areaTotalM2 != null && (
+                      <> · ≈{m2Fmt.format(Number(b.areaTotalM2))} м²</>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {canSeeExact && batchesCapped && (
+            <p className="mt-3 text-sm font-medium text-warning">
+              Показаны первые {MAX_POISK_PIECES} партий.
+            </p>
+          )}
+        </section>
+      )}
+
       <section className="mt-6">
         <h2 className="text-lg font-bold text-ink">
           {hasDims ? "Целые плиты и партии" : "В наличии"}
@@ -514,8 +716,8 @@ export default async function PoiskPage({
             juftlik modul nima qaytarishidan qat'i nazar imkonsiz.
             Kursor bor-u ro'yxat bo'sh (skan chegarasi urilgan holat) → «hech
             narsa yo'q» emas, «davom etadi» deb aytiladi. */}
-        {visibleTypes.length === 0 ? (
-          nextCursor ? (
+        {visibleTypesForDims.length === 0 ? (
+          nextCursor && !hasDims ? (
             <Alert
               variant="warning"
               title="Поиск продолжается"
@@ -528,11 +730,15 @@ export default async function PoiskPage({
               </p>
             </Alert>
           ) : (
-            <p className="mt-3 text-ink/70">Ничего не найдено.</p>
+            <p className="mt-3 text-ink/70">
+              {hasDims
+                ? "Подходящих целых плит и партий под этот размер нет (см. бой/остатки выше, если есть)."
+                : "Ничего не найдено."}
+            </p>
           )
         ) : (
           <ul className="mt-3 space-y-2.5">
-            {visibleTypes.map((t) => {
+            {visibleTypesForDims.map((t) => {
               // BUG-03: bron bo'lsa — всего/свободно/бронь ajratib ko'rsatiladi;
               // bronsiz — oldingidek bitta son (свободно = всего).
               // Faqat canSeeExact — PARTNER ga aniq sonlar yopiq (§3 / §4.6).
@@ -653,7 +859,7 @@ export default async function PoiskPage({
         {/* Sahifa TO'LMAGAN, chunki skan chegarasiga yetdi (fittingPieces cap
             ogohlantirishi bilan bir uslubda). Bo'sh natijada bu xabar
             takrorlanmaydi — u yerda yuqoridagi Alert allaqachon aytadi. */}
-        {typesIncomplete && visibleTypes.length > 0 && (
+        {typesIncomplete && visibleTypesForDims.length > 0 && (
           <p className="mt-3 text-sm font-medium text-warning">
             Просмотрено {typesPage.scannedRows} видов — это предел одного шага
             поиска, показаны не все подходящие. Продолжите по «Показать ещё» или

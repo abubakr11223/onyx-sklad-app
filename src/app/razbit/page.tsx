@@ -69,6 +69,11 @@ export default async function RazbitPage({
         thicknessMm: true,
         areaM2: true,
         stoneType: { select: { name: true } },
+        photos: {
+          select: { id: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
     }),
     db.batch.findMany({
@@ -105,6 +110,7 @@ export default async function RazbitPage({
     widthMm: s.widthMm,
     thicknessMm: s.thicknessMm,
     areaM2: s.areaM2 != null ? Number(s.areaM2) : null,
+    photoId: s.photos[0]?.id ?? null,
   }));
 
   const batches: BatchOption[] = batchRows.map((b) => ({

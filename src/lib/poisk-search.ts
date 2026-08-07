@@ -53,3 +53,69 @@ export function piecesWhere(
     ],
   };
 }
+
+/**
+ * ТЗ №12 §3: целые плиты (Slab) — тот же gabarit OR + material, что у boy.
+ * lengthMm/widthMm хранят см (legacy *Mm).
+ */
+export function slabsWhere(
+  q: string,
+  needMax: number,
+  needMin: number,
+): Prisma.SlabWhereInput {
+  const mat = materialWhere(q);
+  return {
+    status: "AVAILABLE",
+    needsCheck: false,
+    lengthMm: { not: null },
+    widthMm: { not: null },
+    stoneType: { isArchived: false, ...(mat ?? {}) },
+    OR: [
+      { lengthMm: { gte: needMax }, widthMm: { gte: needMin } },
+      { lengthMm: { gte: needMin }, widthMm: { gte: needMax } },
+    ],
+  };
+}
+
+/**
+ * ТЗ №12 §3: партии с известным форматом плиты (Batch или BatchPattern L×W).
+ * Запас needMax/needMin уже с CUTTING_MARGIN.
+ */
+export function batchesPlateWhere(
+  q: string,
+  needMax: number,
+  needMin: number,
+): Prisma.BatchWhereInput {
+  const mat = materialWhere(q);
+  const dimOR: Prisma.BatchWhereInput[] = [
+    { lengthMm: { gte: needMax }, widthMm: { gte: needMin } },
+    { lengthMm: { gte: needMin }, widthMm: { gte: needMax } },
+  ];
+  const patDimOR: Prisma.BatchPatternWhereInput[] = [
+    { lengthMm: { gte: needMax }, widthMm: { gte: needMin } },
+    { lengthMm: { gte: needMin }, widthMm: { gte: needMax } },
+  ];
+  return {
+    stoneType: { isArchived: false, ...(mat ?? {}) },
+    OR: [
+      {
+        AND: [
+          { lengthMm: { not: null } },
+          { widthMm: { not: null } },
+          { OR: dimOR },
+        ],
+      },
+      {
+        patterns: {
+          some: {
+            AND: [
+              { lengthMm: { not: null } },
+              { widthMm: { not: null } },
+              { OR: patDimOR },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}

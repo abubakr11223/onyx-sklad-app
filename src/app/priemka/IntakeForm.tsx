@@ -25,6 +25,7 @@ import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
+import { areaDiscrepancyPct, areaM2FromCm } from "@/lib/dimensions";
 
 /** W7-A2 — mint client mutationId (crypto.randomUUID when available). */
 function newMutationId(): string {
@@ -641,6 +642,32 @@ export default function IntakeForm({
               error={e.thicknessMm}
             />
           </div>
+          {(() => {
+            const L = Number.parseInt(values.lengthMm, 10);
+            const W = Number.parseInt(values.widthMm, 10);
+            const N = Number.parseInt(values.slabsTotal, 10);
+            const A = Number.parseFloat(values.areaTotalM2.replace(",", "."));
+            if (!(L > 0 && W > 0 && N > 0 && A > 0)) return null;
+            const expected = areaM2FromCm(L, W) * N;
+            const pct = areaDiscrepancyPct(L, W, N, A);
+            if (pct == null) return null;
+            const soft = pct >= 10;
+            return (
+              <p
+                className={
+                  "mt-3 text-sm " +
+                  (soft ? "font-medium text-warning" : "text-ink/55")
+                }
+              >
+                По размеру: {L}×{W} см × {N} ≈ {expected.toFixed(1)} м²
+                (введено {A} м²
+                {soft
+                  ? ` — расхождение ~${pct.toFixed(0)}%, проверьте ввод`
+                  : ""}
+                ).
+              </p>
+            );
+          })()}
         </Card>
       )}
 
