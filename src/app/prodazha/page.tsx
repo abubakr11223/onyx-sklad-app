@@ -294,7 +294,7 @@ export default async function ProdazhaPage({
             status: s.status as "AVAILABLE" | "RESERVED",
             needsCheck: s.needsCheck,
             detail: [
-              s.lengthMm !== null && s.widthMm !== null && `${s.lengthMm}×${s.widthMm} мм`,
+              s.lengthMm !== null && s.widthMm !== null && `${s.lengthMm}×${s.widthMm} см`,
               s.areaM2 !== null &&
                 `${s.isAreaEstimated ? "≈" : ""}${m2Fmt.format(Number(s.areaM2))} м²`,
             ]
@@ -311,7 +311,7 @@ export default async function ProdazhaPage({
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
           needsCheck: p.needsCheck,
           detail: [
-            `габарит ${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+            `габарит ${p.boundingLengthMm}×${p.boundingWidthMm} см`,
             p.areaM2 !== null && `≈${m2Fmt.format(Number(p.areaM2))} м²`,
           ]
             .filter(Boolean)

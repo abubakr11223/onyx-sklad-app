@@ -181,11 +181,11 @@ export default async function PoiskPage({
   ] as const) {
     if (d.raw && d.mm === null) {
       dimNotes.push(
-        `${label}: «${d.raw}» — так размер не задают. Нужно целое число миллиметров, больше нуля.`,
+        `${label}: «${d.raw}» — так размер не задают. Нужно целое число сантиметров, больше нуля.`,
       );
     } else if (d.coerced) {
       dimNotes.push(
-        `${label}: «${d.raw}» принято как ${d.mm} мм (дробная часть и лишние символы не учитываются).`,
+        `${label}: «${d.raw}» принято как ${d.mm} см (дробная часть и лишние символы не учитываются).`,
       );
     }
   }
@@ -360,7 +360,7 @@ export default async function PoiskPage({
 
           <fieldset>
             <legend className="text-sm font-semibold text-ink">
-              Нужный размер (мм)
+              Нужный размер (см)
             </legend>
             <div className="mt-1.5 flex items-center gap-2">
               <input
@@ -384,7 +384,7 @@ export default async function PoiskPage({
               />
             </div>
             <p className="mt-1.5 text-xs text-ink/60">
-              Подбор с запасом на рез {CUTTING_MARGIN_MM} мм; поворот заготовки
+              Подбор с запасом на рез {CUTTING_MARGIN_MM} см; поворот заготовки
               учитывается.
             </p>
           </fieldset>
@@ -426,7 +426,7 @@ export default async function PoiskPage({
             Бой и остатки — предложить первыми
           </h2>
           <p className="text-sm text-ink/70">
-            Под размер {lenMm}×{widMm} мм (с запасом на рез)
+            Под размер {lenMm}×{widMm} см (с запасом на рез)
             {/* Aniq «N из M» — qoldiq inventar soni; PARTNER ga yopiq. */}
             {canSeeExact && fittingPieces.length > 0 && (
               <>
@@ -457,9 +457,9 @@ export default async function PoiskPage({
                     )}
                   </div>
                   <div className="text-sm text-ink/70">
-                    Габарит {p.boundingLengthMm}×{p.boundingWidthMm} мм
+                    Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
                     {canSeeExact && p.thicknessMm !== null && (
-                      <> · толщина {p.thicknessMm} мм</>
+                      <> · толщина {p.thicknessMm} см</>
                     )}
                     {canSeeExact && p.areaM2 !== null && (
                       <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>

@@ -67,6 +67,8 @@ function readInput(formData: FormData): IntakeInput {
   // ТЗ №3 — узор-подгруппы (параллельные массивы).
   const patDesc = all("patDescription");
   const patThick = all("patThickness");
+  const patLen = all("patLength");
+  const patWid = all("patWidth");
   const patSlabs = all("patSlabs");
   const patArea = all("patArea");
   return {
@@ -79,6 +81,9 @@ function readInput(formData: FormData): IntakeInput {
     newBasePrice: str("newBasePrice"),
     slabsTotal: str("slabsTotal"),
     areaTotalM2: str("areaTotalM2"),
+    lengthMm: str("lengthMm"),
+    widthMm: str("widthMm"),
+    thicknessMm: str("thicknessMm"),
     supplierNote: str("supplierNote"),
     arrivedAt: str("arrivedAt"),
     locations: blocks.map((block, i) => ({
@@ -91,6 +96,8 @@ function readInput(formData: FormData): IntakeInput {
     patterns: patDesc.map((description, i) => ({
       description,
       thicknessMm: patThick[i] ?? "",
+      lengthMm: patLen[i] ?? "",
+      widthMm: patWid[i] ?? "",
       slabs: patSlabs[i] ?? "",
       areaM2: patArea[i] ?? "",
     })),

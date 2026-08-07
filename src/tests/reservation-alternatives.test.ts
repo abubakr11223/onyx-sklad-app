@@ -13,22 +13,22 @@ import {
 } from "@/lib/reservations";
 
 describe("gabaritNeedFromDims — same margin as /poisk", () => {
-  it("adds CUTTING_MARGIN_MM (20) and orders max/min", () => {
-    expect(gabaritNeedFromDims(1200, 700)).toEqual({
-      needMax: 1200 + CUTTING_MARGIN_MM,
-      needMin: 700 + CUTTING_MARGIN_MM,
+  it("adds CUTTING_MARGIN_MM (2 см) and orders max/min", () => {
+    expect(gabaritNeedFromDims(120, 70)).toEqual({
+      needMax: 120 + CUTTING_MARGIN_MM,
+      needMin: 70 + CUTTING_MARGIN_MM,
     });
-    expect(gabaritNeedFromDims(700, 1200)).toEqual({
-      needMax: 1200 + CUTTING_MARGIN_MM,
-      needMin: 700 + CUTTING_MARGIN_MM,
+    expect(gabaritNeedFromDims(70, 120)).toEqual({
+      needMax: 120 + CUTTING_MARGIN_MM,
+      needMin: 70 + CUTTING_MARGIN_MM,
     });
   });
 
   it("null/invalid dims → null (type-only similarity)", () => {
-    expect(gabaritNeedFromDims(null, 700)).toBeNull();
-    expect(gabaritNeedFromDims(1200, null)).toBeNull();
-    expect(gabaritNeedFromDims(0, 700)).toBeNull();
-    expect(gabaritNeedFromDims(-1, 700)).toBeNull();
+    expect(gabaritNeedFromDims(null, 70)).toBeNull();
+    expect(gabaritNeedFromDims(120, null)).toBeNull();
+    expect(gabaritNeedFromDims(0, 70)).toBeNull();
+    expect(gabaritNeedFromDims(-1, 70)).toBeNull();
   });
 });
 
@@ -45,16 +45,16 @@ describe("similarAvailablePiecesWhere — reuses poisk OR rotation", () => {
   });
 
   it("with need: same 90° OR as piecesWhere (poisk-search)", () => {
-    const need = { needMax: 1220, needMin: 720 };
+    const need = { needMax: 122, needMin: 72 };
     const w = similarAvailablePiecesWhere("st1", "p1", need);
     expect(w.OR).toEqual([
       {
-        boundingLengthMm: { gte: 1220 },
-        boundingWidthMm: { gte: 720 },
+        boundingLengthMm: { gte: 122 },
+        boundingWidthMm: { gte: 72 },
       },
       {
-        boundingLengthMm: { gte: 720 },
-        boundingWidthMm: { gte: 1220 },
+        boundingLengthMm: { gte: 72 },
+        boundingWidthMm: { gte: 122 },
       },
     ]);
   });
@@ -66,7 +66,7 @@ describe("presentReservationAlternative — canSeeExactRemainder gate", () => {
     kind: "SLAB",
     stoneTypeName: "Травертин Classic",
     kindRu: "Плита №2",
-    detail: "2800×1900 мм",
+    detail: "280×190 см",
     place: "Блок А, ор. 2",
     freeText: null,
   };
@@ -74,7 +74,7 @@ describe("presentReservationAlternative — canSeeExactRemainder gate", () => {
   it("high visibility: place kept (manager/owner)", () => {
     const a = presentReservationAlternative(raw, true);
     expect(a.place).toBe("Блок А, ор. 2");
-    expect(a.detail).toBe("2800×1900 мм");
+    expect(a.detail).toBe("280×190 см");
     expect(a.inStockLabel).toBeNull();
   });
 
@@ -88,7 +88,7 @@ describe("presentReservationAlternative — canSeeExactRemainder gate", () => {
     expect(a.freeText).toBeNull();
     expect(a.inStockLabel).toBe("В наличии");
     // dimensions are not warehouse remainder secrets
-    expect(a.detail).toBe("2800×1900 мм");
+    expect(a.detail).toBe("280×190 см");
     expect(a.stoneTypeName).toBe("Травертин Classic");
   });
 
@@ -235,7 +235,7 @@ describe("findReservationAlternatives", () => {
     expect(alts).toHaveLength(1);
     expect(alts[0].place).toBeNull();
     expect(alts[0].inStockLabel).toBe("В наличии");
-    expect(alts[0].detail).toBe("1300×800 мм");
+    expect(alts[0].detail).toBe("1300×800 см");
     expect(alts[0].stoneTypeName).toBe("Оникс");
   });
 
@@ -256,8 +256,8 @@ describe("findReservationAlternatives", () => {
   it("piece path uses gabarit where (margin + rotation OR)", async () => {
     M.pieceFindUnique.mockResolvedValue({
       id: "p1",
-      boundingLengthMm: 1000,
-      boundingWidthMm: 500,
+      boundingLengthMm: 100,
+      boundingWidthMm: 50,
       stoneTypeId: "st9",
       stoneType: { name: "X" },
     });
@@ -275,8 +275,8 @@ describe("findReservationAlternatives", () => {
 
     const where = (M.pieceFindMany.mock.calls[0][0] as { where: PrismaLike }).where;
     expect(where.OR).toBeDefined();
-    const needMax = 1000 + CUTTING_MARGIN_MM;
-    const needMin = 500 + CUTTING_MARGIN_MM;
+    const needMax = 100 + CUTTING_MARGIN_MM;
+    const needMin = 50 + CUTTING_MARGIN_MM;
     expect(where.OR).toEqual([
       {
         boundingLengthMm: { gte: needMax },

@@ -342,6 +342,9 @@ export default async function KamenPage({
             needsCheck: true,
             slabsTotal: true,
             areaTotalM2: true,
+            lengthMm: true,
+            widthMm: true,
+            thicknessMm: true,
             slabsAdjusted: true,
             areaAdjustedM2: true,
             slabsSoldDirect: true,
@@ -355,6 +358,8 @@ export default async function KamenPage({
                 id: true,
                 description: true,
                 thicknessMm: true,
+                lengthMm: true,
+                widthMm: true,
                 slabsCount: true,
                 areaM2: true,
                 slabsSold: true,
@@ -943,7 +948,7 @@ export default async function KamenPage({
                   <li key={s.id}>
                     <span className="font-semibold text-ink">{s.label}</span>
                     {s.lengthMm !== null && s.widthMm !== null && (
-                      <> · {s.lengthMm}×{s.widthMm} мм</>
+                      <> · {s.lengthMm}×{s.widthMm} см</>
                     )}
                     {s.areaM2 !== null && (
                       <>
@@ -1038,8 +1043,8 @@ export default async function KamenPage({
                   <span className="font-semibold text-ink">
                     {PIECE_KIND_RU[p.kind] ?? p.kind}
                   </span>{" "}
-                  · Габарит {p.boundingLengthMm}×{p.boundingWidthMm} мм
-                  {p.thicknessMm !== null && <> · толщина {p.thicknessMm} мм</>}
+                  · Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
+                  {p.thicknessMm !== null && <> · толщина {p.thicknessMm} см</>}
                   {p.areaM2 !== null && (
                     <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
                   )}{" "}
@@ -1158,6 +1163,12 @@ export default async function KamenPage({
                     />
                   )}
                 </div>
+                {(b.lengthMm != null && b.widthMm != null) && (
+                  <p className="mt-1 text-ink/70">
+                    Плита: {b.lengthMm}×{b.widthMm}
+                    {b.thicknessMm != null ? `×${b.thicknessMm}` : ""} см
+                  </p>
+                )}
                 {b.locations.length === 0 ? (
                   <p className="mt-1 text-ink/50">Локации не указаны.</p>
                 ) : (
@@ -1296,6 +1307,13 @@ export default async function KamenPage({
                             <p className="font-semibold text-ink">
                               {pat.description}
                             </p>
+                            {pat.lengthMm != null && pat.widthMm != null && (
+                              <span className="text-xs text-ink/55">
+                                {pat.lengthMm}×{pat.widthMm}
+                                {pat.thicknessMm != null ? `×${pat.thicknessMm}` : ""}{" "}
+                                см
+                              </span>
+                            )}
                             {/* ТЗ №3 §2 — статус подгруппы (из остатка): узор
                                 может быть продан, пока в партии есть другие. */}
                             {(() => {
@@ -1331,7 +1349,7 @@ export default async function KamenPage({
                             );
                             return (
                               <p className="tnum text-xs text-ink/60">
-                                {pat.thicknessMm !== null && <>{pat.thicknessMm} мм · </>}
+                                {pat.thicknessMm !== null && <>{pat.thicknessMm} см · </>}
                                 осталось {clamped.slabsRemaining} плит ·{" "}
                                 {m2Fmt.format(clamped.areaRemainingM2)} м²
                               </p>

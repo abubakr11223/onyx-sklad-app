@@ -23,6 +23,9 @@ function baseInput(overrides: Partial<IntakeInput> = {}): IntakeInput {
     newBasePrice: "",
     slabsTotal: "40",
     areaTotalM2: "220",
+    lengthMm: "280",
+    widthMm: "160",
+    thicknessMm: "2",
     supplierNote: "",
     arrivedAt: "2026-07-03",
     locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
@@ -474,7 +477,7 @@ describe("validateIntake — прочее", () => {
 describe("validateIntake — узоры в партии (ТЗ №3)", () => {
   const withPatterns = (patterns: {
     description: string;
-    thicknessMm: string;
+    lengthMm: "280", widthMm: "160", thicknessMm: string;
     slabs: string;
     areaM2: string;
   }[]) =>
@@ -484,7 +487,7 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
     const r = validateIntake(
       baseInput({
         patternsEnabled: false,
-        patterns: [{ description: "x", thicknessMm: "20", slabs: "50", areaM2: "30" }],
+        patterns: [{ description: "x", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" }],
       }),
     );
     expect(r.ok).toBe(true);
@@ -494,9 +497,9 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
   it("суммы сходятся (плиты И м²) → ok, узоры разобраны", () => {
     const r = validateIntake(
       withPatterns([
-        { description: "светлый", thicknessMm: "20", slabs: "50", areaM2: "30" },
-        { description: "тёмный", thicknessMm: "30", slabs: "30", areaM2: "18" },
-        { description: "серый", thicknessMm: "20", slabs: "20", areaM2: "12" },
+        { description: "светлый", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
+        { description: "тёмный", lengthMm: "280", widthMm: "160", thicknessMm: "3", slabs: "30", areaM2: "18" },
+        { description: "серый", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "20", areaM2: "12" },
       ]),
     );
     expect(r.ok).toBe(true);
@@ -504,7 +507,9 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
       expect(r.data.patterns).toHaveLength(3);
       expect(r.data.patterns[0]).toEqual({
         description: "светлый",
-        thicknessMm: 20,
+        lengthMm: 280,
+        widthMm: 160,
+        thicknessMm: 2,
         slabs: 50,
         areaM2: 30,
       });
@@ -514,8 +519,8 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
   it("сумма плит НЕ сходится → patternsSum", () => {
     const r = validateIntake(
       withPatterns([
-        { description: "a", thicknessMm: "20", slabs: "50", areaM2: "30" },
-        { description: "b", thicknessMm: "20", slabs: "40", areaM2: "30" }, // 90 ≠ 100
+        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
+        { description: "b", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "40", areaM2: "30" }, // 90 ≠ 100
       ]),
     );
     expect(r.ok).toBe(false);
@@ -525,8 +530,8 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
   it("сумма м² НЕ сходится → patternsSum", () => {
     const r = validateIntake(
       withPatterns([
-        { description: "a", thicknessMm: "20", slabs: "50", areaM2: "30" },
-        { description: "b", thicknessMm: "20", slabs: "50", areaM2: "25" }, // 55 ≠ 60
+        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
+        { description: "b", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "25" }, // 55 ≠ 60
       ]),
     );
     expect(r.ok).toBe(false);
@@ -536,8 +541,8 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
   it("пустое описание узора → pattern-0-description", () => {
     const r = validateIntake(
       withPatterns([
-        { description: "  ", thicknessMm: "20", slabs: "50", areaM2: "30" },
-        { description: "b", thicknessMm: "20", slabs: "50", areaM2: "30" },
+        { description: "  ", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
+        { description: "b", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
       ]),
     );
     expect(r.ok).toBe(false);
@@ -550,7 +555,7 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
         slabsTotal: "100",
         areaTotalM2: "",
         patternsEnabled: true,
-        patterns: [{ description: "a", thicknessMm: "20", slabs: "100", areaM2: "60" }],
+        patterns: [{ description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "100", areaM2: "60" }],
       }),
     );
     expect(r.ok).toBe(false);

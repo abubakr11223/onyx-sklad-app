@@ -110,40 +110,40 @@ describe("computeFreeRemainder — data-model.md §3", () => {
 
 describe("pieceFitsRequest — TZ §5.2 dopusk bilan gabarit-qidiruv", () => {
   it("dopusk konstantasi 20 mm", () => {
-    expect(CUTTING_MARGIN_MM).toBe(20);
+    expect(CUTTING_MARGIN_MM).toBe(2);
   });
 
-  it("so'rov + dopusk sig'sa — mos (1450×800 ga 1200×700)", () => {
-    expect(pieceFitsRequest(1450, 800, 1200, 700)).toBe(true);
+  it("so'rov + dopusk sig'sa — mos (145×80 ga 120×70)", () => {
+    expect(pieceFitsRequest(145, 80, 120, 70)).toBe(true);
   });
 
-  it("aniq teng o'lcham dopusksiz sig'maydi (1200×700 ga 1200×700)", () => {
-    expect(pieceFitsRequest(1200, 700, 1200, 700)).toBe(false);
+  it("aniq teng o'lcham dopusksiz sig'maydi (120×70 ga 120×70)", () => {
+    expect(pieceFitsRequest(120, 70, 120, 70)).toBe(false);
   });
 
   it("dopusk chegarasi: bounding = so'rov + margin — mos", () => {
-    expect(pieceFitsRequest(1220, 720, 1200, 700)).toBe(true);
-    expect(pieceFitsRequest(1219, 720, 1200, 700)).toBe(false);
-    expect(pieceFitsRequest(1220, 719, 1200, 700)).toBe(false);
+    expect(pieceFitsRequest(122, 72, 120, 70)).toBe(true);
+    expect(pieceFitsRequest(121, 72, 120, 70)).toBe(false);
+    expect(pieceFitsRequest(122, 71, 120, 70)).toBe(false);
   });
 
   it("burish (90°) ruxsat: 800×1450 bounding ham 1200×700 ni yopadi", () => {
-    expect(pieceFitsRequest(800, 1450, 1200, 700)).toBe(true);
-    expect(pieceFitsRequest(800, 1450, 700, 1200)).toBe(true);
+    expect(pieceFitsRequest(80, 145, 120, 70)).toBe(true);
+    expect(pieceFitsRequest(80, 145, 70, 120)).toBe(true);
   });
 
-  it("bitta tomon yetmasa — mos emas (1180×640 ga 1200×700)", () => {
-    expect(pieceFitsRequest(1180, 640, 1200, 700)).toBe(false);
+  it("bitta tomon yetmasa — mos emas (118×64 ga 120×70)", () => {
+    expect(pieceFitsRequest(118, 64, 120, 70)).toBe(false);
   });
 
   it("maxsus margin bilan chaqirish mumkin", () => {
-    expect(pieceFitsRequest(1200, 700, 1200, 700, 0)).toBe(true);
-    expect(pieceFitsRequest(1250, 750, 1200, 700, 50)).toBe(true);
-    expect(pieceFitsRequest(1250, 750, 1200, 700, 51)).toBe(false);
+    expect(pieceFitsRequest(120, 70, 120, 70, 0)).toBe(true);
+    expect(pieceFitsRequest(125, 75, 120, 70, 5)).toBe(true);
+    expect(pieceFitsRequest(125, 75, 120, 70, 6)).toBe(false);
   });
 
   it("nol yoki manfiy so'rov o'lchami — mos emas", () => {
-    expect(pieceFitsRequest(1450, 800, 0, 700)).toBe(false);
-    expect(pieceFitsRequest(1450, 800, 1200, -5)).toBe(false);
+    expect(pieceFitsRequest(145, 80, 0, 70)).toBe(false);
+    expect(pieceFitsRequest(145, 80, 120, -5)).toBe(false);
   });
 });

@@ -880,7 +880,7 @@ export async function findReservationAlternatives(
         kindRu: s.label,
         detail:
           s.lengthMm != null && s.widthMm != null
-            ? `${s.lengthMm}×${s.widthMm} мм`
+            ? `${s.lengthMm}×${s.widthMm} см`
             : null,
         place: `Блок ${s.block}, ор. ${s.landmark}`,
         freeText: null,
@@ -910,7 +910,7 @@ export async function findReservationAlternatives(
           kind: "PIECE",
           stoneTypeName: p.stoneType.name,
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
-          detail: `${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+          detail: `${p.boundingLengthMm}×${p.boundingWidthMm} см`,
           place: `Блок ${p.block}, ор. ${p.landmark}`,
           freeText: null,
         });
@@ -955,7 +955,7 @@ export async function findReservationAlternatives(
         kind: "PIECE",
         stoneTypeName: p.stoneType.name,
         kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
-        detail: `${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+        detail: `${p.boundingLengthMm}×${p.boundingWidthMm} см`,
         place: `Блок ${p.block}, ор. ${p.landmark}`,
         freeText: null,
       });
@@ -989,7 +989,7 @@ export async function findReservationAlternatives(
           kindRu: s.label,
           detail:
             s.lengthMm != null && s.widthMm != null
-              ? `${s.lengthMm}×${s.widthMm} мм`
+              ? `${s.lengthMm}×${s.widthMm} см`
               : null,
           place: `Блок ${s.block}, ор. ${s.landmark}`,
           freeText: null,
@@ -1036,7 +1036,7 @@ export async function findReservationAlternatives(
         kindRu: s.label,
         detail:
           s.lengthMm != null && s.widthMm != null
-            ? `${s.lengthMm}×${s.widthMm} мм`
+            ? `${s.lengthMm}×${s.widthMm} см`
             : null,
         place: `Блок ${s.block}, ор. ${s.landmark}`,
         freeText: null,
@@ -1065,7 +1065,7 @@ export async function findReservationAlternatives(
           kind: "PIECE",
           stoneTypeName: p.stoneType.name,
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
-          detail: `${p.boundingLengthMm}×${p.boundingWidthMm} мм`,
+          detail: `${p.boundingLengthMm}×${p.boundingWidthMm} см`,
           place: `Блок ${p.block}, ор. ${p.landmark}`,
           freeText: null,
         });

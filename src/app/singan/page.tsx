@@ -172,7 +172,7 @@ export default async function SinganPage({
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
-      <PageHeader subtitle="AI распознал форму куска. Измерьте каждую сторону рулеткой и введите размеры в мм — номера сторон совпадают с чертежом." />
+      <PageHeader subtitle="AI распознал форму куска. Измерьте каждую сторону рулеткой и введите размеры в см — номера сторон совпадают с чертежом." />
 
       {err && (
         <Alert variant="danger" className="mb-6">
@@ -192,7 +192,7 @@ export default async function SinganPage({
         {/* ── Стороны ── */}
         <Card>
           <h2 className="mb-3 text-lg font-semibold text-ink">
-            Стороны, мм ({draft.vertices.length})
+            Стороны, см ({draft.vertices.length})
           </h2>
           <div className="grid grid-cols-2 gap-3">
             {sideNumbers.map((n) => (
@@ -202,7 +202,7 @@ export default async function SinganPage({
                 name={`side_${n}`}
                 inputMode="numeric"
                 label={`Сторона ${n}`}
-                placeholder="напр. 1180"
+                placeholder="напр. 118"
                 required
               />
             ))}
@@ -217,21 +217,21 @@ export default async function SinganPage({
               id="boundingLengthMm"
               name="boundingLengthMm"
               inputMode="numeric"
-              label="Длина, мм"
+              label="Длина, см"
               required
             />
             <Field
               id="boundingWidthMm"
               name="boundingWidthMm"
               inputMode="numeric"
-              label="Ширина, мм"
+              label="Ширина, см"
               required
             />
             <Field
               id="thicknessMm"
               name="thicknessMm"
               inputMode="numeric"
-              label="Толщина, мм"
+              label="Толщина, см"
               placeholder="необязательно"
             />
             <Field

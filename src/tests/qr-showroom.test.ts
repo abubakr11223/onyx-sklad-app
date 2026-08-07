@@ -72,7 +72,7 @@ describe("buildQrPublicView — public exposure contract", () => {
     rockType: "травертин",
     color: "бежевый" as string | null,
     description: "Мягкий рисунок" as string | null,
-    properties: [["толщина", "20 мм"]] as Array<[string, string]>,
+    properties: [["толщина", "20 см"]] as Array<[string, string]>,
     hasStock: true,
     textureFileUrl: null as string | null,
     photos: [
@@ -88,7 +88,7 @@ describe("buildQrPublicView — public exposure contract", () => {
       rockType: "травертин",
       color: "бежевый",
       description: "Мягкий рисунок",
-      properties: [["толщина", "20 мм"]],
+      properties: [["толщина", "20 см"]],
       stockLabel: "в наличии",
       textureFileUrl: null,
       photoIds: ["p-int", "p-slab"],

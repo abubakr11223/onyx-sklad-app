@@ -65,12 +65,16 @@ const emptyLoc = (): LocValues => ({
 interface PatValues {
   description: string;
   thicknessMm: string;
+  lengthMm: string;
+  widthMm: string;
   slabs: string;
   areaM2: string;
 }
 const emptyPat = (): PatValues => ({
   description: "",
   thicknessMm: "",
+  lengthMm: "",
+  widthMm: "",
   slabs: "",
   areaM2: "",
 });
@@ -125,6 +129,9 @@ export default function IntakeForm({
     newBasePrice: "",
     slabsTotal: "",
     areaTotalM2: "",
+    lengthMm: "",
+    widthMm: "",
+    thicknessMm: "",
     supplierNote: "",
     arrivedAt: defaultDate,
   });
@@ -344,6 +351,9 @@ export default function IntakeForm({
     newBasePrice: canSeePrices ? values.newBasePrice : "",
     slabsTotal: values.slabsTotal,
     areaTotalM2: values.areaTotalM2,
+    lengthMm: values.lengthMm,
+    widthMm: values.widthMm,
+    thicknessMm: values.thicknessMm,
     supplierNote: values.supplierNote,
     arrivedAt: values.arrivedAt,
     locations: rowIds.map((id) => locs[id] ?? emptyLoc()),
@@ -360,6 +370,9 @@ export default function IntakeForm({
       "newDescription",
       "newBasePrice",
       "slabsTotal",
+      "lengthMm",
+      "widthMm",
+      "thicknessMm",
       "areaTotalM2",
     ];
     for (const k of simple) if (errs[k]) return k;
@@ -586,6 +599,51 @@ export default function IntakeForm({
         </div>
       </Card>
 
+      {/* ── ТЗ №12: размер плиты (см) ── */}
+      {!patternsEnabled && (
+        <Card>
+          <h2 className="mb-1 text-lg font-semibold text-ink">
+            Размер плиты <span className="text-danger">*</span>
+          </h2>
+          <p className="mb-4 text-sm text-ink/60">
+            Длина и ширина обязательны (см). Без них партию не принять — по
+            габариту ищут целые плиты.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <Field
+              id="lengthMm"
+              name="lengthMm"
+              inputMode="numeric"
+              label={<>Длина, см <Req /></>}
+              placeholder="280"
+              value={values.lengthMm}
+              onChange={setField("lengthMm")}
+              error={e.lengthMm}
+            />
+            <Field
+              id="widthMm"
+              name="widthMm"
+              inputMode="numeric"
+              label={<>Ширина, см <Req /></>}
+              placeholder="160"
+              value={values.widthMm}
+              onChange={setField("widthMm")}
+              error={e.widthMm}
+            />
+            <Field
+              id="thicknessMm"
+              name="thicknessMm"
+              inputMode="numeric"
+              label="Толщина, см"
+              placeholder="2"
+              value={values.thicknessMm}
+              onChange={setField("thicknessMm")}
+              error={e.thicknessMm}
+            />
+          </div>
+        </Card>
+      )}
+
       {/* ── Узоры в партии (ТЗ №3) ── */}
       <Card>
         <label className="flex cursor-pointer items-center gap-2.5">
@@ -641,13 +699,33 @@ export default function IntakeForm({
                     onChange={setPat(id, "description")}
                     error={e[`pattern-${idx}-description`]}
                   />
-                  <div className="mt-3 grid grid-cols-3 gap-3">
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <Field
+                      id={`patLength-${idx}`}
+                      name="patLength"
+                      inputMode="numeric"
+                      label={<>Длина, см <Req /></>}
+                      placeholder="280"
+                      value={p.lengthMm}
+                      onChange={setPat(id, "lengthMm")}
+                      error={e[`pattern-${idx}-length`]}
+                    />
+                    <Field
+                      id={`patWidth-${idx}`}
+                      name="patWidth"
+                      inputMode="numeric"
+                      label={<>Ширина, см <Req /></>}
+                      placeholder="160"
+                      value={p.widthMm}
+                      onChange={setPat(id, "widthMm")}
+                      error={e[`pattern-${idx}-width`]}
+                    />
                     <Field
                       id={`patThickness-${idx}`}
                       name="patThickness"
                       inputMode="numeric"
-                      label="Толщина, мм"
-                      placeholder="20"
+                      label="Толщина, см"
+                      placeholder="2"
                       value={p.thicknessMm}
                       onChange={setPat(id, "thicknessMm")}
                       error={e[`pattern-${idx}-thickness`]}

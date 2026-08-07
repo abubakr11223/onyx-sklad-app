@@ -4,8 +4,10 @@
 // Chaqiruvchi (server component) Prisma'dan olingan qiymatlarni oddiy
 // number/null ko'rinishga keltirib uzatadi (Decimal → Number).
 
-/** TZ §5.2: «с разумным запасом на рез» — kesish dopuski, mm (har o'lchamga). */
-export const CUTTING_MARGIN_MM = 20;
+// ТЗ №12: единица размеров — см. CUTTING_MARGIN_MM — legacy-имя; значение 2 (см).
+import { CUTTING_MARGIN_CM as _CUTTING_MARGIN_CM } from "@/lib/dimensions";
+export const CUTTING_MARGIN_MM = _CUTTING_MARGIN_CM;
+export { CUTTING_MARGIN_CM } from "@/lib/dimensions";
 
 /** Batch jadvalining hisob uchun kerakli ustunlari (data-model.md §1.2). */
 export interface BatchTotalsInput {

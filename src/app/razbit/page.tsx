@@ -64,6 +64,10 @@ export default async function RazbitPage({
         status: true,
         block: true,
         landmark: true,
+        lengthMm: true,
+        widthMm: true,
+        thicknessMm: true,
+        areaM2: true,
         stoneType: { select: { name: true } },
       },
     }),
@@ -97,6 +101,10 @@ export default async function RazbitPage({
     reserved: s.status === "RESERVED",
     block: s.block,
     landmark: s.landmark,
+    lengthMm: s.lengthMm,
+    widthMm: s.widthMm,
+    thicknessMm: s.thicknessMm,
+    areaM2: s.areaM2 != null ? Number(s.areaM2) : null,
   }));
 
   const batches: BatchOption[] = batchRows.map((b) => ({

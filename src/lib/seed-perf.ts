@@ -356,7 +356,7 @@ export function buildPerfDataset(
         status,
         lengthMm,
         widthMm,
-        thicknessMm: [20, 30, 40][Math.floor(rnd() * 3)],
+        thicknessMm: [2, 3, 4][Math.floor(rnd() * 3)],
         areaM2: ((lengthMm * widthMm) / 1_000_000).toFixed(3),
         isAreaEstimated: rnd() < 0.4,
         block: BLOCKS[Math.floor(rnd() * BLOCKS.length)],
@@ -390,8 +390,8 @@ export function buildPerfDataset(
       }
 
       // Gabaritlar keng tarqalgan — «нужный размер» qidiruvi turli natija bersin.
-      const boundingLengthMm = 300 + Math.floor(rnd() * 2500); // 300..2800
-      const boundingWidthMm = 200 + Math.floor(rnd() * 1500); // 200..1700
+      const boundingLengthMm = 30 + Math.floor(rnd() * 250); // 30..280 см (ТЗ №12)
+      const boundingWidthMm = 20 + Math.floor(rnd() * 160); // 20..180 см
       const r = rnd();
       const status = r < 0.8 ? "AVAILABLE" : r < 0.92 ? "RESERVED" : "SOLD";
 
@@ -406,18 +406,18 @@ export function buildPerfDataset(
         sidesMm: [
           boundingLengthMm,
           boundingWidthMm,
-          boundingLengthMm - Math.floor(rnd() * 120),
-          boundingWidthMm - Math.floor(rnd() * 120),
+          Math.max(1, boundingLengthMm - Math.floor(rnd() * 10)),
+          Math.max(1, boundingWidthMm - Math.floor(rnd() * 10)),
         ],
         boundingLengthMm,
         boundingWidthMm,
-        thicknessMm: [20, 30, 40][Math.floor(rnd() * 3)],
+        thicknessMm: [2, 3, 4][Math.floor(rnd() * 3)],
         // ~10% areaM2 = null — freeRemainderFromAggregate'ning null-yo'li
         // (batch-remainders.ts:105) ham yuklanadi.
         areaM2:
           rnd() < 0.1
             ? null
-            : ((boundingLengthMm * boundingWidthMm) / 1_000_000).toFixed(3),
+            : ((boundingLengthMm * boundingWidthMm) / 10_000).toFixed(3),
         block: BLOCKS[Math.floor(rnd() * BLOCKS.length)],
         landmark: String(1 + Math.floor(rnd() * 12)),
         needsCheck: rnd() < 0.1,

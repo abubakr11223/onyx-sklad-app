@@ -55,25 +55,25 @@ export async function submitSingan(formData: FormData): Promise<void> {
   for (let i = 1; i <= draft.vertices.length; i++) {
     const parsed = parsePositiveInt(str(`side_${i}`));
     if (parsed === null || parsed === undefined) {
-      fail(`Сторона ${i}: укажите целое положительное число (мм)`);
+      fail(`Сторона ${i}: укажите целое положительное число (см)`);
     }
     sides.push(parsed as number);
   }
   if (!validateSidesMm(sides)) {
-    fail("Стороны — минимум 3 целых положительных числа (мм)");
+    fail("Стороны — минимум 3 целых положительных числа (см)");
   }
 
   const boundingLengthMm = parsePositiveInt(str("boundingLengthMm"));
   if (boundingLengthMm === null || boundingLengthMm === undefined) {
-    fail("Длина (габарит), мм — целое положительное число");
+    fail("Длина (габарит), см — целое положительное число");
   }
   const boundingWidthMm = parsePositiveInt(str("boundingWidthMm"));
   if (boundingWidthMm === null || boundingWidthMm === undefined) {
-    fail("Ширина (габарит), мм — целое положительное число");
+    fail("Ширина (габарит), см — целое положительное число");
   }
   const thicknessMm = parsePositiveInt(str("thicknessMm"));
   if (thicknessMm === undefined) {
-    fail("Толщина, мм — целое положительное число (или пусто)");
+    fail("Толщина, см — целое положительное число (или пусто)");
   }
   const areaM2 = parsePositiveDecimal(str("areaM2"));
   if (areaM2 === undefined) {

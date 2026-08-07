@@ -221,6 +221,11 @@ model Batch {
   slabsAdjusted    Int      @default(0)
   areaAdjustedM2   Decimal  @default(0) @db.Decimal(12, 3)
   purchasePrice    Decimal? @db.Decimal(12, 2)
+  /// ТЗ №12: габарит плиты партии, см (имя *Mm legacy). Обязательны при новой приёмке.
+  lengthMm         Int?
+  widthMm          Int?
+  /// Толщина партии, см — если однородная; при узорах — в BatchPattern.
+  thicknessMm      Int?
   needsCheck       Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -248,7 +253,11 @@ model BatchPattern {
   id          String   @id @default(cuid())
   batchId     String
   description String // «светлый с прожилками»
-  thicknessMm Int? // толщина, мм (необязательно)
+  /// ТЗ №12: толщина в см (имя *Mm legacy). Однородная партия — на Batch.
+  thicknessMm Int?
+  /// ТЗ №12: габарит плиты подгруппы, см (если размеры в партии разные).
+  lengthMm    Int?
+  widthMm     Int?
   slabsCount  Int // плиты в подгруппе (при приёмке)
   areaM2      Decimal  @db.Decimal(12, 3) // площадь подгруппы, м² (при приёмке)
   // ТЗ №3 фаза 4 — продано из подгруппы (как batch.slabsSoldDirect, но по узору).
@@ -294,6 +303,7 @@ model Slab {
   stoneTypeId     String // denormalizatsiya — «vid + status» qidiruvi bitta indexdan
   label           String // «Плита №2»
   status          UnitStatus @default(AVAILABLE)
+  /// ТЗ №12: см (legacy name Mm)
   lengthMm        Int?
   widthMm         Int?
   thicknessMm     Int?
@@ -337,10 +347,10 @@ model Piece {
   originSlabId     String? // konkret plitadan chiqqan bo'lsa (hisob: §3 — formulada QATNASHMAYDI)
   kind             PieceKind
   status           UnitStatus @default(AVAILABLE)
-  sidesMm          Json // har tomon uzunligi, mm: [1180, 640, 950, 610]
+  sidesMm          Json // ТЗ №12: стороны в см (legacy Mm): [118, 64, 95]
   boundingLengthMm Int // qidiruv shu bounding maydonlar bo'yicha
   boundingWidthMm  Int
-  // W6-A2 — STORED generated (migration SQL): L×W mm². /poisk §6.5 ranking key
+  // W6-A2 — STORED generated: L×W (см² после ТЗ №12). /poisk §6.5 ranking key
   // (display bilan bir xil). Prisma GENERATED ALWAYS yozmaydi — dbgenerated
   // Client INSERT/UPDATE da maydonni yubormaydi; DB hisoblaydi.
   // DDL: prisma/migrations/20260731102837_piece_bounding_area/migration.sql

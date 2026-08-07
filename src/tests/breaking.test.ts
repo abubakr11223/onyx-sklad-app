@@ -53,38 +53,38 @@ describe("parseBreakCause — TZ §5.6 taxonomy", () => {
   });
 });
 
-describe("parseSidesMm — «1180, 640, 950, 610» → [числа]", () => {
+describe("parseSidesMm — «118, 64, 95, 610» → [числа]", () => {
   it("парсит запятые с пробелами", () => {
-    expect(parseSidesMm("1180, 640, 950, 610")).toEqual([1180, 640, 950, 610]);
+    expect(parseSidesMm("118, 64, 95, 610")).toEqual([118, 64, 95, 610]);
   });
 
   it("парсит точки с запятой и просто пробелы", () => {
-    expect(parseSidesMm("1180;640;950")).toEqual([1180, 640, 950]);
-    expect(parseSidesMm("1180 640 950")).toEqual([1180, 640, 950]);
+    expect(parseSidesMm("118;64;95")).toEqual([118, 64, 95]);
+    expect(parseSidesMm("118 64 95")).toEqual([118, 64, 95]);
   });
 
   it(`меньше ${MIN_SIDES} сторон → null (форма минимум треугольник)`, () => {
-    expect(parseSidesMm("1180, 640")).toBeNull();
+    expect(parseSidesMm("118, 64")).toBeNull();
     expect(parseSidesMm("")).toBeNull();
   });
 
   it("мусор, дробные, ноль и отрицательные → null", () => {
-    expect(parseSidesMm("1180, abc, 950")).toBeNull();
-    expect(parseSidesMm("1180, 640.5, 950")).toBeNull();
-    expect(parseSidesMm("1180, 0, 950")).toBeNull();
-    expect(parseSidesMm("1180, -640, 950")).toBeNull();
+    expect(parseSidesMm("118, abc, 95")).toBeNull();
+    expect(parseSidesMm("118, 64.5, 95")).toBeNull();
+    expect(parseSidesMm("118, 0, 95")).toBeNull();
+    expect(parseSidesMm("118, -64, 95")).toBeNull();
   });
 });
 
 describe("validateSidesMm — защита на границе БД", () => {
   it("валидный массив", () => {
-    expect(validateSidesMm([1180, 640, 950])).toBe(true);
+    expect(validateSidesMm([118, 64, 95])).toBe(true);
   });
   it("не массив / коротко / не целые положительные", () => {
-    expect(validateSidesMm("1180,640,950")).toBe(false);
-    expect(validateSidesMm([1180, 640])).toBe(false);
-    expect(validateSidesMm([1180, 640, 0])).toBe(false);
-    expect(validateSidesMm([1180, 640, 1.5])).toBe(false);
+    expect(validateSidesMm("118,64,95")).toBe(false);
+    expect(validateSidesMm([118, 64])).toBe(false);
+    expect(validateSidesMm([118, 64, 0])).toBe(false);
+    expect(validateSidesMm([118, 64, 1.5])).toBe(false);
   });
 });
 
@@ -136,10 +136,10 @@ describe("estimatePieceAreaM2 — средняя плита партии (§3)",
 
 const validRow: RawPieceRow = {
   kind: "BROKEN",
-  sidesMm: "1180, 640, 950, 610",
-  boundingLengthMm: "1180",
-  boundingWidthMm: "640",
-  thicknessMm: "20",
+  sidesMm: "118, 64, 95, 61",
+  boundingLengthMm: "118",
+  boundingWidthMm: "64",
+  thicknessMm: "2",
   areaM2: "0,6",
   block: "А",
   landmark: "2",
@@ -152,10 +152,10 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
     if (r.ok) {
       expect(r.data).toEqual({
         kind: "BROKEN",
-        sidesMm: [1180, 640, 950, 610],
-        boundingLengthMm: 1180,
-        boundingWidthMm: 640,
-        thicknessMm: 20,
+        sidesMm: [118, 64, 95, 61],
+        boundingLengthMm: 118,
+        boundingWidthMm: 64,
+        thicknessMm: 2,
         areaM2: 0.6,
         block: "А",
         landmark: "2",
@@ -176,10 +176,10 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
     const r = parsePieceRow({ ...validRow, sidesMm: "" });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      // Длина 1180, ширина 640 → прямоугольник.
-      expect(r.data.sidesMm).toEqual([1180, 640, 1180, 640]);
-      expect(r.data.boundingLengthMm).toBe(1180);
-      expect(r.data.boundingWidthMm).toBe(640);
+      // Длина 118, ширина 64 → прямоугольник.
+      expect(r.data.sidesMm).toEqual([118, 64, 118, 64]);
+      expect(r.data.boundingLengthMm).toBe(118);
+      expect(r.data.boundingWidthMm).toBe(64);
     }
   });
 
@@ -199,7 +199,7 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
   });
 
   it("«Стороны» заданы, но их меньше 3 → ошибка (это не многоугольник)", () => {
-    const r = parsePieceRow({ ...validRow, sidesMm: "1180, 640" });
+    const r = parsePieceRow({ ...validRow, sidesMm: "118, 64" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.sidesMm).toBeTruthy();
   });
@@ -207,7 +207,7 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
   it("ошибки адресованы полям: kind, стороны, габариты, локация", () => {
     const r = parsePieceRow({
       kind: "WHOLE",
-      sidesMm: "1180, 640",
+      sidesMm: "118, 64",
       boundingLengthMm: "0",
       boundingWidthMm: "",
       thicknessMm: "тонкая",
@@ -240,10 +240,10 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
 
 const validPiece: PieceInput = {
   kind: "OFFCUT",
-  sidesMm: [1450, 800, 1450, 800],
-  boundingLengthMm: 1450,
+  sidesMm: [145, 80, 145, 80],
+  boundingLengthMm: 145,
   boundingWidthMm: 800,
-  thicknessMm: 20,
+  thicknessMm: 2,
   areaM2: 1.16,
   block: "В",
   landmark: "3",
@@ -256,7 +256,7 @@ describe("assertValidPieceInput — вход не из формы (Telegram-бо
 
   it("битые стороны / габариты / локация → BreakError(INVALID_PIECE)", () => {
     const cases: PieceInput[] = [
-      { ...validPiece, sidesMm: [1450, 800] },
+      { ...validPiece, sidesMm: [145, 80] },
       { ...validPiece, boundingLengthMm: 0 },
       { ...validPiece, boundingWidthMm: -5 },
       { ...validPiece, thicknessMm: 1.5 },
@@ -275,7 +275,7 @@ describe("assertValidPieceInput — вход не из формы (Telegram-бо
     }
   });
 
-  it("A1: мм-габариты сверх 1 000 000 → INVALID_PIECE (не Int4-переполнение → 500)", () => {
+  it("A1: см-габариты сверх 1 000 000 → INVALID_PIECE (не Int4-переполнение → 500)", () => {
     const overCap: PieceInput[] = [
       { ...validPiece, boundingLengthMm: 1_000_001 },
       { ...validPiece, boundingWidthMm: 2_147_483_648 },

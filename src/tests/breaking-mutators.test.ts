@@ -65,10 +65,10 @@ beforeEach(() => {
 
 const PIECE: PieceInput = {
   kind: "BROKEN",
-  sidesMm: [1180, 640, 950, 610],
-  boundingLengthMm: 1180,
-  boundingWidthMm: 640,
-  thicknessMm: 20,
+  sidesMm: [11, 64, 95, 61],
+  boundingLengthMm: 118,
+  boundingWidthMm: 64,
+  thicknessMm: 2,
   areaM2: 0.6,
   block: "А",
   landmark: "2",

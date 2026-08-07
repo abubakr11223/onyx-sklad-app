@@ -153,6 +153,9 @@ export async function createIntakeWithReceipt(
       supplierNote: data.supplierNote,
       slabsTotal: data.slabsTotal,
       areaTotalM2: data.areaTotalM2 === null ? null : String(data.areaTotalM2),
+      lengthMm: data.lengthMm,
+      widthMm: data.widthMm,
+      thicknessMm: data.thicknessMm,
       locations: {
         create: data.locations.map((loc) => ({
           block: loc.block,
@@ -171,6 +174,8 @@ export async function createIntakeWithReceipt(
         batchId: batch.id,
         description: p.description,
         thicknessMm: p.thicknessMm,
+        lengthMm: p.lengthMm,
+        widthMm: p.widthMm,
         slabsCount: p.slabs,
         areaM2: String(p.areaM2),
       },
@@ -200,9 +205,14 @@ export async function createIntakeWithReceipt(
           slabsHere: loc.slabsHere,
           areaHereM2: loc.areaHereM2,
         })),
+        lengthMm: data.lengthMm,
+        widthMm: data.widthMm,
+        thicknessMm: data.thicknessMm,
         patterns: data.patterns.map((p) => ({
           description: p.description,
           thicknessMm: p.thicknessMm,
+          lengthMm: p.lengthMm,
+          widthMm: p.widthMm,
           slabs: p.slabs,
           areaM2: p.areaM2,
         })),

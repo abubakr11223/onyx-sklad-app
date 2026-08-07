@@ -223,13 +223,13 @@ export default async function BronPage({
         value: `SLAB:${s.id}`,
         label: `${s.label}${
           s.lengthMm !== null && s.widthMm !== null
-            ? ` · ${s.lengthMm}×${s.widthMm} мм`
+            ? ` · ${s.lengthMm}×${s.widthMm} см`
             : ""
         } · Блок ${s.block}, ор. ${s.landmark}`,
       }));
       const pieces: UnitOption[] = st.pieces.map((p) => ({
         value: `PIECE:${p.id}`,
-        label: `${PIECE_KIND_RU[p.kind] ?? p.kind} · ${p.boundingLengthMm}×${p.boundingWidthMm} мм · Блок ${p.block}, ор. ${p.landmark}`,
+        label: `${PIECE_KIND_RU[p.kind] ?? p.kind} · ${p.boundingLengthMm}×${p.boundingWidthMm} см · Блок ${p.block}, ор. ${p.landmark}`,
       }));
       const batches: BatchVolumeOption[] = st.batches
         .map((b) => {

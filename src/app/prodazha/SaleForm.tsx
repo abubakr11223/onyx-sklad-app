@@ -55,7 +55,7 @@ export interface SlabOption {
   label: string;
   status: "AVAILABLE" | "RESERVED";
   needsCheck: boolean;
-  /** «2800×1900 мм · 5,3 м²» — готовая строка с сервера. */
+  /** «280×190 см · 5,3 м²» — готовая строка с сервера. */
   detail: string;
   place: string;
   /** Имя менеджера активной брони (только для RESERVED). */

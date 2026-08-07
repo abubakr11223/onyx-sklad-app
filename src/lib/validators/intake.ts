@@ -17,6 +17,9 @@ export interface IntakeLocationInput {
 export interface IntakePatternInput {
   description: string;
   thicknessMm: string;
+  /** ТЗ №12: габарит плиты узора, см (если размеры в партии разные). */
+  lengthMm: string;
+  widthMm: string;
   slabs: string;
   areaM2: string;
 }
@@ -44,6 +47,10 @@ export interface IntakeInput {
   supplierNote: string;
   /** «ГГГГ-ММ-ДД»; пусто = сегодня */
   arrivedAt: string;
+  /** ТЗ №12: габарит плиты партии, см (обязателен без узоров). */
+  lengthMm: string;
+  widthMm: string;
+  thicknessMm: string;
   locations: IntakeLocationInput[];
   /** ТЗ №3 — «в партии несколько узоров/толщин». Снят → однородная партия. */
   patternsEnabled: boolean;
@@ -61,6 +68,8 @@ export interface ValidIntakeLocation {
 export interface ValidIntakePattern {
   description: string;
   thicknessMm: number | null;
+  lengthMm: number | null;
+  widthMm: number | null;
   slabs: number;
   areaM2: number;
 }
@@ -78,6 +87,10 @@ export interface ValidIntake {
       };
   slabsTotal: number | null;
   areaTotalM2: number | null;
+  /** ТЗ №12: см. */
+  lengthMm: number | null;
+  widthMm: number | null;
+  thicknessMm: number | null;
   supplierNote: string | null;
   arrivedAt: Date;
   locations: ValidIntakeLocation[];
@@ -96,7 +109,7 @@ export type IntakeResult =
 // переполнения Int4 / Decimal(12,3), а обычная ошибка валидации (undefined →
 // «Слишком большое значение» в вызывающем слое). Общая точка для приёмки,
 // продажи, брони, разбить и singan (все идут через эти парсеры).
-/** Целые (штуки, мм, количества) — столбцы Int4 (макс 2 147 483 647). */
+/** Целые (штуки, см, количества) — столбцы Int4 (макс 2 147 483 647). */
 export const MAX_INT_FIELD = 1_000_000;
 /** Площадь и объёмы — Decimal(12,3) (макс 999 999 999.999). Оставлен для
  *  обратной совместимости — новый код берёт MAX_DECIMAL_12_3 из lib/decimal.ts. */
@@ -212,6 +225,45 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     errors.quantity = "Укажите число плит и/или площадь (м²) — минимум одно";
   }
 
+  // ── ТЗ №12: габарит плиты (см) ──
+  // Однородная партия → length/width обязательны на уровне партии.
+  // С узорами → length/width обязательны в каждой подгруппе; партия thickness скрыта.
+  let lengthMm: number | null = null;
+  let widthMm: number | null = null;
+  let thicknessMm: number | null = null;
+  if (!input.patternsEnabled) {
+    const rawLen = parsePositiveInt(input.lengthMm);
+    if (rawLen === null || rawLen === undefined) {
+      errors.lengthMm = "Длина плиты, см — целое положительное число";
+      lengthMm = null;
+    } else {
+      lengthMm = rawLen;
+    }
+    const rawWid = parsePositiveInt(input.widthMm);
+    if (rawWid === null || rawWid === undefined) {
+      errors.widthMm = "Ширина плиты, см — целое положительное число";
+      widthMm = null;
+    } else {
+      widthMm = rawWid;
+    }
+    if (input.thicknessMm.trim() === "") {
+      thicknessMm = null;
+    } else {
+      const rawTh = parsePositiveInt(input.thicknessMm);
+      if (rawTh === undefined) {
+        errors.thicknessMm = "Толщина, см — целое положительное число";
+        thicknessMm = null;
+      } else {
+        thicknessMm = rawTh;
+      }
+    }
+  } else {
+    // thickness on batch optional when patterns; length/width come from patterns
+    thicknessMm = null;
+    lengthMm = null;
+    widthMm = null;
+  }
+
   // ── Дата прихода: пусто = сегодня ──
   let arrivedAt: Date;
   const rawDate = input.arrivedAt.trim();
@@ -276,20 +328,37 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       const thickness =
         p.thicknessMm.trim() === "" ? null : parsePositiveInt(p.thicknessMm);
       if (thickness === undefined) {
-        errors[`pattern-${i}-thickness`] = "Толщина — целое число (мм)";
+        errors[`pattern-${i}-thickness`] = "Толщина — целое число (см)";
+      }
+      const pLen = parsePositiveInt(p.lengthMm ?? "");
+      if (pLen === null || pLen === undefined) {
+        errors[`pattern-${i}-length`] = "Длина, см — целое положительное число";
+      }
+      const pWid = parsePositiveInt(p.widthMm ?? "");
+      if (pWid === null || pWid === undefined) {
+        errors[`pattern-${i}-width`] = "Ширина, см — целое положительное число";
       }
       if (
         description &&
         typeof slabs === "number" &&
         typeof area === "number" &&
-        thickness !== undefined
+        thickness !== undefined &&
+        typeof pLen === "number" &&
+        typeof pWid === "number"
       ) {
         sumSlabs += slabs;
         sumArea += area;
-        patterns.push({ description, thicknessMm: thickness, slabs, areaM2: area });
+        patterns.push({
+          description,
+          thicknessMm: thickness,
+          lengthMm: pLen,
+          widthMm: pWid,
+          slabs,
+          areaM2: area,
+        });
       }
     });
-    // Сходимость сумм — только когда ВСЕ строки валидны и тоталы заданы
+    // Сходимость сусм — только когда ВСЕ строки валидны и тоталы заданы
     // (иначе сначала правим поля, а не пугаем «не сходится»).
     const allValid =
       input.patterns.length > 0 && patterns.length === input.patterns.length;
@@ -310,6 +379,9 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       stoneType: stoneType as ValidIntake["stoneType"],
       slabsTotal: slabsTotal as number | null,
       areaTotalM2: areaTotalM2 as number | null,
+      lengthMm,
+      widthMm,
+      thicknessMm,
       supplierNote: input.supplierNote.trim() || null,
       arrivedAt,
       locations,

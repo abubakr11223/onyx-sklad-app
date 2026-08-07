@@ -18,6 +18,7 @@ import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
+import { areaM2FromCm, formatGabarit } from "@/lib/dimensions";
 
 export interface SlabOption {
   id: string;
@@ -26,6 +27,10 @@ export interface SlabOption {
   reserved: boolean;
   block: string;
   landmark: string;
+  lengthMm?: number | null;
+  widthMm?: number | null;
+  thicknessMm?: number | null;
+  areaM2?: number | null;
 }
 
 export interface BatchOption {
@@ -53,6 +58,8 @@ interface PieceVals {
   area: string;
   block: string;
   landmark: string;
+  /** false → show «Стороны» (непрямоугольный). */
+  isRect: boolean;
 }
 const emptyPiece = (): PieceVals => ({
   kind: "BROKEN",
@@ -63,6 +70,7 @@ const emptyPiece = (): PieceVals => ({
   area: "",
   block: "",
   landmark: "",
+  isRect: true,
 });
 
 /** Звёздочка «обязательное поле». */
@@ -115,10 +123,32 @@ export default function BreakForm({
   const setPiece =
     (id: number, key: keyof PieceVals) =>
     (ev: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setRows((m) => ({
-        ...m,
-        [id]: { ...(m[id] ?? emptyPiece()), [key]: ev.target.value },
-      }));
+      setRows((m) => {
+        const prev = { ...(m[id] ?? emptyPiece()), [key]: ev.target.value };
+        // ТЗ №13 §5.5: прямоугольник → площадь из L×W (см → м²), read-only.
+        if (prev.isRect && (key === "len" || key === "width")) {
+          const L = Number(prev.len.replace(",", "."));
+          const W = Number(prev.width.replace(",", "."));
+          if (Number.isFinite(L) && L > 0 && Number.isFinite(W) && W > 0) {
+            prev.area = areaM2FromCm(L, W).toFixed(3).replace(".", ",");
+          }
+        }
+        return { ...m, [id]: prev };
+      });
+  const setPieceRect = (id: number, isRect: boolean) =>
+    setRows((m) => {
+      const prev = { ...(m[id] ?? emptyPiece()), isRect };
+      if (isRect) {
+        prev.sides = "";
+        const L = Number(prev.len.replace(",", "."));
+        const W = Number(prev.width.replace(",", "."));
+        if (Number.isFinite(L) && L > 0 && Number.isFinite(W) && W > 0) {
+          prev.area = areaM2FromCm(L, W).toFixed(3).replace(".", ",");
+        }
+      }
+      return { ...m, [id]: prev };
+    });
+  const selectedSlab = slabs.find((s) => s.id === slabId) ?? null;
 
   // CRIT-01 (ТЗ №4): при ошибке валидации ВЫХОДИМ из шага подтверждения, чтобы
   // ошибки полей стали видны (иначе submit «молча не проходит» — ошибки висят на
@@ -155,7 +185,7 @@ export default function BreakForm({
       {/* ── Что разбиваем ── */}
       <Card>
         <h2 className="mb-3 text-lg font-semibold text-ink">Что разбиваем</h2>
-        <div className="mb-4 flex gap-2">
+        <div className="mb-2 flex gap-2">
           <Button
             variant={mode === "slab" ? "primary" : "secondary"}
             onClick={() => setMode("slab")}
@@ -171,8 +201,20 @@ export default function BreakForm({
             Бой в партии
           </Button>
         </div>
+        <p className="mb-4 text-sm text-ink/60">
+          {mode === "slab"
+            ? "Плита — разбить конкретную выделенную плиту (была выбрана под клиента)."
+            : "Бой в партии — разбить/списать плиту из общего количества партии (обычный случай на складе)."}
+        </p>
 
         {mode === "slab" ? (
+          slabs.length === 0 ? (
+            <Alert variant="info" title="Поимённо выделенных плит нет">
+              Плита появляется здесь, когда её выделили под клиента (фотозапрос).
+              Чтобы разбить камень из общего склада — используйте «Бой в партии».
+            </Alert>
+          ) : (
+            <>
           <Field id="slabId" label={<>Плита <Req /></>} error={e.slabId}>
             <select
               id="slabId"
@@ -198,6 +240,25 @@ export default function BreakForm({
               ))}
             </select>
           </Field>
+          {selectedSlab && (
+            <div className="mt-3 rounded-card border border-ink/10 bg-paper p-3 text-sm text-ink">
+              <p className="font-semibold">{selectedSlab.stoneName}</p>
+              <p className="mt-1 text-ink/70">
+                Габарит: {formatGabarit(selectedSlab.lengthMm, selectedSlab.widthMm, selectedSlab.thicknessMm)}
+                {selectedSlab.areaM2 != null
+                  ? ` · ${selectedSlab.areaM2.toFixed(2)} м²`
+                  : ""}
+              </p>
+              <p className="mt-1 text-ink/70">
+                Локация: блок {selectedSlab.block}, ориентир {selectedSlab.landmark}
+              </p>
+              {selectedSlab.reserved && (
+                <p className="mt-1 font-medium text-warning">Есть бронь — менеджер будет уведомлён</p>
+              )}
+            </div>
+          )}
+            </>
+          )
         ) : (
           <div className="flex flex-col gap-4">
             <Field id="batchId" label={<>Партия <Req /></>} error={e.batchId}>
@@ -242,14 +303,18 @@ export default function BreakForm({
       <Card>
         <h2 className="mb-1 text-lg font-semibold text-ink">Куски</h2>
         <p className="mb-3 text-sm text-ink/60">
-          Обязательны длина и ширина (по ним ищут остаток). «Стороны» —
-          необязательно: заполните, если кусок непрямоугольный (для чертежа).
+          Обязательны длина и ширина — по ним камень находят в поиске по размеру.
+          Длина × ширина — габарит для поиска; стороны — только если кусок
+          непрямоугольный (для чертежа).
         </p>
         <div className="mb-3">
           <CrossError msg={e.pieces} />
         </div>
         <div className="flex flex-col gap-4">
-          {rowIds.map((id, idx) => (
+          {rowIds.map((id, idx) => {
+            const row = rows[id] ?? emptyPiece();
+            const isRect = row.isRect !== false;
+            return (
             <div key={id} className="rounded-card border border-ink/10 bg-paper p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-base font-semibold text-ink">Кусок {idx + 1}</span>
@@ -270,7 +335,7 @@ export default function BreakForm({
                     id={`pKind-${idx}`}
                     name="pKind"
                     className={inputClass}
-                    value={rows[id]?.kind ?? "BROKEN"}
+                    value={row.kind}
                     onChange={setPiece(id, "kind")}
                     aria-invalid={e[`p-${idx}-kind`] ? true : undefined}
                     aria-describedby={e[`p-${idx}-kind`] ? `pKind-${idx}-error` : undefined}
@@ -279,24 +344,19 @@ export default function BreakForm({
                     <option value="OFFCUT">Остаток</option>
                   </select>
                 </Field>
-                <Field
-                  id={`pSides-${idx}`}
-                  name="pSides"
-                  inputMode="numeric"
-                  label="Стороны, мм (необязательно)"
-                  placeholder="если непрямоугольный: 1180, 640, 950"
-                  value={rows[id]?.sides ?? ""}
-                  onChange={setPiece(id, "sides")}
-                  error={e[`p-${idx}-sidesMm`]}
-                />
+                <p className="text-xs text-ink/55">
+                  {row.kind === "OFFCUT"
+                    ? "Остаток — годный обрезок после распила."
+                    : "Бой — повреждённая/битая плита."}
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field
                     id={`pBoundLen-${idx}`}
                     name="pBoundLen"
                     inputMode="numeric"
-                    label={<>Длина, мм <Req /></>}
-                    placeholder="1180"
-                    value={rows[id]?.len ?? ""}
+                    label={<>Длина, см <Req /></>}
+                    placeholder="118"
+                    value={row.len}
                     onChange={setPiece(id, "len")}
                     error={e[`p-${idx}-boundingLengthMm`]}
                   />
@@ -304,9 +364,9 @@ export default function BreakForm({
                     id={`pBoundWidth-${idx}`}
                     name="pBoundWidth"
                     inputMode="numeric"
-                    label={<>Ширина, мм <Req /></>}
-                    placeholder="640"
-                    value={rows[id]?.width ?? ""}
+                    label={<>Ширина, см <Req /></>}
+                    placeholder="64"
+                    value={row.width}
                     onChange={setPiece(id, "width")}
                     error={e[`p-${idx}-boundingWidthMm`]}
                   />
@@ -314,9 +374,9 @@ export default function BreakForm({
                     id={`pThickness-${idx}`}
                     name="pThickness"
                     inputMode="numeric"
-                    label="Толщина, мм"
-                    placeholder="20"
-                    value={rows[id]?.thickness ?? ""}
+                    label="Толщина, см"
+                    placeholder="2"
+                    value={row.thickness}
                     onChange={setPiece(id, "thickness")}
                     error={e[`p-${idx}-thicknessMm`]}
                   />
@@ -324,11 +384,12 @@ export default function BreakForm({
                     id={`pArea-${idx}`}
                     name="pArea"
                     inputMode="decimal"
-                    label="Площадь, м²"
+                    label={isRect ? "Площадь, м² (авто)" : "Площадь, м²"}
                     placeholder="0,6"
-                    value={rows[id]?.area ?? ""}
+                    value={row.area}
                     onChange={setPiece(id, "area")}
                     error={e[`p-${idx}-areaM2`]}
+                    readOnly={isRect}
                   />
                   <Field
                     id={`pBlock-${idx}`}
@@ -336,7 +397,7 @@ export default function BreakForm({
                     label={<>Блок <Req /></>}
                     placeholder="А"
                     list={blocks.length > 0 ? "wh-blocks" : undefined}
-                    value={rows[id]?.block ?? ""}
+                    value={row.block}
                     onChange={setPiece(id, "block")}
                     error={e[`p-${idx}-block`]}
                   />
@@ -346,18 +407,42 @@ export default function BreakForm({
                     label={<>Ориентир <Req /></>}
                     placeholder="2 или 1–2"
                     list={
-                      blocks.some((b) => b.letter === rows[id]?.block)
-                        ? `wh-lm-${rows[id]?.block}`
+                      blocks.some((b) => b.letter === row.block)
+                        ? `wh-lm-${row.block}`
                         : undefined
                     }
-                    value={rows[id]?.landmark ?? ""}
+                    value={row.landmark}
                     onChange={setPiece(id, "landmark")}
                     error={e[`p-${idx}-landmark`]}
                   />
                 </div>
+                <label className="flex min-h-11 items-center gap-3 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={!isRect}
+                    onChange={(ev) => setPieceRect(id, !ev.target.checked)}
+                    className="h-5 w-5 accent-ink"
+                  />
+                  Кусок непрямоугольный (стороны для чертежа)
+                </label>
+                {!isRect && (
+                  <Field
+                    id={`pSides-${idx}`}
+                    name="pSides"
+                    inputMode="numeric"
+                    label="Стороны, см"
+                    placeholder="118, 64, 95"
+                    value={row.sides}
+                    onChange={setPiece(id, "sides")}
+                    error={e[`p-${idx}-sidesMm`]}
+                    hint="Минимум 3 числа через запятую. Для поиска всё равно нужны длина × ширина."
+                  />
+                )}
+                {isRect && <input type="hidden" name="pSides" value="" />}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         <Button
           variant="secondary"

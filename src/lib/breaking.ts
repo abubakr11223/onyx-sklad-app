@@ -52,9 +52,9 @@ export class BreakError extends Error {
 export const MIN_SIDES = 3;
 
 /**
- * «1180, 640, 950, 610» → [1180, 640, 950, 610].
+ * «118, 64, 95, 610» → [118, 64, 95, 610].
  * Разделители: запятая, точка с запятой, пробелы. Каждая сторона — целое
- * положительное число (мм). Меньше MIN_SIDES сторон или мусор → null.
+ * положительное число (см). Меньше MIN_SIDES сторон или мусор → null.
  */
 export function parseSidesMm(raw: string): number[] | null {
   const parts = raw.split(/[,;\s]+/).filter((p) => p !== "");
@@ -262,22 +262,22 @@ export function parsePieceRow(row: RawPieceRow): ParsePieceRowResult {
     sidesMm = parseSidesMm(row.sidesMm);
     if (!sidesMm) {
       errors.sidesMm =
-        "Стороны — либо пусто, либо минимум 3 целых числа через запятую, например «1180, 640, 950»";
+        "Стороны — либо пусто, либо минимум 3 целых числа через запятую, например «118, 64, 95»";
     }
   }
 
   const boundingLengthMm = parsePositiveInt(row.boundingLengthMm);
   if (boundingLengthMm === null || boundingLengthMm === undefined) {
-    errors.boundingLengthMm = "Длина, мм — целое положительное число";
+    errors.boundingLengthMm = "Длина, см — целое положительное число";
   }
   const boundingWidthMm = parsePositiveInt(row.boundingWidthMm);
   if (boundingWidthMm === null || boundingWidthMm === undefined) {
-    errors.boundingWidthMm = "Ширина, мм — целое положительное число";
+    errors.boundingWidthMm = "Ширина, см — целое положительное число";
   }
 
   const thicknessMm = parsePositiveInt(row.thicknessMm);
   if (thicknessMm === undefined) {
-    errors.thicknessMm = "Толщина, мм — целое положительное число";
+    errors.thicknessMm = "Толщина, см — целое положительное число";
   }
   const areaM2 = parsePositiveDecimal(row.areaM2);
   if (areaM2 === undefined) {
@@ -315,16 +315,16 @@ export function assertValidPieceInput(p: PieceInput): void {
   if (!validateSidesMm(p.sidesMm)) {
     throw new BreakError(
       "INVALID_PIECE",
-      "Стороны куска: минимум 3 целых положительных числа (мм)",
+      "Стороны куска: минимум 3 целых положительных числа (см)",
     );
   }
-  // A1: верхняя граница мм (MAX_INT_FIELD) — иначе Int4-переполнение при вставке
+  // A1: верхняя граница см (MAX_INT_FIELD) — иначе Int4-переполнение при вставке
   // Piece (bounding*/thickness — столбцы Int). Слишком большое → ошибка домена,
   // а не 500 из БД. Ловит и вход из бота (не через parsePieceRow).
   const posInt = (n: number) =>
     Number.isSafeInteger(n) && n > 0 && n <= MAX_INT_FIELD;
   if (!posInt(p.boundingLengthMm) || !posInt(p.boundingWidthMm)) {
-    throw new BreakError("INVALID_PIECE", "Габариты куска — целые положительные мм (не больше 1 000 000)");
+    throw new BreakError("INVALID_PIECE", "Габариты куска — целые положительные см (не больше 1 000 000)");
   }
   if (p.thicknessMm !== null && !posInt(p.thicknessMm)) {
     throw new BreakError("INVALID_PIECE", "Толщина куска — целое положительное число (не больше 1 000 000)");
