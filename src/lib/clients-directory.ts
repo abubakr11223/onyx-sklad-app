@@ -14,6 +14,11 @@ import {
   type SiteStatus,
   type SiteType,
 } from "@/lib/clients";
+import {
+  CLIENT_SEARCH_MAX_TAKE,
+  clientSearchWhere,
+  normalizeClientSearchQuery,
+} from "@/lib/client-search";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -180,28 +185,20 @@ export async function listClientsDirectory(
   db: Db,
   filters: ClientListFilters,
 ): Promise<ClientListItem[]> {
-  const scope = clientListScope({
+  // TZ №14 BUG-02: same name/phone OR as sale form (client-search.ts).
+  const q = normalizeClientSearchQuery(filters.q ?? "");
+  const where = clientSearchWhere({
+    q,
     canSeeAllClients: filters.canSeeAllClients,
     actorId: filters.actorId,
+    type: filters.type,
+    managerId: filters.managerId,
   });
-  const where: Prisma.ClientWhereInput = { ...scope };
-  if (filters.type === "B2C" || filters.type === "B2B") {
-    where.type = filters.type;
-  }
-  if (filters.managerId?.trim() && filters.canSeeAllClients) {
-    where.managerId = filters.managerId.trim();
-  }
-  const q = filters.q?.trim();
-  if (q) {
-    const digits = normalizeClientPhone(q);
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q } },
-      ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
-    ];
-  }
 
-  const take = Math.min(100, Math.max(1, filters.take ?? 50));
+  const take = Math.min(
+    CLIENT_SEARCH_MAX_TAKE,
+    Math.max(1, filters.take ?? 50),
+  );
   const rows = await db.client.findMany({
     where,
     orderBy: [{ name: "asc" }],

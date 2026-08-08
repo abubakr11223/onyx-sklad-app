@@ -5,24 +5,22 @@
 
 import { db } from "@/lib/db";
 import {
-  clientListScope,
   findClientByNormalizedPhone,
-  normalizeClientPhone,
   type ClientType,
   type SiteType,
 } from "@/lib/clients";
+import {
+  CLIENT_SEARCH_SALE_TAKE,
+  searchClients,
+  type ClientSearchHit,
+} from "@/lib/client-search";
 import {
   validateNewClient,
   validateNewSite,
 } from "@/lib/validators/sale-client";
 import { getCapabilities, currentActorId } from "@/lib/session";
 
-export type ClientHit = {
-  id: string;
-  name: string;
-  phone: string;
-  type: ClientType;
-};
+export type ClientHit = ClientSearchHit;
 
 export type SiteHit = {
   id: string;
@@ -55,9 +53,11 @@ async function requireSeller(): Promise<
 }
 
 /**
- * Поиск клиентов по имени или телефону (подстрока).
- * Скоуп: владелец — все; менеджер — свои (canSeeAllClients).
- * Телефон сравнивается и по «сырому» полю, и по цифрам.
+ * Поиск клиентов для формы продажи.
+ * TZ №14 BUG-02: тот же механизм, что /klienty (client-search.ts) —
+ * имя + телефон, partial, без регистра. attachAnyExisting: менеджер
+ * находит карточку владельца и по имени (раньше global path был только
+ * у телефона ≥7 цифр).
  */
 export async function searchClientsForSale(
   query: string,
@@ -65,61 +65,13 @@ export async function searchClientsForSale(
   const auth = await requireSeller();
   if (!auth.ok) return auth;
 
-  const q = query.trim();
-  if (q.length < 1) return { ok: true, clients: [] };
-
-  const scope = clientListScope({
+  const clients = await searchClients(db, {
+    q: query,
     canSeeAllClients: auth.canSeeAllClients,
     actorId: auth.managerId,
+    take: CLIENT_SEARCH_SALE_TAKE,
+    attachAnyExisting: true,
   });
-  const digits = normalizeClientPhone(q);
-
-  const rows = await db.client.findMany({
-    where: {
-      ...scope,
-      OR: [
-        { name: { contains: q, mode: "insensitive" } },
-        { phone: { contains: q } },
-        ...(digits.length >= 3
-          ? [{ phone: { contains: digits } }]
-          : []),
-      ],
-    },
-    orderBy: { name: "asc" },
-    take: 20,
-    select: { id: true, name: true, phone: true, type: true },
-  });
-
-  // Extra filter: if query looks like a phone, also match normalized equality
-  // among a wider set when contains missed formatting differences.
-  let clients: ClientHit[] = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    phone: r.phone,
-    type: r.type as ClientType,
-  }));
-
-  if (digits.length >= 7) {
-    // Global phone lookup for exact match (dedup UX) — even outside manager scope
-    // so the seller can attach an existing card instead of creating a twin.
-    const allPhones = await db.client.findMany({
-      select: { id: true, name: true, phone: true, type: true },
-      take: 500,
-      orderBy: { createdAt: "desc" },
-    });
-    const exact = findClientByNormalizedPhone(allPhones, q);
-    if (exact && !clients.some((c) => c.id === exact.id)) {
-      clients = [
-        {
-          id: exact.id,
-          name: exact.name,
-          phone: exact.phone,
-          type: exact.type as ClientType,
-        },
-        ...clients,
-      ].slice(0, 20);
-    }
-  }
 
   return { ok: true, clients };
 }

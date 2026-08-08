@@ -18,6 +18,7 @@ import {
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
 import { fieldErrorItems as buildFieldErrorItems } from "./sale-form-errors";
 import { issueSampleAction } from "@/app/obraztsy/actions";
+import { emptyIssueSampleState } from "@/app/obraztsy/issue-sample-state";
 import {
   createClientForSale,
   createSiteForSale,
@@ -219,7 +220,10 @@ export default function SaleForm({
   const [returnDueDateSample, setReturnDueDateSample] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [sampleComment, setSampleComment] = useState("");
-  const [sampleState, sampleAction, samplePending] = useActionState(issueSampleAction, { errors: {}, conflict: null });
+  const [sampleState, sampleAction, samplePending] = useActionState(
+    issueSampleAction,
+    emptyIssueSampleState(),
+  );
   const [currency, setCurrency] = useState<SaleCurrency>("UZS");
   const [debtDueDate, setDebtDueDate] = useState("");
   const [debtComment, setDebtComment] = useState("");
@@ -231,14 +235,42 @@ export default function SaleForm({
   const customerContact = selectedClient?.phone ?? "";
   const hasSubmitError =
     Boolean(state.conflict) || Object.keys(state.errors).length > 0;
+  const hasSampleError =
+    Boolean(sampleState.conflict) ||
+    Object.keys(sampleState.errors).length > 0;
+  /** All sample messages for step-4 banner (never field-only silence). */
+  const sampleErrorMessages = [
+    sampleState.conflict,
+    sampleState.errors.form,
+    sampleState.errors.clientId,
+    sampleState.errors.returnDueDate,
+    sampleState.errors.depositAmount,
+    sampleState.errors.qty,
+    sampleState.errors.qtySlabs,
+    sampleState.errors.qtyAreaM2,
+    sampleState.errors.unitId,
+    sampleState.errors.batchId,
+  ].filter((m): m is string => Boolean(m));
+  // Dedupe while preserving order (form often mirrors first field error).
+  const sampleErrorList = [...new Set(sampleErrorMessages)];
 
   // After a rejected submit, stay on confirmation (step 4) so the error is
   // where the user just pressed «Подтвердить». Controlled fields keep values.
+  // TZ14 BUG-01: same for sampleAction — field-only errors must not leave
+  // the user on step 4 with no banner.
   useEffect(() => {
-    if (hasSubmitError && target) {
+    if ((hasSubmitError || hasSampleError) && target) {
       setConfirming(true);
     }
-  }, [hasSubmitError, state.conflict, state.errors, target]);
+  }, [
+    hasSubmitError,
+    hasSampleError,
+    state.conflict,
+    state.errors,
+    sampleState.conflict,
+    sampleState.errors,
+    target,
+  ]);
 
   // Restore caret after re-grouping (useLayoutEffect = before paint, less jump).
   useLayoutEffect(() => {
@@ -289,12 +321,18 @@ export default function SaleForm({
     else setSites([]);
   };
 
-  const runClientSearch = async () => {
+  const runClientSearch = async (raw?: string) => {
+    const q = (raw ?? clientQuery).trim();
+    if (q.length < 1) {
+      setClientHits([]);
+      setClientSearchError(null);
+      return;
+    }
     setClientSearchBusy(true);
     setClientSearchError(null);
     setDupHint(null);
     try {
-      const res = await searchClientsForSale(clientQuery);
+      const res = await searchClientsForSale(q);
       if (!res.ok) {
         setClientSearchError(res.error);
         setClientHits([]);
@@ -308,6 +346,22 @@ export default function SaleForm({
       setClientSearchBusy(false);
     }
   };
+
+  // TZ №14 BUG-02: выпадающий список по мере ввода (debounce), bounded take.
+  useEffect(() => {
+    if (selectedClient) return;
+    const q = clientQuery.trim();
+    if (q.length < 1) {
+      setClientHits([]);
+      setClientSearchError(null);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void runClientSearch(q);
+    }, 280);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on query
+  }, [clientQuery, selectedClient]);
 
   const submitNewClient = async () => {
     setNewClientBusy(true);
@@ -1117,7 +1171,11 @@ export default function SaleForm({
           onClick={() => setConfirming(true)}
           disabled={
             issueAsSample
-              ? !(selectedClient && returnDueDateSample)
+              ? !(
+                  selectedClient &&
+                  returnDueDateSample.trim() &&
+                  !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim())
+                )
               : !canProceed
           }
           className="mt-4 min-h-14 w-full text-lg font-bold"
@@ -1138,11 +1196,31 @@ export default function SaleForm({
         label="Изменить данные"
       />
       <h2 className="mb-3 text-lg font-semibold text-ink">
-        4. Подтверждение продажи
+        {issueAsSample
+          ? "4. Подтверждение выдачи образца"
+          : "4. Подтверждение продажи"}
       </h2>
 
+      {/* TZ14 BUG-01 — sample failures must never be silent on step 4. */}
+      {sampleErrorList.length > 0 && (
+        <Alert variant="danger" title="Образец не выдан" className="mb-4">
+          {sampleErrorList.length === 1 ? (
+            <p className="text-base font-semibold">{sampleErrorList[0]}</p>
+          ) : (
+            <ul className="list-disc space-y-1 pl-4 text-sm">
+              {sampleErrorList.map((msg) => (
+                <li key={msg}>{msg}</li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-sm">
+            Нажмите «Изменить данные», исправьте поля и подтвердите снова.
+          </p>
+        </Alert>
+      )}
+
       {/* Domain conflict (INSUFFICIENT_REMAINDER, ALREADY_SOLD, …) — large, top. */}
-      {state.conflict && (
+      {!issueAsSample && state.conflict && (
         <Alert variant="danger" title="Продажа не прошла" className="mb-4">
           <p className="text-base font-semibold">{state.conflict}</p>
           <p className="mt-2 text-sm">
@@ -1153,7 +1231,7 @@ export default function SaleForm({
       )}
 
       {/* Field / form validation — MUST include qty* (salebug: silent reject). */}
-      {fieldErrorItems.length > 0 && (
+      {!issueAsSample && fieldErrorItems.length > 0 && (
         <Alert variant="danger" title="Продажа не оформлена" className="mb-4">
           <ul className="list-disc space-y-1 pl-4 text-sm">
             {fieldErrorItems.map((msg) => (
@@ -1237,6 +1315,20 @@ export default function SaleForm({
             <dd className="text-right text-sm text-ink/80">{debtComment}</dd>
           </div>
         )}
+        {issueAsSample && (
+          <>
+            <div className="flex justify-between gap-3 py-1">
+              <dt className="text-ink/60">Тип</dt>
+              <dd className="text-right font-semibold text-ink">Образец</dd>
+            </div>
+            <div className="flex justify-between gap-3 py-1">
+              <dt className="text-ink/60">Срок возврата</dt>
+              <dd className="text-right text-ink">
+                {returnDueDateSample || "—"}
+              </dd>
+            </div>
+          </>
+        )}
       </dl>
 
       <form action={issueAsSample ? sampleAction : formAction}>
@@ -1301,14 +1393,10 @@ export default function SaleForm({
               : "Подтвердить продажу"}
         </Button>
       </form>
-      {(sampleState.conflict || sampleState.errors.form) && (
-        <Alert variant="danger" title="Образец не выдан" className="mt-3">
-          {sampleState.conflict || sampleState.errors.form}
-        </Alert>
-      )}
       <p className="mt-2 text-center text-sm text-ink/60">
-        Камень списывается из наличия сразу в момент продажи (TZ §5.4).
-        Способ оплаты на списание не влияет.
+        {issueAsSample
+          ? "После подтверждения образец появится в разделе «Образцы» (активные)."
+          : "Камень списывается из наличия сразу в момент продажи (TZ §5.4). Способ оплаты на списание не влияет."}
       </p>
     </Card>
   );

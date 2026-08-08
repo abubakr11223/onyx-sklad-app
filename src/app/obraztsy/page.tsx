@@ -95,6 +95,8 @@ export default async function ObraztsyPage({
 
       {ok && (
         <Alert variant="success" title="Готово" className="mb-3">
+          {ok === "issued" &&
+            "Образец выдан — камень списан со склада, запись в «Активные»."}
           {ok === "returned" && "Образец возвращён на склад."}
           {ok === "sold" && "Оформлена продажа, образец закрыт."}
           {ok === "extended" && "Срок возврата продлён."}

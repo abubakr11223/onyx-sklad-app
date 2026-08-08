@@ -1,5 +1,6 @@
 // Страница приёмки партии (TZ §5.1, §6.3) — server component:
 // загружает виды камня из каталога и показывает уведомление об успехе.
+// ТЗ №14 §3: ниже формы — «Ранее принятые партии» (список + Редактировать).
 
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
@@ -8,6 +9,7 @@ import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import IntakeForm from "./IntakeForm";
+import BatchList, { type BatchListItem } from "./BatchList";
 
 export const dynamic = "force-dynamic";
 
@@ -36,30 +38,75 @@ export default async function PriemkaPage({
   }
 
   const sp = await searchParams;
-  const stoneTypes = await db.stoneType.findMany({
-    where: { isArchived: false },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, rockType: true },
-  });
+  const q = (first(sp.q) ?? "").trim();
 
-  // ТЗ №6 §5.4 — единый справочник: блоки/ориентиры из сетки склада
-  // (WarehouseBlock) подсказываются в приёмке (datalist), а не свободный ввод.
-  const gridBlocks = await db.warehouseBlock.findMany({
-    orderBy: { sortOrder: "asc" },
-    select: { letter: true, landmarks: { select: { number: true } } },
-  });
+  const [stoneTypes, gridBlocks, batchRows] = await Promise.all([
+    db.stoneType.findMany({
+      where: { isArchived: false },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, rockType: true },
+    }),
+    // ТЗ №6 §5.4 — единый справочник: блоки/ориентиры из сетки склада
+    db.warehouseBlock.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { letter: true, landmarks: { select: { number: true } } },
+    }),
+    db.batch.findMany({
+      orderBy: { arrivedAt: "desc" },
+      take: 80,
+      where: q
+        ? {
+            OR: [
+              { stoneType: { name: { contains: q, mode: "insensitive" } } },
+              { supplierNote: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : undefined,
+      select: {
+        id: true,
+        arrivedAt: true,
+        supplierNote: true,
+        slabsTotal: true,
+        areaTotalM2: true,
+        lengthMm: true,
+        widthMm: true,
+        thicknessMm: true,
+        stoneType: { select: { name: true } },
+        _count: { select: { patterns: true } },
+      },
+    }),
+  ]);
+
   const blocks = gridBlocks.map((b) => ({
     letter: b.letter,
     landmarks: b.landmarks.map((l) => l.number),
   }));
 
   const ok = first(sp.ok) === "1";
+  const edited = first(sp.edited) === "1";
   const stone = first(sp.stone);
   const slabs = first(sp.slabs);
   const area = first(sp.area);
-  const qty = [slabs && `${slabs} плит`, area && `${area} м²`].filter(Boolean).join(" / ");
+  const qty = [slabs && `${slabs} плит`, area && `${area} м²`]
+    .filter(Boolean)
+    .join(" / ");
+  const changeN = first(sp.n);
 
   const today = todayTashkentISO();
+
+  const listItems: BatchListItem[] = batchRows.map((b) => ({
+    id: b.id,
+    stoneName: b.stoneType.name,
+    arrivedAt: b.arrivedAt,
+    slabsTotal: b.slabsTotal,
+    areaTotalM2:
+      b.areaTotalM2 === null ? null : Number(b.areaTotalM2),
+    lengthMm: b.lengthMm,
+    widthMm: b.widthMm,
+    thicknessMm: b.thicknessMm,
+    supplierNote: b.supplierNote,
+    patternCount: b._count.patterns,
+  }));
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
@@ -86,12 +133,23 @@ export default async function PriemkaPage({
         </Alert>
       )}
 
+      {edited && (
+        <Alert variant="success" title="Партия обновлена" className="mb-6">
+          Изменения сохранены
+          {changeN ? ` (полей: ${changeN})` : ""}. Запись в журнале
+          (корректировка).
+        </Alert>
+      )}
+
       <IntakeForm
         stoneTypes={stoneTypes}
         defaultDate={today}
         blocks={blocks}
         canSeePrices={caps.canSeePrices}
       />
+
+      {/* ТЗ №14 §3: список в приёмке — здесь же «ошибка после приёмки» чинится. */}
+      <BatchList batches={listItems} q={q} />
     </main>
   );
 }
