@@ -92,10 +92,12 @@ describe("computeFreeRemainder — data-model.md §3", () => {
     expect(r.areaFreeM2).toBeCloseTo(220, 6);
   });
 
-  it("piece.areaM2 = null → 0 sifatida (m² hisobida qatnashmaydi)", () => {
+  it("piece.areaM2 = null → partiya o'rtachasi (free m² ni sun'iy oshirmaslik)", () => {
+    // BUG-B / §3: null piece area used to count as 0 and overstate free m².
+    // Now same as null slab: average = 220/40 = 5.5.
     const r = computeFreeRemainder(baseBatch, [], [{ areaM2: null }]);
     expect(r.slabsFree).toBe(39);
-    expect(r.areaFreeM2).toBeCloseTo(220, 6);
+    expect(r.areaFreeM2).toBeCloseTo(220 - 5.5, 6);
   });
 
   it("hammasi sotilgan partiya: erkin qoldiq 0 gacha tushadi", () => {
@@ -109,7 +111,7 @@ describe("computeFreeRemainder — data-model.md §3", () => {
 });
 
 describe("pieceFitsRequest — TZ §5.2 dopusk bilan gabarit-qidiruv", () => {
-  it("dopusk konstantasi 20 mm", () => {
+  it("dopusk konstantasi 2 cm (legacy name CUTTING_MARGIN_MM)", () => {
     expect(CUTTING_MARGIN_MM).toBe(2);
   });
 
@@ -127,7 +129,7 @@ describe("pieceFitsRequest — TZ §5.2 dopusk bilan gabarit-qidiruv", () => {
     expect(pieceFitsRequest(122, 71, 120, 70)).toBe(false);
   });
 
-  it("burish (90°) ruxsat: 800×1450 bounding ham 1200×700 ni yopadi", () => {
+  it("burish (90°) ruxsat: 80×145 cm bounding 120×70 so'rovni yopadi", () => {
     expect(pieceFitsRequest(80, 145, 120, 70)).toBe(true);
     expect(pieceFitsRequest(80, 145, 70, 120)).toBe(true);
   });

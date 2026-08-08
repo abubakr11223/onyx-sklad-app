@@ -17,6 +17,10 @@ import {
   createDebtForSale,
   DebtLogicError,
 } from "./debts";
+import {
+  cancelOpenShipmentForSale,
+  createSaleShipment,
+} from "./shipments";
 import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
@@ -638,6 +642,8 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         id: true,
         status: true,
         needsCheck: true,
+        block: true,
+        landmark: true,
         reservations: {
           where: { status: "ACTIVE" as const },
           select: { id: true, managerId: true, expiresAt: true },
@@ -763,6 +769,24 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
             viaReservation: decision.viaReservation,
             completedReservationId,
           },
+        },
+      });
+
+      // TZ №15 Slice 1 — OPEN shipment same TX (stock already SOLD above).
+      const loc =
+        "block" in unit && "landmark" in unit
+          ? `Блок ${unit.block}, ор. ${unit.landmark}`
+          : null;
+      await createSaleShipment(tx, {
+        saleRecordId: sale.id,
+        managerId: actor.id,
+        clientId,
+        siteId,
+        line: {
+          targetType: input.targetType,
+          slabId: input.targetType === "SLAB" ? unit.id : null,
+          pieceId: input.targetType === "PIECE" ? unit.id : null,
+          locationSnapshot: loc,
         },
       });
 
@@ -1079,6 +1103,20 @@ export async function executeVolumeSale(
     },
   });
 
+  // TZ №15 Slice 1 — volume sale shipment (same TX; soldDirect already incremented).
+  await createSaleShipment(tx, {
+    saleRecordId: sale.id,
+    managerId: actor.id,
+    clientId,
+    siteId,
+    line: {
+      targetType: "BATCH_VOLUME",
+      batchId: batch.id,
+      qtyOrderedSlabs: qtySlabs,
+      qtyOrderedAreaM2: qtyAreaM2,
+    },
+  });
+
   return {
     ok: true as const,
     saleId: sale.id,
@@ -1344,6 +1382,9 @@ export async function returnSale(
         actorId: actor.id,
         now,
       });
+
+      // TZ №15 — cancel OPEN shipment task (stock reverse below is independent).
+      await cancelOpenShipmentForSale(tx, sale.id, now);
 
       if (sale.targetType === "SLAB" || sale.targetType === "PIECE") {
         const unitId = sale.targetType === "SLAB" ? sale.slabId : sale.pieceId;

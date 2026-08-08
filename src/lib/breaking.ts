@@ -14,6 +14,7 @@ import { db } from "./db";
 import { computeFreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
 import { normalizeBlockLetter } from "./block-letter";
+import { areaM2FromCm } from "./dimensions";
 import {
   MAX_DECIMAL_FIELD,
   MAX_INT_FIELD,
@@ -206,6 +207,49 @@ export function estimatePieceAreaM2(
 ): number | null {
   if (areaTotalM2 === null || slabsTotal === null || slabsTotal <= 0) return null;
   return areaTotalM2 / slabsTotal;
+}
+
+/**
+ * fixes0809 BUG-B: null area must not stay null when the batch tracks m².
+ * Order: explicit input → bounding L×W (см → м²) → partiya o'rtachasi.
+ * Pure — unit-tested; used by registerDirectPiece / registerDirectPiecesMany.
+ */
+export function resolveDirectPieceAreaM2(args: {
+  areaM2: number | null;
+  boundingLengthCm: number;
+  boundingWidthCm: number;
+  batchAreaTotalM2: number | null;
+  batchSlabsTotal: number | null;
+}): { areaM2: number | null; areaEstimated: boolean } {
+  if (
+    args.areaM2 !== null &&
+    Number.isFinite(args.areaM2) &&
+    args.areaM2 > 0
+  ) {
+    return { areaM2: args.areaM2, areaEstimated: false };
+  }
+  // Post TZ12: *Mm field values are centimetres; area from L×W in см.
+  const fromBox = areaM2FromCm(
+    args.boundingLengthCm,
+    args.boundingWidthCm,
+  );
+  if (Number.isFinite(fromBox) && fromBox > 0) {
+    return {
+      areaM2: Math.round(fromBox * 1000) / 1000,
+      areaEstimated: true,
+    };
+  }
+  const avg = estimatePieceAreaM2(
+    args.batchAreaTotalM2,
+    args.batchSlabsTotal,
+  );
+  if (avg !== null) {
+    return {
+      areaM2: Math.round(avg * 1000) / 1000,
+      areaEstimated: true,
+    };
+  }
+  return { areaM2: null, areaEstimated: false };
 }
 
 /** Валидный кусок — вход для breakSlab / splitSlab / registerDirectPiece. */
@@ -664,11 +708,11 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
 export interface RegisterDirectPieceParams extends PieceInput {
   batchId: string;
   /**
-   * true = бой был целой плитой партии. По §3 прямой Piece (originSlabId
-   * IS NULL) в любом случае даёт −1 к slabsFree — флаг влияет на fallback
-   * площади (списываем среднюю плиту) и фиксируется в журнале.
+   * @deprecated fixes0809 BUG-A: §3 always −1 slab per direct Piece
+   * (originSlabId IS NULL). Flag is ignored for remainder arithmetic; kept for
+   * audit payload / call-site compatibility. UI checkbox removed.
    */
-  decrementSlabs: boolean;
+  decrementSlabs?: boolean;
   byUserId: string;
   /** §5.5b: AI-chertyoj (o'zi-yetarli SVG data-URI). Ixtiyoriy — default null. */
   drawingUrl?: string | null;
@@ -690,10 +734,8 @@ function toNum(d: { toString(): string } | null): number | null {
 
 /**
  * Бой, найденный в партии без выделенной плиты: Piece с originSlabId = null —
- * такой кусок УЧАСТВУЕТ в формуле §3 (−1 к slabsFree, −areaM2 к areaFreeM2),
- * поэтому обязателен guard: свободный остаток партии не должен уйти в минус.
- * Если areaM2 не указана и decrementSlabs=true — берётся средняя плита партии
- * (§3, тот же принцип, что для плиты без размеров).
+ * §3: ALWAYS −1 к slabsFree и −areaM2 к areaFreeM2 (data-model.md §3).
+ * Area never stays null when the batch tracks m² (fixes0809 BUG-B).
  */
 export async function registerDirectPiece(
   params: RegisterDirectPieceParams,
@@ -727,19 +769,25 @@ export async function registerDirectPiece(
     });
     if (!batch) throw new BreakError("BATCH_NOT_FOUND", "Партия не найдена");
 
-    // Fallback площади (§3): бой размером с целую плиту без замера —
-    // списываем среднюю, иначе areaFree разъедется с реальностью.
-    let areaM2 = params.areaM2;
-    let areaEstimated = false;
-    if (areaM2 === null && params.decrementSlabs) {
-      const estimate = estimatePieceAreaM2(toNum(batch.areaTotalM2), batch.slabsTotal);
-      if (estimate !== null) {
-        areaM2 = Math.round(estimate * 1000) / 1000;
-        areaEstimated = true;
-      }
+    const resolved = resolveDirectPieceAreaM2({
+      areaM2: params.areaM2,
+      boundingLengthCm: params.boundingLengthMm,
+      boundingWidthCm: params.boundingWidthMm,
+      batchAreaTotalM2: toNum(batch.areaTotalM2),
+      batchSlabsTotal: batch.slabsTotal,
+    });
+    const areaM2 = resolved.areaM2;
+    const areaEstimated = resolved.areaEstimated;
+    // If the batch tracks m², refuse a silent null (would inflate free m²).
+    if (areaM2 === null && batch.areaTotalM2 !== null) {
+      throw new BreakError(
+        "INVALID_PIECE",
+        "Укажите площадь куска (м²) или габариты длины и ширины",
+      );
     }
 
     // Guard §3: пересчёт свободного остатка С УЧЁТОМ нового куска.
+    // Always include piece in directPieces (BUG-A: no optional slab debit).
     const after = computeFreeRemainder(
       {
         slabsTotal: batch.slabsTotal,
@@ -793,7 +841,8 @@ export async function registerDirectPiece(
         payload: {
           batchId: batch.id,
           direct: true, // без выделенной плиты
-          decrementSlabs: params.decrementSlabs,
+          // §3 always −1; flag kept true for journal clarity (checkbox removed).
+          decrementSlabs: true,
           kind: params.kind,
           sidesMm: params.sidesMm,
           boundingLengthMm: params.boundingLengthMm,
@@ -823,8 +872,11 @@ export interface RegisterDirectPiecesManyParams {
   /** ≥1 кусок; block/landmark у каждого свои (PieceInput). */
   rows: PieceInput[];
   batchId: string;
-  /** Флаг формы «бой был целой плитой» — общий для всех строк (см. §3). */
-  decrementSlabs: boolean;
+  /**
+   * @deprecated fixes0809 BUG-A: ignored for remainder; §3 always −1 per row.
+   * Kept optional for call-site compatibility.
+   */
+  decrementSlabs?: boolean;
   byUserId: string;
   /** §5.5b: AI-chertyoj — общий (обычно null для /razbit direct). */
   drawingUrl?: string | null;
@@ -881,21 +933,29 @@ export async function registerDirectPiecesMany(
     });
     if (!batch) throw new BreakError("BATCH_NOT_FOUND", "Партия не найдена");
 
-    // Fallback площади (§3) — построчно, тот же принцип, что в registerDirectPiece.
+    // Area resolution per row (BUG-B): never leave null when batch tracks m².
     const prepared = params.rows.map((p) => {
-      let areaM2 = p.areaM2;
-      let areaEstimated = false;
-      if (areaM2 === null && params.decrementSlabs) {
-        const estimate = estimatePieceAreaM2(toNum(batch.areaTotalM2), batch.slabsTotal);
-        if (estimate !== null) {
-          areaM2 = Math.round(estimate * 1000) / 1000;
-          areaEstimated = true;
-        }
+      const resolved = resolveDirectPieceAreaM2({
+        areaM2: p.areaM2,
+        boundingLengthCm: p.boundingLengthMm,
+        boundingWidthCm: p.boundingWidthMm,
+        batchAreaTotalM2: toNum(batch.areaTotalM2),
+        batchSlabsTotal: batch.slabsTotal,
+      });
+      if (resolved.areaM2 === null && batch.areaTotalM2 !== null) {
+        throw new BreakError(
+          "INVALID_PIECE",
+          "Укажите площадь куска (м²) или габариты длины и ширины",
+        );
       }
-      return { input: p, areaM2, areaEstimated };
+      return {
+        input: p,
+        areaM2: resolved.areaM2,
+        areaEstimated: resolved.areaEstimated,
+      };
     });
 
-    // Guard §3 на АГРЕГАТЕ: все новые куски добавляются разом.
+    // Guard §3 на АГРЕГАТЕ: каждый прямой кусок −1 плита (§3 / BUG-A).
     const after = computeFreeRemainder(
       {
         slabsTotal: batch.slabsTotal,
@@ -957,7 +1017,7 @@ export async function registerDirectPiecesMany(
             batchId: batch.id,
             direct: true,
             batchRows: params.rows.length, // A4: часть атомарной многострочной записи
-            decrementSlabs: params.decrementSlabs,
+            decrementSlabs: true, // §3 always
             kind: p.kind,
             sidesMm: p.sidesMm,
             boundingLengthMm: p.boundingLengthMm,

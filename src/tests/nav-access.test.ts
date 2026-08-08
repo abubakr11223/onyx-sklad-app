@@ -22,8 +22,21 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     expect(canAccessNav("/poisk", w)).toBe(true);
     // W6-B: canViewPhotoTasks — §3 «задачи на фото», §5.9 dual access
     expect(canAccessNav("/fotozapros", w)).toBe(true);
+    expect(canAccessNav("/otgruzki", w)).toBe(true); // TZ15
     expect(canAccessNav("/bron", w)).toBe(false);
     expect(canAccessNav("/prodazha", w)).toBe(false);
+  });
+
+  it("PARTNER — Отгрузки yashirin (route gate: canSeeShipments=false)", () => {
+    expect(canAccessNav("/otgruzki", caps("PARTNER"))).toBe(false);
+    expect(caps("PARTNER").canSeeShipments).toBe(false);
+  });
+
+  it("MANAGER — /otgruzki ochiq (own scope); confirm yo'q", () => {
+    const m = caps("MANAGER");
+    expect(canAccessNav("/otgruzki", m)).toBe(true);
+    expect(m.canSeeShipments).toBe(true);
+    expect(m.canConfirmShipment).toBe(false);
   });
 
   it("MANAGER — sotuv/bron/foto ochiq, ammo Приёмка/Разбить yopiq (TZ §3)", () => {

@@ -36,6 +36,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/obraztsy": "canSell",
   // «Сводка» владельца (TZ №10+11 §9): только OWNER.
   "/svodka": "canSeeHistory",
+  // «Отгрузки» (TZ №15): склад / владелец / менеджер (canSeeShipments).
+  "/otgruzki": "canSeeShipments",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

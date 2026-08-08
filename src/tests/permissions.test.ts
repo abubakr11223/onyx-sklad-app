@@ -23,6 +23,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeDebts: true, // TZ №9 — Должники: только OWNER
     canSeeClients: true, // TZ №10+11
     canSeeAllClients: true,
+    canSeeShipments: true,
+    canConfirmShipment: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -41,6 +43,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeDebts: false,
     canSeeClients: true, // TZ №10+11 — свои
     canSeeAllClients: false,
+    canSeeShipments: true,
+    canConfirmShipment: false,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -59,6 +63,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeDebts: false,
     canSeeClients: false,
     canSeeAllClients: false,
+    canSeeShipments: true,
+    canConfirmShipment: true,
   },
   PARTNER: {
     canSeePrices: false,
@@ -77,6 +83,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeDebts: false,
     canSeeClients: false,
     canSeeAllClients: false,
+    canSeeShipments: false,
+    canConfirmShipment: false,
   },
 };
 

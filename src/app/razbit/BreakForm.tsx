@@ -303,16 +303,13 @@ export default function BreakForm({
                 ))}
               </select>
             </Field>
-            <label className="flex min-h-11 items-center gap-3 rounded-field border border-ink/15 bg-paper p-3 text-base text-ink">
-              <input
-                type="checkbox"
-                name="decrementSlabs"
-                value="1"
-                defaultChecked
-                className="h-6 w-6 accent-ink"
-              />
-              Это была целая плита партии (списать плиту)
-            </label>
+            {/* fixes0809 BUG-A: §3 always −1 free slab per direct piece — no
+                optional checkbox (was a lie). Honest copy only. */}
+            <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">
+              Каждый кусок списывает <strong>1 плиту</strong> из свободного
+              остатка партии (учёт §3). Чтобы разбить уже выделенную плиту —
+              режим «Плита».
+            </p>
           </div>
         )}
       </Card>

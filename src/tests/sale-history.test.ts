@@ -163,6 +163,8 @@ function makeRows(n: number): Row[] {
       },
       piece: null,
       batch: null,
+      // TZ №15 — null = legacy sale → derived DONE in UI.
+      shipment: null,
     };
   });
 }

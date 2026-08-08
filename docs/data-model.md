@@ -110,9 +110,9 @@ TZ §4.1 L3 + ADR-004: yozuv faqat «ajratish» paytida tug'iladi (fotozapros na
 | `stoneTypeId` | FK → StoneType | ✔ | Denormalizatsiya (batch orqali ham bor) — qidiruv «vid + status» bitta indexdan o'tishi uchun (TZ §8: qidiruv — sekundlar). |
 | `label` | String | ✔ | Inson o'qiydigan nom: «Плита №2» — fotozaprosdagi raqamlash (TZ §6.1.8). Partiya ichida unique. |
 | `status` | Enum `UnitStatus` | ✔ | §2 ga qarang. |
-| `lengthMm` | Int? | | O'lchamlar ajratish paytida ma'lum bo'lmasligi mumkin — fotodan keyin kiritiladi. |
-| `widthMm` | Int? | | |
-| `thicknessMm` | Int? | | |
+| `lengthMm` | Int? | | **Legacy column name.** Value is **cm** (ТЗ №12 / migr. 20260807). Null = o'lcham hali yo'q. |
+| `widthMm` | Int? | | Same — **cm**, not millimetres. |
+| `thicknessMm` | Int? | | Same — **cm**. |
 | `areaM2` | Decimal? | | Kiritilmagan bo'lsa hisobda partiya o'rtachasi ishlatiladi (§3, `isAreaEstimated=true`). |
 | `isAreaEstimated` | Boolean | ✔, default true | `areaM2` haqiqiy o'lchovmi yoki partiya o'rtachasimi. |
 | `block` / `landmark` | String / String | ✔ | Ajratish paytida partiya lokatsiyalaridan biri tanlanadi; keyin mustaqil ko'chirilishi mumkin (TZ §5.7). |
@@ -136,10 +136,10 @@ TZ §4.2: alohida sushnost, poshtuchno, O'Z gabaritlari bilan — aynan gabarit 
 | `originSlabId` | FK → Slab? | | Konkret plitadan chiqqan bo'lsa (TZ §6.4). Hisob uchun muhim — §3. |
 | `kind` | Enum `PieceKind` | ✔ | `BROKEN` (бой) \| `OFFCUT` (остаток/обрезок). Ikkalasi bitta jadvalda — hayot sikli bir xil, faqat kelib chiqishi farq. |
 | `status` | Enum `UnitStatus` | ✔ | §2. `BROKEN_OFFCUT` statusiga o'ta olmaydi (allaqachon shu). |
-| `sidesMm` | Json | ✔ | Har tomon uzunligi, mm: `[1180, 640, 950, 610]` — AI chertyoj + skladchi kiritadi (TZ §5.5). Tomonlar soni erkin (shakl notekis). |
-| `boundingLengthMm` | Int | ✔ | Ichiga sig'adigan eng katta to'rtburchak taxmini — **qidiruv shu maydonlar bo'yicha** (TZ §5.2 dopusk bilan qidiruv; Json ichida indexli qidirib bo'lmaydi). Kiritishda hisoblanadi/qo'lda tasdiqlanadi. |
-| `boundingWidthMm` | Int | ✔ | |
-| `thicknessMm` | Int? | | |
+| `sidesMm` | Json | ✔ | **Legacy name.** Side lengths in **cm**: e.g. `[118, 64, 95, 61]` (not mm). AI chertyoj + skladchi (TZ §5.5 / №12). |
+| `boundingLengthMm` | Int | ✔ | Bounding box long side, **cm** (legacy `*Mm` name). Search uses these fields (TZ §5.2 + 2 cm cutting margin). |
+| `boundingWidthMm` | Int | ✔ | Bounding box short side, **cm**. |
+| `thicknessMm` | Int? | | Thickness, **cm**. |
 | `areaM2` | Decimal? | | Taxminiy maydon (hisob uchun). |
 | `drawingUrl` | String? | | AI chizgan chertyoj fayli (TZ §5.5). |
 | `block` / `landmark` | String / String | ✔ | O'z lokatsiyasi (TZ §4.2). |

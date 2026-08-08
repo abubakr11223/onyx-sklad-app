@@ -533,6 +533,8 @@ describe("executeVolumeSale — продажа из узора (интеграц
     },
     reservation: { updateMany: vi.fn(async (_a?: any) => ({ count: 0 })) },
     saleRecord: { create: vi.fn(async (_a?: any) => ({ id: "sale-1" })) },
+    // TZ №15 — OPEN shipment created in same TX as volume sale.
+    shipment: { create: vi.fn(async (_a?: any) => ({ id: "ship-1" })) },
     auditLog: { create: vi.fn(async (_a?: any) => ({})) },
   });
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -584,6 +586,12 @@ describe("executeVolumeSale — продажа из узора (интеграц
     // SaleRecord несёт batchPatternId.
     const saleArg = tx.saleRecord.create.mock.calls[0][0];
     expect(saleArg.data.batchPatternId).toBe("pat-1");
+    // TZ №15 — exactly one OPEN shipment (same TX).
+    expect(tx.shipment.create).toHaveBeenCalledTimes(1);
+    expect(tx.shipment.create.mock.calls[0][0].data).toMatchObject({
+      kind: "SALE",
+      saleRecordId: "sale-1",
+    });
   });
 
   it("продажа сверх остатка узора → INSUFFICIENT_REMAINDER ДО записи (партия не тронута)", async () => {
@@ -618,6 +626,7 @@ describe("executeVolumeSale — продажа из узора (интеграц
     expect(tx.batchPattern.updateMany).not.toHaveBeenCalled();
     const saleArg = tx.saleRecord.create.mock.calls[0][0];
     expect(saleArg.data.batchPatternId).toBeNull();
+    expect(tx.shipment.create).toHaveBeenCalledTimes(1);
   });
 })
 

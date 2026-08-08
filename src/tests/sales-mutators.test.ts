@@ -39,6 +39,10 @@ const M = vi.hoisted(() => {
     queryRaw: fn(),
     // db.auditLog
     auditCreate: fn(),
+    // TZ №15 — Shipment
+    shipmentCreate: fn(),
+    shipmentFindUnique: fn(),
+    shipmentUpdateMany: fn(),
   };
 });
 
@@ -64,6 +68,11 @@ const tx = {
     findUnique: M.debtFindUnique,
     create: M.debtCreate,
     updateMany: M.debtUpdateMany,
+  },
+  shipment: {
+    create: M.shipmentCreate,
+    findUnique: M.shipmentFindUnique,
+    updateMany: M.shipmentUpdateMany,
   },
   auditLog: { create: M.auditCreate },
   $queryRaw: M.queryRaw,
@@ -102,6 +111,10 @@ beforeEach(() => {
   M.debtFindUnique.mockResolvedValue(null);
   M.debtCreate.mockResolvedValue({ id: "debt1" });
   M.debtUpdateMany.mockResolvedValue({ count: 1 });
+  // TZ №15: shipment.create nested lines via Prisma create
+  M.shipmentCreate.mockResolvedValue({ id: "ship1" });
+  M.shipmentFindUnique.mockResolvedValue(null);
+  M.shipmentUpdateMany.mockResolvedValue({ count: 1 });
 });
 
 // W11-C: sellUnit / sellBatchVolume use wall-clock `new Date()` for
@@ -159,11 +172,13 @@ describe("sellUnit — единичная продажа плиты (mock-tx)", 
     expect(M.auditCreate).not.toHaveBeenCalled();
   });
 
-  it("AVAILABLE → SOLD (happy) → status.SOLD + SaleRecord + AuditLog(SALE)", async () => {
+  it("AVAILABLE → SOLD (happy) → status.SOLD + SaleRecord + Shipment + AuditLog(SALE)", async () => {
     M.slabFindUnique.mockResolvedValue({
       id: "slab1",
       status: "AVAILABLE",
       needsCheck: false,
+      block: "А",
+      landmark: "2",
       reservations: [],
     });
 
@@ -175,8 +190,19 @@ describe("sellUnit — единичная продажа плиты (mock-tx)", 
     const upd = M.slabUpdateMany.mock.calls[0][0];
     expect(upd.where).toMatchObject({ id: "slab1", status: "AVAILABLE", needsCheck: false });
     expect(upd.data).toEqual({ status: "SOLD" });
-    // SaleRecord + AuditLog.
+    // SaleRecord + AuditLog + TZ15 Shipment (same TX).
     expect(M.saleCreate).toHaveBeenCalledTimes(1);
+    expect(M.shipmentCreate).toHaveBeenCalledTimes(1);
+    expect(M.shipmentCreate.mock.calls[0][0].data).toMatchObject({
+      kind: "SALE",
+      saleRecordId: "sale1",
+      managerId: "mgr1",
+    });
+    // Status transition SOLD only once — confirm path never called here.
+    expect(M.slabUpdateMany.mock.calls.every((c: unknown[]) => {
+      const d = (c[0] as { data?: { status?: string } }).data;
+      return !d || d.status === "SOLD";
+    })).toBe(true);
     expect(M.auditCreate).toHaveBeenCalledTimes(1);
     expect(M.auditCreate.mock.calls[0][0].data).toMatchObject({
       action: "SALE",
@@ -184,6 +210,20 @@ describe("sellUnit — единичная продажа плиты (mock-tx)", 
     });
     // Из-под своей брони не шли — reservation не трогается.
     expect(M.reservationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("failed sale (ALREADY_SOLD) creates no Shipment", async () => {
+    M.slabFindUnique.mockResolvedValue({
+      id: "slab1",
+      status: "AVAILABLE",
+      needsCheck: false,
+      block: "А",
+      landmark: "1",
+      reservations: [],
+    });
+    M.slabUpdateMany.mockResolvedValue({ count: 0 });
+    await sellUnit(INPUT);
+    expect(M.shipmentCreate).not.toHaveBeenCalled();
   });
 
   it("из-под СВОЕЙ брони → SOLD + бронь COMPLETED (переход №4)", async () => {
@@ -454,7 +494,7 @@ describe("sellBatchVolume — объёмная продажа партии (mock
     expect(M.batchUpdateMany).not.toHaveBeenCalled();
   });
 
-  it("happy: 3 плиты в 10-плитовую партию → slabsSoldDirect +3, SaleRecord + AuditLog", async () => {
+  it("happy: 3 плиты в 10-плитовую партию → slabsSoldDirect +3, SaleRecord + Shipment + AuditLog", async () => {
     M.batchFindUnique.mockResolvedValue(batchRow());
 
     const res = await sellBatchVolume(INPUT);
@@ -466,11 +506,31 @@ describe("sellBatchVolume — объёмная продажа партии (mock
     expect(upd.data.slabsSoldDirect).toEqual({ increment: 3 });
     expect(M.saleCreate).toHaveBeenCalledTimes(1);
     expect(M.saleCreate.mock.calls[0][0].data.targetType).toBe("BATCH_VOLUME");
+    // TZ №15 — OPEN shipment same TX (soldDirect already written above).
+    expect(M.shipmentCreate).toHaveBeenCalledTimes(1);
+    expect(M.shipmentCreate.mock.calls[0][0].data).toMatchObject({
+      kind: "SALE",
+      saleRecordId: "sale1",
+      lines: {
+        create: expect.objectContaining({
+          targetType: "BATCH_VOLUME",
+          batchId: "b1",
+          qtyOrderedSlabs: 3,
+          qtyShippedSlabs: 0,
+        }),
+      },
+    });
     expect(M.auditCreate).toHaveBeenCalledTimes(1);
     expect(M.auditCreate.mock.calls[0][0].data).toMatchObject({
       action: "SALE",
       entityType: "Batch",
     });
+  });
+
+  it("oversell creates no Shipment", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow({ slabsSoldDirect: 9 }));
+    await sellBatchVolume(INPUT);
+    expect(M.shipmentCreate).not.toHaveBeenCalled();
   });
 });
 
@@ -532,7 +592,7 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
     expect(M.auditCreate).not.toHaveBeenCalled();
   });
 
-  it("SLAB happy: SOLD → RETURNED+needsCheck; SaleRecord.returnedAt проставлен; AuditLog(RETURN)", async () => {
+  it("SLAB happy: SOLD → RETURNED+needsCheck; SaleRecord.returnedAt проставлен; OPEN shipment cancelled; AuditLog(RETURN)", async () => {
     M.saleFindUnique.mockResolvedValue({
       id: "sale1",
       targetType: "SLAB",
@@ -544,6 +604,13 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
       qtyAreaM2: null,
       returnedAt: null,
     });
+    // TZ №15 — OPEN shipment exists for this sale.
+    M.shipmentFindUnique.mockResolvedValue({
+      id: "ship1",
+      cancelledAt: null,
+      completedAt: null,
+      lines: [{ qtyShippedSlabs: 0, qtyShippedAreaM2: 0 }],
+    });
 
     const res = await returnSale(INPUT);
 
@@ -553,6 +620,13 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
     expect(M.saleUpdateMany.mock.calls[0][0]).toMatchObject({
       where: { id: "sale1", returnedAt: null },
     });
+    // TZ №15 — cancel OPEN shipment task (does not touch UnitStatus beyond reverse below).
+    expect(M.shipmentUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "ship1", cancelledAt: null },
+        data: expect.objectContaining({ cancelledAt: expect.any(Date) }),
+      }),
+    );
     // Slab: SOLD → RETURNED+needsCheck (условный WHERE на SOLD).
     expect(M.slabUpdateMany).toHaveBeenCalledTimes(1);
     expect(M.slabUpdateMany.mock.calls[0][0]).toMatchObject({

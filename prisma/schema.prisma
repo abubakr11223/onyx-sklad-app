@@ -102,6 +102,8 @@ enum AuditAction {
   SAMPLE_RETURN
   SAMPLE_SELL
   SAMPLE_EXTEND
+  /// TZ №15 — warehouse confirmed a physical hand-over (shipment).
+  SHIPMENT_CONFIRM
 }
 
 /// data-model.md §1.12 / ADR-006.
@@ -109,6 +111,13 @@ enum SaleTarget {
   SLAB
   PIECE
   BATCH_VOLUME
+}
+
+/// TZ №15 Slice 1 — only SALE used; SAMPLE/SHOWROOM reserved for later slices.
+enum ShipmentKind {
+  SALE
+  SAMPLE
+  SHOWROOM
 }
 
 /// TZ №9 — способ оплаты в продаже (часть A).
@@ -236,9 +245,10 @@ model Batch {
   pieces        Piece[]
   reservations  Reservation[]
   photoRequests PhotoRequest[]
-  sales         SaleRecord[]
-  samples       Sample[]
-  patterns      BatchPattern[]
+  sales          SaleRecord[]
+  samples        Sample[]
+  patterns       BatchPattern[]
+  shipmentLines  ShipmentLine[]
 
   @@index([stoneTypeId])
   @@index([arrivedAt])
@@ -326,6 +336,7 @@ model Slab {
   pieces          Piece[] // bo'linganda chiqqan qoldiqlar
   sales           SaleRecord[]
   samples         Sample[]
+  shipmentLines   ShipmentLine[]
   reshootRequests PhotoRequest[] @relation("PhotoRequestReshootSlab")
 
   @@unique([batchId, label])
@@ -371,8 +382,9 @@ model Piece {
   createdBy    User          @relation("PieceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   photos       Photo[]
   reservations Reservation[]
-  sales        SaleRecord[]
-  samples         Sample[]
+  sales         SaleRecord[]
+  samples       Sample[]
+  shipmentLines ShipmentLine[]
 
   @@index([status, boundingLengthMm, boundingWidthMm])
   @@index([batchId])
@@ -462,6 +474,7 @@ model User {
   clientsCreated        Client[]       @relation("ClientManager")
   sitesCreated          Site[]         @relation("SiteManager")
   samplesIssued         Sample[]       @relation("SampleManager")
+  shipmentsCreated      Shipment[]     @relation("ShipmentManager")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -651,11 +664,12 @@ model Client {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  manager User         @relation("ClientManager", fields: [managerId], references: [id], onDelete: Restrict)
-  sites   Site[]
-  sales   SaleRecord[]
-  debts   Debt[]
-  samples Sample[]
+  manager    User         @relation("ClientManager", fields: [managerId], references: [id], onDelete: Restrict)
+  sites      Site[]
+  sales      SaleRecord[]
+  debts      Debt[]
+  samples    Sample[]
+  shipments  Shipment[]
 
   @@index([managerId, createdAt])
   @@index([phone])
@@ -679,9 +693,10 @@ model Site {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  client  Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  manager User         @relation("SiteManager", fields: [managerId], references: [id], onDelete: Restrict)
-  sales   SaleRecord[]
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  manager   User         @relation("SiteManager", fields: [managerId], references: [id], onDelete: Restrict)
+  sales     SaleRecord[]
+  shipments Shipment[]
 
   @@index([clientId, status])
   @@index([managerId, createdAt])
@@ -734,6 +749,8 @@ model SaleRecord {
   site         Site?         @relation(fields: [siteId], references: [id], onDelete: Restrict)
   debt         Debt?
   sampleFrom   Sample?
+  /// TZ №15 — at most one shipment task per sale (1:1).
+  shipment     Shipment?
 
   @@index([managerId, soldAt])
   @@index([soldAt])
@@ -744,6 +761,65 @@ model SaleRecord {
   @@index([paymentMethod, soldAt])
   @@index([clientId, soldAt])
   @@index([siteId, soldAt])
+}
+
+/// TZ №15 Slice 1 — warehouse hand-over task for a sale (kind=SALE only in this slice).
+/// Status OPEN/PARTIAL/DONE is DERIVED from line qty shipped vs ordered (+ cancelledAt).
+/// Stock write-off stays on the sale TX — confirm does NOT change UnitStatus.
+model Shipment {
+  id           String       @id @default(cuid())
+  kind         ShipmentKind @default(SALE)
+  /// Required for SALE; unique → one shipment per sale.
+  saleRecordId String?      @unique
+  sampleId     String?      @unique
+  managerId    String
+  clientId     String?
+  siteId       String?
+  note         String?
+  createdAt    DateTime     @default(now())
+  /// Set when every line is fully shipped (derived DONE).
+  completedAt  DateTime?
+  /// Sale returned before any/full ship — task cancelled.
+  cancelledAt  DateTime?
+  updatedAt    DateTime     @updatedAt
+
+  saleRecord SaleRecord?    @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
+  manager    User           @relation("ShipmentManager", fields: [managerId], references: [id], onDelete: Restrict)
+  client     Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  site       Site?          @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  lines      ShipmentLine[]
+
+  @@index([cancelledAt, completedAt, createdAt])
+  @@index([managerId, createdAt])
+  @@index([kind, createdAt])
+}
+
+/// Ordered vs shipped quantities — source of truth for derived shipment status.
+model ShipmentLine {
+  id                 String     @id @default(cuid())
+  shipmentId         String
+  targetType         SaleTarget
+  slabId             String?
+  pieceId            String?
+  batchId            String?
+  qtyOrderedSlabs    Int?
+  qtyOrderedAreaM2   Decimal?   @db.Decimal(12, 3)
+  qtyShippedSlabs    Int        @default(0)
+  qtyShippedAreaM2   Decimal    @default(0) @db.Decimal(12, 3)
+  /// block/landmark snapshot at sale (warehouse speed).
+  locationSnapshot   String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  slab     Slab?    @relation(fields: [slabId], references: [id], onDelete: Restrict)
+  piece    Piece?   @relation(fields: [pieceId], references: [id], onDelete: Restrict)
+  batch    Batch?   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId])
+  @@index([slabId])
+  @@index([pieceId])
+  @@index([batchId])
 }
 
 /// TZ №9 — долг по продаже «в долг». 1 SaleRecord = 0..1 Debt (CREDIT only).

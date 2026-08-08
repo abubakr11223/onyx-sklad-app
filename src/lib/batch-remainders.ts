@@ -80,7 +80,8 @@ export function aggregateFromRows(
  *   - separatedSlabs.length     → agg.slabCount
  *   - directPieces.length       → agg.pieceCount
  *   - Σ(slab.areaM2 ?? avg)     → agg.slabAreaSum + agg.slabNullAreaCount * avg
- *   - Σ(piece.areaM2 ?? 0)      → agg.pieceAreaSum   (null → 0)
+ *   - Σ(piece.areaM2 ?? avg)    → agg.pieceAreaSum + agg.pieceNullAreaCount * avg
+ *     (fixes0809 BUG-B: null piece was 0 → free m² inflated)
  * (mantiq inventory.ts computeFreeRemainder bilan qatorma-qator ko'zgu.)
  */
 export function freeRemainderFromAggregate(
@@ -103,7 +104,8 @@ export function freeRemainderFromAggregate(
         ? batch.areaTotalM2 / batch.slabsTotal
         : 0;
     const slabsAreaM2 = agg.slabAreaSum + agg.slabNullAreaCount * avgSlabAreaM2;
-    const piecesAreaM2 = agg.pieceAreaSum;
+    const piecesAreaM2 =
+      agg.pieceAreaSum + agg.pieceNullAreaCount * avgSlabAreaM2;
     areaFreeM2 =
       batch.areaTotalM2 +
       batch.areaAdjustedM2 -

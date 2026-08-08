@@ -341,8 +341,10 @@ export function buildPerfDataset(
       batchSlabCount.set(batchId, labelNo);
 
       const slabId = padId("sl", s);
-      const lengthMm = 1800 + Math.floor(rnd() * 1400); // 1800..3200
-      const widthMm = 900 + Math.floor(rnd() * 800); // 900..1700
+      // ТЗ №12: *Mm columns store centimetres. Slab sizes ~1.8–3.2 m → 180–320 cm.
+      // (Pre-cleanup bug: 1800–3200 looked like mm and mixed with piece cm-scale.)
+      const lengthCm = 180 + Math.floor(rnd() * 140); // 180..320 cm
+      const widthCm = 90 + Math.floor(rnd() * 80); // 90..170 cm
       const r = rnd();
       // Ko'pchilik AVAILABLE (qidiruv aynan shularni sanaydi), qolgani aralash.
       const status =
@@ -354,10 +356,11 @@ export function buildPerfDataset(
         stoneTypeId,
         label: `Плита №${labelNo}`,
         status,
-        lengthMm,
-        widthMm,
-        thicknessMm: [2, 3, 4][Math.floor(rnd() * 3)],
-        areaM2: ((lengthMm * widthMm) / 1_000_000).toFixed(3),
+        lengthMm: lengthCm,
+        widthMm: widthCm,
+        thicknessMm: [2, 3, 4][Math.floor(rnd() * 3)], // cm
+        // L×W in cm → m²
+        areaM2: ((lengthCm * widthCm) / 10_000).toFixed(3),
         isAreaEstimated: rnd() < 0.4,
         block: BLOCKS[Math.floor(rnd() * BLOCKS.length)],
         landmark: String(1 + Math.floor(rnd() * 12)),
@@ -390,8 +393,9 @@ export function buildPerfDataset(
       }
 
       // Gabaritlar keng tarqalgan — «нужный размер» qidiruvi turli natija bersin.
-      const boundingLengthMm = 30 + Math.floor(rnd() * 250); // 30..280 см (ТЗ №12)
-      const boundingWidthMm = 20 + Math.floor(rnd() * 160); // 20..180 см
+      // *Mm names legacy; values in cm (same as slabs above).
+      const boundingLengthCm = 30 + Math.floor(rnd() * 250); // 30..280 cm
+      const boundingWidthCm = 20 + Math.floor(rnd() * 160); // 20..180 cm
       const r = rnd();
       const status = r < 0.8 ? "AVAILABLE" : r < 0.92 ? "RESERVED" : "SOLD";
 
@@ -402,22 +406,22 @@ export function buildPerfDataset(
         originSlabId,
         kind: rnd() < 0.5 ? "BROKEN" : "OFFCUT",
         status,
-        // sidesMm Json (schema.prisma:268) — to'rtburchakka yaqin ko'pburchak.
+        // sidesMm Json — polygon side lengths in cm (legacy column name).
         sidesMm: [
-          boundingLengthMm,
-          boundingWidthMm,
-          Math.max(1, boundingLengthMm - Math.floor(rnd() * 10)),
-          Math.max(1, boundingWidthMm - Math.floor(rnd() * 10)),
+          boundingLengthCm,
+          boundingWidthCm,
+          Math.max(1, boundingLengthCm - Math.floor(rnd() * 10)),
+          Math.max(1, boundingWidthCm - Math.floor(rnd() * 10)),
         ],
-        boundingLengthMm,
-        boundingWidthMm,
-        thicknessMm: [2, 3, 4][Math.floor(rnd() * 3)],
+        boundingLengthMm: boundingLengthCm,
+        boundingWidthMm: boundingWidthCm,
+        thicknessMm: [2, 3, 4][Math.floor(rnd() * 3)], // cm
         // ~10% areaM2 = null — freeRemainderFromAggregate'ning null-yo'li
         // (batch-remainders.ts:105) ham yuklanadi.
         areaM2:
           rnd() < 0.1
             ? null
-            : ((boundingLengthMm * boundingWidthMm) / 10_000).toFixed(3),
+            : ((boundingLengthCm * boundingWidthCm) / 10_000).toFixed(3),
         block: BLOCKS[Math.floor(rnd() * BLOCKS.length)],
         landmark: String(1 + Math.floor(rnd() * 12)),
         needsCheck: rnd() < 0.1,

@@ -279,10 +279,10 @@ export default async function SinganPage({
                 })}
               </select>
             </Field>
-            <label className="flex items-center gap-2 text-base text-ink/80">
-              <input type="checkbox" name="decrementSlabs" value="1" />
-              Бой был целой плитой партии (−1 плита)
-            </label>
+            <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">
+              Кусок списывает <strong>1 плиту</strong> из свободного остатка
+              партии (учёт §3).
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <Field
                 id="block"

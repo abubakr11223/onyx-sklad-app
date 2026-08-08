@@ -127,10 +127,12 @@ describe("freeRemainderFromAggregate — §3 formulasi bilan pariteti", () => {
     );
   });
 
-  it("piece.areaM2 = null → 0 (m² hisobida qatnashmaydi)", () => {
+  it("piece.areaM2 = null → partiya o'rtachasi (free m² ni sun'iy oshirmaslik)", () => {
+    // fixes0809 BUG-B: null piece was 0 → free m² inflated. Now same as
+    // null slab: avg = 220/40 = 5.5.
     const { aggregateBased } = assertParity(baseBatch, [], [{ areaM2: null }]);
     expect(aggregateBased.slabsFree).toBe(39);
-    expect(aggregateBased.areaFreeM2).toBeCloseTo(220, 6);
+    expect(aggregateBased.areaFreeM2).toBeCloseTo(220 - 5.5, 6);
   });
 
   it("hammasi sotilgan partiya: qoldiq 0", () => {

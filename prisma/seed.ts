@@ -147,6 +147,7 @@ async function main() {
   });
 
   // ── Ajratilgan plitalar (ADR-004: faqat kerak bo'lganda) ──
+  // ТЗ №12: lengthMm/widthMm/thicknessMm columns store **cm** (legacy names).
   // slab1 quyida faol bron oladi → statusi RESERVED (§2 o'tish №1 bilan izchil).
   const slab1 = await prisma.slab.create({
     data: {
@@ -154,9 +155,9 @@ async function main() {
       stoneTypeId: travertin.id,
       label: "Плита №1",
       status: "RESERVED",
-      lengthMm: 280,
-      widthMm: 190,
-      thicknessMm: 2,
+      lengthMm: 280, // cm
+      widthMm: 190, // cm
+      thicknessMm: 2, // cm
       areaM2: "5.320",
       isAreaEstimated: false,
       block: "А",
@@ -180,14 +181,16 @@ async function main() {
   });
 
   // ── Boy / qoldiq (poshtuchno, o'z gabaritlari bilan — TZ §4.2) ──
+  // ТЗ №12: column names *Mm are LEGACY; values are centimetres (cm).
+  // Mixed mm/cm was a seed bug (e.g. width 640 with length 118) — all cm here.
   await prisma.piece.create({
     data: {
       stoneTypeId: travertin.id,
       batchId: batch1.id, // partiyadan to'g'ridan-to'g'ri boy (originSlabId = null)
       kind: "BROKEN",
-      sidesMm: [118, 64, 95, 610],
+      sidesMm: [118, 64, 95, 61],
       boundingLengthMm: 118,
-      boundingWidthMm: 640,
+      boundingWidthMm: 64,
       thicknessMm: 2,
       areaM2: "0.600",
       block: "Б",
@@ -202,7 +205,7 @@ async function main() {
       kind: "OFFCUT",
       sidesMm: [145, 80, 145, 80],
       boundingLengthMm: 145,
-      boundingWidthMm: 800,
+      boundingWidthMm: 80,
       thicknessMm: 2,
       areaM2: "1.160",
       block: "В",

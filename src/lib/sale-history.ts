@@ -157,6 +157,18 @@ export type SaleHistoryRow = {
     stoneType: { name: string };
   } | null;
   batch: { stoneType: { name: string } } | null;
+  /** TZ №15 — optional; null = legacy → derived DONE. */
+  shipment: {
+    cancelledAt: Date | null;
+    completedAt: Date | null;
+    lines: Array<{
+      targetType: string;
+      qtyOrderedSlabs: number | null;
+      qtyOrderedAreaM2: { toString(): string } | null;
+      qtyShippedSlabs: number;
+      qtyShippedAreaM2: { toString(): string };
+    }>;
+  } | null;
 };
 
 export type SaleHistoryPage = {
@@ -185,6 +197,22 @@ const SALE_INCLUDE = {
     },
   },
   batch: { select: { stoneType: { select: { name: true } } } },
+  shipment: {
+    select: {
+      cancelledAt: true,
+      completedAt: true,
+      lines: {
+        select: {
+          targetType: true,
+          qtyOrderedSlabs: true,
+          qtyOrderedAreaM2: true,
+          qtyShippedSlabs: true,
+          qtyShippedAreaM2: true,
+        },
+        take: 5,
+      },
+    },
+  },
 } as const;
 
 /**

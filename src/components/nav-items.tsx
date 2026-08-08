@@ -251,6 +251,13 @@ export const NAV_ITEMS: NavItem[] = [
     Icon: SaleIcon,
   },
   {
+    href: "/otgruzki",
+    label: "Отгрузки",
+    short: "Отгруз.",
+    description: "К отгрузке и архив выдач со склада",
+    Icon: PackageIcon,
+  },
+  {
     href: "/razbit",
     label: "Разбить",
     short: "Разбить",

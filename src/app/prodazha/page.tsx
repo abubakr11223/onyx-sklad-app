@@ -36,6 +36,10 @@ import {
   type SalePreselectUnitRow,
 } from "./sale-preselect";
 import { formatSaleListPrice } from "./format-sale-price";
+import {
+  deriveShipmentStatus,
+  shipmentStatusLabelRu,
+} from "@/lib/shipments";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -525,6 +529,30 @@ export default async function ProdazhaPage({
               const priceStr = canSeeSalePrice
                 ? formatSaleListPrice(s.price, saleCurrency, m2Fmt)
                 : null;
+              // TZ №15 — derived shipment status (legacy null → DONE).
+              // Returned supersedes ship badge in UI.
+              const shipStatus = returned
+                ? null
+                : deriveShipmentStatus(
+                    s.shipment
+                      ? {
+                          cancelledAt: s.shipment.cancelledAt,
+                          completedAt: s.shipment.completedAt,
+                          lines: s.shipment.lines.map((l) => ({
+                            targetType: l.targetType,
+                            qtyOrderedSlabs: l.qtyOrderedSlabs,
+                            qtyOrderedAreaM2:
+                              l.qtyOrderedAreaM2 == null
+                                ? null
+                                : Number(l.qtyOrderedAreaM2.toString()),
+                            qtyShippedSlabs: l.qtyShippedSlabs,
+                            qtyShippedAreaM2: Number(
+                              l.qtyShippedAreaM2.toString(),
+                            ),
+                          })),
+                        }
+                      : null,
+                  );
               return (
                 <li
                   key={s.id}
@@ -542,6 +570,22 @@ export default async function ProdazhaPage({
                     {returned && (
                       <Badge variant="danger" className="ml-2 align-middle">
                         возврат
+                      </Badge>
+                    )}
+                    {shipStatus && (
+                      <Badge
+                        variant={
+                          shipStatus === "DONE"
+                            ? "success"
+                            : shipStatus === "PARTIAL"
+                              ? "warning"
+                              : shipStatus === "CANCELLED"
+                                ? "neutral"
+                                : "warning"
+                        }
+                        className="ml-2 align-middle"
+                      >
+                        {shipmentStatusLabelRu(shipStatus)}
                       </Badge>
                     )}
                   </div>

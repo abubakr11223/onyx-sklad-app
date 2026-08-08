@@ -4,10 +4,14 @@
 // Chaqiruvchi (server component) Prisma'dan olingan qiymatlarni oddiy
 // number/null ko'rinishga keltirib uzatadi (Decimal → Number).
 
-// ТЗ №12: единица размеров — см. CUTTING_MARGIN_MM — legacy-имя; значение 2 (см).
-import { CUTTING_MARGIN_CM as _CUTTING_MARGIN_CM } from "@/lib/dimensions";
-export const CUTTING_MARGIN_MM = _CUTTING_MARGIN_CM;
-export { CUTTING_MARGIN_CM } from "@/lib/dimensions";
+// ТЗ №12: linear sizes are centimetres. `*Mm` names are legacy (see dimensions.ts).
+import {
+  CUTTING_MARGIN_CM,
+  CUTTING_MARGIN_MM as _CUTTING_MARGIN_MM_ALIAS,
+} from "@/lib/dimensions";
+/** @deprecated Prefer CUTTING_MARGIN_CM — value is 2 **cm**, not mm. */
+export const CUTTING_MARGIN_MM = _CUTTING_MARGIN_MM_ALIAS;
+export { CUTTING_MARGIN_CM };
 
 /** Batch jadvalining hisob uchun kerakli ustunlari (data-model.md §1.2). */
 export interface BatchTotalsInput {
@@ -59,10 +63,9 @@ export interface FreeRemainder {
  * `slabsTotal = null` → slabsFree = null (dona-nazorat o'chadi);
  * `areaTotalM2 = null` → areaFreeM2 = null (m²-nazorat o'chadi).
  * Slab.areaM2 = null bo'lsa partiya o'rtachasi (areaTotalM2 / slabsTotal)
- * olinadi (§3 «o'lchov noaniqligi»); o'rtacha hisoblab bo'lmasa (slabsTotal
- * null) bunday holat §3 bo'yicha bo'lmasligi kerak — himoya sifatida 0
- * olinadi (qoldiqni sun'iy kamaytirmaymiz, haqiqiy o'lcham kiritilganda farq
- * areaFree ga singadi).
+ * olinadi (§3 «o'lchov noaniqligi»). **Piece.areaM2 = null** ham shu o'rtacha
+ * (ilgari 0 edi — erkin m² sun'iy oshib qolardi; fixes0809 BUG-B).
+ * O'rtacha hisoblab bo'lmasa (slabsTotal null) himoya: 0.
  */
 export function computeFreeRemainder(
   batch: BatchTotalsInput,
@@ -88,7 +91,11 @@ export function computeFreeRemainder(
       (sum, s) => sum + (s.areaM2 ?? avgSlabAreaM2),
       0,
     );
-    const piecesAreaM2 = directPieces.reduce((sum, p) => sum + (p.areaM2 ?? 0), 0);
+    // BUG-B: null piece area must NOT read as 0 (overstates free m²).
+    const piecesAreaM2 = directPieces.reduce(
+      (sum, p) => sum + (p.areaM2 ?? avgSlabAreaM2),
+      0,
+    );
     areaFreeM2 =
       batch.areaTotalM2 +
       batch.areaAdjustedM2 -
@@ -101,23 +108,26 @@ export function computeFreeRemainder(
 }
 
 /**
- * Gabarit bo'yicha moslik (TZ §5.2, §6.5): so'ralgan L×W (mm) bo'lak
+ * Gabarit bo'yicha moslik (TZ §5.2, §6.5): so'ralgan L×W (**cm**) bo'lak
  * bounding-to'rtburchagiga kesish dopuski bilan sig'adimi. Burish (90°)
  * ruxsat etiladi — to'rtburchak uchun bu «katta tomon katta tomonga,
  * kichigi kichigiga» tekshiruv bilan ekvivalent.
  * Nol/manfiy so'rov o'lchami — mos emas (false).
+ *
+ * Parameter names historically said Mm; **all numbers are centimetres**.
  */
 export function pieceFitsRequest(
-  boundingLengthMm: number,
-  boundingWidthMm: number,
-  requestLengthMm: number,
-  requestWidthMm: number,
-  marginMm: number = CUTTING_MARGIN_MM,
+  boundingLengthCm: number,
+  boundingWidthCm: number,
+  requestLengthCm: number,
+  requestWidthCm: number,
+  /** Cutting margin in **cm** (default {@link CUTTING_MARGIN_CM} = 2). */
+  marginCm: number = CUTTING_MARGIN_CM,
 ): boolean {
-  if (requestLengthMm <= 0 || requestWidthMm <= 0) return false;
-  const boundMax = Math.max(boundingLengthMm, boundingWidthMm);
-  const boundMin = Math.min(boundingLengthMm, boundingWidthMm);
-  const needMax = Math.max(requestLengthMm, requestWidthMm) + marginMm;
-  const needMin = Math.min(requestLengthMm, requestWidthMm) + marginMm;
+  if (requestLengthCm <= 0 || requestWidthCm <= 0) return false;
+  const boundMax = Math.max(boundingLengthCm, boundingWidthCm);
+  const boundMin = Math.min(boundingLengthCm, boundingWidthCm);
+  const needMax = Math.max(requestLengthCm, requestWidthCm) + marginCm;
+  const needMin = Math.min(requestLengthCm, requestWidthCm) + marginCm;
   return boundMax >= needMax && boundMin >= needMin;
 }

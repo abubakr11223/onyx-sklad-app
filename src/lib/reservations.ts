@@ -635,8 +635,8 @@ export async function expireOverdueReservations(): Promise<number> {
 //
 // «Похожие» = /poisk bilan bir xil domen:
 //   • bir xil stoneTypeId (aniq vid, matn qidiruvidan qattiqroq);
-//   • gabarit: CUTTING_MARGIN_MM (20) + 90° burish — poisk-search.piecesWhere /
-//     inventory.pieceFitsRequest bilan bir xil OR-shart.
+//   • gabarit: CUTTING_MARGIN_CM (2 cm; legacy alias CUTTING_MARGIN_MM) + 90°
+//     burish — poisk-search.piecesWhere / inventory.pieceFitsRequest bilan bir xil.
 
 /** UI/query cap — cheksiz findMany taqiqlangan. */
 export const MAX_RESERVATION_ALTERNATIVES = 5;

@@ -40,10 +40,13 @@
 //   managerId?: string,
 //   overdueOnly?: boolean,
 //   currency?: Currency,
-//   cursor?: string | null,     // Debt.id for keyset
+//   cursor?: string | null,     // keyset: `${createdAt.toISOString()}_${id}`
 //   pageSize?: number,          // default 30, max 100
 //   now: Date,                  // for overdue classification
 // }): Promise<{ items: DebtListItem[]; nextCursor: string | null }>
+//
+// Pagination matches sale-history.ts compound keyset (createdAt DESC, id DESC).
+// Id-only cursors over two-column order skip/duplicate when createdAt ties.
 //
 // debtSummary(db, { now: Date }): Promise<DebtSummary>
 //   → Per-currency active / overdue totals. NEVER a single combined money figure.
@@ -485,6 +488,87 @@ export async function cancelDebtForReturnedSale(
   return { outcome: "cancelled", debtId: debt.id };
 }
 
+// ───────────────────────── listDebts keyset (sale-history shape) ─────────────────────────
+
+export type DebtsListCursor = {
+  createdAt: Date;
+  id: string;
+};
+
+/** Cursor: `${createdAt.toISOString()}_${id}` — same shape as sale-history. */
+export function encodeDebtsCursor(c: DebtsListCursor): string {
+  return `${c.createdAt.toISOString()}_${c.id}`;
+}
+
+/**
+ * Parse keyset cursor. Malformed / legacy id-only → null (caller must not
+ * fall back to page one as if continuing the list).
+ */
+export function parseDebtsCursor(
+  raw: string | null | undefined,
+): DebtsListCursor | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  const i = s.indexOf("_");
+  if (i <= 0) return null;
+  const iso = s.slice(0, i);
+  const id = s.slice(i + 1);
+  if (!id) return null;
+  const createdAt = new Date(iso);
+  if (Number.isNaN(createdAt.getTime())) return null;
+  return { createdAt, id };
+}
+
+/**
+ * SQL filters + compound keyset. Order: createdAt DESC, id DESC.
+ * Next page: (createdAt, id) < (c.createdAt, c.id) in that order:
+ *   createdAt < c.createdAt OR (createdAt = c.createdAt AND id < c.id)
+ */
+export function debtsListWhere(
+  input: Omit<ListDebtsInput, "cursor" | "pageSize">,
+  cursor: DebtsListCursor | null,
+): Prisma.DebtWhereInput {
+  const and: Prisma.DebtWhereInput[] = [];
+
+  const statusFilter =
+    !input.status || input.status === "ALL" ? undefined : input.status;
+  if (statusFilter) and.push({ status: statusFilter });
+  if (input.currency) and.push({ currency: input.currency });
+
+  // saleRecord nested filters (manager + client q) share one relation object.
+  const saleWhere: Prisma.SaleRecordWhereInput = {};
+  if (input.managerId) saleWhere.managerId = input.managerId;
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    saleWhere.OR = [
+      { customerName: { contains: q, mode: "insensitive" } },
+      { customerContact: { contains: q, mode: "insensitive" } },
+    ];
+  }
+  if (Object.keys(saleWhere).length > 0) {
+    and.push({ saleRecord: saleWhere });
+  }
+
+  if (input.overdueOnly) {
+    // End-of-Tashkent-day storage: overdue when dueDate < now (same as isDebtOverdue).
+    and.push({ status: "ACTIVE" });
+    and.push({ dueDate: { lt: input.now } });
+  }
+
+  if (cursor) {
+    and.push({
+      OR: [
+        { createdAt: { lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+      ],
+    });
+  }
+
+  if (and.length === 0) return {};
+  if (and.length === 1) return and[0]!;
+  return { AND: and };
+}
+
 // ───────────────────────── listDebts ─────────────────────────
 
 export async function listDebts(
@@ -496,33 +580,18 @@ export async function listDebts(
     Math.max(1, input.pageSize ?? DEFAULT_PAGE),
   );
   const now = input.now;
-  const statusFilter =
-    !input.status || input.status === "ALL" ? undefined : input.status;
 
-  const where: Prisma.DebtWhereInput = {};
-  if (statusFilter) where.status = statusFilter;
-  if (input.currency) where.currency = input.currency;
-  if (input.managerId) {
-    where.saleRecord = { ...(where.saleRecord as object), managerId: input.managerId };
+  // Non-empty but unparseable cursor (legacy id-only, garbage): empty page —
+  // never 500, never re-serve page one as "continuation".
+  if (input.cursor != null && String(input.cursor).trim() !== "") {
+    const parsed = parseDebtsCursor(input.cursor);
+    if (!parsed) {
+      return { items: [], nextCursor: null };
+    }
   }
-  if (input.q?.trim()) {
-    const q = input.q.trim();
-    where.saleRecord = {
-      ...(where.saleRecord as object),
-      OR: [
-        { customerName: { contains: q, mode: "insensitive" } },
-        { customerContact: { contains: q, mode: "insensitive" } },
-      ],
-    };
-  }
-  if (input.overdueOnly) {
-    // End-of-Tashkent-day storage: overdue when dueDate < now (same as isDebtOverdue).
-    where.status = "ACTIVE";
-    where.dueDate = { lt: now };
-  }
-  if (input.cursor) {
-    where.id = { lt: input.cursor }; // keyset: createdAt desc + id desc approximated by id
-  }
+
+  const cursor = parseDebtsCursor(input.cursor);
+  const where = debtsListWhere(input, cursor);
 
   const rows = await db.debt.findMany({
     where,
@@ -546,8 +615,11 @@ export async function listDebts(
   });
 
   const page = rows.slice(0, pageSize);
+  const last = page[page.length - 1];
   const nextCursor =
-    rows.length > pageSize ? page[page.length - 1]?.id ?? null : null;
+    rows.length > pageSize && last
+      ? encodeDebtsCursor({ createdAt: last.createdAt, id: last.id })
+      : null;
 
   const items: DebtListItem[] = page.map((d) => ({
     id: d.id,

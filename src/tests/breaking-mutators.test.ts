@@ -334,7 +334,7 @@ describe("registerDirectPiece — прямой бой (без плиты) + guar
     expect(M.queryRaw).toHaveBeenCalled();
   });
 
-  it("happy: free=5, decrementSlabs=true → Piece(originSlabId:null) + Audit + slabsFreeAfter=4", async () => {
+  it("happy: free=5 → Piece(originSlabId:null) + Audit + slabsFreeAfter=4", async () => {
     M.batchFindUnique.mockResolvedValue(batchRow({ slabsSoldDirect: 5 }));
 
     const res = await registerDirectPiece(PARAMS);
@@ -357,6 +357,41 @@ describe("registerDirectPiece — прямой бой (без плиты) + guar
         breakReasonLabel: "Бой при перемещении",
       }),
     });
+  });
+
+  it("BUG-A: decrementSlabs=false still −1 slab (§3; flag does not opt out)", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow({ slabsSoldDirect: 5 })); // free=5
+    const res = await registerDirectPiece({
+      ...PARAMS,
+      decrementSlabs: false,
+    });
+    expect(res.slabsFreeAfter).toBe(4);
+    expect(M.pieceCreate).toHaveBeenCalledTimes(1);
+    expect(M.auditCreate.mock.calls[0][0].data.payload.decrementSlabs).toBe(
+      true,
+    );
+  });
+
+  it("BUG-B: areaM2 null → stores geometric area from L×W, free m² decreases", async () => {
+    // free slabs=10, areaTotal=100 → avg=10; piece 200×100 cm → 2 m²
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({
+        slabsTotal: 10,
+        areaTotalM2: { toString: () => "100" },
+        slabsSoldDirect: 0,
+      }),
+    );
+    const res = await registerDirectPiece({
+      ...PARAMS,
+      areaM2: null,
+      boundingLengthMm: 200,
+      boundingWidthMm: 100,
+      decrementSlabs: false, // would have skipped estimate before fix
+    });
+    expect(res.areaM2).toBeCloseTo(2, 6);
+    expect(res.areaEstimated).toBe(true);
+    expect(res.areaFreeM2After).toBeCloseTo(98, 6);
+    expect(M.pieceCreate.mock.calls[0][0].data.areaM2).toBe("2");
   });
 
   it("партия не найдена → BATCH_NOT_FOUND, Piece НЕ пишется", async () => {

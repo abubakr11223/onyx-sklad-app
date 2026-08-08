@@ -89,8 +89,6 @@ export async function submitSingan(formData: FormData): Promise<void> {
   if (!block) fail("Укажите блок (например «А»)");
   const landmark = str("landmark");
   if (!landmark) fail("Укажите ориентир (например «2»)");
-  const decrementSlabs = formData.get("decrementSlabs") === "1";
-
   // TZ §5.6 — same cause taxonomy as /razbit (both paths must record it).
   const causeParsed = parseBreakCause(str("breakCause"), str("breakCauseNote"));
   if (!causeParsed.ok) fail(causeParsed.message);
@@ -119,6 +117,7 @@ export async function submitSingan(formData: FormData): Promise<void> {
 
   let pieceId: string;
   try {
+    // §3 / fixes0809: always −1 free slab; area resolved in registerDirectPiece.
     const result = await registerDirectPiece({
       kind,
       sidesMm: sides,
@@ -129,7 +128,6 @@ export async function submitSingan(formData: FormData): Promise<void> {
       block,
       landmark,
       batchId,
-      decrementSlabs,
       byUserId: byUserId as string,
       drawingUrl,
       cause: causeParsed.cause,

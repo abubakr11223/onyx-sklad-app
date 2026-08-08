@@ -160,14 +160,11 @@ export async function submitBreak(
       if (!batchId) errors.batchId = "Выберите партию";
       if (Object.keys(errors).length > 0 || !causeParsed.ok) return { errors };
 
-      const decrementSlabs = formData.get("decrementSlabs") === "1";
-      // A4: все строки — ОДНОЙ атомарной транзакцией (registerDirectPiecesMany):
-      // guard §3 на сумме, всё-или-ничего. Ошибка на любой строке → не записано
-      // НИЧЕГО, поэтому повторная отправка формы не задублирует куски 1…N−1.
+      // A4: все строки — ОДНОЙ атомарной транзакцией (registerDirectPiecesMany).
+      // §3 / fixes0809 BUG-A: every direct piece always −1 free slab (no checkbox).
       const result = await registerDirectPiecesMany({
         rows: pieces,
         batchId,
-        decrementSlabs,
         byUserId,
         cause: causeParsed.cause,
       });

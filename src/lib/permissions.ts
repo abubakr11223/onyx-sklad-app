@@ -82,6 +82,16 @@ export interface Capabilities {
    * Аналог canSeeAllReservations.
    */
   canSeeAllClients: boolean;
+  /**
+   * TZ №15 — раздел «Отгрузки»: OPEN list + archive.
+   * OWNER / MANAGER / WAREHOUSE. Scope (all vs own) is enforced in listShipments.
+   */
+  canSeeShipments: boolean;
+  /**
+   * TZ №15 — confirm physical hand-over. OWNER + WAREHOUSE (canManageWarehouse).
+   * Manager does not self-confirm by default (design D4).
+   */
+  canConfirmShipment: boolean;
 }
 
 /**
@@ -133,6 +143,8 @@ export const DENY_ALL: Capabilities = {
   canSeeDebts: false,
   canSeeClients: false,
   canSeeAllClients: false,
+  canSeeShipments: false,
+  canConfirmShipment: false,
 };
 
 export function capabilitiesFor(
@@ -158,6 +170,8 @@ export function capabilitiesFor(
         canSeeDebts: true, // TZ №9: «Должники» — только владелец
         canSeeClients: true, // TZ №10+11: справочники клиентов/объектов
         canSeeAllClients: true, // владелец видит всех
+        canSeeShipments: true,
+        canConfirmShipment: true,
       };
     case "MANAGER":
       return {
@@ -179,6 +193,8 @@ export function capabilitiesFor(
         canSeeDebts: false, // TZ №9 §5: раздел только OWNER
         canSeeClients: true, // TZ №10+11: свои клиенты/объекты
         canSeeAllClients: false, // только managerId = actor
+        canSeeShipments: true, // own sales' shipments
+        canConfirmShipment: false, // design D4 — warehouse/owner confirm
       };
     case "WAREHOUSE":
       return {
@@ -198,6 +214,8 @@ export function capabilitiesFor(
         canSeeDebts: false,
         canSeeClients: false,
         canSeeAllClients: false,
+        canSeeShipments: true,
+        canConfirmShipment: true,
       };
     case "PARTNER":
       return {
@@ -217,6 +235,8 @@ export function capabilitiesFor(
         canSeeDebts: false,
         canSeeClients: false,
         canSeeAllClients: false,
+        canSeeShipments: false,
+        canConfirmShipment: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —
