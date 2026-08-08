@@ -6,27 +6,44 @@
 // tekshiruvi bu yerda EMAS — sahifalar va server-action'lar o'zlari qayta
 // tekshiradi (defense-in-depth). Gate faqat «kirganmi/kirmaganmi»ni hal qiladi.
 //
-// matcher: /login, /login/tg, /q (§6.7 QR ochiq shou-room — mijoz login qilmagan)
-// va barcha /api, statik fayllar gate'DAN TASHQARIDA (/api'da o'z auth'i bor —
-// Telegram webhook secret, cron secret).
-//
-// W9-C: middleware → proxy rename only (Next 16 deprecation). Behaviour identical
-// to former src/middleware.ts — same verifySessionToken, redirect, matcher.
+// BUG-OWN trust: proxy runs on public paths too (login/api/q/tg) so it can
+// STRIP a client-forged x-onyx-gated header before RootLayout. Only gated
+// routes with a valid session signature SET the stamp.
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import {
+  GATED_REQUEST_HEADER,
+  isProxyPublicPath,
+  stripClientGatedHeader,
+} from "@/lib/gated-request";
 
 export async function proxy(req: NextRequest) {
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
-  // Аудит ТЗ №7 #9 — verify возвращает { ok, userId?, tokenVersion? } / reason.
-  // На Edge проверяем только подпись+срок; tokenVersion сверяется с БД в session.ts
-  // (getRealSessionUser/getCurrentUser) — там же реализуется revoke на смене пароля.
-  // legacy / expired / badsig / malformed — все тянут на /login (qайта-login).
-  const res = token ? await verifySessionToken(token) : null;
-  if (res?.ok) return NextResponse.next();
+  const pathname = req.nextUrl.pathname;
+  // Always start from request headers and drop any client-supplied stamp.
+  const headers = new Headers(req.headers);
+  stripClientGatedHeader(headers);
 
-  // Sessiya yo'q → /login. Kelingan yo'lni ?next bilan saqlaymiz (login'dan keyin
-  // qaytish uchun). Open-redirect xavfi yo'q — bu faqat lokal path.
+  // Public entry: strip only, never gate, never re-stamp.
+  if (isProxyPublicPath(pathname)) {
+    return NextResponse.next({ request: { headers } });
+  }
+
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  // Аудит ТЗ №7 #9 — verify: signature+expiry only on Edge.
+  // tokenVersion / isActive / existence — session.ts (Node + DB).
+  const res = token ? await verifySessionToken(token) : null;
+  if (res?.ok) {
+    // Signature OK — stamp path for layout stale-session re-login.
+    // Overwrites any residual value (already deleted above).
+    headers.set(
+      GATED_REQUEST_HEADER,
+      req.nextUrl.pathname + req.nextUrl.search,
+    );
+    return NextResponse.next({ request: { headers } });
+  }
+
+  // No/invalid session → /login. Keep ?next for return path (local only).
   const loginUrl = req.nextUrl.clone();
   loginUrl.pathname = "/login";
   loginUrl.search = "";
@@ -39,9 +56,8 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Identical to pre-W9-C middleware matcher (byte-for-byte):
-    // GATED: all app routes not listed in the negative lookahead.
-    // EXCLUDED: login, api, q/, tg, _next/static, _next/image, favicon.ico, *.*
-    "/((?!login|api|q/|tg|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    // Run on app pages AND public paths (login/api/q/tg) so the header strip
+    // always happens. Still skip static assets and files with extensions.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };

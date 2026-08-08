@@ -116,7 +116,7 @@ export interface Capabilities {
  * hech qachon undefined qaytmaydi va hech qachon ortiqcha ruxsat bermaydi.
  * Hardcoded (PARTNER'ga bog'liq emas) — PARTNER kelajakda o'zgarsa ham xavfsiz.
  */
-const DENY_ALL: Capabilities = {
+export const DENY_ALL: Capabilities = {
   canSeePrices: false,
   canSeePurchasePrice: false,
   canSell: false,

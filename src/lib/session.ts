@@ -11,7 +11,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-import { capabilitiesFor, type Capabilities, type Role } from "@/lib/permissions";
+import { DENY_ALL, capabilitiesFor, type Capabilities, type Role } from "@/lib/permissions";
 
 export interface CurrentUser {
   id: string;
@@ -129,7 +129,12 @@ export async function currentActorId(): Promise<string | null> {
  */
 export async function getCapabilities(): Promise<Capabilities> {
   const user = await getCurrentUser();
-  if (!user) return capabilitiesFor("PARTNER", { canSeePurchasePrice: false });
+  // BUG-OWN: sessiyasiz — PARTNER emas, DENY_ALL. PARTNER — haqiqiy rol
+  // (requestsRouteToManager: true), «hech kim»ni unga tenglashtirish noto'g'ri
+  // edi: nav huquqsiz ochiq bitta bo'limni ko'rsatib, yarim kirgan taassurot
+  // qoldirardi. Ochiq sahifalar (/q) faqat canSeeExactRemainder'ga qaraydi —
+  // u ikkalasida ham false, shuning uchun QR-showroom o'zgarmaydi.
+  if (!user) return DENY_ALL;
   return capabilitiesFor(user.role, {
     canSeePurchasePrice: user.canSeePurchasePrice,
   });

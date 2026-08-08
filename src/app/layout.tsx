@@ -11,7 +11,11 @@ import FlashToaster from "@/components/FlashToaster";
 import TelegramBackButton from "@/components/TelegramBackButton";
 import OfflineBanner from "@/components/OfflineBanner";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
+import { GATED_REQUEST_HEADER } from "@/lib/auth";
+import { staleSessionLoginHref } from "@/lib/gated-request";
 import { capabilitiesFor } from "@/lib/permissions";
 
 // Фирменная типографика бренда «Графит + золото» (см. public/karta.html):
@@ -55,6 +59,25 @@ export default async function RootLayout({
   // R6: реальный пользователь из сессии (демо-shim удалён). БД моргнула → null
   // (deny-all shell), сама страница-ребёнок повторит и её throw поймает error.tsx.
   const user = await getCurrentUser().catch(() => null);
+
+  // BUG-OWN: proxy stamped x-onyx-gated after signature OK, but getCurrentUser
+  // is null (deleted / inactive / tokenVersion bump). Half-logged-in shell
+  // used to render «only Поиск» — force re-login instead.
+  //
+  // Trust: the stamp is only meaningful after proxy DELETE+optional SET
+  // (src/proxy.ts). Clients can send the header name; public paths never re-set
+  // it. See staleSessionLoginHref — pure contract unit-tested.
+  //
+  // ⚠️ DB blip: catch → user null + stamp present → /login (fail-closed).
+  // Server Actions / /api do NOT run this layout branch — they use
+  // getCapabilities / own secrets (documented in result-security.md).
+  const gatedPath = (await headers()).get(GATED_REQUEST_HEADER);
+  const staleLogin = staleSessionLoginHref(!user, gatedPath);
+  if (staleLogin) redirect(staleLogin);
+
+  // Shell caps: real role when logged in. Null user should not reach nav
+  // (redirect above on gated paths; public pages hide Nav via `user ?`).
+  // Keep PARTNER-shaped shell only for the rare null-user shell path without stamp.
   const caps = user
     ? capabilitiesFor(user.role, { canSeePurchasePrice: user.canSeePurchasePrice })
     : capabilitiesFor("PARTNER", { canSeePurchasePrice: false });

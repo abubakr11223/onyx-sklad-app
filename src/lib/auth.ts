@@ -112,6 +112,21 @@ export async function isAuthedFromCookie(
 // uchun bir turdagi tokenni boshqasi sifatida qayta ishlatib bo'lmaydi (replay yo'q).
 
 /** Session cookie nomi — eski parol-darvozasi `onyx_auth`dan ALOHIDA. */
+/**
+ * BUG-OWN — internal stamp from proxy → RootLayout. Value = path+search
+ * (e.g. `/prodazha?x=1`) for `?next=` after re-login.
+ *
+ * Why: Edge can only verify the cookie signature (no DB). Deleted / inactive /
+ * tokenVersion-mismatched users still pass the signature check; layout loads
+ * the user and redirects to /login when null **if** this stamp is present.
+ *
+ * Trust (audit 2026-08-07): clients CAN send this header. It is NOT proof of
+ * anything unless proxy overwrote it. Proxy always DELETE then optionally SET
+ * (see `src/lib/gated-request.ts` + `src/proxy.ts`). Do not assume «only the
+ * gate can set it» without that strip/overwrite path.
+ */
+export const GATED_REQUEST_HEADER = "x-onyx-gated";
+
 export const SESSION_COOKIE = "onyx_session";
 
 /**
