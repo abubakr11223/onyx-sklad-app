@@ -19,6 +19,7 @@ import {
   type IntakeInput,
 } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
+import { ensureFormError } from "@/lib/form-errors";
 import {
   createIntakeWithReceipt,
   IntakeConcurrentClaimError,
@@ -116,7 +117,9 @@ export async function submitIntake(
   }
 
   const result = validateIntake(readInput(formData));
-  if (!result.ok) return { errors: result.errors };
+  if (!result.ok) {
+    return { errors: ensureFormError({ ...result.errors }) };
+  }
   const data = result.data;
 
   // W7-A2 — same logical intake must carry the same mutationId (client UUID).
@@ -156,7 +159,7 @@ export async function submitIntake(
     if (e instanceof IntakeConcurrentClaimError) {
       summary = e.winner;
     } else if (e instanceof IntakeFieldError) {
-      return { errors: { [e.field]: e.message } };
+      return { errors: ensureFormError({ [e.field]: e.message }) };
     } else if (
       e instanceof Prisma.PrismaClientKnownRequestError &&
       e.code === "P2002"

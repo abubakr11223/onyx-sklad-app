@@ -95,16 +95,28 @@ export default async function ObraztsyPage({
 
       {ok && (
         <Alert variant="success" title="Готово" className="mb-3">
-          {ok === "issued" &&
-            "Образец выдан — камень списан, запись в «Активные». Склад подтвердит физическую выдачу в «Отгрузки»."}
-          {ok === "returned" && "Образец возвращён на склад."}
-          {ok === "sold" && "Оформлена продажа, образец закрыт."}
-          {ok === "extended" && "Срок возврата продлён."}
+          {ok === "issued"
+            ? "Образец выдан — камень списан, запись в «Активные». Склад подтвердит физическую выдачу в «Отгрузки»."
+            : ok === "returned"
+              ? "Образец возвращён на склад."
+              : ok === "sold"
+                ? "Оформлена продажа, образец закрыт."
+                : ok === "extended"
+                  ? "Срок возврата продлён."
+                  : // Unknown ok code — never empty green banner (silent success class)
+                    "Операция выполнена."}
         </Alert>
       )}
       {err && (
         <Alert variant="danger" title="Ошибка" className="mb-3">
-          {decodeURIComponent(err)}
+          {/* Actions send full RU message (encodeURIComponent); never a bare code. */}
+          {(() => {
+            try {
+              return decodeURIComponent(err);
+            } catch {
+              return err || "Ошибка.";
+            }
+          })()}
         </Alert>
       )}
 

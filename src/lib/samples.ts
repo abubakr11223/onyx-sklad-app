@@ -18,6 +18,10 @@ import {
   createSampleShipment,
   shipmentAwaitsWarehouse,
 } from "@/lib/shipments";
+import {
+  cancelOpenShowroomShipmentForUnit,
+  closeOpenShowroomPlacement,
+} from "@/lib/showroom";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -276,21 +280,31 @@ export async function issueSample(
             message: "Не выбран камень",
           });
         }
-        const where = {
-          id: unitId,
-          status: "AVAILABLE" as const,
-          needsCheck: false,
-        };
-        const updated =
-          input.targetType === "SLAB"
-            ? await tx.slab.updateMany({
-                where,
-                data: { status: "SAMPLE" },
-              })
-            : await tx.piece.updateMany({
-                where,
-                data: { status: "SAMPLE" },
-              });
+        // Conditional AVAILABLE→SAMPLE; or SHOWROOM→SAMPLE (issue from showroom).
+        let fromShowroom = false;
+        const tryStatuses = ["AVAILABLE", "SHOWROOM"] as const;
+        let updated = { count: 0 };
+        for (const st of tryStatuses) {
+          const where = {
+            id: unitId,
+            status: st,
+            needsCheck: false,
+          };
+          updated =
+            input.targetType === "SLAB"
+              ? await tx.slab.updateMany({
+                  where,
+                  data: { status: "SAMPLE" },
+                })
+              : await tx.piece.updateMany({
+                  where,
+                  data: { status: "SAMPLE" },
+                });
+          if (updated.count > 0) {
+            fromShowroom = st === "SHOWROOM";
+            break;
+          }
+        }
         if (updated.count === 0) {
           // Distinguish already SAMPLE vs missing
           const unit =
@@ -319,6 +333,19 @@ export async function issueSample(
             code: "UNIT_UNAVAILABLE",
             message:
               "Камень недоступен для образца (продан, в брони или на проверке)",
+          });
+        }
+        if (fromShowroom) {
+          const now = new Date();
+          await cancelOpenShowroomShipmentForUnit(tx, {
+            slabId: input.targetType === "SLAB" ? unitId : null,
+            pieceId: input.targetType === "PIECE" ? unitId : null,
+            now,
+          });
+          await closeOpenShowroomPlacement(tx, {
+            slabId: input.targetType === "SLAB" ? unitId : null,
+            pieceId: input.targetType === "PIECE" ? unitId : null,
+            now,
           });
         }
         if (input.targetType === "SLAB") slabId = unitId;
@@ -878,6 +905,12 @@ export async function sellSample(
           message: "Образец уже закрыт",
         });
       }
+
+      // TZ №15 §4 — cancel OPEN SAMPLE shipment if warehouse has not finished
+      // hand-over. Without this, /otgruzki keeps a «К отгрузке» task after the
+      // commercial sample is already SOLD (badge on /obraztsy would not show
+      // awaitsWarehouse for SOLD, but the ship queue would lie).
+      await cancelOpenShipmentForSample(tx, sample.id, now);
 
       await tx.auditLog.create({
         data: {

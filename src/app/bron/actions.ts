@@ -16,6 +16,7 @@ import {
 } from "@/lib/reservations";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 import { strOf } from "@/lib/form";
+import { ensureFormError } from "@/lib/form-errors";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
@@ -80,7 +81,7 @@ export async function createReservation(
   }
 
   if (Object.keys(errors).length > 0) {
-    return { errors, alternatives: emptyAlts() };
+    return { errors: ensureFormError(errors), alternatives: emptyAlts() };
   }
 
   const managerId = await currentActorId();
@@ -146,7 +147,10 @@ export async function createReservation(
         }
       }
 
-      return { errors: { [field]: e.message }, alternatives };
+      return {
+        errors: ensureFormError({ [field]: e.message }),
+        alternatives,
+      };
     }
     throw e;
   }

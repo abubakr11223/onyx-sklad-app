@@ -326,6 +326,13 @@ describe("sellSample — creates sale, closes sample, CREDIT→debt", () => {
 
   it("CASH sale from sample", async () => {
     activeSlabSample();
+    // OPEN sibling shipment — must cancel on sell (lifecycle coherence).
+    M.shipmentFindUnique.mockResolvedValue({
+      id: "ship-s1",
+      cancelledAt: null,
+      completedAt: null,
+      lines: [{ qtyShippedSlabs: 0, qtyShippedAreaM2: 0 }],
+    });
     const res = await sellSample({
       sampleId: "samp1",
       managerId: "mgr1",
@@ -350,6 +357,12 @@ describe("sellSample — creates sale, closes sample, CREDIT→debt", () => {
           status: "SOLD",
           saleRecordId: "sale1",
         }),
+      }),
+    );
+    expect(M.shipmentUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "ship-s1", cancelledAt: null },
+        data: expect.objectContaining({ cancelledAt: expect.any(Date) }),
       }),
     );
     expect(M.debtCreate).not.toHaveBeenCalled();

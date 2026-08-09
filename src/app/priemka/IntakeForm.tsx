@@ -24,6 +24,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
+import { intakeErrorItems } from "./intake-form-errors";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
 import { areaDiscrepancyPct, areaM2FromCm } from "@/lib/dimensions";
 
@@ -387,6 +388,9 @@ export default function IntakeForm({
     if (errs.patternsTotals || errs.patterns || errs.patternsSum) return "slabsTotal";
     for (let i = 0; i < patRowIds.length; i++) {
       if (errs[`pattern-${i}-description`]) return `patDescription-${i}`;
+      // sweep: length/width focus was missed — errors under field but no auto-focus
+      if (errs[`pattern-${i}-length`]) return `patLength-${i}`;
+      if (errs[`pattern-${i}-width`]) return `patWidth-${i}`;
       if (errs[`pattern-${i}-thickness`]) return `patThickness-${i}`;
       if (errs[`pattern-${i}-slabs`]) return `patSlabs-${i}`;
       if (errs[`pattern-${i}-area`]) return `patArea-${i}`;
@@ -444,7 +448,25 @@ export default function IntakeForm({
     >
       {/* W7-A2 — same logical intake → same mutationId (de-dupe on server). */}
       <input type="hidden" name="mutationId" value={mutationId} />
-      {e.form && <Alert variant="danger">{e.form}</Alert>}
+      {(() => {
+        // Preferred top keys + any leftover (unknown / dynamic not in TOP list
+        // still append via orderedErrorMessages). form always listed first.
+        const banner = intakeErrorItems(e);
+        if (banner.length === 0) return null;
+        return (
+          <Alert variant="danger" title="Проверьте данные">
+            {banner.length === 1 ? (
+              <p className="text-base font-semibold">{banner[0]}</p>
+            ) : (
+              <ul className="list-disc space-y-1 pl-4 text-sm">
+                {banner.map((msg) => (
+                  <li key={msg}>{msg}</li>
+                ))}
+              </ul>
+            )}
+          </Alert>
+        );
+      })()}
       {/* §7/§8 — офлайн: данные сохранены черновиком, не потеряны. */}
       {offlineMsg && <Alert variant="warning">{offlineMsg}</Alert>}
       {draftRestored && (

@@ -27,6 +27,7 @@ import {
   approveTelegramRequest,
   rejectTelegramRequest,
 } from "./actions";
+import { mapFlashCode, mapOkFlash } from "@/lib/form-errors";
 import {
   isDemoWarehouseAccount,
   telegramIdMatchesOwner,
@@ -93,8 +94,13 @@ export default async function AccountsPage({
   }
 
   const sp = await searchParams;
-  const okMsg = sp.ok ? OK_RU[sp.ok] : undefined;
-  const errMsg = sp.error ? (ERROR_RU[sp.error] ?? "Не удалось выполнить действие.") : undefined;
+  // Unknown codes never silent (structural — form-errors mapFlash*).
+  const okMsg = mapOkFlash(sp.ok, OK_RU, "Готово.");
+  const errMsg = mapFlashCode(
+    sp.error,
+    ERROR_RU,
+    "Не удалось выполнить действие.",
+  );
 
   const users = await db.user.findMany({
     orderBy: [{ role: "asc" }, { createdAt: "asc" }],

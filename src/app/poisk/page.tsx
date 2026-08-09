@@ -36,6 +36,8 @@ import {
   piecesWhere,
   slabsWhere,
   batchesPlateWhere,
+  showroomPiecesWhere,
+  showroomSlabsWhere,
 } from "@/lib/poisk-search";
 import {
   fetchPoiskTypesPage,
@@ -296,7 +298,14 @@ export default async function PoiskPage({
     }>;
   };
 
-  const [fittingPiecesMatched, fittingSlabsMatched, fittingBatchesMatched, batchLocs] =
+  const [
+    fittingPiecesMatched,
+    fittingSlabsMatched,
+    fittingBatchesMatched,
+    batchLocs,
+    showroomPiecesMatched,
+    showroomSlabsMatched,
+  ] =
     await Promise.all([
       hasDims
         ? (db.piece.findMany({
@@ -371,6 +380,55 @@ export default async function PoiskPage({
         : Promise.resolve(
             [] as Array<{ batchId: string; block: string; landmark: string }>,
           ),
+      // TZ №15: showroom matches — separate list, not ordinary free stock.
+      hasDims
+        ? db.piece.findMany({
+            where: showroomPiecesWhere(q, needMax, needMin),
+            select: {
+              id: true,
+              kind: true,
+              boundingLengthMm: true,
+              boundingWidthMm: true,
+              block: true,
+              landmark: true,
+              stoneType: { select: { name: true } },
+            },
+            orderBy: [{ boundingAreaMm2: "asc" }, { id: "asc" }],
+            take: 50,
+          })
+        : Promise.resolve([] as Array<{
+            id: string;
+            kind: string;
+            boundingLengthMm: number;
+            boundingWidthMm: number;
+            block: string;
+            landmark: string;
+            stoneType: { name: string };
+          }>),
+      hasDims
+        ? db.slab.findMany({
+            where: showroomSlabsWhere(q, needMax, needMin),
+            select: {
+              id: true,
+              label: true,
+              lengthMm: true,
+              widthMm: true,
+              block: true,
+              landmark: true,
+              stoneType: { select: { name: true } },
+            },
+            orderBy: [{ lengthMm: "asc" }, { widthMm: "asc" }, { id: "asc" }],
+            take: 50,
+          })
+        : Promise.resolve([] as Array<{
+            id: string;
+            label: string;
+            lengthMm: number | null;
+            widthMm: number | null;
+            block: string;
+            landmark: string;
+            stoneType: { name: string };
+          }>),
     ]);
 
   const slabsCapped = fittingSlabsMatched.length > MAX_POISK_PIECES;
@@ -421,6 +479,8 @@ export default async function PoiskPage({
   // prefiks kengayishi baribir pn orqali.
   const visiblePieces = fittingPieces.slice(0, shownPieces);
   const hasMorePieces = fittingPieces.length > visiblePieces.length;
+  const showroomHits =
+    showroomSlabsMatched.length + showroomPiecesMatched.length;
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -507,6 +567,80 @@ export default async function PoiskPage({
             </ul>
           )}
         </Alert>
+      )}
+
+      {hasDims && showroomHits > 0 && (
+        <section
+          id="shourum"
+          className="mt-6 scroll-mt-4 rounded-card border border-gold/40 bg-gold/10 p-4"
+        >
+          <h2 className="text-lg font-bold text-ink">
+            В шоу-руме{" "}
+            <span className="text-sm font-normal text-ink/60">
+              (не обычное наличие)
+            </span>
+          </h2>
+          <p className="text-sm text-ink/70">
+            Подходит по размеру, но выставлен на витрине — продажа/образец через
+            раздел «Шоу-рум».
+          </p>
+          <ul className="mt-3 space-y-2">
+            {showroomSlabsMatched.map((s) => (
+              <li
+                key={s.id}
+                className="rounded-card border border-ink/10 bg-paper p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
+                  <span>
+                    {s.stoneType.name} — {s.label}
+                  </span>
+                  <Badge variant="warning">в шоу-руме</Badge>
+                </div>
+                <div className="text-sm text-ink/70">
+                  {s.lengthMm}×{s.widthMm} см
+                  {canSeeExact && (
+                    <>
+                      {" "}
+                      · Блок {s.block}, ор. {s.landmark}
+                    </>
+                  )}
+                </div>
+                <Link
+                  href="/shourum"
+                  className="mt-1 inline-block text-sm text-gold-deep underline"
+                >
+                  Открыть шоу-рум →
+                </Link>
+              </li>
+            ))}
+            {showroomPiecesMatched.map((p) => (
+              <li
+                key={p.id}
+                className="rounded-card border border-ink/10 bg-paper p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
+                  <span>{p.stoneType.name}</span>
+                  <Badge variant="warning">в шоу-руме</Badge>
+                </div>
+                <div className="text-sm text-ink/70">
+                  Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
+                  {canSeeExact && (
+                    <>
+                      {" "}
+                      · Блок {p.block}, ор. {p.landmark}
+                    </>
+                  )}
+                </div>
+                <Link
+                  href="/shourum"
+                  className="mt-1 inline-block text-sm text-gold-deep underline"
+                >
+                  Открыть шоу-рум →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {hasDims && (

@@ -32,6 +32,13 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
     expect(caps("PARTNER").canSeeShipments).toBe(false);
   });
 
+  it("Шоу-рум — OWNER/MANAGER/WAREHOUSE; PARTNER yo'q", () => {
+    expect(canAccessNav("/shourum", caps("OWNER"))).toBe(true);
+    expect(canAccessNav("/shourum", caps("MANAGER"))).toBe(true);
+    expect(canAccessNav("/shourum", caps("WAREHOUSE"))).toBe(true);
+    expect(canAccessNav("/shourum", caps("PARTNER"))).toBe(false);
+  });
+
   it("MANAGER — /otgruzki ochiq (own scope); confirm yo'q", () => {
     const m = caps("MANAGER");
     expect(canAccessNav("/otgruzki", m)).toBe(true);

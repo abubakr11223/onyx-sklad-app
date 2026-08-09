@@ -236,6 +236,20 @@ export type BatchEditInput = {
     slabsCount: number;
     areaM2: number;
   }[];
+  /**
+   * ТЗ №14 §3 pattern photo (reuses Photo SAMPLE + batchPatternId).
+   * Blob put happens BEFORE applyBatchEdit; DB create/unlink is inside this TX
+   * so field edit + photo never diverge (same class of bug as slab-without-photo).
+   * Photo rows are eternal (§1.9) — clear unlinks only (batchPatternId → null,
+   * stoneTypeId kept as owner for CHECK).
+   */
+  patternPhotoOps?: {
+    patternId: string;
+    op: "set" | "clear";
+    /** Required for set — result of putPhotoBlob. */
+    storageKey?: string;
+    takenAt?: Date;
+  }[];
   actorId: string;
   /** OWNER → can edit quantity; warehouse → dims/details only. */
   canEditQuantity: boolean;
@@ -300,6 +314,12 @@ export async function applyBatchEdit(
             areaM2: true,
             slabsSold: true,
             areaSoldM2: true,
+            photos: {
+              where: { kind: "SAMPLE" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { id: true },
+            },
           },
         },
         locations: {
@@ -464,6 +484,35 @@ export async function applyBatchEdit(
       push(`pattern.${p.id}.areaM2`, Number(old.areaM2), p.areaM2);
     }
 
+    // Pattern photos — audit old photo id → new id | null (unlink).
+    const photoOps = input.patternPhotoOps ?? [];
+    for (const op of photoOps) {
+      if (!existingPat.has(op.patternId)) {
+        throw new BatchEditError(
+          "INVALID_INPUT",
+          "Узор не принадлежит этой партии (фото)",
+          "patterns",
+        );
+      }
+      if (op.op === "set" && !op.storageKey) {
+        throw new BatchEditError(
+          "INVALID_INPUT",
+          "Нет файла фото узора",
+          "patterns",
+        );
+      }
+      const oldPhotoId =
+        existingPat.get(op.patternId)!.photos[0]?.id ?? null;
+      if (op.op === "set") {
+        push(`pattern.${op.patternId}.photo`, oldPhotoId, "new");
+      } else {
+        // clear: only meaningful if something was linked
+        if (oldPhotoId) {
+          push(`pattern.${op.patternId}.photo`, oldPhotoId, null);
+        }
+      }
+    }
+
     // Locations: compare serialised
     const oldLoc = batch.locations
       .map(
@@ -558,6 +607,33 @@ export async function applyBatchEdit(
             areaHereM2:
               l.areaHereM2 === null ? null : l.areaHereM2.toFixed(3),
           })),
+        });
+      }
+    }
+
+    // Pattern photos inside the same TX as field edits (atomic DB).
+    // §1.9: Photo rows are never hard-deleted.
+    for (const op of photoOps) {
+      if (op.op === "clear") {
+        // Unlink from pattern; keep stoneTypeId so Photo_owner_check holds.
+        await tx.photo.updateMany({
+          where: { batchPatternId: op.patternId, kind: "SAMPLE" },
+          data: {
+            batchPatternId: null,
+            stoneTypeId: batch.stoneTypeId,
+          },
+        });
+      } else if (op.op === "set" && op.storageKey) {
+        // New SAMPLE photo on the pattern (old rows stay linked — eternal archive).
+        await tx.photo.create({
+          data: {
+            storageKey: op.storageKey,
+            kind: "SAMPLE",
+            takenAt: op.takenAt ?? new Date(),
+            takenById: input.actorId,
+            stoneTypeId: batch.stoneTypeId,
+            batchPatternId: op.patternId,
+          },
         });
       }
     }

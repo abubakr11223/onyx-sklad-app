@@ -3,6 +3,10 @@
 // kamen/actions.ts:generateInteriors (INTERIOR_AI). Разошлась мелочью
 // extFromMime (priemka знает про webp, kamen — только png/jpg). Здесь — единый
 // helper, extFromMime — часть контракта, дубль убран.
+//
+// final/pattern-photo: put + create split so batch-edit can put outside the
+// Prisma TX then create Photo rows inside the same TX as field changes
+// (atomic DB; blob put is not transactional by nature).
 
 import type { PhotoKind, Prisma } from "@prisma/client";
 import { put } from "@vercel/blob";
@@ -33,21 +37,50 @@ export interface StorePhotoBlobParams {
   photoRequestId?: string | null;
 }
 
+export type PhotoDbClient = {
+  photo: {
+    create: (args: {
+      data: Prisma.PhotoUncheckedCreateInput;
+      select: { id: true };
+    }) => Promise<{ id: string }>;
+  };
+};
+
 /**
- * put() → db.photo.create в одной обёртке. Возвращает созданную Photo (id + url).
- * Ошибку не глотает — вызывающий сам решит (аудит хочет консистентности; priemka
- * ловит и продолжает без photo, kamen выбрасывает наверх).
+ * Upload bytes to Vercel Blob only (no DB). Caller must create Photo in the
+ * same domain transaction that depends on this file existing.
  */
-export async function storePhotoBlob(
-  params: StorePhotoBlobParams,
-): Promise<{ id: string; url: string }> {
+export async function putPhotoBlob(params: {
+  pathPrefix: string;
+  bytes: Buffer;
+  mediaType: string;
+}): Promise<{ storageKey: string; mediaType: string }> {
   const ext = extFromMime(params.mediaType);
   const blob = await put(`${params.pathPrefix}.${ext}`, params.bytes, {
     access: "public",
     contentType: params.mediaType,
   });
+  return { storageKey: blob.url, mediaType: params.mediaType };
+}
+
+/** Insert Photo row via optional TX client (default: global db). */
+export async function createPhotoRecord(
+  client: PhotoDbClient,
+  params: {
+    storageKey: string;
+    mediaType?: string; // unused — storageKey already has url
+    kind: PhotoKind;
+    takenAt: Date;
+    takenById?: string | null;
+    stoneTypeId?: string | null;
+    slabId?: string | null;
+    pieceId?: string | null;
+    batchPatternId?: string | null;
+    photoRequestId?: string | null;
+  },
+): Promise<{ id: string; url: string }> {
   const data: Prisma.PhotoUncheckedCreateInput = {
-    storageKey: blob.url,
+    storageKey: params.storageKey,
     kind: params.kind,
     takenAt: params.takenAt,
     takenById: params.takenById ?? null,
@@ -57,6 +90,32 @@ export async function storePhotoBlob(
     batchPatternId: params.batchPatternId ?? null,
     photoRequestId: params.photoRequestId ?? null,
   };
-  const photo = await db.photo.create({ data, select: { id: true } });
-  return { id: photo.id, url: blob.url };
+  const photo = await client.photo.create({ data, select: { id: true } });
+  return { id: photo.id, url: params.storageKey };
+}
+
+/**
+ * put() → db.photo.create в одной обёртке. Возвращает созданную Photo (id + url).
+ * Ошибку не глотает — вызывающий сам решит (аудит хочет консистентности; priemka
+ * ловит и продолжает без photo, kamen выбрасывает наверх).
+ */
+export async function storePhotoBlob(
+  params: StorePhotoBlobParams,
+): Promise<{ id: string; url: string }> {
+  const { storageKey } = await putPhotoBlob({
+    pathPrefix: params.pathPrefix,
+    bytes: params.bytes,
+    mediaType: params.mediaType,
+  });
+  return createPhotoRecord(db, {
+    storageKey,
+    kind: params.kind,
+    takenAt: params.takenAt,
+    takenById: params.takenById,
+    stoneTypeId: params.stoneTypeId,
+    slabId: params.slabId,
+    pieceId: params.pieceId,
+    batchPatternId: params.batchPatternId,
+    photoRequestId: params.photoRequestId,
+  });
 }

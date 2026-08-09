@@ -38,6 +38,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/svodka": "canSeeHistory",
   // «Отгрузки» (TZ №15): склад / владелец / менеджер (canSeeShipments).
   "/otgruzki": "canSeeShipments",
+  // «Шоу-рум» (TZ №15 Slice 3): canSeeShowroom (OWNER/MANAGER/WAREHOUSE).
+  "/shourum": "canSeeShowroom",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

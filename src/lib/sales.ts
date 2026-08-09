@@ -21,6 +21,10 @@ import {
   cancelOpenShipmentForSale,
   createSaleShipment,
 } from "./shipments";
+import {
+  cancelOpenShowroomShipmentForUnit,
+  closeOpenShowroomPlacement,
+} from "./showroom";
 import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
@@ -67,7 +71,8 @@ export type SellableUnitStatus =
   | "SOLD"
   | "BROKEN_OFFCUT"
   | "RETURNED"
-  | "SAMPLE";
+  | "SAMPLE"
+  | "SHOWROOM";
 
 export interface UnitSaleDecisionInput {
   unitStatus: SellableUnitStatus;
@@ -90,7 +95,7 @@ export type UnitSaleDecision =
   | {
       ok: true;
       /** Ожидаемый статус для условного UPDATE (data-model §2). */
-      expectedStatus: "AVAILABLE" | "RESERVED";
+      expectedStatus: "AVAILABLE" | "RESERVED" | "SHOWROOM";
       /** true → бронь переводится в COMPLETED той же транзакцией (переход №4). */
       viaReservation: boolean;
     }
@@ -160,6 +165,9 @@ export function decideUnitSale(input: UnitSaleDecisionInput): UnitSaleDecision {
         "INVALID_STATUS",
         "Камень выдан как образец — оформите через раздел «Образцы»",
       );
+    case "SHOWROOM":
+      // TZ №15 Slice 3 — sell from showroom (SHOWROOM → SOLD, conditional).
+      return { ok: true, expectedStatus: "SHOWROOM", viaReservation: false };
   }
 }
 
@@ -690,6 +698,20 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         throw new SaleLogicError({
           code: "ALREADY_SOLD",
           message: "Уже продан — другой менеджер закрыл продажу первым (TZ §7.1)",
+        });
+      }
+
+      // TZ №15 Slice 3 — selling from showroom closes placement + cancels OPEN showroom ship.
+      if (decision.expectedStatus === "SHOWROOM") {
+        await cancelOpenShowroomShipmentForUnit(tx, {
+          slabId: input.targetType === "SLAB" ? unit.id : null,
+          pieceId: input.targetType === "PIECE" ? unit.id : null,
+          now,
+        });
+        await closeOpenShowroomPlacement(tx, {
+          slabId: input.targetType === "SLAB" ? unit.id : null,
+          pieceId: input.targetType === "PIECE" ? unit.id : null,
+          now,
         });
       }
 

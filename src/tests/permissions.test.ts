@@ -25,6 +25,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllClients: true,
     canSeeShipments: true,
     canConfirmShipment: true,
+    canSeeShowroom: true,
+    canSendToShowroom: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -45,6 +47,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllClients: false,
     canSeeShipments: true,
     canConfirmShipment: false,
+    canSeeShowroom: true,
+    canSendToShowroom: true,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -65,6 +69,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllClients: false,
     canSeeShipments: true,
     canConfirmShipment: true,
+    canSeeShowroom: true,
+    canSendToShowroom: true,
   },
   PARTNER: {
     canSeePrices: false,
@@ -85,6 +91,8 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSeeAllClients: false,
     canSeeShipments: false,
     canConfirmShipment: false,
+    canSeeShowroom: false,
+    canSendToShowroom: false,
   },
 };
 

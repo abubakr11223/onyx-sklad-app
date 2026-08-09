@@ -258,6 +258,13 @@ export const NAV_ITEMS: NavItem[] = [
     Icon: PackageIcon,
   },
   {
+    href: "/shourum",
+    label: "Шоу-рум",
+    short: "Шоу-р.",
+    description: "Камень на витрине",
+    Icon: PackageIcon,
+  },
+  {
     href: "/razbit",
     label: "Разбить",
     short: "Разбить",

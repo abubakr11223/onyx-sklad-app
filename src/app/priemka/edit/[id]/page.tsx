@@ -70,6 +70,12 @@ export default async function PriemkaEditBatchPage({
           areaM2: true,
           slabsSold: true,
           areaSoldM2: true,
+          photos: {
+            where: { kind: "SAMPLE" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true },
+          },
         },
       },
       locations: {
@@ -164,6 +170,7 @@ export default async function PriemkaEditBatchPage({
           areaM2: Number(p.areaM2),
           slabsSold: p.slabsSold,
           areaSoldM2: Number(p.areaSoldM2),
+          photoId: p.photos[0]?.id ?? null,
         }))}
         locations={batch.locations.map((l) => ({
           block: l.block,

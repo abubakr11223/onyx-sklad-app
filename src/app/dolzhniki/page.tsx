@@ -251,9 +251,9 @@ export default async function DolzhnikiPage({
         </p>
       </header>
 
-      {ok && OK_RU[ok] && (
+      {ok && (
         <Alert variant="success" className="mb-4">
-          {OK_RU[ok]}
+          {OK_RU[ok] ?? "Готово."}
         </Alert>
       )}
       {err && (

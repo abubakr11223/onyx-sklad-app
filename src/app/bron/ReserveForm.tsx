@@ -10,6 +10,11 @@ import {
   createReservation,
   type ReserveFormState,
 } from "./actions";
+import {
+  reserveErrorItems,
+  reserveRenderedKeys,
+} from "./reserve-form-errors";
+import { leftoverErrorMessages } from "@/lib/form-errors";
 import type { ReservationAlternative } from "@/lib/reservations";
 import Button from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -92,9 +97,38 @@ export default function ReserveForm({
 
   const alternatives = state.alternatives ?? [];
 
+  // Structural leftover: unmounted target/qty + unknown keys never silent.
+  // Preferred list always includes target/qty*; mount-aware leftovers add
+  // anything not on a live Field (e.g. target when stone not chosen).
+  const bannerItems = reserveErrorItems(e);
+  const mountLeftovers = leftoverErrorMessages(
+    e,
+    reserveRenderedKeys({
+      stoneSelected: Boolean(stone),
+      isBatch,
+    }),
+  );
+  // Merge: full preferred order, plus any mount-only gap already covered by
+  // preferred keys (target/qty are in RESERVE_FORM_ERROR_KEYS).
+  const errorBanner = [
+    ...new Set([...bannerItems, ...mountLeftovers]),
+  ];
+
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      {e.form && <Alert variant="danger">{e.form}</Alert>}
+      {errorBanner.length > 0 && (
+        <Alert variant="danger" title="Бронь не оформлена">
+          {errorBanner.length === 1 ? (
+            <p className="text-base font-semibold">{errorBanner[0]}</p>
+          ) : (
+            <ul className="list-disc space-y-1 pl-4 text-sm">
+              {errorBanner.map((msg) => (
+                <li key={msg}>{msg}</li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      )}
 
       {/* TZ §7: отказ брони не «глухой» — похожие AVAILABLE (не авто-бронь). */}
       {alternatives.length > 0 && (

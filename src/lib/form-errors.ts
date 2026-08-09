@@ -77,3 +77,30 @@ export function ensureFormError(
   errors.form = first;
   return errors;
 }
+
+/**
+ * Redirect mini-forms (?error=code / ?err=code): map code → RU message.
+ * Unknown codes must NEVER be silent — always return fallback text.
+ */
+export function mapFlashCode(
+  code: string | undefined | null,
+  map: Readonly<Record<string, string>>,
+  unknownFallback: string,
+): string | null {
+  if (code == null) return null;
+  const c = String(code).trim();
+  if (!c) return null;
+  return map[c] ?? unknownFallback;
+}
+
+/**
+ * Success flash for ?ok=code maps. Unknown codes → explicit fallback
+ * (never empty green banner that looks like total success with no text).
+ */
+export function mapOkFlash(
+  code: string | undefined | null,
+  map: Readonly<Record<string, string>>,
+  unknownFallback = "Готово.",
+): string | null {
+  return mapFlashCode(code, map, unknownFallback);
+}

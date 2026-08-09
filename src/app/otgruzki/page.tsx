@@ -123,6 +123,9 @@ export default async function OtgruzkiPage({
                       {s.isSample && (
                         <Badge variant="warning">ОБРАЗЕЦ</Badge>
                       )}
+                      {s.isShowroom && (
+                        <Badge variant="warning">ШОУ-РУМ</Badge>
+                      )}
                     </div>
                     <p className="text-sm text-ink/70">
                       {s.clientName ?? "—"}

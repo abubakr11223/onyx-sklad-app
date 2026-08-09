@@ -92,6 +92,14 @@ export interface Capabilities {
    * Manager does not self-confirm by default (design D4).
    */
   canConfirmShipment: boolean;
+  /**
+   * TZ №15 Slice 3 — раздел «Шоу-рум» (list + send + return).
+   * PLACEHOLDER (design D5/D6): OWNER + MANAGER + WAREHOUSE.
+   * Owner may later restrict warehouse or manager — change only this matrix.
+   */
+  canSeeShowroom: boolean;
+  /** Send unit to showroom (same roles as canSeeShowroom for now). */
+  canSendToShowroom: boolean;
 }
 
 /**
@@ -145,6 +153,8 @@ export const DENY_ALL: Capabilities = {
   canSeeAllClients: false,
   canSeeShipments: false,
   canConfirmShipment: false,
+  canSeeShowroom: false,
+  canSendToShowroom: false,
 };
 
 export function capabilitiesFor(
@@ -172,6 +182,8 @@ export function capabilitiesFor(
         canSeeAllClients: true, // владелец видит всех
         canSeeShipments: true,
         canConfirmShipment: true,
+        canSeeShowroom: true,
+        canSendToShowroom: true,
       };
     case "MANAGER":
       return {
@@ -195,6 +207,8 @@ export function capabilitiesFor(
         canSeeAllClients: false, // только managerId = actor
         canSeeShipments: true, // own sales' shipments
         canConfirmShipment: false, // design D4 — warehouse/owner confirm
+        canSeeShowroom: true,
+        canSendToShowroom: true,
       };
     case "WAREHOUSE":
       return {
@@ -216,6 +230,8 @@ export function capabilitiesFor(
         canSeeAllClients: false,
         canSeeShipments: true,
         canConfirmShipment: true,
+        canSeeShowroom: true,
+        canSendToShowroom: true,
       };
     case "PARTNER":
       return {
@@ -237,6 +253,8 @@ export function capabilitiesFor(
         canSeeAllClients: false,
         canSeeShipments: false,
         canConfirmShipment: false,
+        canSeeShowroom: false,
+        canSendToShowroom: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

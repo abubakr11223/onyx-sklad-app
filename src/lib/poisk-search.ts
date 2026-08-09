@@ -45,7 +45,25 @@ export function piecesWhere(
 ): Prisma.PieceWhereInput {
   const mat = materialWhere(q);
   return {
+    // Ordinary free stock only — SHOWROOM not offered as ordinary remainder.
     status: "AVAILABLE",
+    stoneType: { isArchived: false, ...(mat ?? {}) },
+    OR: [
+      { boundingLengthMm: { gte: needMax }, boundingWidthMm: { gte: needMin } },
+      { boundingLengthMm: { gte: needMin }, boundingWidthMm: { gte: needMax } },
+    ],
+  };
+}
+
+/** TZ №15 — showroom pieces (badge «в шоу-руме»), not free stock. */
+export function showroomPiecesWhere(
+  q: string,
+  needMax: number,
+  needMin: number,
+): Prisma.PieceWhereInput {
+  const mat = materialWhere(q);
+  return {
+    status: "SHOWROOM",
     stoneType: { isArchived: false, ...(mat ?? {}) },
     OR: [
       { boundingLengthMm: { gte: needMax }, boundingWidthMm: { gte: needMin } },
@@ -65,6 +83,7 @@ export function slabsWhere(
 ): Prisma.SlabWhereInput {
   const mat = materialWhere(q);
   return {
+    // Ordinary free stock only — SHOWROOM excluded (not sellable as ordinary).
     status: "AVAILABLE",
     needsCheck: false,
     lengthMm: { not: null },
@@ -74,6 +93,41 @@ export function slabsWhere(
       { lengthMm: { gte: needMax }, widthMm: { gte: needMin } },
       { lengthMm: { gte: needMin }, widthMm: { gte: needMax } },
     ],
+  };
+}
+
+/**
+ * TZ №15 Slice 3 — showroom slabs matching same size/material, marked separately.
+ * Not mixed into ordinary AVAILABLE results (not ordinarily sellable).
+ */
+export function showroomSlabsWhere(
+  q: string,
+  needMax: number,
+  needMin: number,
+): Prisma.SlabWhereInput {
+  const mat = materialWhere(q);
+  return {
+    status: "SHOWROOM",
+    needsCheck: false,
+    lengthMm: { not: null },
+    widthMm: { not: null },
+    stoneType: { isArchived: false, ...(mat ?? {}) },
+    OR: [
+      { lengthMm: { gte: needMax }, widthMm: { gte: needMin } },
+      { lengthMm: { gte: needMin }, widthMm: { gte: needMax } },
+    ],
+  };
+}
+
+/** Name-only showroom list (no size filter) — bounded pickers / discovery. */
+export function showroomUnitsByMaterialWhere(
+  q: string,
+): Prisma.SlabWhereInput {
+  const mat = materialWhere(q);
+  return {
+    status: "SHOWROOM",
+    needsCheck: false,
+    stoneType: { isArchived: false, ...(mat ?? {}) },
   };
 }
 

@@ -152,6 +152,43 @@ export async function createSaleShipment(
 }
 
 /**
+ * Create OPEN SHOWROOM shipment + line in the same TX as AVAILABLE→SHOWROOM.
+ * Confirm is physical move only — does NOT change UnitStatus again.
+ */
+export async function createShowroomShipment(
+  tx: Db,
+  args: {
+    managerId: string;
+    note?: string | null;
+    line: ShipmentLineInput;
+  },
+): Promise<{ shipmentId: string }> {
+  const line = args.line;
+  const shipment = await tx.shipment.create({
+    data: {
+      kind: "SHOWROOM",
+      managerId: args.managerId,
+      note: args.note?.trim() || null,
+      lines: {
+        create: {
+          targetType: line.targetType,
+          slabId: line.slabId ?? null,
+          pieceId: line.pieceId ?? null,
+          batchId: null,
+          qtyOrderedSlabs: 1,
+          qtyOrderedAreaM2: null,
+          qtyShippedSlabs: 0,
+          qtyShippedAreaM2: 0,
+          locationSnapshot: line.locationSnapshot ?? null,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return { shipmentId: shipment.id };
+}
+
+/**
  * Create OPEN SAMPLE shipment + line in the same TX as Sample.create.
  * Does NOT create/update Sample — issueSample is the single Sample writer (design §4.4).
  * Does NOT touch UnitStatus (already SAMPLE / volume hold at issue).
@@ -465,6 +502,8 @@ export type ShipmentListItem = {
   kind: string;
   /** True when kind === SAMPLE (warehouse UI «ОБРАЗЕЦ»). */
   isSample: boolean;
+  /** True when kind === SHOWROOM (warehouse UI «ШОУ-РУМ»). */
+  isShowroom: boolean;
   createdAt: Date;
   completedAt: Date | null;
   managerId: string;
@@ -499,8 +538,8 @@ export async function listShipments(
 ): Promise<ShipmentListItem[]> {
   const take = Math.min(MAX_SHIPMENTS_PAGE, args.take ?? MAX_SHIPMENTS_PAGE);
   const where: Prisma.ShipmentWhereInput = {
-    // Slice 2: sales + samples (SHOWROOM later).
-    kind: { in: ["SALE", "SAMPLE"] },
+    // Slice 3: sales + samples + showroom physical moves.
+    kind: { in: ["SALE", "SAMPLE", "SHOWROOM"] },
     ...(args.canSeeAll
       ? {}
       : args.actorId
@@ -580,6 +619,18 @@ export async function listShipments(
           qtyShippedSlabs: true,
           qtyShippedAreaM2: true,
           locationSnapshot: true,
+          slab: {
+            select: {
+              label: true,
+              stoneType: { select: { name: true } },
+            },
+          },
+          piece: {
+            select: {
+              kind: true,
+              stoneType: { select: { name: true } },
+            },
+          },
         },
         take: 5,
       },
@@ -604,6 +655,7 @@ export async function listShipments(
     });
     const sale = r.saleRecord;
     const sample = r.sample;
+    const line0 = r.lines[0];
     let stoneLabel = "—";
     if (sale?.slab) {
       stoneLabel = `${sale.slab.stoneType.name} — ${sale.slab.label}`;
@@ -619,23 +671,30 @@ export async function listShipments(
       stoneLabel = `${sample.piece.stoneType.name} — ${k}`;
     } else if (sample?.batch) {
       stoneLabel = `${sample.batch.stoneType.name} — объём (образец)`;
+    } else if (line0?.slab) {
+      stoneLabel = `${line0.slab.stoneType.name} — ${line0.slab.label}`;
+    } else if (line0?.piece) {
+      const k = line0.piece.kind === "BROKEN" ? "бой" : "остаток";
+      stoneLabel = `${line0.piece.stoneType.name} — ${k}`;
     }
-    const line0 = r.lines[0];
     return {
       id: r.id,
       status,
       statusLabel: shipmentStatusLabelRu(status),
       kind: r.kind,
       isSample: r.kind === "SAMPLE",
+      isShowroom: r.kind === "SHOWROOM",
       createdAt: r.createdAt,
       completedAt: r.completedAt,
       managerId: r.managerId,
       managerName: r.manager.name,
       clientName:
-        r.client?.name ??
-        sample?.client?.name ??
-        sale?.customerName ??
-        null,
+        r.kind === "SHOWROOM"
+          ? "Шоу-рум"
+          : (r.client?.name ??
+            sample?.client?.name ??
+            sale?.customerName ??
+            null),
       siteName: r.site?.name ?? null,
       saleId: sale?.id ?? null,
       sampleId: sample?.id ?? null,

@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
+import { batchEditErrorItems } from "./intake-form-errors";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
 
 export type EditPattern = {
@@ -20,6 +21,8 @@ export type EditPattern = {
   areaM2: number;
   slabsSold: number;
   areaSoldM2: number;
+  /** Latest SAMPLE photo id (proxy /api/photo/[id]), if any. */
+  photoId: string | null;
 };
 
 export type EditLocation = {
@@ -110,7 +113,23 @@ export default function BatchEditForm(props: EditBatchProps) {
 
       <WarehouseGridDatalists blocks={props.blocks} />
 
-      {e.form && <Alert variant="danger">{e.form}</Alert>}
+      {(() => {
+        const banner = batchEditErrorItems(e);
+        if (banner.length === 0) return null;
+        return (
+          <Alert variant="danger" title="Проверьте данные">
+            {banner.length === 1 ? (
+              <p className="text-base font-semibold">{banner[0]}</p>
+            ) : (
+              <ul className="list-disc space-y-1 pl-4 text-sm">
+                {banner.map((msg) => (
+                  <li key={msg}>{msg}</li>
+                ))}
+              </ul>
+            )}
+          </Alert>
+        );
+      })()}
 
       <Alert variant="info" title={props.stoneName}>
         {props.hasMovements ? (
@@ -284,6 +303,55 @@ export default function BatchEditForm(props: EditBatchProps) {
                     readOnly={!props.canEditQuantity}
                     error={e[`pat-${i}-area`]}
                   />
+                </div>
+                {/* ТЗ №14 §3 — фото узора: тот же SAMPLE+batchPatternId путь, что приёмка. */}
+                <div className="mt-3 flex flex-col gap-1.5">
+                  <p className="text-sm font-semibold text-ink">Фото узора</p>
+                  {p.photoId ? (
+                    <p className="text-sm text-ink/70">
+                      Сейчас:{" "}
+                      <a
+                        href={`/api/photo/${p.photoId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-gold-deep underline"
+                      >
+                        открыть
+                      </a>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-ink/50">Фото ещё нет</p>
+                  )}
+                  <input
+                    id={`patPhoto-${i}`}
+                    name="patPhoto"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+                    aria-invalid={e[`pat-${i}-photo`] ? true : undefined}
+                  />
+                  {e[`pat-${i}-photo`] && (
+                    <p className="text-sm font-medium text-danger">
+                      {e[`pat-${i}-photo`]}
+                    </p>
+                  )}
+                  {p.photoId && (
+                    <label className="mt-1 flex min-h-11 items-center gap-2 text-sm text-ink">
+                      <input
+                        type="checkbox"
+                        name={`patPhotoClear-${p.id}`}
+                        value="1"
+                        className="h-5 w-5 accent-ink"
+                      />
+                      Снять фото с узора (строка Photo не удаляется — §1.9)
+                    </label>
+                  )}
+                  <p className="text-xs text-ink/50">
+                    Новое фото добавляется к узору (старое остаётся в архиве).
+                    «Снять» отвязывает SAMPLE-фото от узора, файл в хранилище
+                    сохраняется.
+                  </p>
                 </div>
               </div>
             ))}

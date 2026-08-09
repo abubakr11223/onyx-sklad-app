@@ -12,6 +12,10 @@ import {
   type ChangeEvent,
 } from "react";
 import { submitBreak, type BreakFormState } from "./actions";
+import {
+  breakLeftoverItems,
+  breakRenderedKeys,
+} from "./break-form-errors";
 import { BREAK_CAUSES } from "@/lib/breaking";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -175,9 +179,35 @@ export default function BreakForm({
   const slabGroups = groupBy(slabs, (s) => s.stoneName);
   const batchGroups = groupBy(batches, (b) => b.stoneName);
 
+  // soldPart edge + unknown keys: anything not on a mounted Field → banner.
+  const leftovers = breakLeftoverItems(
+    e,
+    breakRenderedKeys({
+      mode,
+      soldPart,
+      pieceRowCount: rowIds.length,
+    }),
+  );
+  // form is always in banner when ensureFormError set it (or domain form).
+  const topMessages = [
+    ...new Set([...(e.form ? [e.form] : []), ...leftovers]),
+  ];
+
   return (
     <form action={formAction} className="flex flex-col gap-6">
-      {e.form && <Alert variant="danger">{e.form}</Alert>}
+      {topMessages.length > 0 && (
+        <Alert variant="danger" title="Проверьте данные">
+          {topMessages.length === 1 ? (
+            <p className="text-base font-semibold">{topMessages[0]}</p>
+          ) : (
+            <ul className="list-disc space-y-1 pl-4 text-sm">
+              {topMessages.map((msg) => (
+                <li key={msg}>{msg}</li>
+              ))}
+            </ul>
+          )}
+        </Alert>
+      )}
       <input type="hidden" name="mode" value={mode} />
 
       {/* ТЗ №7 §2 / #14 — общий компонент datalist сетки склада. */}

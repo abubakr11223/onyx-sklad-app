@@ -18,10 +18,15 @@ import {
 } from "@/lib/validators/intake";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { strOf, allOf } from "@/lib/form";
+import { ensureFormError } from "@/lib/form-errors";
+import { putPhotoBlob } from "@/lib/photo-blob";
 
 export type BatchEditFormState = {
   errors: Record<string, string>;
 };
+
+/** Same limit as intake pattern photo (priemka/actions). */
+const MAX_PATTERN_PHOTO_BYTES = 15 * 1024 * 1024;
 
 export async function submitBatchEdit(
   _prev: BatchEditFormState,
@@ -119,7 +124,7 @@ export async function submitBatchEdit(
     locations.push(parsed.data);
   }
 
-  // Patterns
+  // Patterns (text) + optional photo ops (aligned by index with patId).
   const pIds = all("patId");
   const pDesc = all("patDesc");
   const pTh = all("patThickness");
@@ -127,7 +132,11 @@ export async function submitBatchEdit(
   const pWid = all("patWidth");
   const pSlabs = all("patSlabs");
   const pArea = all("patArea");
+  const patPhotoFiles = formData.getAll("patPhoto");
   const patterns: BatchEditInput["patterns"] = [];
+  type PhotoOp = NonNullable<BatchEditInput["patternPhotoOps"]>[number];
+  const photoOps: PhotoOp[] = [];
+
   for (let i = 0; i < pIds.length; i++) {
     const id = (pIds[i] ?? "").trim();
     if (!id) continue;
@@ -169,9 +178,46 @@ export async function submitBatchEdit(
         areaM2: ar,
       });
     }
+
+    // Photo: clear checkbox wins over new file if both set (explicit remove).
+    const clear = formData.get(`patPhotoClear-${id}`) === "1";
+    const file = patPhotoFiles[i];
+    const hasFile =
+      file instanceof File && file.size > 0 && file.type.startsWith("image/");
+    if (clear) {
+      photoOps.push({ patternId: id, op: "clear" });
+    } else if (hasFile && file instanceof File) {
+      if (file.size > MAX_PATTERN_PHOTO_BYTES) {
+        errors[`pat-${i}-photo`] =
+          "Фото узора слишком большое (макс. 15 МБ)";
+      } else if (!file.type.startsWith("image/")) {
+        errors[`pat-${i}-photo`] = "Фото узора — только изображение";
+      } else {
+        // Blob put BEFORE domain TX (network). DB Photo.create is inside applyBatchEdit.
+        try {
+          const buf = Buffer.from(await file.arrayBuffer());
+          const { storageKey } = await putPhotoBlob({
+            pathPrefix: `patterns/${batchId}/${id}-${Date.now()}`,
+            bytes: buf,
+            mediaType: file.type || "image/jpeg",
+          });
+          photoOps.push({
+            patternId: id,
+            op: "set",
+            storageKey,
+            takenAt: new Date(),
+          });
+        } catch {
+          errors[`pat-${i}-photo`] =
+            "Не удалось загрузить фото узора — повторите";
+        }
+      }
+    }
   }
 
-  if (Object.keys(errors).length > 0) return { errors };
+  if (Object.keys(errors).length > 0) {
+    return { errors: ensureFormError(errors) };
+  }
   if (slabsTotal === undefined || areaTotalM2 === undefined) {
     return { errors: { form: "Проверьте количество" } };
   }
@@ -207,6 +253,7 @@ export async function submitBatchEdit(
       arrivedAt,
       locations,
       patterns,
+      patternPhotoOps: photoOps.length > 0 ? photoOps : undefined,
       actorId,
       canEditQuantity,
     });

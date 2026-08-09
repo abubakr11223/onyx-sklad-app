@@ -136,6 +136,14 @@ export function resolveSalePreselect(args: {
       message:
         "Камень выдан как образец — продажа через «Образцы» (оформить продажу) или сначала верните образец.",
     };
+  } else if (unit.status === "SHOWROOM") {
+    // TZ №15: not ordinarily sellable from /prodazha picker — use /shourum.
+    return {
+      ok: false,
+      reason: "unavailable",
+      message:
+        "Камень в шоу-руме — продажа через раздел «Шоу-рум» («Продать из шоу-рума»).",
+    };
   } else if (unit.status !== "AVAILABLE") {
     return {
       ok: false,

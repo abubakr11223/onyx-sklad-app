@@ -18,6 +18,7 @@ import {
 } from "@/lib/breaking";
 import { parsePositiveDecimal } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
+import { ensureFormError } from "@/lib/form-errors";
 
 export type BreakFormErrors = Record<string, string>;
 
@@ -117,7 +118,9 @@ export async function submitBreak(
         }
       }
 
-      if (Object.keys(errors).length > 0 || !causeParsed.ok) return { errors };
+      if (Object.keys(errors).length > 0 || !causeParsed.ok) {
+        return { errors: ensureFormError(errors) };
+      }
 
       if (hasSoldPart) {
         const result = await splitSlab({
@@ -158,7 +161,9 @@ export async function submitBreak(
     if (mode === "direct") {
       const batchId = str("batchId");
       if (!batchId) errors.batchId = "Выберите партию";
-      if (Object.keys(errors).length > 0 || !causeParsed.ok) return { errors };
+      if (Object.keys(errors).length > 0 || !causeParsed.ok) {
+        return { errors: ensureFormError(errors) };
+      }
 
       // A4: все строки — ОДНОЙ атомарной транзакцией (registerDirectPiecesMany).
       // §3 / fixes0809 BUG-A: every direct piece always −1 free slab (no checkbox).

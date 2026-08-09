@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   ensureFormError,
   leftoverErrorMessages,
+  mapFlashCode,
+  mapOkFlash,
   orderedErrorMessages,
 } from "@/lib/form-errors";
 
@@ -89,3 +91,22 @@ describe("ensureFormError", () => {
     expect(errors).toEqual({});
   });
 });
+
+describe("mapFlashCode / mapOkFlash", () => {
+  it("unknown code uses fallback", () => {
+    expect(mapFlashCode("nope", { a: "A" }, "fallback")).toBe("fallback");
+    expect(mapOkFlash("nope", { a: "A" }, "done")).toBe("done");
+  });
+});
+
+describe("intake-form preferred + leftover", () => {
+  it("unknown intake key surfaces via orderedErrorMessages", async () => {
+    const { intakeErrorItems } = await import(
+      "@/app/priemka/intake-form-errors"
+    );
+    expect(
+      intakeErrorItems({ brandNew: "must show" } as Record<string, string>),
+    ).toEqual(["must show"]);
+  });
+});
+

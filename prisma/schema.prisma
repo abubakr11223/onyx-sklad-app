@@ -28,6 +28,8 @@ enum UnitStatus {
   BROKEN_OFFCUT // Бой / остаток (faqat Slab uchun terminal)
   RETURNED // Возврат
   SAMPLE // sample issued (TZ10)
+  /// TZ №15 Slice 3 — on display stand; not free stock, not sold.
+  SHOWROOM
 }
 
 /// data-model.md §1.5.
@@ -104,6 +106,9 @@ enum AuditAction {
   SAMPLE_EXTEND
   /// TZ №15 — warehouse confirmed a physical hand-over (shipment).
   SHIPMENT_CONFIRM
+  /// TZ №15 Slice 3 — unit sent to / returned from showroom.
+  SHOWROOM_SEND
+  SHOWROOM_RETURN
 }
 
 /// data-model.md §1.12 / ADR-006.
@@ -338,6 +343,7 @@ model Slab {
   samples         Sample[]
   shipmentLines   ShipmentLine[]
   reshootRequests PhotoRequest[] @relation("PhotoRequestReshootSlab")
+  showroomPlacements ShowroomPlacement[]
 
   @@unique([batchId, label])
   @@index([batchId])
@@ -382,6 +388,7 @@ model Piece {
   createdBy    User          @relation("PieceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   photos       Photo[]
   reservations Reservation[]
+  showroomPlacements ShowroomPlacement[]
   sales         SaleRecord[]
   samples       Sample[]
   shipmentLines ShipmentLine[]
@@ -475,6 +482,7 @@ model User {
   sitesCreated          Site[]         @relation("SiteManager")
   samplesIssued         Sample[]       @relation("SampleManager")
   shipmentsCreated      Shipment[]     @relation("ShipmentManager")
+  showroomSends         ShowroomPlacement[] @relation("ShowroomSentBy")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -792,10 +800,41 @@ model Shipment {
   client     Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   site       Site?          @relation(fields: [siteId], references: [id], onDelete: Restrict)
   lines      ShipmentLine[]
+  /// TZ15 Slice 3 — optional reverse link from SHOWROOM shipment to placement.
+  showroomPlacement ShowroomPlacement?
 
   @@index([cancelledAt, completedAt, createdAt])
   @@index([managerId, createdAt])
   @@index([kind, createdAt])
+}
+
+/// TZ №15 Slice 3 — metadata for a unit currently (or historically) on a display stand.
+/// Source of truth for «in showroom now» is UnitStatus.SHOWROOM; this row carries
+/// stand note / who / when. closedAt set on return / sell / sample from showroom.
+model ShowroomPlacement {
+  id          String     @id @default(cuid())
+  targetType  SaleTarget // SLAB | PIECE only
+  slabId      String?
+  pieceId     String?
+  /// Which stand / display comment (manager or warehouse free text).
+  standNote   String?
+  sentById    String
+  sentAt      DateTime   @default(now())
+  closedAt    DateTime?
+  /// Sibling SHOWROOM shipment (physical move task); optional after confirm archive.
+  shipmentId  String?    @unique
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  slab     Slab?     @relation(fields: [slabId], references: [id], onDelete: Restrict)
+  piece    Piece?    @relation(fields: [pieceId], references: [id], onDelete: Restrict)
+  sentBy   User      @relation("ShowroomSentBy", fields: [sentById], references: [id], onDelete: Restrict)
+  shipment Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+
+  @@index([closedAt, sentAt])
+  @@index([slabId, closedAt])
+  @@index([pieceId, closedAt])
+  @@index([sentById, sentAt])
 }
 
 /// Ordered vs shipped quantities — source of truth for derived shipment status.

@@ -10,6 +10,8 @@ const M = vi.hoisted(() => {
     patternUpdateMany: fn(),
     locationDeleteMany: fn(),
     locationCreateMany: fn(),
+    photoCreate: fn(),
+    photoUpdateMany: fn(),
     auditCreate: fn(),
     getRemainders: fn(),
     getHolds: fn(),
@@ -26,6 +28,10 @@ const tx = {
   batchLocation: {
     deleteMany: M.locationDeleteMany,
     createMany: M.locationCreateMany,
+  },
+  photo: {
+    create: M.photoCreate,
+    updateMany: M.photoUpdateMany,
   },
   auditLog: { create: M.auditCreate },
 };
@@ -59,6 +65,8 @@ beforeEach(() => {
   M.patternUpdateMany.mockResolvedValue({ count: 1 });
   M.locationDeleteMany.mockResolvedValue({ count: 0 });
   M.locationCreateMany.mockResolvedValue({ count: 0 });
+  M.photoCreate.mockResolvedValue({ id: "ph-new" });
+  M.photoUpdateMany.mockResolvedValue({ count: 1 });
   M.auditCreate.mockResolvedValue({});
   M.getRemainders.mockResolvedValue(
     new Map([["b1", { ...EMPTY_AGGREGATE }]]),
@@ -268,3 +276,132 @@ describe("BatchEditError", () => {
     expect(e.field).toBe("slabsTotal");
   });
 });
+
+describe("applyBatchEdit — pattern photo (ТЗ №14 §3)", () => {
+  const patternRow = {
+    id: "pat1",
+    description: "светлый",
+    thicknessMm: 2,
+    lengthMm: 100,
+    widthMm: 50,
+    slabsCount: 5,
+    areaM2: { toString: () => "20.000" },
+    slabsSold: 0,
+    areaSoldM2: { toString: () => "0" },
+    photos: [] as { id: string }[],
+  };
+
+  function withPattern(photos: { id: string }[] = []) {
+    return batchRow({
+      patterns: [{ ...patternRow, photos }],
+    });
+  }
+
+  function patternInput(
+    photoOps?: BatchEditInput["patternPhotoOps"],
+  ): BatchEditInput {
+    return baseInput({
+      patterns: [
+        {
+          id: "pat1",
+          description: "светлый",
+          thicknessMm: 2,
+          lengthMm: 100,
+          widthMm: 50,
+          slabsCount: 5,
+          areaM2: 20,
+        },
+      ],
+      patternPhotoOps: photoOps,
+    });
+  }
+
+  it("set photo only → Photo.create in TX + audit pattern.*.photo", async () => {
+    M.batchFindUnique.mockResolvedValue(withPattern());
+    const res = await applyBatchEdit(
+      patternInput([
+        {
+          patternId: "pat1",
+          op: "set",
+          storageKey: "https://blob.example/p.jpg",
+          takenAt: new Date("2026-08-09T00:00:00Z"),
+        },
+      ]),
+    );
+    expect(M.photoCreate).toHaveBeenCalledTimes(1);
+    expect(M.photoCreate.mock.calls[0][0].data).toMatchObject({
+      storageKey: "https://blob.example/p.jpg",
+      kind: "SAMPLE",
+      batchPatternId: "pat1",
+      stoneTypeId: "st1",
+    });
+    expect(M.photoUpdateMany).not.toHaveBeenCalled();
+    expect(res.changes).toContainEqual({
+      field: "pattern.pat1.photo",
+      old: null,
+      new: "new",
+    });
+    expect(M.auditCreate.mock.calls[0][0].data.payload.changes).toEqual(
+      res.changes,
+    );
+  });
+
+  it("clear photo → updateMany unlink (no hard delete) + audit", async () => {
+    M.batchFindUnique.mockResolvedValue(withPattern([{ id: "ph-old" }]));
+    const res = await applyBatchEdit(
+      patternInput([{ patternId: "pat1", op: "clear" }]),
+    );
+    expect(M.photoCreate).not.toHaveBeenCalled();
+    expect(M.photoUpdateMany).toHaveBeenCalledTimes(1);
+    expect(M.photoUpdateMany.mock.calls[0][0]).toMatchObject({
+      where: { batchPatternId: "pat1", kind: "SAMPLE" },
+      data: { batchPatternId: null, stoneTypeId: "st1" },
+    });
+    expect(res.changes).toContainEqual({
+      field: "pattern.pat1.photo",
+      old: "ph-old",
+      new: null,
+    });
+  });
+
+  it("clear with no existing photo → NO_CHANGES (not silent write)", async () => {
+    M.batchFindUnique.mockResolvedValue(withPattern());
+    await expect(
+      applyBatchEdit(patternInput([{ patternId: "pat1", op: "clear" }])),
+    ).rejects.toMatchObject({ code: "NO_CHANGES" });
+    expect(M.photoUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("set + field change in one TX (atomic)", async () => {
+    M.batchFindUnique.mockResolvedValue(withPattern([{ id: "ph-old" }]));
+    const res = await applyBatchEdit({
+      ...patternInput([
+        {
+          patternId: "pat1",
+          op: "set",
+          storageKey: "https://blob.example/new.jpg",
+        },
+      ]),
+      patterns: [
+        {
+          id: "pat1",
+          description: "тёмный", // field change
+          thicknessMm: 2,
+          lengthMm: 100,
+          widthMm: 50,
+          slabsCount: 5,
+          areaM2: 20,
+        },
+      ],
+    });
+    expect(M.patternUpdateMany).toHaveBeenCalled();
+    expect(M.photoCreate).toHaveBeenCalledTimes(1);
+    expect(res.changes.map((c) => c.field)).toEqual(
+      expect.arrayContaining([
+        "pattern.pat1.description",
+        "pattern.pat1.photo",
+      ]),
+    );
+  });
+});
+
