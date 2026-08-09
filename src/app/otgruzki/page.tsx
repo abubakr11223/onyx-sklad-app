@@ -118,11 +118,21 @@ export default async function OtgruzkiPage({
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-ink">{s.stoneLabel}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-ink">{s.stoneLabel}</p>
+                      {s.isSample && (
+                        <Badge variant="warning">ОБРАЗЕЦ</Badge>
+                      )}
+                    </div>
                     <p className="text-sm text-ink/70">
                       {s.clientName ?? "—"}
                       {s.siteName ? ` · ${s.siteName}` : ""}
                     </p>
+                    {s.isSample && s.returnDueDate && (
+                      <p className="text-sm text-ink/80">
+                        Вернуть до {formatTashkentDate(s.returnDueDate)}
+                      </p>
+                    )}
                     {s.locationSnapshot && (
                       <p className="text-sm text-ink">{s.locationSnapshot}</p>
                     )}
@@ -130,7 +140,9 @@ export default async function OtgruzkiPage({
                       Менеджер {s.managerName}
                       {s.soldAt
                         ? ` · продажа ${formatTashkentDate(s.soldAt)}`
-                        : ""}
+                        : s.isSample
+                          ? " · образец"
+                          : ""}
                       {" · "}
                       {formatTashkentDateTime(s.createdAt)}
                     </p>

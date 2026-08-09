@@ -1,5 +1,6 @@
-// TZ №15 Slice 1 — SALE shipments only.
-// Stock leaves availability at SALE time (unchanged). Confirm records hand-over only.
+// TZ №15 — SALE (slice 1) + SAMPLE (slice 2) shipments.
+// Stock / Sample row leave free stock at commercial TX (sale or issueSample).
+// Confirm records physical hand-over only — never UnitStatus, never Sample create.
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -19,6 +20,24 @@ export type ShipmentLineInput = {
 };
 
 const AREA_EPS = 1e-6;
+
+/** Queue / badge: OPEN or PARTIAL still needs warehouse hand-over. */
+export function shipmentAwaitsWarehouse(
+  shipment: {
+    cancelledAt: Date | null;
+    completedAt: Date | null;
+    lines: Array<{
+      targetType: string;
+      qtyOrderedSlabs: number | null;
+      qtyOrderedAreaM2: number | null;
+      qtyShippedSlabs: number;
+      qtyShippedAreaM2: number;
+    }>;
+  } | null,
+): boolean {
+  const s = deriveShipmentStatus(shipment);
+  return s === "OPEN" || s === "PARTIAL";
+}
 
 /** Pure: line fully shipped? Units: ordered 1 / shipped ≥1; volume: shipped ≥ ordered. */
 export function lineIsFullyShipped(line: {
@@ -132,14 +151,79 @@ export async function createSaleShipment(
   return { shipmentId: shipment.id };
 }
 
+/**
+ * Create OPEN SAMPLE shipment + line in the same TX as Sample.create.
+ * Does NOT create/update Sample — issueSample is the single Sample writer (design §4.4).
+ * Does NOT touch UnitStatus (already SAMPLE / volume hold at issue).
+ */
+export async function createSampleShipment(
+  tx: Db,
+  args: {
+    sampleId: string;
+    managerId: string;
+    clientId?: string | null;
+    note?: string | null;
+    line: ShipmentLineInput;
+  },
+): Promise<{ shipmentId: string }> {
+  const line = args.line;
+  const shipment = await tx.shipment.create({
+    data: {
+      kind: "SAMPLE",
+      sampleId: args.sampleId,
+      managerId: args.managerId,
+      clientId: args.clientId?.trim() || null,
+      note: args.note?.trim() || null,
+      lines: {
+        create: {
+          targetType: line.targetType,
+          slabId: line.slabId ?? null,
+          pieceId: line.pieceId ?? null,
+          batchId: line.batchId ?? null,
+          qtyOrderedSlabs:
+            line.targetType === "BATCH_VOLUME"
+              ? (line.qtyOrderedSlabs ?? null)
+              : 1,
+          qtyOrderedAreaM2:
+            line.targetType === "BATCH_VOLUME" && line.qtyOrderedAreaM2 != null
+              ? line.qtyOrderedAreaM2.toFixed(3)
+              : null,
+          qtyShippedSlabs: 0,
+          qtyShippedAreaM2: 0,
+          locationSnapshot: line.locationSnapshot ?? null,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return { shipmentId: shipment.id };
+}
+
 /** Cancel OPEN shipment when sale is returned (minimal Slice 1). */
 export async function cancelOpenShipmentForSale(
   tx: Db,
   saleRecordId: string,
   now: Date = new Date(),
 ): Promise<boolean> {
+  return cancelOpenShipmentByKey(tx, { saleRecordId }, now);
+}
+
+/** Cancel OPEN SAMPLE shipment when sample is returned (Slice 2). */
+export async function cancelOpenShipmentForSample(
+  tx: Db,
+  sampleId: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  return cancelOpenShipmentByKey(tx, { sampleId }, now);
+}
+
+async function cancelOpenShipmentByKey(
+  tx: Db,
+  key: { saleRecordId: string } | { sampleId: string },
+  now: Date,
+): Promise<boolean> {
   const ship = await tx.shipment.findUnique({
-    where: { saleRecordId },
+    where: key,
     select: {
       id: true,
       cancelledAt: true,
@@ -158,8 +242,7 @@ export async function cancelOpenShipmentForSale(
       l.qtyShippedSlabs > 0 ||
       Number(l.qtyShippedAreaM2.toString()) > AREA_EPS,
   );
-  // Partial already shipped: still cancel the task header (stock reverse is sale's job).
-  // Product can refine reverse-ship later (design D9).
+  // Partial already shipped: still cancel the task header (stock reverse is commercial path).
   void anyShipped;
   const res = await tx.shipment.updateMany({
     where: { id: ship.id, cancelledAt: null },
@@ -187,6 +270,7 @@ export class ShipmentError extends Error {
 
 /**
  * Confirm hand-over. NEVER changes UnitStatus / batch sold counters.
+ * NEVER creates, re-creates, or re-activates Sample (design §4.4 single writer).
  * Unit: full only. Volume: partial allowed, never above remaining ordered.
  */
 export async function confirmShipment(args: {
@@ -233,7 +317,10 @@ export async function confirmShipment(args: {
       });
       if (!ship) throw new ShipmentError("NOT_FOUND", "Отгрузка не найдена");
       if (ship.cancelledAt) {
-        throw new ShipmentError("CANCELLED", "Отгрузка отменена (возврат продажи)");
+        throw new ShipmentError(
+          "CANCELLED",
+          "Отгрузка отменена (возврат продажи/образца)",
+        );
       }
       if (ship.completedAt) {
         throw new ShipmentError("ALREADY_DONE", "Уже отгружено полностью");
@@ -243,7 +330,7 @@ export async function confirmShipment(args: {
       }
 
       const now = new Date();
-      // Slice 1: one line per sale
+      // One line per commercial event (sale or sample).
       const line = ship.lines[0]!;
       const orderedSlabs = line.qtyOrderedSlabs ?? 0;
       const orderedArea =
@@ -292,7 +379,7 @@ export async function confirmShipment(args: {
         if (addSlabs > remSlabs + 0 || addArea > remArea + AREA_EPS) {
           throw new ShipmentError(
             "INVALID_QTY",
-            "Нельзя отгрузить больше остатка по продаже",
+            "Нельзя отгрузить больше остатка по заказу",
           );
         }
       }
@@ -335,6 +422,7 @@ export async function confirmShipment(args: {
         });
       }
 
+      // Intentionally NO tx.sample.* and NO slab/piece status writes (design §4).
       await tx.auditLog.create({
         data: {
           userId: actor.id,
@@ -342,12 +430,14 @@ export async function confirmShipment(args: {
           entityType: "Shipment",
           entityId: ship.id,
           payload: {
+            kind: ship.kind,
             lineId: line.id,
             addSlabs,
             addArea,
             fully,
-            // Explicit: no UnitStatus change on confirm (TZ15 §6 / design §3)
+            // Explicit: confirm is physical hand-over only.
             unitStatusTouched: false,
+            sampleTouched: false,
           },
         },
       });
@@ -373,6 +463,8 @@ export type ShipmentListItem = {
   status: DerivedShipmentStatus;
   statusLabel: string;
   kind: string;
+  /** True when kind === SAMPLE (warehouse UI «ОБРАЗЕЦ»). */
+  isSample: boolean;
   createdAt: Date;
   completedAt: Date | null;
   managerId: string;
@@ -380,7 +472,10 @@ export type ShipmentListItem = {
   clientName: string | null;
   siteName: string | null;
   saleId: string | null;
+  sampleId: string | null;
   soldAt: Date | null;
+  /** Sample return due (warehouse queue, design §3.1). */
+  returnDueDate: Date | null;
   stoneLabel: string;
   locationSnapshot: string | null;
   qtyOrderedSlabs: number | null;
@@ -391,7 +486,7 @@ export type ShipmentListItem = {
   targetType: string;
 };
 
-/** Bounded list. tab=open → not cancelled & not completed; archive → completed. */
+/** Bounded list. SALE + SAMPLE. tab=open → not cancelled & not completed; archive → completed/cancelled. */
 export async function listShipments(
   database: Db,
   args: {
@@ -404,7 +499,8 @@ export async function listShipments(
 ): Promise<ShipmentListItem[]> {
   const take = Math.min(MAX_SHIPMENTS_PAGE, args.take ?? MAX_SHIPMENTS_PAGE);
   const where: Prisma.ShipmentWhereInput = {
-    kind: "SALE",
+    // Slice 2: sales + samples (SHOWROOM later).
+    kind: { in: ["SALE", "SAMPLE"] },
     ...(args.canSeeAll
       ? {}
       : args.actorId
@@ -452,6 +548,29 @@ export async function listShipments(
           batch: { select: { stoneType: { select: { name: true } } } },
         },
       },
+      sample: {
+        select: {
+          id: true,
+          returnDueDate: true,
+          targetType: true,
+          qtySlabs: true,
+          qtyAreaM2: true,
+          client: { select: { name: true } },
+          slab: {
+            select: {
+              label: true,
+              stoneType: { select: { name: true } },
+            },
+          },
+          piece: {
+            select: {
+              kind: true,
+              stoneType: { select: { name: true } },
+            },
+          },
+          batch: { select: { stoneType: { select: { name: true } } } },
+        },
+      },
       lines: {
         select: {
           id: true,
@@ -484,6 +603,7 @@ export async function listShipments(
       lines,
     });
     const sale = r.saleRecord;
+    const sample = r.sample;
     let stoneLabel = "—";
     if (sale?.slab) {
       stoneLabel = `${sale.slab.stoneType.name} — ${sale.slab.label}`;
@@ -492,6 +612,13 @@ export async function listShipments(
       stoneLabel = `${sale.piece.stoneType.name} — ${k}`;
     } else if (sale?.batch) {
       stoneLabel = `${sale.batch.stoneType.name} — объём`;
+    } else if (sample?.slab) {
+      stoneLabel = `${sample.slab.stoneType.name} — ${sample.slab.label}`;
+    } else if (sample?.piece) {
+      const k = sample.piece.kind === "BROKEN" ? "бой" : "остаток";
+      stoneLabel = `${sample.piece.stoneType.name} — ${k}`;
+    } else if (sample?.batch) {
+      stoneLabel = `${sample.batch.stoneType.name} — объём (образец)`;
     }
     const line0 = r.lines[0];
     return {
@@ -499,14 +626,21 @@ export async function listShipments(
       status,
       statusLabel: shipmentStatusLabelRu(status),
       kind: r.kind,
+      isSample: r.kind === "SAMPLE",
       createdAt: r.createdAt,
       completedAt: r.completedAt,
       managerId: r.managerId,
       managerName: r.manager.name,
-      clientName: r.client?.name ?? sale?.customerName ?? null,
+      clientName:
+        r.client?.name ??
+        sample?.client?.name ??
+        sale?.customerName ??
+        null,
       siteName: r.site?.name ?? null,
       saleId: sale?.id ?? null,
+      sampleId: sample?.id ?? null,
       soldAt: sale?.soldAt ?? null,
+      returnDueDate: sample?.returnDueDate ?? null,
       stoneLabel,
       locationSnapshot: line0?.locationSnapshot ?? null,
       qtyOrderedSlabs: line0?.qtyOrderedSlabs ?? null,

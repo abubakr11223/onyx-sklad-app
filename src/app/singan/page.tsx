@@ -66,17 +66,35 @@ export default async function SinganPage({
 
   const sp = await searchParams;
   const ok = first(sp.ok) === "1";
+  const photoWarn = first(sp.photoWarn) === "1";
   const stoneId = first(sp.stone);
   const causeLabel = first(sp.cause);
   const err = first(sp.err);
 
-  // ── Muvaffaqiyat holati: forma o'rniga yakuniy panel ──
+  // ── Yakuniy panel: sof muvaffaqiyat yoki piece OK + photo yo'q (photoWarn) ──
   if (ok) {
     return (
       <main className="mx-auto max-w-xl p-4 pb-12">
         <PageHeader />
-        <Alert variant="success" title="Кусок записан">
-          <p className="text-ink/70">Чертёж и фото сохранены в карточке камня.</p>
+        <Alert
+          variant={photoWarn ? "warning" : "success"}
+          title={
+            photoWarn
+              ? "Кусок записан — фото не сохранено"
+              : "Кусок записан"
+          }
+        >
+          {photoWarn ? (
+            <p className="text-ink/70">
+              Кусок в остатке есть (чертёж сохранён), но фото из Telegram не
+              прикрепилось. Откройте карточку камня и добавьте фото вручную,
+              либо повторите из бота.
+            </p>
+          ) : (
+            <p className="text-ink/70">
+              Чертёж и фото сохранены в карточке камня.
+            </p>
+          )}
           {causeLabel && (
             <p className="mt-1 text-sm text-ink/70">
               Причина: <span className="font-medium text-ink">{causeLabel}</span>

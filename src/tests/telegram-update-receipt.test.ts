@@ -16,7 +16,11 @@ const M = vi.hoisted(() => {
       return args.data;
     },
   );
-  const deleteMany = vi.fn(async () => ({ count: 0 }));
+  const deleteMany = vi.fn(
+    async (_args?: {
+      where?: { updateId?: string; expiresAt?: { lt: Date } };
+    }): Promise<{ count: number }> => ({ count: 0 }),
+  );
   return { store, create, deleteMany };
 });
 
@@ -40,13 +44,17 @@ beforeEach(() => {
   M.store.clear();
   M.create.mockClear();
   M.deleteMany.mockClear();
-  M.deleteMany.mockImplementation(async (args: { where: { updateId?: string; expiresAt?: { lt: Date } } }) => {
-    if (args.where.updateId) {
-      const had = M.store.delete(args.where.updateId);
-      return { count: had ? 1 : 0 };
-    }
-    return { count: 0 };
-  });
+  M.deleteMany.mockImplementation(
+    async (args?: {
+      where?: { updateId?: string; expiresAt?: { lt: Date } };
+    }) => {
+      if (args?.where?.updateId) {
+        const had = M.store.delete(args.where.updateId);
+        return { count: had ? 1 : 0 };
+      }
+      return { count: 0 };
+    },
+  );
 });
 
 const NOW = new Date("2026-07-31T12:00:00Z");

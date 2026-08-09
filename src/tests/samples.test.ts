@@ -21,6 +21,10 @@ const M = vi.hoisted(() => {
     batchUpdateMany: fn(),
     queryRaw: fn(),
     reservationFindMany: fn(),
+    // TZ №15 Slice 2 — sibling SAMPLE shipment
+    shipmentCreate: fn(),
+    shipmentFindUnique: fn(),
+    shipmentUpdateMany: fn(),
   };
 });
 
@@ -40,6 +44,11 @@ const tx = {
   auditLog: { create: M.auditCreate },
   batch: { findUnique: M.batchFindUnique, updateMany: M.batchUpdateMany },
   reservation: { findMany: M.reservationFindMany },
+  shipment: {
+    create: M.shipmentCreate,
+    findUnique: M.shipmentFindUnique,
+    updateMany: M.shipmentUpdateMany,
+  },
   $queryRaw: M.queryRaw,
 };
 
@@ -72,11 +81,16 @@ beforeEach(() => {
   M.clientFindUnique.mockResolvedValue({ id: "c1" });
   M.slabUpdateMany.mockResolvedValue({ count: 1 });
   M.pieceUpdateMany.mockResolvedValue({ count: 1 });
+  M.slabFindUnique.mockResolvedValue({ block: "А", landmark: "1" });
+  M.pieceFindUnique.mockResolvedValue({ block: "А", landmark: "1" });
   M.sampleCreate.mockResolvedValue({ id: "samp1" });
   M.sampleUpdateMany.mockResolvedValue({ count: 1 });
   M.saleCreate.mockResolvedValue({ id: "sale1" });
   M.debtCreate.mockResolvedValue({ id: "d1" });
   M.auditCreate.mockResolvedValue({});
+  M.shipmentCreate.mockResolvedValue({ id: "ship-s1" });
+  M.shipmentFindUnique.mockResolvedValue(null);
+  M.shipmentUpdateMany.mockResolvedValue({ count: 1 });
 });
 
 const DUE = new Date("2026-09-01T00:00:00.000Z");
@@ -156,7 +170,7 @@ describe("sumDepositsByCurrency — never mix UZS+USD", () => {
 });
 
 describe("issueSample — unit becomes SAMPLE", () => {
-  it("happy SLAB: AVAILABLE→SAMPLE + Sample ACTIVE", async () => {
+  it("happy SLAB: AVAILABLE→SAMPLE + Sample ACTIVE + OPEN SAMPLE shipment (same TX)", async () => {
     const res = await issueSample({
       targetType: "SLAB",
       unitId: "slab1",
@@ -169,8 +183,44 @@ describe("issueSample — unit becomes SAMPLE", () => {
       where: { id: "slab1", status: "AVAILABLE", needsCheck: false },
       data: { status: "SAMPLE" },
     });
-    expect(M.sampleCreate).toHaveBeenCalled();
+    // Exactly one Sample row (single writer) + one sibling shipment.
+    expect(M.sampleCreate).toHaveBeenCalledTimes(1);
+    expect(M.sampleCreate.mock.calls[0][0].data).toMatchObject({
+      status: "ACTIVE",
+      clientId: "c1",
+      slabId: "slab1",
+    });
+    expect(M.shipmentCreate).toHaveBeenCalledTimes(1);
+    expect(M.shipmentCreate.mock.calls[0][0].data).toMatchObject({
+      kind: "SAMPLE",
+      sampleId: "samp1",
+      managerId: "mgr1",
+      clientId: "c1",
+      lines: {
+        create: expect.objectContaining({
+          targetType: "SLAB",
+          slabId: "slab1",
+          qtyShippedSlabs: 0,
+        }),
+      },
+    });
     expect(M.auditCreate.mock.calls[0][0].data.action).toBe("SAMPLE_ISSUE");
+  });
+
+  it("failure (ALREADY_ISSUED) creates neither Sample nor Shipment", async () => {
+    M.slabUpdateMany.mockResolvedValue({ count: 0 });
+    M.slabFindUnique.mockResolvedValue({ status: "SAMPLE" });
+    const res = await issueSample({
+      targetType: "SLAB",
+      unitId: "slab1",
+      clientId: "c1",
+      managerId: "mgr1",
+      returnDueDate: DUE,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("ALREADY_ISSUED");
+    expect(M.sampleCreate).not.toHaveBeenCalled();
+    expect(M.shipmentCreate).not.toHaveBeenCalled();
   });
 
   it("second issue on same slab (updateMany 0 + status SAMPLE) → ALREADY_ISSUED", async () => {
@@ -199,6 +249,7 @@ describe("issueSample — unit becomes SAMPLE", () => {
     });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("ALREADY_ISSUED");
+    expect(M.shipmentCreate).not.toHaveBeenCalled();
   });
 
   it("SOLD unit → UNIT_UNAVAILABLE", async () => {
@@ -213,11 +264,12 @@ describe("issueSample — unit becomes SAMPLE", () => {
     });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("UNIT_UNAVAILABLE");
+    expect(M.shipmentCreate).not.toHaveBeenCalled();
   });
 });
 
 describe("returnSample — stone back to AVAILABLE", () => {
-  it("SAMPLE→AVAILABLE + Sample RETURNED", async () => {
+  it("SAMPLE→AVAILABLE + Sample RETURNED + OPEN shipment cancelled", async () => {
     M.sampleFindUnique.mockResolvedValue({
       id: "samp1",
       status: "ACTIVE",
@@ -226,12 +278,25 @@ describe("returnSample — stone back to AVAILABLE", () => {
       pieceId: null,
       depositAmount: "10",
     });
+    M.shipmentFindUnique.mockResolvedValue({
+      id: "ship-s1",
+      cancelledAt: null,
+      completedAt: null,
+      lines: [{ qtyShippedSlabs: 0, qtyShippedAreaM2: 0 }],
+    });
     const res = await returnSample({ sampleId: "samp1", managerId: "mgr1" });
     expect(res.ok).toBe(true);
     expect(M.sampleUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "samp1", status: "ACTIVE" },
         data: expect.objectContaining({ status: "RETURNED" }),
+      }),
+    );
+    // TZ №15 — cancel OPEN SAMPLE shipment on return.
+    expect(M.shipmentUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "ship-s1", cancelledAt: null },
+        data: expect.objectContaining({ cancelledAt: expect.any(Date) }),
       }),
     );
     expect(M.slabUpdateMany).toHaveBeenCalledWith({

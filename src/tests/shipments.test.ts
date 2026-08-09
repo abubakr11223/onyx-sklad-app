@@ -1,4 +1,4 @@
-// TZ №15 Slice 1 — pure derive + confirm mock-tx (no UnitStatus change).
+// TZ №15 Slice 1+2 — pure derive + confirm mock-tx (no UnitStatus / Sample touch).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const M = vi.hoisted(() => {
@@ -10,6 +10,12 @@ const M = vi.hoisted(() => {
     shipmentUpdateMany: fn(),
     shipmentLineUpdateMany: fn(),
     auditCreate: fn(),
+    // Guards: confirm must never call these.
+    sampleCreate: fn(),
+    sampleUpdate: fn(),
+    sampleUpdateMany: fn(),
+    slabUpdateMany: fn(),
+    pieceUpdateMany: fn(),
   };
 });
 
@@ -22,6 +28,13 @@ const tx = {
   },
   shipmentLine: { updateMany: M.shipmentLineUpdateMany },
   auditLog: { create: M.auditCreate },
+  sample: {
+    create: M.sampleCreate,
+    update: M.sampleUpdate,
+    updateMany: M.sampleUpdateMany,
+  },
+  slab: { updateMany: M.slabUpdateMany },
+  piece: { updateMany: M.pieceUpdateMany },
 };
 
 vi.mock("@/lib/db", () => ({
@@ -34,6 +47,7 @@ import {
   confirmShipment,
   deriveShipmentStatus,
   lineIsFullyShipped,
+  shipmentAwaitsWarehouse,
   shipmentStatusLabelRu,
 } from "@/lib/shipments";
 
@@ -266,5 +280,95 @@ describe("confirmShipment — mock-tx", () => {
     await expect(
       confirmShipment({ shipmentId: "ship1", actorId: "mgr1" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("SAMPLE confirm → DONE + audit; does NOT create/update Sample or UnitStatus", async () => {
+    M.shipmentFindUnique.mockResolvedValue({
+      id: "ship-s1",
+      kind: "SAMPLE",
+      cancelledAt: null,
+      completedAt: null,
+      lines: [
+        {
+          id: "ln1",
+          targetType: "SLAB",
+          qtyOrderedSlabs: 1,
+          qtyOrderedAreaM2: null,
+          qtyShippedSlabs: 0,
+          qtyShippedAreaM2: 0,
+        },
+      ],
+    });
+
+    const res = await confirmShipment({
+      shipmentId: "ship-s1",
+      actorId: "wh1",
+    });
+    expect(res.status).toBe("DONE");
+    expect(M.shipmentLineUpdateMany).toHaveBeenCalled();
+    expect(M.auditCreate.mock.calls[0][0].data).toMatchObject({
+      action: "SHIPMENT_CONFIRM",
+      payload: expect.objectContaining({
+        kind: "SAMPLE",
+        unitStatusTouched: false,
+        sampleTouched: false,
+      }),
+    });
+    // Single-writer invariant: confirm never writes Sample / unit status.
+    expect(M.sampleCreate).not.toHaveBeenCalled();
+    expect(M.sampleUpdate).not.toHaveBeenCalled();
+    expect(M.sampleUpdateMany).not.toHaveBeenCalled();
+    expect(M.slabUpdateMany).not.toHaveBeenCalled();
+    expect(M.pieceUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("shipmentAwaitsWarehouse — badge derive", () => {
+  it("null / DONE / CANCELLED → false; OPEN/PARTIAL → true", () => {
+    expect(shipmentAwaitsWarehouse(null)).toBe(false);
+    expect(
+      shipmentAwaitsWarehouse({
+        cancelledAt: null,
+        completedAt: new Date(),
+        lines: [],
+      }),
+    ).toBe(false);
+    expect(
+      shipmentAwaitsWarehouse({
+        cancelledAt: new Date(),
+        completedAt: null,
+        lines: [],
+      }),
+    ).toBe(false);
+    expect(
+      shipmentAwaitsWarehouse({
+        cancelledAt: null,
+        completedAt: null,
+        lines: [
+          {
+            targetType: "SLAB",
+            qtyOrderedSlabs: 1,
+            qtyOrderedAreaM2: null,
+            qtyShippedSlabs: 0,
+            qtyShippedAreaM2: 0,
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      shipmentAwaitsWarehouse({
+        cancelledAt: null,
+        completedAt: null,
+        lines: [
+          {
+            targetType: "BATCH_VOLUME",
+            qtyOrderedSlabs: 10,
+            qtyOrderedAreaM2: null,
+            qtyShippedSlabs: 3,
+            qtyShippedAreaM2: 0,
+          },
+        ],
+      }),
+    ).toBe(true);
   });
 });

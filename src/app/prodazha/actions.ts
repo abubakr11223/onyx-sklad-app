@@ -21,6 +21,7 @@ import { validateSalePayment } from "@/lib/validators/sale-payment";
 import { validateSaleClientLink } from "@/lib/validators/sale-client";
 import { parseVolumeQtyFields } from "@/lib/validators/volume-qty";
 import { strOf } from "@/lib/form";
+import { ensureFormError } from "@/lib/form-errors";
 
 export type SaleMode =
   | "SLAB"
@@ -53,6 +54,11 @@ function failState(error: SaleError): SaleFormState {
     return { errors: {}, conflict: error.message };
   }
   return { errors: { form: error.message }, conflict: null };
+}
+
+/** Field validation fail — always include errors.form (silent-form second net). */
+function fieldFail(errors: Record<string, string>): SaleFormState {
+  return { errors: ensureFormError(errors), conflict: null };
 }
 
 /** Итог продажи для баннера успеха — «что, сколько, кому». */
@@ -159,7 +165,7 @@ export async function submitSale(
   }
 
   if (Object.keys(errors).length > 0 || !payment.ok || !clientLink.ok) {
-    return { errors, conflict: null };
+    return fieldFail(errors);
   }
 
   const pay = payment.data;
@@ -167,10 +173,9 @@ export async function submitSale(
 
   const managerId = await currentActorId();
   if (!managerId) {
-    return {
-      errors: { form: "В системе нет активного менеджера (seed) — обратитесь к администратору" },
-      conflict: null,
-    };
+    return fieldFail({
+      form: "В системе нет активного менеджера (seed) — обратитесь к администратору",
+    });
   }
 
   // Resolve directory row — defense-in-depth if clientId was forged/stale.
@@ -179,10 +184,9 @@ export async function submitSale(
     select: { id: true, name: true, phone: true },
   });
   if (!client) {
-    return {
-      errors: { clientId: "Клиент не найден — выберите или создайте заново" },
-      conflict: null,
-    };
+    return fieldFail({
+      clientId: "Клиент не найден — выберите или создайте заново",
+    });
   }
 
   let siteId: string | null = link.siteId;
@@ -192,10 +196,9 @@ export async function submitSale(
       select: { id: true, clientId: true },
     });
     if (!site || site.clientId !== client.id) {
-      return {
-        errors: { siteId: "Объект не принадлежит выбранному клиенту" },
-        conflict: null,
-      };
+      return fieldFail({
+        siteId: "Объект не принадлежит выбранному клиенту",
+      });
     }
   }
 
@@ -207,12 +210,9 @@ export async function submitSale(
 
   // Re-check CREDIT phone after resolving client card.
   if (pay.paymentMethod === "CREDIT" && !customerContact) {
-    return {
-      errors: {
-        customerContact: "Для продажи в долг укажите телефон клиента",
-      },
-      conflict: null,
-    };
+    return fieldFail({
+      customerContact: "Для продажи в долг укажите телефон клиента",
+    });
   }
 
   const common = {

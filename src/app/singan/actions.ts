@@ -140,7 +140,10 @@ export async function submitSingan(formData: FormData): Promise<void> {
 
   // Asl Telegram rasmi — Photo yozuvi (storageKey = file_id, PIECE turi),
   // shunda kartochkada foto proksi orqali ko'rinadi. ALOHIDA try/catch:
-  // metadata yiqilsa ham Piece tranzaksiyasi ortga QAYTMAYDI — log + davom.
+  // metadata yiqilsa ham Piece tranzaksiyasi ortga QAYTMAYDI — piece qoldi.
+  // round2: hech qachon sof ok=1 — photo muvaffaqiyatsiz bo'lsa photoWarn=1
+  // (yashil «foto saqlandi» yolg'oni yo'q).
+  let photoSaved = true;
   try {
     await db.photo.create({
       data: {
@@ -153,10 +156,15 @@ export async function submitSingan(formData: FormData): Promise<void> {
       },
     });
   } catch (err) {
+    photoSaved = false;
     console.error("[singan] Photo yozuvi yaratilmadi (piece saqlangan):", err);
   }
 
-  redirect(
-    `/singan?ok=1&stone=${encodeURIComponent(batch.stoneTypeId)}&cause=${encodeURIComponent(causeParsed.cause.labelRu)}`,
-  );
+  const params = new URLSearchParams({
+    ok: "1",
+    stone: batch.stoneTypeId,
+    cause: causeParsed.cause.labelRu,
+  });
+  if (!photoSaved) params.set("photoWarn", "1");
+  redirect(`/singan?${params.toString()}`);
 }

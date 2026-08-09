@@ -6,15 +6,29 @@
 // Product keeps AI+photo in Telegram (product decision 2026-07-15); this page
 // is the manual/split door. We connect both doors in copy + links — no AI move
 // into web, no changes to breaking.ts arithmetic.
+//
+// Bounds (audit round2): slabs/batches capped with take+1; visible «N of M»
+// notice — never silent truncate. Optional ?q= narrows by stone type name.
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
+import {
+  CATALOG_BATCHES_CAP,
+  CATALOG_SLABS_CAP,
+  catalogCapNoticeRu,
+  isCapNoticeVisible,
+  stoneNameContainsFilter,
+  takeCapPlusOne,
+  takeForCap,
+} from "@/lib/catalog-bounds";
 import NoAccess from "@/components/NoAccess";
 import Alert from "@/components/ui/Alert";
 import Card from "@/components/ui/Card";
+import Field from "@/components/ui/Field";
+import Button from "@/components/ui/Button";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
 
 export const metadata: Metadata = {
@@ -53,53 +67,74 @@ export default async function RazbitPage({
   }
 
   const sp = await searchParams;
+  const q = (first(sp.q) ?? "").trim();
+  const nameFilter = stoneNameContainsFilter(q);
 
-  const [slabRows, batchRows, gridBlocks] = await Promise.all([
-    db.slab.findMany({
-      where: { status: { in: ["AVAILABLE", "RESERVED"] } },
-      orderBy: [{ stoneType: { name: "asc" } }, { label: "asc" }],
-      select: {
-        id: true,
-        label: true,
-        status: true,
-        block: true,
-        landmark: true,
-        lengthMm: true,
-        widthMm: true,
-        thicknessMm: true,
-        areaM2: true,
-        stoneType: { select: { name: true } },
-        photos: {
-          select: { id: true },
-          orderBy: { createdAt: "desc" },
-          take: 1,
+  // Mutable array — Prisma EnumUnitStatusFilter rejects readonly tuples.
+  const slabWhere = {
+    status: { in: ["AVAILABLE", "RESERVED"] as Array<"AVAILABLE" | "RESERVED"> },
+    ...(nameFilter ? { stoneType: nameFilter } : {}),
+  };
+  const batchWhere = nameFilter ? { stoneType: nameFilter } : undefined;
+
+  const [slabRowsRaw, batchRowsRaw, slabTotal, batchTotal, gridBlocks] =
+    await Promise.all([
+      db.slab.findMany({
+        where: slabWhere,
+        orderBy: [{ stoneType: { name: "asc" } }, { label: "asc" }, { id: "asc" }],
+        take: takeForCap(CATALOG_SLABS_CAP),
+        select: {
+          id: true,
+          label: true,
+          status: true,
+          block: true,
+          landmark: true,
+          lengthMm: true,
+          widthMm: true,
+          thicknessMm: true,
+          areaM2: true,
+          stoneType: { select: { name: true } },
+          photos: {
+            select: { id: true },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
-      },
-    }),
-    db.batch.findMany({
-      orderBy: [{ stoneType: { name: "asc" } }, { arrivedAt: "desc" }],
-      select: {
-        id: true,
-        arrivedAt: true,
-        slabsTotal: true,
-        areaTotalM2: true,
-        stoneType: { select: { name: true } },
-      },
-    }),
-    // ТЗ №7 §2 (BUG-01) — подсказка буквы блока из сетки склада (datalist),
-    // как в приёмке. Нормализация всё равно на записи — подсказка лишь удобство.
-    db.warehouseBlock.findMany({
-      orderBy: { sortOrder: "asc" },
-      select: { letter: true, landmarks: { select: { number: true } } },
-    }),
-  ]);
+      }),
+      db.batch.findMany({
+        where: batchWhere,
+        orderBy: [
+          { stoneType: { name: "asc" } },
+          { arrivedAt: "desc" },
+          { id: "desc" },
+        ],
+        take: takeForCap(CATALOG_BATCHES_CAP),
+        select: {
+          id: true,
+          arrivedAt: true,
+          slabsTotal: true,
+          areaTotalM2: true,
+          stoneType: { select: { name: true } },
+        },
+      }),
+      db.slab.count({ where: slabWhere }),
+      db.batch.count({ where: batchWhere ?? {} }),
+      // ТЗ №7 §2 (BUG-01) — подсказка буквы блока из сетки склада (datalist).
+      db.warehouseBlock.findMany({
+        orderBy: { sortOrder: "asc" },
+        select: { letter: true, landmarks: { select: { number: true } } },
+      }),
+    ]);
+
+  const slabsCap = takeCapPlusOne(slabRowsRaw, CATALOG_SLABS_CAP);
+  const batchesCap = takeCapPlusOne(batchRowsRaw, CATALOG_BATCHES_CAP);
 
   const blocks = gridBlocks.map((b) => ({
     letter: b.letter,
     landmarks: b.landmarks.map((l) => l.number),
   }));
 
-  const slabs: SlabOption[] = slabRows.map((s) => ({
+  const slabs: SlabOption[] = slabsCap.items.map((s) => ({
     id: s.id,
     label: s.label,
     stoneName: s.stoneType.name,
@@ -113,7 +148,7 @@ export default async function RazbitPage({
     photoId: s.photos[0]?.id ?? null,
   }));
 
-  const batches: BatchOption[] = batchRows.map((b) => ({
+  const batches: BatchOption[] = batchesCap.items.map((b) => ({
     id: b.id,
     stoneName: b.stoneType.name,
     arrived: formatTashkentDate(b.arrivedAt),
@@ -131,6 +166,17 @@ export default async function RazbitPage({
   const label = first(sp.label);
   const causeLabel = first(sp.cause);
   const reserveCancelled = first(sp.reserveCancelled) === "1";
+
+  const showSlabNotice = isCapNoticeVisible(
+    slabsCap.truncated,
+    slabTotal,
+    slabsCap.shown,
+  );
+  const showBatchNotice = isCapNoticeVisible(
+    batchesCap.truncated,
+    batchTotal,
+    batchesCap.shown,
+  );
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
@@ -211,6 +257,49 @@ export default async function RazbitPage({
             </Link>
             .
           </p>
+        </Alert>
+      )}
+
+      {/* Catalog bound: name filter + explicit cap notice (picker, never silent). */}
+      <form
+        method="get"
+        action="/razbit"
+        className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end"
+      >
+        <div className="min-w-0 flex-1">
+          <Field
+            id="q"
+            name="q"
+            label="Фильтр по виду камня"
+            defaultValue={q}
+            placeholder="например Травертин"
+          />
+        </div>
+        <Button type="submit" variant="secondary">
+          Найти
+        </Button>
+      </form>
+
+      {(showSlabNotice || showBatchNotice) && (
+        <Alert variant="warning" title="Список ограничен" className="mb-4">
+          {showSlabNotice && (
+            <p>
+              {catalogCapNoticeRu({
+                what: "плит",
+                shown: slabsCap.shown,
+                total: slabTotal,
+              })}
+            </p>
+          )}
+          {showBatchNotice && (
+            <p className={showSlabNotice ? "mt-1" : undefined}>
+              {catalogCapNoticeRu({
+                what: "партий",
+                shown: batchesCap.shown,
+                total: batchTotal,
+              })}
+            </p>
+          )}
         </Alert>
       )}
 

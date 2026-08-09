@@ -40,6 +40,17 @@ import {
   deriveShipmentStatus,
   shipmentStatusLabelRu,
 } from "@/lib/shipments";
+import {
+  CATALOG_BATCHES_CAP,
+  CATALOG_PIECES_CAP,
+  CATALOG_SLABS_CAP,
+  CATALOG_STONE_TYPES_CAP,
+  catalogCapNoticeRu,
+  isCapNoticeVisible,
+  stoneNameContainsFilter,
+  takeCapPlusOne,
+  takeForCap,
+} from "@/lib/catalog-bounds";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -86,6 +97,9 @@ export default async function ProdazhaPage({
   const customer = first(sp.customer);
   const retOk = first(sp.retOk);
   const retErr = first(sp.retErr);
+  // Catalog bound: optional name filter for picker (never silent full dump).
+  const catalogQ = (first(sp.catalogQ) ?? "").trim();
+  const nameFilter = stoneNameContainsFilter(catalogQ);
 
   // W7-B / §6.1 шаг 8: ?slab= | ?piece= deep-link. Query ishonchsiz — DB + canSell.
   const preQ = parseSalePreselectQuery({
@@ -96,20 +110,25 @@ export default async function ProdazhaPage({
   const preKind = preQ.slabId ? ("SLAB" as const) : preQ.pieceId ? ("PIECE" as const) : null;
   const preId = preQ.slabId ?? preQ.pieceId;
 
-  const [stoneTypesRaw, actorId, preUnit] = await Promise.all([
-    // BATCH-B (perf): весь склад больше не тянется. Для формулы §3 берём только
-    // счётчики партий + агрегаты (getBatchRemainders ниже); для пикера — только
-    // продаваемые плиты (AVAILABLE/RESERVED) и куски (AVAILABLE). SOLD/история
-    // не грузятся.
+  const stoneTypeWhere = {
+    isArchived: false,
+    ...(nameFilter ?? {}),
+  };
+
+  const [stoneTypesRawAll, stoneTypesTotal, actorId, preUnit] = await Promise.all([
+    // BATCH-B (perf): счётчики партий + агрегаты; пикер — sellable units only.
+    // Bounds: top-level stone types + nested unit caps (take+1) — visible N of M.
     db.stoneType.findMany({
-      where: { isArchived: false },
-      orderBy: { name: "asc" },
+      where: stoneTypeWhere,
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      take: takeForCap(CATALOG_STONE_TYPES_CAP),
       select: {
         id: true,
         name: true,
         rockType: true,
         batches: {
           orderBy: { arrivedAt: "asc" },
+          take: takeForCap(CATALOG_BATCHES_CAP),
           select: {
             id: true,
             arrivedAt: true,
@@ -123,6 +142,8 @@ export default async function ProdazhaPage({
             // Пикер: только продаваемые плиты (не весь исторический хвост).
             slabs: {
               where: { status: { in: ["AVAILABLE", "RESERVED"] } },
+              orderBy: [{ label: "asc" }, { id: "asc" }],
+              take: takeForCap(CATALOG_SLABS_CAP),
               select: {
                 id: true,
                 label: true,
@@ -137,6 +158,7 @@ export default async function ProdazhaPage({
                 reservations: {
                   where: { status: "ACTIVE" },
                   select: { manager: { select: { name: true } } },
+                  take: 1,
                 },
               },
             },
@@ -156,6 +178,8 @@ export default async function ProdazhaPage({
         },
         pieces: {
           where: { status: "AVAILABLE" },
+          orderBy: [{ id: "asc" }],
+          take: takeForCap(CATALOG_PIECES_CAP),
           select: {
             id: true,
             kind: true,
@@ -169,6 +193,7 @@ export default async function ProdazhaPage({
         },
       },
     }),
+    db.stoneType.count({ where: stoneTypeWhere }),
     currentActorId(),
     preKind === "SLAB" && preId
       ? db.slab.findUnique({
@@ -206,6 +231,25 @@ export default async function ProdazhaPage({
           })
         : Promise.resolve(null),
   ]);
+
+  // Apply caps (take was cap+1): never silent truncate — flag for UI notice.
+  const typesCap = takeCapPlusOne(stoneTypesRawAll, CATALOG_STONE_TYPES_CAP);
+  let nestedTruncated = false;
+  const stoneTypesRaw = typesCap.items.map((st) => {
+    const batchesCap = takeCapPlusOne(st.batches, CATALOG_BATCHES_CAP);
+    if (batchesCap.truncated) nestedTruncated = true;
+    const piecesCap = takeCapPlusOne(st.pieces, CATALOG_PIECES_CAP);
+    if (piecesCap.truncated) nestedTruncated = true;
+    const batches = batchesCap.items.map((b) => {
+      const slabsCap = takeCapPlusOne(b.slabs, CATALOG_SLABS_CAP);
+      if (slabsCap.truncated) nestedTruncated = true;
+      return { ...b, slabs: slabsCap.items };
+    });
+    return { ...st, batches, pieces: piecesCap.items };
+  });
+  const catalogTruncated =
+    isCapNoticeVisible(typesCap.truncated, stoneTypesTotal, typesCap.shown) ||
+    nestedTruncated;
 
   // W8-B — sotuv tarixi: keyset + filtr (SQL where). Rol: OWNER hammasi,
   // MANAGER faqat o'ziniki (saleHistoryAccess).
@@ -415,6 +459,44 @@ export default async function ProdazhaPage({
           className="mb-6"
         >
           {preselectBanner.body}
+        </Alert>
+      )}
+
+      {/* Catalog bound: filter by stone name + explicit cap (picker). */}
+      <form
+        method="get"
+        action="/prodazha"
+        className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end"
+      >
+        <label className="min-w-0 flex-1 text-sm text-ink/70">
+          Фильтр каталога (вид камня)
+          <input
+            name="catalogQ"
+            defaultValue={catalogQ}
+            placeholder="например Травертин"
+            className={inputClass + " mt-1"}
+          />
+        </label>
+        <button type="submit" className={buttonClass("secondary", "md")}>
+          Найти
+        </button>
+      </form>
+
+      {catalogTruncated && (
+        <Alert variant="warning" title="Каталог ограничен" className="mb-4">
+          <p>
+            {catalogCapNoticeRu({
+              what: "видов камня",
+              shown: typesCap.shown,
+              total: stoneTypesTotal,
+            })}
+          </p>
+          {nestedTruncated && (
+            <p className="mt-1 text-sm">
+              У части видов список плит/кусков/партий тоже обрезан по пределу —
+              сузьте фильтр по названию, чтобы увидеть нужный камень.
+            </p>
+          )}
         </Alert>
       )}
 

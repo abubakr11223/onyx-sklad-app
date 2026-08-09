@@ -43,38 +43,49 @@ describe("isDemoStoneType — seed-demo.ts markers only", () => {
   });
 });
 
+/** ProcessEnv requires NODE_ENV; tests only override purge allow vars. */
+function testEnv(
+  overrides: Record<string, string | undefined> = {},
+): NodeJS.ProcessEnv {
+  return { NODE_ENV: "test", ...overrides };
+}
+
 describe("parsePurgeArgs / validatePurgeArgs — safety gates", () => {
   it("env gate: missing ONYX_PURGE_ALLOW → error env", () => {
-    const raw = parsePurgeArgs(["--scope=A"], {});
+    const raw = parsePurgeArgs(["--scope=A"], testEnv());
     expect(raw.envAllow).toBe(false);
     expect(validatePurgeArgs(raw)).toEqual({ ok: false, error: "env" });
   });
 
   it("env must be exact value", () => {
-    const raw = parsePurgeArgs(["--scope=A"], {
-      [PURGE_ALLOW_ENV]: "yes",
-    });
+    const raw = parsePurgeArgs(
+      ["--scope=A"],
+      testEnv({ [PURGE_ALLOW_ENV]: "yes" }),
+    );
     expect(validatePurgeArgs(raw)).toEqual({ ok: false, error: "env" });
   });
 
   it("scope required", () => {
-    const raw = parsePurgeArgs([], {
-      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
-    });
+    const raw = parsePurgeArgs(
+      [],
+      testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+    );
     expect(validatePurgeArgs(raw)).toEqual({ ok: false, error: "scope" });
   });
 
   it("invalid scope rejected", () => {
-    const raw = parsePurgeArgs(["--scope=Z"], {
-      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
-    });
+    const raw = parsePurgeArgs(
+      ["--scope=Z"],
+      testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+    );
     expect(validatePurgeArgs(raw)).toEqual({ ok: false, error: "scope" });
   });
 
   it("dry-run: scope + env, no execute → willWrite false", () => {
-    const raw = parsePurgeArgs(["--scope=B"], {
-      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
-    });
+    const raw = parsePurgeArgs(
+      ["--scope=B"],
+      testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+    );
     const v = validatePurgeArgs(raw);
     expect(v).toEqual({
       ok: true,
@@ -85,16 +96,18 @@ describe("parsePurgeArgs / validatePurgeArgs — safety gates", () => {
   });
 
   it("execute without --yes → confirm error", () => {
-    const raw = parsePurgeArgs(["--scope=C", "--execute"], {
-      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
-    });
+    const raw = parsePurgeArgs(
+      ["--scope=C", "--execute"],
+      testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+    );
     expect(validatePurgeArgs(raw)).toEqual({ ok: false, error: "confirm" });
   });
 
   it("execute + yes + env → willWrite true", () => {
-    const raw = parsePurgeArgs(["--scope=A", "--execute", "--yes"], {
-      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
-    });
+    const raw = parsePurgeArgs(
+      ["--scope=A", "--execute", "--yes"],
+      testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+    );
     expect(validatePurgeArgs(raw)).toEqual({
       ok: true,
       scope: "A",
@@ -104,9 +117,10 @@ describe("parsePurgeArgs / validatePurgeArgs — safety gates", () => {
   });
 
   it("scope=P is valid photo-queue scope", () => {
-    const raw = parsePurgeArgs(["--scope=P"], {
-      [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE,
-    });
+    const raw = parsePurgeArgs(
+      ["--scope=P"],
+      testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+    );
     expect(validatePurgeArgs(raw)).toEqual({
       ok: true,
       scope: "P",
@@ -132,7 +146,7 @@ function makeFakePurgeDb(seed: {
 
   const db: PurgeDb = {
     stoneType: {
-      findMany: async () => seed.stones,
+      findMany: async (_args) => seed.stones,
       count: async ({ where } = {}) => {
         calls.push({ model: "stoneType", op: "count", where });
         if (!where) return seed.stones.length;
@@ -149,7 +163,7 @@ function makeFakePurgeDb(seed: {
       },
     },
     batch: {
-      findMany: async ({ where } = {}) => {
+      findMany: async ({ where } = { select: { id: true } }) => {
         const w = where as { stoneTypeId?: { in: string[] } } | undefined;
         if (w?.stoneTypeId?.in) {
           return seed.batches
@@ -191,7 +205,7 @@ function makeFakePurgeDb(seed: {
         }
         return countOf("slab", 0);
       },
-      updateMany: async ({ where } = {}) => {
+      updateMany: async ({ where, data: _data }) => {
         calls.push({ model: "slab", op: "updateMany", where });
         return { count: countOf("slabsWithPhotoRequest", 0) };
       },
@@ -251,7 +265,7 @@ function makeFakePurgeDb(seed: {
         // Scope P: status PENDING only — still return configured count.
         return countOf("photoRequest", 0);
       },
-      updateMany: async ({ where } = {}) => {
+      updateMany: async ({ where, data: _data }) => {
         calls.push({ model: "photoRequest", op: "updateMany", where });
         return { count: countOf("photoRequestsWithSlab", 0) };
       },
@@ -607,7 +621,7 @@ describe("emptyPurgeCounts", () => {
 describe("validatePurgeArgs does not default a destructive scope", () => {
   it("empty argv never becomes willWrite", () => {
     const v = validatePurgeArgs(
-      parsePurgeArgs([], { [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE }),
+      parsePurgeArgs([], testEnv({ [PURGE_ALLOW_ENV]: PURGE_ALLOW_VALUE })),
     );
     expect(v.ok).toBe(false);
   });

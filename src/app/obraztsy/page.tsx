@@ -96,7 +96,7 @@ export default async function ObraztsyPage({
       {ok && (
         <Alert variant="success" title="Готово" className="mb-3">
           {ok === "issued" &&
-            "Образец выдан — камень списан со склада, запись в «Активные»."}
+            "Образец выдан — камень списан, запись в «Активные». Склад подтвердит физическую выдачу в «Отгрузки»."}
           {ok === "returned" && "Образец возвращён на склад."}
           {ok === "sold" && "Оформлена продажа, образец закрыт."}
           {ok === "extended" && "Срок возврата продлён."}
@@ -190,12 +190,19 @@ export default async function ObraztsyPage({
                   >
                     <div className="flex flex-wrap justify-between gap-2">
                       <span className="font-semibold text-ink">{s.stoneLabel}</span>
-                      {s.overdue && (
-                        <Badge variant="warning">просрочен</Badge>
-                      )}
-                      {s.status !== "ACTIVE" && (
-                        <Badge variant="neutral">{s.status}</Badge>
-                      )}
+                      <span className="flex flex-wrap gap-1">
+                        {s.awaitsWarehouse && s.status === "ACTIVE" && (
+                          <Badge variant="warning">
+                            ожидает выдачи со склада
+                          </Badge>
+                        )}
+                        {s.overdue && (
+                          <Badge variant="warning">просрочен</Badge>
+                        )}
+                        {s.status !== "ACTIVE" && (
+                          <Badge variant="neutral">{s.status}</Badge>
+                        )}
+                      </span>
                     </div>
                     <p className="mt-1 text-ink/65">
                       Выдан {formatTashkentDate(s.issuedAt)} · вернуть до{" "}

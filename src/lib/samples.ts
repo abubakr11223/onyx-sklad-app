@@ -13,6 +13,11 @@ import {
 } from "@/lib/debts";
 import { MAX_DECIMAL_14_2 } from "@/lib/decimal";
 import type { MoneyCurrency } from "@/lib/clients";
+import {
+  cancelOpenShipmentForSample,
+  createSampleShipment,
+  shipmentAwaitsWarehouse,
+} from "@/lib/shipments";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -453,6 +458,8 @@ export async function issueSample(
       }
 
       try {
+        // TZ14: Sample ACTIVE written here (single writer). TZ15 §4 does NOT
+        // create Sample at warehouse confirm — shipment is a sibling only.
         const sample = await tx.sample.create({
           data: {
             targetType: input.targetType,
@@ -473,6 +480,49 @@ export async function issueSample(
             linkedRequestId: input.linkedRequestId?.trim() || null,
           },
           select: { id: true },
+        });
+
+        // Location snapshot for warehouse queue (unit samples).
+        let locationSnapshot: string | null =
+          input.locationNote?.trim() || null;
+        if (
+          (input.targetType === "SLAB" || input.targetType === "PIECE") &&
+          !locationSnapshot
+        ) {
+          const unitId = slabId ?? pieceId;
+          if (unitId) {
+            const loc =
+              input.targetType === "SLAB"
+                ? await tx.slab.findUnique({
+                    where: { id: unitId },
+                    select: { block: true, landmark: true },
+                  })
+                : await tx.piece.findUnique({
+                    where: { id: unitId },
+                    select: { block: true, landmark: true },
+                  });
+            if (loc) {
+              locationSnapshot = `Блок ${loc.block}, ор. ${loc.landmark}`;
+            }
+          }
+        }
+
+        // TZ №15 Slice 2 — OPEN SAMPLE shipment same TX (stock already held above).
+        await createSampleShipment(tx, {
+          sampleId: sample.id,
+          managerId: actor.id,
+          clientId,
+          note: input.comment?.trim() || null,
+          line: {
+            targetType: input.targetType,
+            slabId,
+            pieceId,
+            batchId,
+            qtyOrderedSlabs: qtySlabs,
+            qtyOrderedAreaM2:
+              qtyAreaM2 != null ? Number(qtyAreaM2) : null,
+            locationSnapshot,
+          },
         });
 
         await tx.auditLog.create({
@@ -558,6 +608,9 @@ export async function returnSample(args: {
           message: "Образец изменился — обновите страницу",
         });
       }
+
+      // TZ №15 Slice 2 — cancel OPEN sample shipment (stock reverse below is independent).
+      await cancelOpenShipmentForSample(tx, sample.id, new Date());
 
       if (sample.targetType === "SLAB" && sample.slabId) {
         await tx.slab.updateMany({
@@ -902,6 +955,11 @@ export type SampleListItem = {
   managerId: string;
   managerName: string;
   stoneLabel: string;
+  /**
+   * TZ №15 Slice 2 — true while sibling SAMPLE shipment is OPEN/PARTIAL.
+   * Derived only; never stored on Sample. Legacy samples (no shipment) → false.
+   */
+  awaitsWarehouse: boolean;
 };
 
 export async function listSamples(
@@ -956,6 +1014,23 @@ export async function listSamples(
       batch: { select: { stoneType: { select: { name: true } } } },
       qtySlabs: true,
       qtyAreaM2: true,
+      // TZ №15 — sibling shipment for «ожидает выдачи» badge (bounded lines).
+      shipment: {
+        select: {
+          cancelledAt: true,
+          completedAt: true,
+          lines: {
+            select: {
+              targetType: true,
+              qtyOrderedSlabs: true,
+              qtyOrderedAreaM2: true,
+              qtyShippedSlabs: true,
+              qtyShippedAreaM2: true,
+            },
+            take: 5,
+          },
+        },
+      },
     },
   });
 
@@ -974,6 +1049,22 @@ export async function listSamples(
         .join(" / ");
       stoneLabel = `${r.batch.stoneType.name} — объём${q ? ` (${q})` : ""}`;
     }
+    const ship = r.shipment
+      ? {
+          cancelledAt: r.shipment.cancelledAt,
+          completedAt: r.shipment.completedAt,
+          lines: r.shipment.lines.map((l) => ({
+            targetType: l.targetType,
+            qtyOrderedSlabs: l.qtyOrderedSlabs,
+            qtyOrderedAreaM2:
+              l.qtyOrderedAreaM2 == null
+                ? null
+                : Number(l.qtyOrderedAreaM2.toString()),
+            qtyShippedSlabs: l.qtyShippedSlabs,
+            qtyShippedAreaM2: Number(l.qtyShippedAreaM2.toString()),
+          })),
+        }
+      : null;
     return {
       id: r.id,
       status: r.status as SampleStatus,
@@ -994,6 +1085,7 @@ export async function listSamples(
       managerId: r.managerId,
       managerName: r.manager.name,
       stoneLabel,
+      awaitsWarehouse: shipmentAwaitsWarehouse(ship),
     };
   });
 }

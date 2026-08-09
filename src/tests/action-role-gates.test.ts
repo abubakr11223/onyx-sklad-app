@@ -185,7 +185,10 @@ describe("createReservation — capability gate canReserve (ТЗ №7 #5)", () =
   it("нет canReserve (склад/партнёр) → form-ошибка, Reservation НЕ создаётся", async () => {
     M.getCapabilities.mockResolvedValue(denyAll());
 
-    const res = await createReservation({ errors: {} }, emptyForm());
+    const res = await createReservation(
+      { errors: {}, alternatives: [] },
+      emptyForm(),
+    );
 
     expect(res.errors?.form).toMatch(/нет доступа|бронь/i);
     expectNoDbWrites();

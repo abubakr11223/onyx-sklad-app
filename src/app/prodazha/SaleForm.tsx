@@ -16,7 +16,10 @@ import {
   type ChangeEvent,
 } from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
-import { fieldErrorItems as buildFieldErrorItems } from "./sale-form-errors";
+import {
+  fieldErrorItems as buildFieldErrorItems,
+  sampleFieldErrorItems,
+} from "./sale-form-errors";
 import { issueSampleAction } from "@/app/obraztsy/actions";
 import { emptyIssueSampleState } from "@/app/obraztsy/issue-sample-state";
 import {
@@ -238,21 +241,13 @@ export default function SaleForm({
   const hasSampleError =
     Boolean(sampleState.conflict) ||
     Object.keys(sampleState.errors).length > 0;
-  /** All sample messages for step-4 banner (never field-only silence). */
-  const sampleErrorMessages = [
+  /** Step-4 sample banner: preferred keys + leftovers (unknown keys never silent). */
+  const sampleErrorList = [
     sampleState.conflict,
-    sampleState.errors.form,
-    sampleState.errors.clientId,
-    sampleState.errors.returnDueDate,
-    sampleState.errors.depositAmount,
-    sampleState.errors.qty,
-    sampleState.errors.qtySlabs,
-    sampleState.errors.qtyAreaM2,
-    sampleState.errors.unitId,
-    sampleState.errors.batchId,
+    ...sampleFieldErrorItems(sampleState.errors),
   ].filter((m): m is string => Boolean(m));
   // Dedupe while preserving order (form often mirrors first field error).
-  const sampleErrorList = [...new Set(sampleErrorMessages)];
+  const sampleErrorListUnique = [...new Set(sampleErrorList)];
 
   // After a rejected submit, stay on confirmation (step 4) so the error is
   // where the user just pressed «Подтвердить». Controlled fields keep values.
@@ -1201,14 +1196,14 @@ export default function SaleForm({
           : "4. Подтверждение продажи"}
       </h2>
 
-      {/* TZ14 BUG-01 — sample failures must never be silent on step 4. */}
-      {sampleErrorList.length > 0 && (
+      {/* TZ14 BUG-01 + round2 leftover — sample failures never silent on step 4. */}
+      {sampleErrorListUnique.length > 0 && (
         <Alert variant="danger" title="Образец не выдан" className="mb-4">
-          {sampleErrorList.length === 1 ? (
-            <p className="text-base font-semibold">{sampleErrorList[0]}</p>
+          {sampleErrorListUnique.length === 1 ? (
+            <p className="text-base font-semibold">{sampleErrorListUnique[0]}</p>
           ) : (
             <ul className="list-disc space-y-1 pl-4 text-sm">
-              {sampleErrorList.map((msg) => (
+              {sampleErrorListUnique.map((msg) => (
                 <li key={msg}>{msg}</li>
               ))}
             </ul>

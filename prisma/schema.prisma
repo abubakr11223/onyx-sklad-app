@@ -643,6 +643,8 @@ model Sample {
   piece      Piece?      @relation(fields: [pieceId], references: [id], onDelete: Restrict)
   batch      Batch?      @relation(fields: [batchId], references: [id], onDelete: Restrict)
   saleRecord SaleRecord? @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
+  /// TZ №15 Slice 2 — at most one shipment task per sample (1:1 sibling).
+  shipment   Shipment?
 
   @@index([status, returnDueDate])
   @@index([clientId, status])
@@ -763,14 +765,15 @@ model SaleRecord {
   @@index([siteId, soldAt])
 }
 
-/// TZ №15 Slice 1 — warehouse hand-over task for a sale (kind=SALE only in this slice).
+/// TZ №15 — warehouse hand-over task (SALE + SAMPLE in slice 2; SHOWROOM later).
 /// Status OPEN/PARTIAL/DONE is DERIVED from line qty shipped vs ordered (+ cancelledAt).
-/// Stock write-off stays on the sale TX — confirm does NOT change UnitStatus.
+/// Stock write-off stays on the commercial TX — confirm does NOT change UnitStatus / Sample.
 model Shipment {
   id           String       @id @default(cuid())
   kind         ShipmentKind @default(SALE)
   /// Required for SALE; unique → one shipment per sale.
   saleRecordId String?      @unique
+  /// Required for SAMPLE; unique → one shipment per sample (sibling, not second Sample).
   sampleId     String?      @unique
   managerId    String
   clientId     String?
@@ -779,11 +782,12 @@ model Shipment {
   createdAt    DateTime     @default(now())
   /// Set when every line is fully shipped (derived DONE).
   completedAt  DateTime?
-  /// Sale returned before any/full ship — task cancelled.
+  /// Sale/sample returned before any/full ship — task cancelled.
   cancelledAt  DateTime?
   updatedAt    DateTime     @updatedAt
 
   saleRecord SaleRecord?    @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
+  sample     Sample?        @relation(fields: [sampleId], references: [id], onDelete: Restrict)
   manager    User           @relation("ShipmentManager", fields: [managerId], references: [id], onDelete: Restrict)
   client     Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   site       Site?          @relation(fields: [siteId], references: [id], onDelete: Restrict)

@@ -104,14 +104,22 @@ describe("clientSearchWhere — directory scope + same OR", () => {
 
 describe("searchClients — both call sites same OR; sale attachAnyExisting", () => {
   it("directory-style (scoped only): uses clientSearchWhere OR", async () => {
-    const findMany = vi.fn(async () => [
-      {
-        id: "c1",
-        name: "Тимур Каримов",
-        phone: "+998901111111",
-        type: "B2C",
-      },
-    ]);
+    type FindManyArgs = {
+      where: { managerId?: string; OR?: unknown };
+      take: number;
+    };
+    const findMany = vi.fn(
+      async (_args: FindManyArgs): Promise<
+        Array<{ id: string; name: string; phone: string; type: string }>
+      > => [
+        {
+          id: "c1",
+          name: "Тимур Каримов",
+          phone: "+998901111111",
+          type: "B2C",
+        },
+      ],
+    );
     const db = { client: { findMany } } as never;
 
     const hits = await searchClients(db, {
@@ -125,10 +133,7 @@ describe("searchClients — both call sites same OR; sale attachAnyExisting", ()
     expect(hits).toHaveLength(1);
     expect(hits[0]!.name).toBe("Тимур Каримов");
     expect(findMany).toHaveBeenCalledTimes(1);
-    const arg = findMany.mock.calls[0]![0] as unknown as {
-      where: { managerId?: string; OR?: unknown };
-      take: number;
-    };
+    const arg = findMany.mock.calls[0][0];
     expect(arg.where.managerId).toBe("mgr-1");
     expect(arg.where.OR).toEqual(clientSearchOrFilters("тим"));
     expect(arg.take).toBeLessThanOrEqual(CLIENT_SEARCH_MAX_TAKE);

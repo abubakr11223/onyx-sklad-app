@@ -143,7 +143,9 @@ describe("buildPerfDataset — FK integrity", () => {
     ];
     expect(allIds.length).toBeGreaterThan(0);
     for (const id of allIds) {
-      expect(id.startsWith(PERF_ID_PREFIX)).toBe(true);
+      // CreateManyInput marks some ids optional; generator always sets them.
+      expect(id).toBeDefined();
+      expect(id!.startsWith(PERF_ID_PREFIX)).toBe(true);
     }
   });
 });

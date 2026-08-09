@@ -149,12 +149,19 @@ describe("createIntakeWithReceipt — idempotency", () => {
     expect(t1.batchId).toBe("batch-1");
 
     let findCalls = 0;
-    const mapFind = tx.mutationReceipt.findUnique;
-    tx.mutationReceipt.findUnique = vi.fn(async (args) => {
+    type FindUnique = (args: {
+      where: { mutationId: string };
+    }) => Promise<{ entityId: string; resultJson: unknown } | null>;
+    // makeTx casts fake to IntakeReceiptTx; rebind via unknown → narrow bag.
+    const receiptBag = tx.mutationReceipt as unknown as {
+      findUnique: FindUnique;
+    };
+    const mapFind = receiptBag.findUnique.bind(receiptBag);
+    receiptBag.findUnique = async (args) => {
       findCalls += 1;
       if (findCalls === 1) return null; // T2 thinks empty
       return mapFind(args); // after P2002: load winner
-    });
+    };
 
     let caught: IntakeConcurrentClaimError | null = null;
     try {

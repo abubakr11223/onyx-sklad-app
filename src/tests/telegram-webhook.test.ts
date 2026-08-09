@@ -44,38 +44,46 @@ const claimTelegramUpdate = vi.fn(
 // W10-B — release on domain fail (must not stay claimed).
 const releaseTelegramUpdate = vi.fn(async (_id: number): Promise<boolean> => true);
 
+/** Bridge vi.fn → WebhookDeps without illegal `...unknown[]` spread (TS2556). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function callMock(fn: ReturnType<typeof vi.fn>, ...args: any[]): any {
+  return fn(...args);
+}
+
 function makeDeps(overrides?: Partial<WebhookDeps>): WebhookDeps {
   return {
     db: {
       user: {
-        findMany: (...a: unknown[]) => findMany(...a),
-        update: (...a: unknown[]) => update(...a),
-        findFirst: (...a: unknown[]) => userFindFirst(...a),
-        findUnique: (...a: unknown[]) => userFindUnique(...a),
+        findMany: (...a: unknown[]) => callMock(findMany, ...a),
+        update: (...a: unknown[]) => callMock(update, ...a),
+        findFirst: (...a: unknown[]) => callMock(userFindFirst, ...a),
+        findUnique: (...a: unknown[]) => callMock(userFindUnique, ...a),
       },
       telegramAccessRequest: {
-        upsert: (...a: unknown[]) => tarUpsert(...a),
+        upsert: (...a: unknown[]) => callMock(tarUpsert, ...a),
       },
       photoRequest: {
-        findFirst: (...a: unknown[]) => prFindFirst(...a),
-        findMany: (...a: unknown[]) => prFindMany(...a),
-        update: (...a: unknown[]) => prUpdate(...a),
+        findFirst: (...a: unknown[]) => callMock(prFindFirst, ...a),
+        findMany: (...a: unknown[]) => callMock(prFindMany, ...a),
+        update: (...a: unknown[]) => callMock(prUpdate, ...a),
       },
       photoDispatch: {
-        findFirst: (...a: unknown[]) => pdFindFirst(...a),
+        findFirst: (...a: unknown[]) => callMock(pdFindFirst, ...a),
       },
       photo: {
-        create: (...a: unknown[]) => photoCreate(...a),
+        create: (...a: unknown[]) => callMock(photoCreate, ...a),
       },
     },
-    sendMessage: (...a: unknown[]) => sendMessage(...a),
-    signMagicLinkToken: (...a: unknown[]) => signMagicLinkToken(...a),
+    sendMessage: (...a: unknown[]) => callMock(sendMessage, ...a),
+    signMagicLinkToken: (...a: unknown[]) => callMock(signMagicLinkToken, ...a),
     appBaseUrl: "https://onyx.test",
-    downloadPhotoBase64: (...a: unknown[]) => downloadPhotoBase64(...a),
-    analyzeShape: (...a: unknown[]) => analyzeShape(...a),
-    separateSlabWithPhoto: (...a: unknown[]) => separateSlabWithPhotoMock(...a),
-    claimTelegramUpdate: (...a: unknown[]) => claimTelegramUpdate(...a),
-    releaseTelegramUpdate: (...a: unknown[]) => releaseTelegramUpdate(...a),
+    downloadPhotoBase64: (...a: unknown[]) =>
+      callMock(downloadPhotoBase64, ...a),
+    analyzeShape: (...a: unknown[]) => callMock(analyzeShape, ...a),
+    separateSlabWithPhoto: (...a: unknown[]) =>
+      callMock(separateSlabWithPhotoMock, ...a),
+    claimTelegramUpdate: (id: number) => claimTelegramUpdate(id),
+    releaseTelegramUpdate: (id: number) => releaseTelegramUpdate(id),
     ...overrides,
   } as unknown as WebhookDeps;
 }

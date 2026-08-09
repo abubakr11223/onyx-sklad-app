@@ -1,8 +1,14 @@
 // SaleForm step-4: which error keys surface on confirmation banner.
 // Shared by SaleForm.tsx and sale-form-errors.test.ts — test must import THIS
 // module (not a local copy), or production drift goes silent.
+//
+// round2: preferred keys keep stable order; UNKNOWN keys are no longer dropped
+// (see orderedErrorMessages in @/lib/form-errors). Allowlist drift → leftover
+// banner, not silence.
 
-/** Keys shown as list items after failed submit (salebug: qty* must be included). */
+import { orderedErrorMessages } from "@/lib/form-errors";
+
+/** Preferred keys (order stable for UI). Unknown keys still append. */
 export const SALE_FORM_ERROR_KEYS = [
   "form",
   "qty",
@@ -22,12 +28,34 @@ export const SALE_FORM_ERROR_KEYS = [
 export type SaleFormErrorKey = (typeof SALE_FORM_ERROR_KEYS)[number];
 
 /**
+ * Sample issue path on the same SaleForm confirm step.
+ * Preferred order; leftovers still surface (structural, not hand-list only).
+ */
+export const SAMPLE_FORM_ERROR_KEYS = [
+  "form",
+  "clientId",
+  "returnDueDate",
+  "depositAmount",
+  "qty",
+  "qtySlabs",
+  "qtyAreaM2",
+  "unitId",
+  "batchId",
+] as const;
+
+/**
  * Build confirmation-step error list from server action errors map.
- * Order matches SALE_FORM_ERROR_KEYS (stable for UI).
+ * Preferred keys first (stable order), then any leftover unknown keys.
  */
 export function fieldErrorItems(
   errors: Readonly<Record<string, string | undefined>>,
 ): string[] {
-  return SALE_FORM_ERROR_KEYS.map((k) => errors[k])
-    .filter((msg): msg is string => Boolean(msg));
+  return orderedErrorMessages(errors, SALE_FORM_ERROR_KEYS);
+}
+
+/** Same contract for issue-sample errors on step 4. */
+export function sampleFieldErrorItems(
+  errors: Readonly<Record<string, string | undefined>>,
+): string[] {
+  return orderedErrorMessages(errors, SAMPLE_FORM_ERROR_KEYS);
 }

@@ -33,6 +33,25 @@ import ReserveForm, {
   type StoneGroup,
   type UnitOption,
 } from "./ReserveForm";
+import {
+  ACTIVE_RESERVATIONS_PAGE_SIZE,
+  CATALOG_BATCHES_CAP,
+  CATALOG_PIECES_CAP,
+  CATALOG_SLABS_CAP,
+  CATALOG_STONE_TYPES_CAP,
+  afterExpiresIdKeyset,
+  catalogCapNoticeRu,
+  encodeExpiresIdCursor,
+  isCapNoticeVisible,
+  parseExpiresIdCursor,
+  stoneNameContainsFilter,
+  takeCapPlusOne,
+  takeForCap,
+  type ExpiresIdCursor,
+} from "@/lib/catalog-bounds";
+import Link from "next/link";
+import { buttonClass } from "@/components/ui/Button";
+import { inputClass } from "@/components/ui/Field";
 
 export const metadata: Metadata = {
   title: "Брони — Onyx",
@@ -135,82 +154,147 @@ export default async function BronPage({
     batch: { select: { arrivedAt: true, stoneType: { select: { name: true } } } },
   } as const;
 
+  // Active list: compound keyset (expiresAt ASC, id ASC) — never unbounded.
+  const afterRaw = firstParam(params.after);
+  const parsedAfter = afterRaw ? parseExpiresIdCursor(afterRaw) : null;
+  const afterCursor: ExpiresIdCursor | "malformed" | null = afterRaw
+    ? parsedAfter ?? "malformed"
+    : null;
+  // Malformed after → empty list (not silent page 1 restart).
+  const activeWhere =
+    afterCursor === "malformed"
+      ? null
+      : {
+          status: "ACTIVE" as const,
+          ...listScope,
+          ...(afterCursor ? afterExpiresIdKeyset(afterCursor) : {}),
+        };
+
+  const catalogQ = firstParam(params.catalogQ);
+  const nameFilter = stoneNameContainsFilter(catalogQ);
+  const stoneTypeWhere = {
+    isArchived: false,
+    ...(nameFilter ?? {}),
+  };
+
   // BATCH-B (perf): данные брони и каталог для формы — одним параллельным
   // Promise.all (мигрируем разрозненный await в общую группу, как в /kamen).
-  const [active, history, cfg, stoneTypes] = await Promise.all([
-    db.reservation.findMany({
-      where: { status: "ACTIVE", ...listScope },
-      orderBy: { expiresAt: "asc" },
-      include: reservationInclude,
-    }),
-    db.reservation.findMany({
-      where: {
-        status: { in: ["COMPLETED", "CANCELLED", "EXPIRED"] },
-        ...listScope,
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 20,
-      include: reservationInclude,
-    }),
-    db.appConfig.findUnique({
-      where: { key: RESERVATION_DAYS_KEY },
-      select: { value: true },
-    }),
-    // ── Yangi bron formasi: AVAILABLE birliklar + partiya hajmi ──
-    // §3 formula uchun partiyaning BARCHA plita/boy qatorlari EMAS — faqat
-    // hisoblagichlar; qoldiq getBatchRemainders (SQL agregat) orqali (pastda).
-    db.stoneType.findMany({
-      where: { isArchived: false },
-      orderBy: { name: "asc" },
-      include: {
-        slabs: {
-          where: { status: "AVAILABLE", needsCheck: false },
-          orderBy: { label: "asc" },
-          select: {
-            id: true,
-            label: true,
-            lengthMm: true,
-            widthMm: true,
-            block: true,
-            landmark: true,
-          },
+  const [activeRaw, activeTotal, history, cfg, stoneTypesAll, stoneTypesTotal] =
+    await Promise.all([
+      activeWhere === null
+        ? Promise.resolve([])
+        : db.reservation.findMany({
+            where: activeWhere,
+            orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
+            take: takeForCap(ACTIVE_RESERVATIONS_PAGE_SIZE),
+            include: reservationInclude,
+          }),
+      db.reservation.count({
+        where: { status: "ACTIVE", ...listScope },
+      }),
+      db.reservation.findMany({
+        where: {
+          status: { in: ["COMPLETED", "CANCELLED", "EXPIRED"] },
+          ...listScope,
         },
-        pieces: {
-          where: { status: "AVAILABLE", needsCheck: false },
-          select: {
-            id: true,
-            kind: true,
-            boundingLengthMm: true,
-            boundingWidthMm: true,
-            block: true,
-            landmark: true,
+        orderBy: { updatedAt: "desc" },
+        take: 20,
+        include: reservationInclude,
+      }),
+      db.appConfig.findUnique({
+        where: { key: RESERVATION_DAYS_KEY },
+        select: { value: true },
+      }),
+      // ── Yangi bron formasi: AVAILABLE birliklar + partiya hajmi (capped) ──
+      db.stoneType.findMany({
+        where: stoneTypeWhere,
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+        take: takeForCap(CATALOG_STONE_TYPES_CAP),
+        include: {
+          slabs: {
+            where: { status: "AVAILABLE", needsCheck: false },
+            orderBy: [{ label: "asc" }, { id: "asc" }],
+            take: takeForCap(CATALOG_SLABS_CAP),
+            select: {
+              id: true,
+              label: true,
+              lengthMm: true,
+              widthMm: true,
+              block: true,
+              landmark: true,
+            },
           },
-        },
-        batches: {
-          where: { needsCheck: false },
-          orderBy: { arrivedAt: "asc" },
-          select: {
-            id: true,
-            arrivedAt: true,
-            slabsTotal: true,
-            areaTotalM2: true,
-            slabsAdjusted: true,
-            areaAdjustedM2: true,
-            slabsSoldDirect: true,
-            areaSoldDirectM2: true,
-            reservations: {
-              where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
-              select: { qtySlabs: true, qtyAreaM2: true },
+          pieces: {
+            where: { status: "AVAILABLE", needsCheck: false },
+            orderBy: [{ id: "asc" }],
+            take: takeForCap(CATALOG_PIECES_CAP),
+            select: {
+              id: true,
+              kind: true,
+              boundingLengthMm: true,
+              boundingWidthMm: true,
+              block: true,
+              landmark: true,
+            },
+          },
+          batches: {
+            where: { needsCheck: false },
+            orderBy: [{ arrivedAt: "asc" }, { id: "asc" }],
+            take: takeForCap(CATALOG_BATCHES_CAP),
+            select: {
+              id: true,
+              arrivedAt: true,
+              slabsTotal: true,
+              areaTotalM2: true,
+              slabsAdjusted: true,
+              areaAdjustedM2: true,
+              slabsSoldDirect: true,
+              areaSoldDirectM2: true,
+              reservations: {
+                where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
+                select: { qtySlabs: true, qtyAreaM2: true },
+              },
             },
           },
         },
-      },
-    }),
-  ]);
+      }),
+      db.stoneType.count({ where: stoneTypeWhere }),
+    ]);
+
+  const activeCap = takeCapPlusOne(activeRaw, ACTIVE_RESERVATIONS_PAGE_SIZE);
+  const active = activeCap.items;
+  const activeHasMore = activeCap.truncated;
+  const activeNextCursor =
+    activeHasMore && active.length > 0
+      ? encodeExpiresIdCursor({
+          expiresAt: active[active.length - 1]!.expiresAt,
+          id: active[active.length - 1]!.id,
+        })
+      : null;
+
+  const typesCap = takeCapPlusOne(stoneTypesAll, CATALOG_STONE_TYPES_CAP);
+  let nestedTruncated = false;
+  const stoneTypes = typesCap.items.map((st) => {
+    const slabsCap = takeCapPlusOne(st.slabs, CATALOG_SLABS_CAP);
+    const piecesCap = takeCapPlusOne(st.pieces, CATALOG_PIECES_CAP);
+    const batchesCap = takeCapPlusOne(st.batches, CATALOG_BATCHES_CAP);
+    if (slabsCap.truncated || piecesCap.truncated || batchesCap.truncated) {
+      nestedTruncated = true;
+    }
+    return {
+      ...st,
+      slabs: slabsCap.items,
+      pieces: piecesCap.items,
+      batches: batchesCap.items,
+    };
+  });
+  const catalogTruncated =
+    isCapNoticeVisible(typesCap.truncated, stoneTypesTotal, typesCap.shown) ||
+    nestedTruncated;
+
   const defaultDays = cfg
     ? parseReservationDaysConfig(cfg.value)
     : DEFAULT_RESERVATION_DAYS;
-
   // §3 formula: partiya qoldiqlari SQL agregatlaridan (butun ombor tortilmaydi).
   const remainders = await getBatchRemainders(
     db,
@@ -323,11 +407,19 @@ export default async function BronPage({
         </Alert>
       )}
 
-      {/* ── Faol bronlar ── */}
+      {/* ── Faol bronlar (keyset page) ── */}
       <section className="mt-6">
         <h2 className="text-lg font-semibold text-ink">Активные брони</h2>
-        {active.length === 0 ? (
+        {afterCursor === "malformed" && (
+          <Alert variant="warning" className="mt-3">
+            Ссылка на страницу броней устарела или повреждена. Показан пустой
+            список — откройте «Активные брони» с начала.
+          </Alert>
+        )}
+        {active.length === 0 && afterCursor !== "malformed" ? (
           <p className="mt-3 text-ink/70">Активных броней нет.</p>
+        ) : active.length === 0 ? (
+          <p className="mt-3 text-ink/70">Нет записей на этой странице.</p>
         ) : (
           <ul className="mt-3 space-y-3">
             {active.map((r) => {
@@ -366,11 +458,72 @@ export default async function BronPage({
             })}
           </ul>
         )}
+        {activeHasMore && activeNextCursor && (
+          <div className="mt-3">
+            <p className="mb-2 text-sm text-ink/60">
+              {catalogCapNoticeRu({
+                what: "активных броней (на странице)",
+                shown: active.length,
+                total: activeTotal,
+              })}
+            </p>
+            <Link
+              href={`/bron?after=${encodeURIComponent(activeNextCursor)}`}
+              className={buttonClass("secondary", "md")}
+            >
+              Ещё брони
+            </Link>
+          </div>
+        )}
+        {!activeHasMore &&
+          activeTotal > active.length &&
+          afterCursor &&
+          afterCursor !== "malformed" && (
+            <p className="mt-2 text-sm text-ink/55">
+              Показано {active.length} на этой странице (всего активных:{" "}
+              {activeTotal}).
+            </p>
+          )}
       </section>
 
       {/* ── Yangi bron ── */}
       <section className="mt-8 rounded-card border border-line bg-paper-2 p-4 shadow-card">
         <h2 className="mb-3 text-lg font-semibold text-ink">Новая бронь</h2>
+        <form
+          method="get"
+          action="/bron"
+          className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end"
+        >
+          <label className="min-w-0 flex-1 text-sm text-ink/70">
+            Фильтр каталога (вид)
+            <input
+              name="catalogQ"
+              defaultValue={catalogQ}
+              placeholder="например Травертин"
+              className={inputClass + " mt-1"}
+            />
+          </label>
+          <button type="submit" className={buttonClass("secondary", "md")}>
+            Найти
+          </button>
+        </form>
+        {catalogTruncated && (
+          <Alert variant="warning" title="Каталог ограничен" className="mb-3">
+            <p>
+              {catalogCapNoticeRu({
+                what: "видов камня",
+                shown: typesCap.shown,
+                total: stoneTypesTotal,
+              })}
+            </p>
+            {nestedTruncated && (
+              <p className="mt-1 text-sm">
+                У части видов плиты/куски/партии обрезаны по пределу — сузьте
+                фильтр по названию.
+              </p>
+            )}
+          </Alert>
+        )}
         <ReserveForm stones={stones} defaultDays={defaultDays} />
       </section>
 
