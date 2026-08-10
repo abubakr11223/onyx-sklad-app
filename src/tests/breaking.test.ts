@@ -259,7 +259,12 @@ describe("assertValidPieceInput — вход не из формы (Telegram-бо
       { ...validPiece, sidesMm: [145, 80] },
       { ...validPiece, boundingLengthMm: 0 },
       { ...validPiece, boundingWidthMm: -5 },
-      { ...validPiece, thicknessMm: 1.5 },
+      // ТЗ №12 + решение владельца 2026-08-10: ДРОБНАЯ толщина теперь валидна
+      // (18 мм = 1,8 см), поэтому 1.5 переехало в список допустимых ниже.
+      // Здесь остаётся то, что и должно падать: ноль, минус, за пределом NUMERIC(5,1).
+      { ...validPiece, thicknessMm: 0 },
+      { ...validPiece, thicknessMm: -2 },
+      { ...validPiece, thicknessMm: 10_000 },
       { ...validPiece, areaM2: 0 },
       { ...validPiece, block: "  " },
       { ...validPiece, landmark: "" },
@@ -299,9 +304,21 @@ describe("assertValidPieceInput — вход не из формы (Telegram-бо
         ...validPiece,
         boundingLengthMm: 1_000_000,
         boundingWidthMm: 1_000_000,
-        thicknessMm: 1_000_000,
+        // Толщина — своя граница: NUMERIC(5,1), не Int4 (ТЗ №12, дробные см).
+        thicknessMm: 9999.9,
         areaM2: 999_999_999.999,
       }),
+    ).not.toThrow();
+  });
+
+  it("ТЗ №12: дробная толщина принимается — 18 мм это 1,8 см", () => {
+    // Ровно тот случай, ради которого менялся тип: раньше 1,8 не сохранить,
+    // складчик был вынужден писать 2 и терять реальный размер камня.
+    expect(() =>
+      assertValidPieceInput({ ...validPiece, thicknessMm: 1.8 }),
+    ).not.toThrow();
+    expect(() =>
+      assertValidPieceInput({ ...validPiece, thicknessMm: 1.5 }),
     ).not.toThrow();
   });
 });

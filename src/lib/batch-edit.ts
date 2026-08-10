@@ -10,6 +10,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { lockBatchForUpdate } from "@/lib/batch-lock";
+import { thicknessToNumber } from "@/lib/dimensions";
 import {
   EMPTY_AGGREGATE,
   EMPTY_HOLD,
@@ -464,7 +465,7 @@ export async function applyBatchEdit(
     push("areaTotalM2", curArea, input.areaTotalM2);
     push("lengthMm", batch.lengthMm, input.lengthMm);
     push("widthMm", batch.widthMm, input.widthMm);
-    push("thicknessMm", batch.thicknessMm, input.thicknessMm);
+    push("thicknessMm", thicknessToNumber(batch.thicknessMm), input.thicknessMm);
     push(
       "supplierNote",
       batch.supplierNote?.trim() || null,
@@ -477,7 +478,11 @@ export async function applyBatchEdit(
     for (const p of input.patterns) {
       const old = existingPat.get(p.id)!;
       push(`pattern.${p.id}.description`, old.description, p.description);
-      push(`pattern.${p.id}.thicknessMm`, old.thicknessMm, p.thicknessMm);
+      push(
+        `pattern.${p.id}.thicknessMm`,
+        thicknessToNumber(old.thicknessMm),
+        p.thicknessMm,
+      );
       push(`pattern.${p.id}.lengthMm`, old.lengthMm, p.lengthMm);
       push(`pattern.${p.id}.widthMm`, old.widthMm, p.widthMm);
       push(`pattern.${p.id}.slabsCount`, old.slabsCount, p.slabsCount);

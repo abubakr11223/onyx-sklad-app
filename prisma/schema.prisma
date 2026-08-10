@@ -239,7 +239,8 @@ model Batch {
   lengthMm         Int?
   widthMm          Int?
   /// Толщина партии, см — если однородная; при узорах — в BatchPattern.
-  thicknessMm      Int?
+  /// Decimal(5,1): на складе есть 18 мм = 1,8 см (решение владельца 2026-08-10).
+  thicknessMm      Decimal? @db.Decimal(5, 1)
   needsCheck       Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -269,7 +270,8 @@ model BatchPattern {
   batchId     String
   description String // «светлый с прожилками»
   /// ТЗ №12: толщина в см (имя *Mm legacy). Однородная партия — на Batch.
-  thicknessMm Int?
+  /// Decimal(5,1): 18 мм = 1,8 см (решение владельца 2026-08-10, ТЗ №12).
+  thicknessMm Decimal? @db.Decimal(5, 1)
   /// ТЗ №12: габарит плиты подгруппы, см (если размеры в партии разные).
   lengthMm    Int?
   widthMm     Int?
@@ -321,7 +323,8 @@ model Slab {
   /// ТЗ №12: см (legacy name Mm)
   lengthMm        Int?
   widthMm         Int?
-  thicknessMm     Int?
+  /// Decimal(5,1): 18 мм = 1,8 см (решение владельца 2026-08-10, ТЗ №12).
+  thicknessMm     Decimal? @db.Decimal(5, 1)
   areaM2          Decimal?   @db.Decimal(12, 3)
   isAreaEstimated Boolean    @default(true)
   block           String
@@ -372,7 +375,8 @@ model Piece {
   // Client INSERT/UPDATE da maydonni yubormaydi; DB hisoblaydi.
   // DDL: prisma/migrations/20260731102837_piece_bounding_area/migration.sql
   boundingAreaMm2  Int        @default(dbgenerated("(\"boundingLengthMm\" * \"boundingWidthMm\")"))
-  thicknessMm      Int?
+  /// Decimal(5,1): 18 мм = 1,8 см (решение владельца 2026-08-10, ТЗ №12).
+  thicknessMm      Decimal? @db.Decimal(5, 1)
   areaM2           Decimal?   @db.Decimal(12, 3)
   drawingUrl       String? // AI-chertyoj (TZ §5.5), S1 da bo'sh turadi
   block            String

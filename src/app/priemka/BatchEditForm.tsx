@@ -216,7 +216,7 @@ export default function BatchEditForm(props: EditBatchProps) {
             id="thicknessMm"
             name="thicknessMm"
             label="Толщина, см"
-            inputMode="numeric"
+            inputMode="decimal"
             defaultValue={n(props.thicknessMm)}
             error={e.thicknessMm}
           />
@@ -265,7 +265,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                     id={`patTh-${i}`}
                     name="patThickness"
                     label="Толщ., см"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     defaultValue={n(p.thicknessMm)}
                     error={e[`pat-${i}-th`]}
                   />

@@ -51,6 +51,7 @@ import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
 import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
+import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
 
 export const dynamic = "force-dynamic";
 
@@ -1044,7 +1045,9 @@ export default async function KamenPage({
                     {PIECE_KIND_RU[p.kind] ?? p.kind}
                   </span>{" "}
                   · Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
-                  {p.thicknessMm !== null && <> · толщина {p.thicknessMm} см</>}
+                  {p.thicknessMm !== null && (
+                    <> · толщина {formatThickness(thicknessToNumber(p.thicknessMm))} см</>
+                  )}
                   {p.areaM2 !== null && (
                     <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
                   )}{" "}
@@ -1166,7 +1169,10 @@ export default async function KamenPage({
                 {(b.lengthMm != null && b.widthMm != null) && (
                   <p className="mt-1 text-ink/70">
                     Плита: {b.lengthMm}×{b.widthMm}
-                    {b.thicknessMm != null ? `×${b.thicknessMm}` : ""} см
+                    {b.thicknessMm != null
+                      ? `×${formatThickness(thicknessToNumber(b.thicknessMm))}`
+                      : ""}{" "}
+                    см
                   </p>
                 )}
                 {b.locations.length === 0 ? (
@@ -1310,7 +1316,9 @@ export default async function KamenPage({
                             {pat.lengthMm != null && pat.widthMm != null && (
                               <span className="text-xs text-ink/55">
                                 {pat.lengthMm}×{pat.widthMm}
-                                {pat.thicknessMm != null ? `×${pat.thicknessMm}` : ""}{" "}
+                                {pat.thicknessMm != null
+                                  ? `×${formatThickness(thicknessToNumber(pat.thicknessMm))}`
+                                  : ""}{" "}
                                 см
                               </span>
                             )}
@@ -1349,7 +1357,9 @@ export default async function KamenPage({
                             );
                             return (
                               <p className="tnum text-xs text-ink/60">
-                                {pat.thicknessMm !== null && <>{pat.thicknessMm} см · </>}
+                                {pat.thicknessMm !== null && (
+                                  <>{formatThickness(thicknessToNumber(pat.thicknessMm))} см · </>
+                                )}
                                 осталось {clamped.slabsRemaining} плит ·{" "}
                                 {m2Fmt.format(clamped.areaRemainingM2)} м²
                               </p>

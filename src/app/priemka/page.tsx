@@ -10,6 +10,7 @@ import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import IntakeForm from "./IntakeForm";
 import BatchList, { type BatchListItem } from "./BatchList";
+import { thicknessToNumber } from "@/lib/dimensions";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export default async function PriemkaPage({
       b.areaTotalM2 === null ? null : Number(b.areaTotalM2),
     lengthMm: b.lengthMm,
     widthMm: b.widthMm,
-    thicknessMm: b.thicknessMm,
+    thicknessMm: thicknessToNumber(b.thicknessMm),
     supplierNote: b.supplierNote,
     patternCount: b._count.patterns,
   }));

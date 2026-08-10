@@ -4,7 +4,7 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
-import { formatGabarit } from "@/lib/dimensions";
+import { formatGabarit, thicknessToNumber } from "@/lib/dimensions";
 import {
   parseTashkentDayEnd,
   parseTashkentDayStart,
@@ -824,13 +824,13 @@ export async function listShipments(
       ? formatGabarit(
           line0.slab.lengthMm,
           line0.slab.widthMm,
-          line0.slab.thicknessMm,
+          thicknessToNumber(line0.slab.thicknessMm),
         )
       : line0?.piece
         ? formatGabarit(
             line0.piece.boundingLengthMm,
             line0.piece.boundingWidthMm,
-            line0.piece.thicknessMm,
+            thicknessToNumber(line0.piece.thicknessMm),
           )
         : null;
     return {

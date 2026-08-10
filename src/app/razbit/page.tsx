@@ -30,6 +30,7 @@ import Card from "@/components/ui/Card";
 import Field from "@/components/ui/Field";
 import Button from "@/components/ui/Button";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
+import { thicknessToNumber } from "@/lib/dimensions";
 
 export const metadata: Metadata = {
   title: "Разбить камень — Onyx",
@@ -143,7 +144,7 @@ export default async function RazbitPage({
     landmark: s.landmark,
     lengthMm: s.lengthMm,
     widthMm: s.widthMm,
-    thicknessMm: s.thicknessMm,
+    thicknessMm: thicknessToNumber(s.thicknessMm),
     areaM2: s.areaM2 != null ? Number(s.areaM2) : null,
     photoId: s.photos[0]?.id ?? null,
   }));

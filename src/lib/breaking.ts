@@ -14,7 +14,11 @@ import { db } from "./db";
 import { computeFreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
 import { normalizeBlockLetter } from "./block-letter";
-import { areaM2FromCm } from "./dimensions";
+import {
+  areaM2FromCm,
+  MAX_THICKNESS_CM,
+  parseThicknessCm,
+} from "./dimensions";
 import {
   MAX_DECIMAL_FIELD,
   MAX_INT_FIELD,
@@ -335,9 +339,10 @@ export function parsePieceRow(row: RawPieceRow): ParsePieceRowResult {
     errors.boundingWidthMm = "Ширина, см — целое положительное число";
   }
 
-  const thicknessMm = parsePositiveInt(row.thicknessMm);
+  // ТЗ №12 + решение владельца 2026-08-10: толщина ДРОБНАЯ (18 мм = 1,8 см).
+  const thicknessMm = parseThicknessCm(row.thicknessMm);
   if (thicknessMm === undefined) {
-    errors.thicknessMm = "Толщина, см — целое положительное число";
+    errors.thicknessMm = "Толщина, см — положительное число, например 2 или 1,8";
   }
   const areaM2 = parsePositiveDecimal(row.areaM2);
   if (areaM2 === undefined) {
@@ -386,8 +391,19 @@ export function assertValidPieceInput(p: PieceInput): void {
   if (!posInt(p.boundingLengthMm) || !posInt(p.boundingWidthMm)) {
     throw new BreakError("INVALID_PIECE", "Габариты куска — целые положительные см (не больше 1 000 000)");
   }
-  if (p.thicknessMm !== null && !posInt(p.thicknessMm)) {
-    throw new BreakError("INVALID_PIECE", "Толщина куска — целое положительное число (не больше 1 000 000)");
+  // Толщина — дробная (NUMERIC(5,1)), поэтому свой предикат, не posInt.
+  if (
+    p.thicknessMm !== null &&
+    !(
+      Number.isFinite(p.thicknessMm) &&
+      p.thicknessMm > 0 &&
+      p.thicknessMm <= MAX_THICKNESS_CM
+    )
+  ) {
+    throw new BreakError(
+      "INVALID_PIECE",
+      "Толщина куска — положительное число в см (не больше 9999,9)",
+    );
   }
   if (
     p.areaM2 !== null &&

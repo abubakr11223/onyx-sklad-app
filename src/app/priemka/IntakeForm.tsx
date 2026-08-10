@@ -656,9 +656,9 @@ export default function IntakeForm({
             <Field
               id="thicknessMm"
               name="thicknessMm"
-              inputMode="numeric"
+              inputMode="decimal"
               label="Толщина, см"
-              placeholder="2"
+              placeholder="2 или 1,8"
               value={values.thicknessMm}
               onChange={setField("thicknessMm")}
               error={e.thicknessMm}
@@ -772,9 +772,9 @@ export default function IntakeForm({
                     <Field
                       id={`patThickness-${idx}`}
                       name="patThickness"
-                      inputMode="numeric"
+                      inputMode="decimal"
                       label="Толщина, см"
-                      placeholder="2"
+                      placeholder="2 или 1,8"
                       value={p.thicknessMm}
                       onChange={setPat(id, "thicknessMm")}
                       error={e[`pattern-${idx}-thickness`]}

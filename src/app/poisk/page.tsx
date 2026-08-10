@@ -49,6 +49,7 @@ import Badge from "@/components/ui/Badge";
 import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { SearchIcon } from "@/components/ui/Icons";
+import { formatThickness } from "@/lib/dimensions";
 
 export const metadata: Metadata = {
   title: "Поиск камня — Onyx",
@@ -685,7 +686,7 @@ export default async function PoiskPage({
                   <div className="text-sm text-ink/70">
                     Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
                     {canSeeExact && p.thicknessMm !== null && (
-                      <> · толщина {p.thicknessMm} см</>
+                      <> · толщина {formatThickness(p.thicknessMm)} см</>
                     )}
                     {canSeeExact && p.areaM2 !== null && (
                       <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
@@ -762,7 +763,7 @@ export default async function PoiskPage({
                   <div className="text-sm text-ink/70">
                     Габарит {s.lengthMm}×{s.widthMm} см
                     {canSeeExact && s.thicknessMm != null && (
-                      <> · толщина {s.thicknessMm} см</>
+                      <> · толщина {formatThickness(s.thicknessMm)} см</>
                     )}
                     {canSeeExact && s.areaM2 != null && (
                       <> · ≈{m2Fmt.format(Number(s.areaM2))} м²</>
@@ -799,12 +800,12 @@ export default async function PoiskPage({
             {fittingBatches.map((b) => {
               const fmt =
                 b.lengthMm != null && b.widthMm != null
-                  ? `${b.lengthMm}×${b.widthMm}${b.thicknessMm != null ? `×${b.thicknessMm}` : ""} см`
+                  ? `${b.lengthMm}×${b.widthMm}${b.thicknessMm != null ? `×${formatThickness(b.thicknessMm)}` : ""} см`
                   : b.patterns
                       .filter((p) => p.lengthMm != null && p.widthMm != null)
                       .map(
                         (p) =>
-                          `${p.description}: ${p.lengthMm}×${p.widthMm}${p.thicknessMm != null ? `×${p.thicknessMm}` : ""} см`,
+                          `${p.description}: ${p.lengthMm}×${p.widthMm}${p.thicknessMm != null ? `×${formatThickness(p.thicknessMm)}` : ""} см`,
                       )
                       .join("; ") || "—";
               return (

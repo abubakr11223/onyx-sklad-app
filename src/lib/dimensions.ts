@@ -31,7 +31,57 @@ export function formatDim(n: number | null | undefined): string {
   return String(Math.round(n));
 }
 
-/** «118×64 см» или «118×64×2 см». */
+/**
+ * ТЗ №12 + решение владельца 2026-08-10 — ТОЛЩИНА показывается дробной.
+ *
+ * Длина и ширина остаются целыми (`formatDim`): 275×185 см. Толщина — нет:
+ * на складе есть 18 мм, то есть 1,8 см, и округление до 2 теряет реальный
+ * размер камня. Отдельная функция, а не «сделать formatDim дробным», чтобы
+ * длина/ширина случайно не начали показывать 275,0.
+ *
+ * Хвостовые нули убираем (2,0 → «2»), разделитель — запятая (ru).
+ */
+export function formatThickness(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const rounded = Math.round(n * 10) / 10;
+  if (Number.isInteger(rounded)) return String(rounded);
+  return rounded.toFixed(1).replace(".", ",");
+}
+
+/** Максимум для толщины: NUMERIC(5,1) в БД. */
+export const MAX_THICKNESS_CM = 9999.9;
+
+/**
+ * Разбор поля «Толщина, см» из формы. Принимает «2», «1,8», «1.8».
+ *
+ * Возвращает (тот же контракт, что у parsePositiveInt в приёмке):
+ *   null      — пусто (толщина необязательна);
+ *   undefined — ошибка ввода (не число, ноль, минус, слишком много знаков);
+ *   number    — значение в см, округлённое до 0,1 (в БД NUMERIC(5,1)).
+ *
+ * Округляем ЗДЕСЬ, а не в БД: иначе «1,84» молча превратится в 1,8 уже после
+ * сохранения, и пользователь увидит не то, что ввёл, без объяснения.
+ */
+export function parseThicknessCm(raw: string): number | null | undefined {
+  const s = (raw ?? "").trim().replace(",", ".");
+  if (s === "") return null;
+  if (!/^\d+(\.\d+)?$/.test(s)) return undefined;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_THICKNESS_CM) return undefined;
+  return Math.round(n * 10) / 10;
+}
+
+/** Prisma Decimal | number | null → number | null (толщина). */
+export function thicknessToNumber(
+  v: { toString(): string } | number | null | undefined,
+): number | null {
+  if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const n = Number(v.toString());
+  return Number.isFinite(n) ? n : null;
+}
+
+/** «118×64 см» или «118×64×1,8 см». */
 export function formatGabarit(
   length: number | null | undefined,
   width: number | null | undefined,
@@ -39,7 +89,7 @@ export function formatGabarit(
 ): string {
   if (length == null || width == null) return "—";
   if (thickness != null) {
-    return `${formatDim(length)}×${formatDim(width)}×${formatDim(thickness)} ${DIM_UNIT}`;
+    return `${formatDim(length)}×${formatDim(width)}×${formatThickness(thickness)} ${DIM_UNIT}`;
   }
   return `${formatDim(length)}×${formatDim(width)} ${DIM_UNIT}`;
 }

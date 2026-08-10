@@ -20,6 +20,7 @@ import {
 import NoAccess from "@/components/NoAccess";
 import BatchEditForm from "../../BatchEditForm";
 import { buttonClass } from "@/components/ui/Button";
+import { thicknessToNumber } from "@/lib/dimensions";
 
 export const dynamic = "force-dynamic";
 
@@ -157,13 +158,13 @@ export default async function PriemkaEditBatchPage({
         areaSoldDirectM2={Number(batch.areaSoldDirectM2)}
         lengthMm={batch.lengthMm}
         widthMm={batch.widthMm}
-        thicknessMm={batch.thicknessMm}
+        thicknessMm={thicknessToNumber(batch.thicknessMm)}
         supplierNote={batch.supplierNote}
         arrivedAtIso={arrivedAtIso}
         patterns={batch.patterns.map((p) => ({
           id: p.id,
           description: p.description,
-          thicknessMm: p.thicknessMm,
+          thicknessMm: thicknessToNumber(p.thicknessMm),
           lengthMm: p.lengthMm,
           widthMm: p.widthMm,
           slabsCount: p.slabsCount,

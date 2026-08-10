@@ -17,6 +17,7 @@ import {
   parsePositiveDecimal,
 } from "@/lib/validators/intake";
 import { getCapabilities, currentActorId } from "@/lib/session";
+import { parseThicknessCm } from "@/lib/dimensions";
 import { strOf, allOf } from "@/lib/form";
 import { ensureFormError } from "@/lib/form-errors";
 import { putPhotoBlob } from "@/lib/photo-blob";
@@ -91,9 +92,10 @@ export async function submitBatchEdit(
   if (lengthMm === undefined) errors.lengthMm = "Длина, см — целое > 0 или пусто";
   const widthMm = parseOptionalCm(str("widthMm"));
   if (widthMm === undefined) errors.widthMm = "Ширина, см — целое > 0 или пусто";
-  const thicknessMm = parseOptionalCm(str("thicknessMm"));
+  // ТЗ №12 + решение владельца 2026-08-10: толщина ДРОБНАЯ (18 мм = 1,8 см).
+  const thicknessMm = parseThicknessCm(str("thicknessMm"));
   if (thicknessMm === undefined) {
-    errors.thicknessMm = "Толщина, см — целое > 0 или пусто";
+    errors.thicknessMm = "Толщина, см — число > 0 (например 2 или 1,8) или пусто";
   }
 
   const arrivedAt = parseDateOnly(str("arrivedAt"));
@@ -144,7 +146,8 @@ export async function submitBatchEdit(
     if (!description) {
       errors[`pat-${i}-desc`] = "Описание узора обязательно";
     }
-    const th = parseOptionalCm(pTh[i] ?? "");
+    // Толщина узор-подгруппы — тоже дробная (ТЗ №12).
+    const th = parseThicknessCm(pTh[i] ?? "");
     if (th === undefined) errors[`pat-${i}-th`] = "Толщина узора — см или пусто";
     const len = parseOptionalCm(pLen[i] ?? "");
     if (len === undefined) errors[`pat-${i}-len`] = "Длина узора — см или пусто";
@@ -240,7 +243,7 @@ export async function submitBatchEdit(
         areaSoldDirectM2: expSoldAreaVal,
         lengthMm: parseOptionalCm(str("expectedLengthMm")) ?? null,
         widthMm: parseOptionalCm(str("expectedWidthMm")) ?? null,
-        thicknessMm: parseOptionalCm(str("expectedThicknessMm")) ?? null,
+        thicknessMm: parseThicknessCm(str("expectedThicknessMm")) ?? null,
         supplierNote: str("expectedSupplierNote").trim() || null,
         arrivedAtIso: str("expectedArrivedAt"),
       },

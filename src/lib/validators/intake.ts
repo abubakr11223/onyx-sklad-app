@@ -5,6 +5,7 @@
 import { normalizeBlockLetter } from "@/lib/block-letter";
 import { MAX_DECIMAL_12_3, parseBoundedDecimal } from "@/lib/decimal";
 import { parseMoneyField } from "@/lib/stone-edit";
+import { parseThicknessCm } from "@/lib/dimensions";
 
 export interface IntakeLocationInput {
   block: string;
@@ -249,9 +250,10 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     if (input.thicknessMm.trim() === "") {
       thicknessMm = null;
     } else {
-      const rawTh = parsePositiveInt(input.thicknessMm);
+      // ТЗ №12 + решение владельца 2026-08-10: толщина ДРОБНАЯ (18 мм = 1,8 см).
+      const rawTh = parseThicknessCm(input.thicknessMm);
       if (rawTh === undefined) {
-        errors.thicknessMm = "Толщина, см — целое положительное число";
+        errors.thicknessMm = "Толщина, см — положительное число, например 2 или 1,8";
         thicknessMm = null;
       } else {
         thicknessMm = rawTh;
@@ -326,9 +328,10 @@ export function validateIntake(input: IntakeInput): IntakeResult {
         errors[`pattern-${i}-area`] = "Площадь — положительное число, например 12,5";
       }
       const thickness =
-        p.thicknessMm.trim() === "" ? null : parsePositiveInt(p.thicknessMm);
+        p.thicknessMm.trim() === "" ? null : parseThicknessCm(p.thicknessMm);
       if (thickness === undefined) {
-        errors[`pattern-${i}-thickness`] = "Толщина — целое число (см)";
+        errors[`pattern-${i}-thickness`] =
+          "Толщина, см — положительное число, например 2 или 1,8";
       }
       const pLen = parsePositiveInt(p.lengthMm ?? "");
       if (pLen === null || pLen === undefined) {

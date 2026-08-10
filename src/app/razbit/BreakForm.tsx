@@ -418,9 +418,9 @@ export default function BreakForm({
                   <Field
                     id={`pThickness-${idx}`}
                     name="pThickness"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     label="Толщина, см"
-                    placeholder="2"
+                    placeholder="2 или 1,8"
                     value={row.thickness}
                     onChange={setPiece(id, "thickness")}
                     error={e[`p-${idx}-thicknessMm`]}

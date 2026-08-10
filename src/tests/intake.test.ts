@@ -132,6 +132,68 @@ describe("parseQuantityField (BUG-02 — 0 == пусто только для п�
   });
 });
 
+describe("validateIntake — толщина дробная (ТЗ №12, решение владельца 2026-08-10)", () => {
+  it("принимает «1,8» — плита 18 мм заводится без потери размера", () => {
+    const r = validateIntake(baseInput({ thicknessMm: "1,8" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thicknessMm).toBe(1.8);
+  });
+
+  it("принимает точку «1.8» — раскладка не должна мешать складчику", () => {
+    const r = validateIntake(baseInput({ thicknessMm: "1.8" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thicknessMm).toBe(1.8);
+  });
+
+  it("целое по-прежнему работает: «2» → 2", () => {
+    const r = validateIntake(baseInput({ thicknessMm: "2" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thicknessMm).toBe(2);
+  });
+
+  it("пусто разрешено (толщина необязательна на уровне партии)", () => {
+    const r = validateIntake(baseInput({ thicknessMm: "" }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thicknessMm).toBeNull();
+  });
+
+  it("ноль и мусор — ошибка поля, а не тихий null", () => {
+    for (const bad of ["0", "-2", "два"]) {
+      const r = validateIntake(baseInput({ thicknessMm: bad }));
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.errors.thicknessMm).toBeTruthy();
+    }
+  });
+
+  it("толщина узор-подгруппы тоже дробная", () => {
+    const r = validateIntake(
+      baseInput({
+        patternsEnabled: true,
+        slabsTotal: "50",
+        areaTotalM2: "30",
+        patterns: [
+          {
+            description: "светлый",
+            lengthMm: "280",
+            widthMm: "160",
+            thicknessMm: "1,8",
+            slabs: "50",
+            areaM2: "30",
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.patterns[0].thicknessMm).toBe(1.8);
+  });
+});
+
 describe("validateIntake — вид камня", () => {
   it("принимает существующий вид", () => {
     const r = validateIntake(baseInput());
