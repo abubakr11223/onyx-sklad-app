@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
+import { notifyWarehouseSafe } from "@/lib/shipment-notify-hook";
 import {
   returnSample,
   extendSampleDueDate,
@@ -239,6 +240,10 @@ export async function issueSampleAction(
     // INVALID_INPUT / NOT_FOUND / FORBIDDEN_ROLE — form + never silent
     return failFields({ form: res.error.message });
   }
+
+  // ТЗ №15 §8.2 + §4 — образец идёт той же цепочкой отгрузки, с пометкой
+  // «ОБРАЗЕЦ». Зовём складчика ПОСЛЕ коммита; сбой Telegram не отменяет выдачу.
+  await notifyWarehouseSafe(res.shipmentId, managerId);
 
   revalidateSamples();
   redirect(`/obraztsy?ok=issued&id=${res.sampleId}`);

@@ -17,6 +17,11 @@ import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDateTime } from "@/lib/datetime";
 import { roleLabel } from "@/lib/role-labels";
+import {
+  actionLabelRu,
+  actionVariant,
+  entityLabelRu,
+} from "@/lib/history-labels";
 import type { Role } from "@/lib/permissions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -31,46 +36,6 @@ export const metadata: Metadata = {
 
 /** Сколько последних записей показываем (v1 — без пагинации, TZ §9). */
 const HISTORY_LIMIT = 100;
-
-// AuditAction (schema §1.10) → русская подпись действия.
-const ACTION_RU: Record<string, string> = {
-  INTAKE: "Приёмка",
-  SALE: "Продажа",
-  RESERVE: "Бронь",
-  RESERVE_CANCEL: "Снятие брони",
-  RESERVE_EXPIRE: "Бронь истекла",
-  SEPARATE_SLAB: "Выделение плиты",
-  BREAK: "Разбитие",
-  SPLIT: "Разделение",
-  MOVE: "Перемещение",
-  PHOTO_REQUEST: "Фотозапрос",
-  PHOTO_UPLOAD: "Загрузка фото",
-  RETURN: "Возврат",
-  ADJUSTMENT: "Корректировка",
-  STATUS_CHANGE: "Смена статуса",
-};
-
-// AuditLog.entityType (свободная строка «Batch»/«Slab»/…) → русская подпись.
-const ENTITY_RU: Record<string, string> = {
-  Batch: "Партия",
-  Slab: "Плита",
-  Piece: "Бой/остаток",
-  BatchLocation: "Локация",
-  Reservation: "Бронь",
-  StoneType: "Вид камня",
-};
-
-// Действия, где badge несёт «настроение» (продажа — успех, разбитие — риск).
-const ACTION_VARIANT: Record<string, "success" | "warning" | "danger" | "neutral"> = {
-  SALE: "success",
-  RESERVE: "success",
-  BREAK: "warning",
-  SPLIT: "warning",
-  RESERVE_EXPIRE: "warning",
-  RESERVE_CANCEL: "neutral",
-  RETURN: "warning",
-  ADJUSTMENT: "warning",
-};
 
 /** Первое непустое строковое значение из payload по списку ключей. */
 function payloadString(payload: unknown, keys: string[]): string | null {
@@ -99,7 +64,7 @@ function targetLabel(row: {
   if (slab) return slab;
   const customer = payloadString(row.payload, ["customerName"]);
   if (customer) return `клиент ${customer}`;
-  const entity = ENTITY_RU[row.entityType] ?? row.entityType;
+  const entity = entityLabelRu(row.entityType);
   return `${entity} #${row.entityId.slice(0, 8)}`;
 }
 
@@ -168,8 +133,8 @@ export default async function IstoriyaPage() {
                 className="rounded-card border border-line bg-paper p-3 text-sm text-ink/80"
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Badge variant={ACTION_VARIANT[e.action] ?? "neutral"}>
-                    {ACTION_RU[e.action] ?? e.action}
+                  <Badge variant={actionVariant(e.action)}>
+                    {actionLabelRu(e.action)}
                   </Badge>
                   <span className="font-medium text-ink">
                     {targetLabel(e)}

@@ -8,6 +8,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
+import { notifyWarehouseSafe } from "@/lib/shipment-notify-hook";
 import {
   confirmReturnedUnit,
   returnSale,
@@ -237,6 +238,12 @@ export async function submitSale(
           : await sellWholeBatch({ batchId, ...common });
 
   if (!result.ok) return failState(result.error);
+
+  // ТЗ №15 §8.2 — задача на отгрузку создана в той же транзакции; теперь, ПОСЛЕ
+  // коммита, зовём складчика в Telegram. Продажа уже состоялась: сбой отправки
+  // не откатывает её и не показывается менеджеру как ошибка — очередь
+  // /otgruzki остаётся источником правды.
+  await notifyWarehouseSafe(result.shipmentId, managerId);
 
   const params = new URLSearchParams({
     ok: "1",

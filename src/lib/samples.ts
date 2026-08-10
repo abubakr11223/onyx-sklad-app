@@ -209,7 +209,7 @@ export interface IssueSampleInput {
 
 export async function issueSample(
   input: IssueSampleInput,
-): Promise<{ ok: true; sampleId: string } | SampleFail> {
+): Promise<{ ok: true; sampleId: string; shipmentId: string } | SampleFail> {
   try {
     return await db.$transaction(async (tx) => {
       const actor = await loadActor(tx, input.managerId);
@@ -535,7 +535,7 @@ export async function issueSample(
         }
 
         // TZ №15 Slice 2 — OPEN SAMPLE shipment same TX (stock already held above).
-        await createSampleShipment(tx, {
+        const { shipmentId } = await createSampleShipment(tx, {
           sampleId: sample.id,
           managerId: actor.id,
           clientId,
@@ -571,7 +571,8 @@ export async function issueSample(
           },
         });
 
-        return { ok: true as const, sampleId: sample.id };
+        // shipmentId — ТЗ №15 §8.2: уведомление складчику шлём ПОСЛЕ коммита.
+        return { ok: true as const, sampleId: sample.id, shipmentId };
       } catch (e) {
         const code = (e as { code?: string })?.code;
         if (code === "P2002") {

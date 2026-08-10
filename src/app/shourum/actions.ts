@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCapabilities, currentActorId } from "@/lib/session";
+import { notifyWarehouseSafe } from "@/lib/shipment-notify-hook";
 import {
   sendToShowroom,
   returnFromShowroom,
@@ -39,6 +40,11 @@ export async function sendToShowroomAction(formData: FormData): Promise<void> {
     standNote: standNote || null,
   });
   if (!res.ok) redir(res.error.message);
+
+  // ТЗ №15 §5.1/§8.2 — «Создаётся задача на отгрузку типа „Шоу-рум" →
+  // складчик физически переносит и подтверждает». Зовём его после коммита.
+  await notifyWarehouseSafe(res.shipmentId, actorId);
+
   revalidatePath("/shourum");
   revalidatePath("/otgruzki");
   revalidatePath("/poisk");

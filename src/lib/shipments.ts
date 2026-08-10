@@ -4,6 +4,11 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
+import { formatGabarit } from "@/lib/dimensions";
+import {
+  parseTashkentDayEnd,
+  parseTashkentDayStart,
+} from "@/lib/sale-history";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -516,6 +521,10 @@ export type ShipmentListItem = {
   /** Sample return due (warehouse queue, design §3.1). */
   returnDueDate: Date | null;
   stoneLabel: string;
+  /** ТЗ №15 §3.1 — габарит выдаваемого камня, «118×64×2 см» или null. */
+  gabarit: string | null;
+  /** ТЗ №15 §3.1 — комментарий менеджера к задаче. */
+  note: string | null;
   locationSnapshot: string | null;
   qtyOrderedSlabs: number | null;
   qtyOrderedAreaM2: number | null;
@@ -525,18 +534,40 @@ export type ShipmentListItem = {
   targetType: string;
 };
 
-/** Bounded list. SALE + SAMPLE. tab=open → not cancelled & not completed; archive → completed/cancelled. */
-export async function listShipments(
-  database: Db,
-  args: {
-    /** OWNER / WAREHOUSE: all; MANAGER: own managerId only */
-    canSeeAll: boolean;
-    actorId: string | null;
-    tab: "open" | "archive";
-    take?: number;
-  },
-): Promise<ShipmentListItem[]> {
-  const take = Math.min(MAX_SHIPMENTS_PAGE, args.take ?? MAX_SHIPMENTS_PAGE);
+/** ТЗ №15 §3.2 — тип задачи в фильтре. Пусто → все. */
+export type ShipmentKindFilter = "" | "SALE" | "SAMPLE" | "SHOWROOM";
+
+/** ТЗ №15 §3.2/§7.7 — «Поиск / фильтр: по клиенту, по типу, по дате, по менеджеру». */
+export type ShipmentFilters = {
+  /** Имя клиента (частичное, без учёта регистра). Для шоу-рума клиента нет. */
+  client?: string;
+  kind?: ShipmentKindFilter;
+  /** Начало периода по дате создания задачи (включительно). */
+  from?: Date | null;
+  /** Конец периода (включительно — вызывающий передаёт конец дня). */
+  to?: Date | null;
+  /** Только владелец/склад: сузить до одного менеджера. */
+  managerId?: string;
+};
+
+/**
+ * Чистый where-builder (без БД) — ТЗ №15 §3.2/§7.7.
+ *
+ * Раньше `listShipments` не принимала фильтров вообще: архив показывал
+ * «последние 100» и всё. Для склада это значит, что вопрос «когда мы отдали
+ * Ахмаду плиту?» отвечался прокруткой, а после сотни отгрузок — никак.
+ *
+ * Область видимости (`canSeeAll`) — НЕ фильтр, а гейт: менеджер видит только
+ * свои отгрузки, и `managerId` из формы применяется лишь тем, кто видит все.
+ * Иначе фильтр стал бы способом посмотреть чужие задачи.
+ */
+export function shipmentsListWhere(args: {
+  canSeeAll: boolean;
+  actorId: string | null;
+  tab: "open" | "archive";
+  filters?: ShipmentFilters;
+}): Prisma.ShipmentWhereInput {
+  const f = args.filters ?? {};
   const where: Prisma.ShipmentWhereInput = {
     // Slice 3: sales + samples + showroom physical moves.
     kind: { in: ["SALE", "SAMPLE", "SHOWROOM"] },
@@ -549,6 +580,104 @@ export async function listShipments(
       ? { cancelledAt: null, completedAt: null }
       : { OR: [{ completedAt: { not: null } }, { cancelledAt: { not: null } }] }),
   };
+
+  // Тип задачи — сужает список kind'ов, не расширяет.
+  if (f.kind === "SALE" || f.kind === "SAMPLE" || f.kind === "SHOWROOM") {
+    where.kind = f.kind;
+  }
+
+  // Менеджер — только для тех, кто и так видит все (иначе обход области).
+  const mgr = f.managerId?.trim();
+  if (mgr && args.canSeeAll) {
+    where.managerId = mgr;
+  }
+
+  // Дата создания задачи. gte/lte — вызывающий передаёт границы дня.
+  if (f.from || f.to) {
+    where.createdAt = {
+      ...(f.from ? { gte: f.from } : {}),
+      ...(f.to ? { lte: f.to } : {}),
+    };
+  }
+
+  // Клиент. Имя живёт в трёх местах: справочник (client), карточка образца
+  // (sample.client) и текстовое имя в продаже (saleRecord.customerName) —
+  // legacy-продажи до справочника. Ищем во всех трёх, иначе поиск «работает,
+  // но не находит» на части данных.
+  const q = f.client?.trim();
+  if (q) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [
+          { client: { name: { contains: q, mode: "insensitive" } } },
+          { sample: { client: { name: { contains: q, mode: "insensitive" } } } },
+          {
+            saleRecord: {
+              customerName: { contains: q, mode: "insensitive" },
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  return where;
+}
+
+/**
+ * URL-параметры → фильтры (чистая функция, ТЗ №15 §3.2).
+ * Мусорные значения молча игнорируются: фильтр не должен ронять страницу
+ * склада из-за кривой ссылки — он просто не сужает список.
+ */
+export function shipmentFiltersFromSearchParams(sp: {
+  client?: string;
+  kind?: string;
+  from?: string;
+  to?: string;
+  manager?: string;
+}): ShipmentFilters {
+  const kindRaw = (sp.kind ?? "").trim().toUpperCase();
+  const kind: ShipmentKindFilter =
+    kindRaw === "SALE" || kindRaw === "SAMPLE" || kindRaw === "SHOWROOM"
+      ? kindRaw
+      : "";
+  return {
+    client: (sp.client ?? "").trim(),
+    kind,
+    from: parseTashkentDayStart(sp.from ?? ""),
+    to: parseTashkentDayEnd(sp.to ?? ""),
+    managerId: (sp.manager ?? "").trim(),
+  };
+}
+
+/** True когда хоть один фильтр реально сужает список (для подписи «сброс»). */
+export function shipmentFiltersActive(f: ShipmentFilters): boolean {
+  return Boolean(
+    f.client?.trim() || f.kind || f.from || f.to || f.managerId?.trim(),
+  );
+}
+
+/** Bounded list. SALE + SAMPLE + SHOWROOM. tab=open → not cancelled & not completed; archive → completed/cancelled. */
+export async function listShipments(
+  database: Db,
+  args: {
+    /** OWNER / WAREHOUSE: all; MANAGER: own managerId only */
+    canSeeAll: boolean;
+    actorId: string | null;
+    tab: "open" | "archive";
+    take?: number;
+    /** ТЗ №15 §3.2 — поиск/фильтр архива и очереди. */
+    filters?: ShipmentFilters;
+  },
+): Promise<ShipmentListItem[]> {
+  const take = Math.min(MAX_SHIPMENTS_PAGE, args.take ?? MAX_SHIPMENTS_PAGE);
+  const where = shipmentsListWhere({
+    canSeeAll: args.canSeeAll,
+    actorId: args.actorId,
+    tab: args.tab,
+    filters: args.filters,
+  });
 
   const rows = await database.shipment.findMany({
     where,
@@ -610,6 +739,9 @@ export async function listShipments(
           batch: { select: { stoneType: { select: { name: true } } } },
         },
       },
+      // ТЗ №15 §3.1 — «Комментарий менеджера (если есть)». Писался при создании
+      // отгрузки, но в очередь не выбирался, поэтому складчик его не видел.
+      note: true,
       lines: {
         select: {
           id: true,
@@ -622,12 +754,20 @@ export async function listShipments(
           slab: {
             select: {
               label: true,
+              // ТЗ №15 §3.1 — «размеры (см)»: складчик должен видеть габарит
+              // того, что выдаёт, не открывая карточку камня.
+              lengthMm: true,
+              widthMm: true,
+              thicknessMm: true,
               stoneType: { select: { name: true } },
             },
           },
           piece: {
             select: {
               kind: true,
+              boundingLengthMm: true,
+              boundingWidthMm: true,
+              thicknessMm: true,
               stoneType: { select: { name: true } },
             },
           },
@@ -677,6 +817,22 @@ export async function listShipments(
       const k = line0.piece.kind === "BROKEN" ? "бой" : "остаток";
       stoneLabel = `${line0.piece.stoneType.name} — ${k}`;
     }
+    // ТЗ №15 §3.1 «размеры (см)». Берём с СТРОКИ отгрузки — это ровно та
+    // единица, которую складчик несёт. Объёмная продажа габарита не имеет
+    // (партия, а не конкретная плита) → null, и в UI строка просто не рисуется.
+    const gabarit = line0?.slab
+      ? formatGabarit(
+          line0.slab.lengthMm,
+          line0.slab.widthMm,
+          line0.slab.thicknessMm,
+        )
+      : line0?.piece
+        ? formatGabarit(
+            line0.piece.boundingLengthMm,
+            line0.piece.boundingWidthMm,
+            line0.piece.thicknessMm,
+          )
+        : null;
     return {
       id: r.id,
       status,
@@ -701,6 +857,10 @@ export async function listShipments(
       soldAt: sale?.soldAt ?? null,
       returnDueDate: sample?.returnDueDate ?? null,
       stoneLabel,
+      // formatGabarit отдаёт «—», когда длина/ширина не заданы: в списке это
+      // шум, поэтому приводим к null и не рисуем строку вовсе.
+      gabarit: gabarit && gabarit !== "—" ? gabarit : null,
+      note: r.note ?? null,
       locationSnapshot: line0?.locationSnapshot ?? null,
       qtyOrderedSlabs: line0?.qtyOrderedSlabs ?? null,
       qtyOrderedAreaM2:

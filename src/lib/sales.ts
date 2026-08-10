@@ -628,6 +628,12 @@ export interface SellUnitOk {
   viaReservation: boolean;
   /** id брони, переведённой в COMPLETED (переход №4), иначе null. */
   completedReservationId: string | null;
+  /**
+   * ТЗ №15 §8.2 — id созданной задачи на отгрузку. Нужен вызывающему, чтобы
+   * ПОСЛЕ коммита уведомить складчика в Telegram: сама отправка — внешний
+   * I/O и внутри транзакции ей не место.
+   */
+  shipmentId: string;
 }
 
 /**
@@ -799,7 +805,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         "block" in unit && "landmark" in unit
           ? `Блок ${unit.block}, ор. ${unit.landmark}`
           : null;
-      await createSaleShipment(tx, {
+      const { shipmentId } = await createSaleShipment(tx, {
         saleRecordId: sale.id,
         managerId: actor.id,
         clientId,
@@ -818,6 +824,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         unitId: unit.id,
         viaReservation: decision.viaReservation,
         completedReservationId,
+        shipmentId,
       };
     });
   } catch (e) {
@@ -844,6 +851,8 @@ export interface SellVolumeOk {
   qtyAreaM2: number | null;
   /** Свои volume-брони, погашенные продажей (COMPLETED). */
   completedReservationIds: string[];
+  /** ТЗ №15 §8.2 — задача на отгрузку; уведомление шлём после коммита. */
+  shipmentId: string;
 }
 
 interface BatchForVolume {
@@ -1126,7 +1135,7 @@ export async function executeVolumeSale(
   });
 
   // TZ №15 Slice 1 — volume sale shipment (same TX; soldDirect already incremented).
-  await createSaleShipment(tx, {
+  const { shipmentId } = await createSaleShipment(tx, {
     saleRecordId: sale.id,
     managerId: actor.id,
     clientId,
@@ -1146,6 +1155,7 @@ export async function executeVolumeSale(
     qtySlabs,
     qtyAreaM2,
     completedReservationIds,
+    shipmentId,
   };
 }
 

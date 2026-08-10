@@ -7,6 +7,8 @@ import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import {
   listShipments,
   MAX_SHIPMENTS_PAGE,
+  shipmentFiltersActive,
+  shipmentFiltersFromSearchParams,
 } from "@/lib/shipments";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -48,12 +50,34 @@ export default async function OtgruzkiPage({
   // Do not use canSeeHistory alone — managers lack it, warehouse has confirm.
   const canSeeAll = caps.canConfirmShipment || caps.canSeeAllClients;
 
+  // ТЗ №15 §3.2/§7.7 — поиск/фильтр по клиенту, типу, дате, менеджеру.
+  const filters = shipmentFiltersFromSearchParams({
+    client: first(sp.client),
+    kind: first(sp.kind),
+    from: first(sp.from),
+    to: first(sp.to),
+    manager: first(sp.manager),
+  });
+  const filtersOn = shipmentFiltersActive(filters);
+
   const items = await listShipments(db, {
     canSeeAll,
     actorId,
     tab,
     take: MAX_SHIPMENTS_PAGE,
+    filters,
   });
+
+  // Список менеджеров для фильтра — только тем, кто видит все отгрузки.
+  // Ограничен: сотрудников десятки, не тысячи.
+  const managers = canSeeAll
+    ? await db.user.findMany({
+        where: { isActive: true, role: { in: ["MANAGER", "OWNER"] } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+        take: 100,
+      })
+    : [];
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -68,6 +92,13 @@ export default async function OtgruzkiPage({
         <Alert variant="success" title="Готово" className="mb-3">
           Отгрузка подтверждена. Статус единицы на складе не менялся (уже
           продана).
+        </Alert>
+      )}
+      {/* Фото не обязано ронять отгрузку: камень уже выдан физически. Неудача
+          с картинкой — предупреждение, а не ошибка (ТЗ №15 §3.3). */}
+      {first(sp.warn) && (
+        <Alert variant="warning" title="Обратите внимание" className="mb-3">
+          {first(sp.warn)}
         </Alert>
       )}
       {err && (
@@ -100,6 +131,87 @@ export default async function OtgruzkiPage({
           Архив
         </Link>
       </div>
+
+      {/* ТЗ №15 §3.2/§7.7 — поиск/фильтр: клиент, тип, дата, менеджер.
+          GET-форма: фильтр остаётся в ссылке — её можно сохранить и переслать. */}
+      <form method="get" className="mb-4">
+        <input type="hidden" name="tab" value={tab} />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Field
+            id="f-client"
+            name="client"
+            label="Клиент"
+            placeholder="имя содержит…"
+            defaultValue={filters.client ?? ""}
+          />
+          <div>
+            <label htmlFor="f-kind" className="mb-1 block text-sm text-ink/70">
+              Тип
+            </label>
+            <select
+              id="f-kind"
+              name="kind"
+              defaultValue={filters.kind ?? ""}
+              className={inputClass}
+            >
+              <option value="">Все</option>
+              <option value="SALE">Продажа</option>
+              <option value="SAMPLE">Образец</option>
+              <option value="SHOWROOM">Шоу-рум</option>
+            </select>
+          </div>
+          <Field
+            id="f-from"
+            name="from"
+            type="date"
+            label="С даты"
+            defaultValue={first(sp.from)}
+          />
+          <Field
+            id="f-to"
+            name="to"
+            type="date"
+            label="По дату"
+            defaultValue={first(sp.to)}
+          />
+          {managers.length > 0 && (
+            <div>
+              <label
+                htmlFor="f-manager"
+                className="mb-1 block text-sm text-ink/70"
+              >
+                Менеджер
+              </label>
+              <select
+                id="f-manager"
+                name="manager"
+                defaultValue={filters.managerId ?? ""}
+                className={inputClass}
+              >
+                <option value="">Все</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Button type="submit" variant="secondary" size="sm">
+            Показать
+          </Button>
+          {filtersOn && (
+            <Link
+              href={tab === "archive" ? "/otgruzki?tab=archive" : "/otgruzki"}
+              className="text-sm text-ink/60 underline"
+            >
+              Сбросить фильтр
+            </Link>
+          )}
+        </div>
+      </form>
 
       {items.length === 0 ? (
         <Card>
@@ -136,8 +248,19 @@ export default async function OtgruzkiPage({
                         Вернуть до {formatTashkentDate(s.returnDueDate)}
                       </p>
                     )}
+                    {/* ТЗ №15 §3.1 — что выдать: габарит в см. */}
+                    {s.gabarit && (
+                      <p className="tnum text-sm text-ink/80">{s.gabarit}</p>
+                    )}
                     {s.locationSnapshot && (
                       <p className="text-sm text-ink">{s.locationSnapshot}</p>
+                    )}
+                    {/* ТЗ №15 §3.1 — комментарий менеджера к задаче. */}
+                    {s.note && (
+                      <p className="mt-1 text-sm text-ink/70">
+                        <span className="text-ink/50">Комментарий:</span>{" "}
+                        {s.note}
+                      </p>
                     )}
                     <p className="mt-1 text-xs text-ink/55">
                       Менеджер {s.managerName}
@@ -231,6 +354,23 @@ export default async function OtgruzkiPage({
                           />
                         </div>
                       ) : null}
+                      {/* ТЗ №15 §3.3/§8.1 — фото факта отгрузки: «что именно
+                          выдали» (сверка при спорах). Необязательное: без него
+                          отгрузка записывается как обычно. */}
+                      <label
+                        htmlFor={`ph-${s.id}`}
+                        className="mb-2 block text-sm text-ink/70"
+                      >
+                        Фото выдачи (необязательно)
+                      </label>
+                      <input
+                        id={`ph-${s.id}`}
+                        name="factPhoto"
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="mb-3 block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+                      />
                       <Button type="submit" className="min-h-12 w-full sm:w-auto">
                         Отгрузить
                         {s.targetType === "BATCH_VOLUME"
