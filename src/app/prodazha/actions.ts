@@ -189,7 +189,7 @@ export async function submitSale(
     });
   }
 
-  let siteId: string | null = link.siteId;
+  const siteId: string | null = link.siteId;
   if (siteId) {
     const site = await db.site.findUnique({
       where: { id: siteId },

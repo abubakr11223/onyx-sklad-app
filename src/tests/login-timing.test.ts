@@ -10,15 +10,25 @@ vi.mock("@/lib/password", () => ({
 }));
 
 // ── db mock ──
+// loginAttempt тоже мокаем: троттлинг (аудит 2026-08-10) читает эту таблицу
+// перед PBKDF2. Без неё модуль fail-open'ит и тесты проходят, но лог засорён.
 const findFirst = vi.fn();
 vi.mock("@/lib/db", () => ({
-  db: { user: { findFirst: (...a: unknown[]) => findFirst(...a) } },
+  db: {
+    user: { findFirst: (...a: unknown[]) => findFirst(...a) },
+    loginAttempt: {
+      findUnique: vi.fn(async () => null),
+      upsert: vi.fn(async () => ({})),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+  },
 }));
 
 // ── cookie store mock ──
 const cookieSet = vi.fn();
 vi.mock("next/headers", () => ({
   cookies: async () => ({ set: cookieSet, get: vi.fn(), delete: vi.fn() }),
+  headers: async () => new Headers(),
 }));
 
 // ── redirect: throw so we can assert destination ──

@@ -152,7 +152,7 @@ export async function issueSampleAction(
     fieldErrors.form = "Неизвестный тип — обновите страницу";
   }
 
-  let unitId = str("unitId") || undefined;
+  const unitId = str("unitId") || undefined;
   let batchId = str("batchId") || undefined;
 
   if (mode === "SLAB" || mode === "PIECE") {

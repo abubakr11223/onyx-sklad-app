@@ -17,6 +17,9 @@ export default async function LoginPage({
   const next = safeNext(typeof sp.next === "string" ? sp.next : "/");
   const magicError = sp.error === "magic";
   const loginError = sp.error === "login";
+  // Аудит 2026-08-10 — отдельная причина: пароль может быть ВЕРНЫМ, дело в
+  // числе попыток. Без своего текста сотрудник начнёт менять рабочий пароль.
+  const throttledError = sp.error === "throttled";
 
   const me = await getRealSessionUser();
   if (me) redirect(next);
@@ -33,6 +36,7 @@ export default async function LoginPage({
     <LoginPageClient
       next={next}
       loginError={loginError}
+      throttledError={throttledError}
       magicError={magicError}
       tgDeepLink={tgDeepLink}
     />

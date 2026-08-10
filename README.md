@@ -55,7 +55,18 @@ psql -h localhost -d postgres -c "CREATE DATABASE onyx OWNER onyx;"
 
 > Diqqat: nativ Postgres 5432-portni band qilgan bo'lsa, `docker compose up` ham ishga tushirilsa port to'qnashadi — bittasini tanlang.
 
-`prisma/schema.prisma` hozircha minimal (S1-A) — domen modeli S1-C sprint-taskida qo'shiladi.
+`prisma/schema.prisma` — to'liq domen modeli (29 ta jadval: partiya, plita, boy,
+bron, sotuv, qarz, namuna, otgruzka, shou-rum, mijoz/obyekt, foto-navbat, audit).
+Model va uning invariantlari `docs/data-model.md` da izohlangan; qaror tarixi —
+`docs/decisions.md` (ADR).
+
+## Deploy
+
+Amaldagi production — **Vercel + Neon**: `docs/deploy-vercel.md`.
+VPS/Docker varianti (`docs/deploy-vps.md`, `Dockerfile`, `docker-compose.prod.yml`)
+— **zaxira, hozircha ishlatilmaydi**. Bu farq muhim: Vercel'da uzluksiz jarayon
+yo'q, shuning uchun `src/reservation-cron.ts` dagi 15 daqiqalik jadval ishlamaydi
+va bronlar backstop'i `vercel.json` dagi kunlik cron orqali yuritiladi.
 
 ## Jamoa ish tartibi
 

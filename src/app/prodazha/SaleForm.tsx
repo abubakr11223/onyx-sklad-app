@@ -253,8 +253,16 @@ export default function SaleForm({
   // where the user just pressed «Подтвердить». Controlled fields keep values.
   // TZ14 BUG-01: same for sampleAction — field-only errors must not leave
   // the user on step 4 with no banner.
+  //
+  // react-hooks/set-state-in-effect ОСОЗНАННО подавлен (аудит 2026-08-10).
+  // Правило право в общем случае, но переписывание этого шага на «производное
+  // состояние» меняет ровно то поведение, которое чинили дважды: ошибка обязана
+  // показываться на шаге, где нажали кнопку. Это самый регрессивный класс багов
+  // в проекте (см. docs/tz-audit-2026-08-09.md §4, пять инцидентов).
+  // Менять — только с ручным прогоном продажи в браузере, не «под линтер».
   useEffect(() => {
     if ((hasSubmitError || hasSampleError) && target) {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect -- см. выше: сохраняем шаг с ошибкой */
       setConfirming(true);
     }
   }, [
@@ -343,12 +351,16 @@ export default function SaleForm({
   };
 
   // TZ №14 BUG-02: выпадающий список по мере ввода (debounce), bounded take.
+  // set-state-in-effect здесь — синхронизация с внешней системой (сетевой поиск):
+  // очистка подсказок при пустом запросе и есть «отписка» от прошлого результата.
   useEffect(() => {
     if (selectedClient) return;
     const q = clientQuery.trim();
     if (q.length < 1) {
+      /* eslint-disable react-hooks/set-state-in-effect -- сброс результатов внешнего поиска */
       setClientHits([]);
       setClientSearchError(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
     const t = window.setTimeout(() => {

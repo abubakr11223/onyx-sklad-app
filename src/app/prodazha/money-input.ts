@@ -17,7 +17,7 @@ const GROUP_SPACE = /[\s\u00A0\u202F\u2009]/g;
  * Empty / only junk → "".
  */
 export function normalizeMoneyForSubmit(display: string): string {
-  let s = display.trim().replace(GROUP_SPACE, "");
+  const s = display.trim().replace(GROUP_SPACE, "");
   if (s === "") return "";
   // Allow one decimal separator: last , or . wins as decimal point.
   const lastComma = s.lastIndexOf(",");

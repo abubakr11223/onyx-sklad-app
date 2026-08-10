@@ -1,10 +1,22 @@
 // Next.js `instrumentation` — register() har server jarayoni ishga tushganda
 // BIR MARTA chaqiriladi (Next 15+ da barqaror, config flag KERAK EMAS).
 //
-// SABAB (pm2, Vercel EMAS): production self-hosted pm2 ostida ishlaydi, shu bois
-// `vercel.json` dagi Vercel Cron HECH QACHON ishlamaydi → muddati o'tgan bronlar
-// backstop'i o'lik edi. Bu yerda `node-cron` bilan JARAYON-ICHIDA jadval quramiz:
-// doimiy pm2 Node jarayonining o'zi har 15 daqiqada sweep yuritadi.
+// ⚠️ TUZATISH (audit 2026-08-10). Bu yerda ilgari «production pm2 ostida
+// ishlaydi, shuning uchun Vercel Cron HECH QACHON ishlamaydi» deb yozilgan edi.
+// BU TESKARISI. `docs/deploy-vercel.md` aniq aytadi: Vercel — amaldagi
+// production, VPS/pm2 esa «hozircha ishlatilmaydi» zaxira. Demak:
+//
+//   • Vercel'da (amaldagi holat) bu node-cron jadvali AMALDA ISHLAMAYDI:
+//     serverless nusxa so'rovlar orasida o'ladi, u bilan birga taymer ham.
+//     Haqiqiy backstop — `vercel.json` dagi cron, va u Hobby rejada KUNIGA
+//     BIR MARTA (03:00 UTC) ishlaydi, 15 daqiqada emas.
+//   • VPS/pm2 ga qaytilsa — quyidagi jadval o'sha zahoti kuchga kiradi.
+//
+// Ya'ni bu modul zarar qilmaydi va zaxira yo'l uchun saqlanadi, LEKIN uni
+// «bronlar har 15 daqiqada tozalanadi» kafolati deb o'qish XATO.
+// Amaldagi kafolat: (1) sotuv paytida muddat alohida tekshiriladi
+// (`isHoldEffective` — eng muhimi), (2) /bron va /fotozapros ochilganda lazy
+// sweep, (3) kunlik Vercel cron.
 //
 // KLASTER HIMOYASI: pm2 `cluster` rejimida N nusxa ishga tushishi mumkin. Har
 // nusxada jadval qursak — sweep N marta yuritiladi (isrof; expireOverdive...

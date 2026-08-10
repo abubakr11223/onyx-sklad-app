@@ -4,9 +4,12 @@
 // bo'lsa ham EDGE bundle'ga hech qachon kirmaydi (edge'da import o'lik-kod).
 //
 // SABAB (pm2 / standalone): doimiy Node jarayoni har 15 daqiqada muddati o'tgan
-// bronlarni tozalaydi. Vercel'da bu ishlamaydi (serverless) — u yerda
-// vercel.json cron (/api/cron/expire-reservations) + /bron,/fotozapros lazy
-// sweep himoya qatlamlari bor.
+// bronlarni tozalaydi.
+//
+// ⚠️ AMALDAGI PRODUCTION — VERCEL (`docs/deploy-vercel.md`), ya'ni bu jadval
+// hozir ISHLAMAYDI: serverless nusxa so'rovlar orasida yashamaydi. Vercel'dagi
+// haqiqiy backstop — `vercel.json` cron, Hobby rejada kuniga bir marta.
+// Batafsil izoh: `src/instrumentation.ts` boshidagi tuzatish qaydi.
 import * as cron from "node-cron";
 import { shouldScheduleSweep, SWEEP_CRON_EXPRESSION } from "./instrumentation";
 

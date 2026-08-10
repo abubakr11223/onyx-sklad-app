@@ -937,39 +937,22 @@ export async function sellSample(
   }
 }
 
-/**
- * Sell all ACTIVE samples of a client (one action, multiple SaleRecords in one UX flow).
- * Each sample becomes its own sale; same payment method/currency.
- */
-export async function sellAllClientSamples(args: {
-  clientId: string;
-  managerId: string;
-  pricePerSample: number;
-  paymentMethod: "CASH" | "CARD" | "CREDIT";
-  currency: MoneyCurrency;
-}): Promise<{ ok: true; saleIds: string[]; count: number } | SampleFail> {
-  const samples = await db.sample.findMany({
-    where: { clientId: args.clientId, status: "ACTIVE" },
-    select: { id: true },
-    orderBy: { issuedAt: "asc" },
-  });
-  if (samples.length === 0) {
-    return fail("NOT_FOUND", "Нет активных образцов у клиента");
-  }
-  const saleIds: string[] = [];
-  for (const s of samples) {
-    const res = await sellSample({
-      sampleId: s.id,
-      managerId: args.managerId,
-      price: args.pricePerSample,
-      paymentMethod: args.paymentMethod,
-      currency: args.currency,
-    });
-    if (!res.ok) return res;
-    saleIds.push(res.saleId);
-  }
-  return { ok: true, saleIds, count: saleIds.length };
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// УДАЛЕНО (аудит 2026-08-10): `sellAllClientSamples` — «продать все образцы
+// клиента одним действием».
+//
+// Функция не имела НИ ОДНОГО вызова и НИ ОДНОГО теста, и при этом содержала
+// частичный коммит: она продавала образцы по одному, каждый своей транзакцией,
+// и при ошибке на N-м возвращала ошибку — при том, что первые N−1 уже проданы.
+// Пользователь увидел бы «не получилось», а склад — списанные камни, долги и
+// SaleRecord'ы. То есть худший вариант из возможных: «неуспех» на пути, который
+// частично удался.
+//
+// Если такое действие понадобится, его нельзя писать циклом поверх `sellSample`:
+// нужен один $transaction на все образцы (как `sellUnit`) — либо явное
+// частичное поведение, которое честно показано в UI («продано 3 из 5, потому
+// что …»). Восстанавливать старую форму — значит вернуть тихую порчу данных.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type SampleListItem = {
   id: string;

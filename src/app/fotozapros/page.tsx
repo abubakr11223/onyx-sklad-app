@@ -75,6 +75,15 @@ function first(
   return Array.isArray(v) ? v[0] : v;
 }
 
+/**
+ * Граница «старее N дней» для массового закрытия фотозапросов.
+ * Async намеренно: часы читаются в момент выборки, а не в теле рендера
+ * (см. комментарий на месте вызова).
+ */
+async function bulkCloseCutoff(): Promise<Date> {
+  return new Date(Date.now() - BULK_CLOSE_DEFAULT_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export default async function FotozaprosPage({
   searchParams,
 }: {
@@ -124,9 +133,11 @@ export default async function FotozaprosPage({
     }
   }
 
-  const olderCutoff = new Date(
-    Date.now() - BULK_CLOSE_DEFAULT_DAYS * 24 * 60 * 60 * 1000,
-  );
+  // Часы читаем ВНУТРИ запроса, а не в теле рендера: это async Server Component,
+  // но правило react-hooks/purity (справедливо для клиентских компонентов) видит
+  // здесь нечистый вызов. Вынос в await-функцию убирает и предупреждение, и сам
+  // повод для него — «сейчас» фиксируется в момент выборки, а не выше по коду.
+  const olderCutoff = await bulkCloseCutoff();
 
   // After sweep: warehouse panel + request list + bulk counts are independent —
   // parallelize (region RTT multiplies sequential cost).

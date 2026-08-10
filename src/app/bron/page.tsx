@@ -273,21 +273,26 @@ export default async function BronPage({
       : null;
 
   const typesCap = takeCapPlusOne(stoneTypesAll, CATALOG_STONE_TYPES_CAP);
-  let nestedTruncated = false;
-  const stoneTypes = typesCap.items.map((st) => {
+  // Флаг «вложенный список обрезан» выводим ИЗ результата map, а не копим
+  // мутацией внешней переменной внутри колбэка: React-правила (react-hooks/purity)
+  // справедливо считают такую запись побочным эффектом рендера.
+  const cappedTypes = typesCap.items.map((st) => {
     const slabsCap = takeCapPlusOne(st.slabs, CATALOG_SLABS_CAP);
     const piecesCap = takeCapPlusOne(st.pieces, CATALOG_PIECES_CAP);
     const batchesCap = takeCapPlusOne(st.batches, CATALOG_BATCHES_CAP);
-    if (slabsCap.truncated || piecesCap.truncated || batchesCap.truncated) {
-      nestedTruncated = true;
-    }
     return {
-      ...st,
-      slabs: slabsCap.items,
-      pieces: piecesCap.items,
-      batches: batchesCap.items,
+      truncated:
+        slabsCap.truncated || piecesCap.truncated || batchesCap.truncated,
+      item: {
+        ...st,
+        slabs: slabsCap.items,
+        pieces: piecesCap.items,
+        batches: batchesCap.items,
+      },
     };
   });
+  const stoneTypes = cappedTypes.map((r) => r.item);
+  const nestedTruncated = cappedTypes.some((r) => r.truncated);
   const catalogTruncated =
     isCapNoticeVisible(typesCap.truncated, stoneTypesTotal, typesCap.shown) ||
     nestedTruncated;

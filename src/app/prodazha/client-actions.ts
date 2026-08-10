@@ -6,11 +6,13 @@
 import { db } from "@/lib/db";
 import {
   findClientByNormalizedPhone,
+  siteListScope,
   type ClientType,
   type SiteType,
 } from "@/lib/clients";
 import {
   CLIENT_SEARCH_SALE_TAKE,
+  SITE_PICKER_TAKE,
   searchClients,
   type ClientSearchHit,
 } from "@/lib/client-search";
@@ -146,7 +148,22 @@ export async function createClientForSale(input: {
   };
 }
 
-/** Объекты выбранного клиента (для select в форме). */
+/**
+ * Объекты выбранного клиента (для select в форме).
+ *
+ * ⚠️ ОБЛАСТЬ ВИДИМОСТИ (аудит 2026-08-10). Поиск клиента в форме продажи
+ * намеренно ГЛОБАЛЬНЫЙ (`attachAnyExisting`, ТЗ №14 BUG-02) — менеджер должен
+ * находить существующую карточку, а не плодить дубль. Раньше отсюда следовало,
+ * что по чужому clientId возвращался ПОЛНЫЙ список объектов (имя, адрес,
+ * контактное лицо) — тех самых, которые `/obekty/[id]` этому же менеджеру
+ * отдаёт как 404 (`canAccessDirectoryRecord`). Две части системы противоречили
+ * друг другу, и более слабая выигрывала.
+ *
+ * Теперь список объектов подчиняется ТОМУ ЖЕ правилу, что справочник:
+ * `siteListScope` — владелец видит все, менеджер только свои (`managerId`).
+ * Продажа не ломается: объект опционален («Без объекта»), а нужный менеджер
+ * создаёт через `createSiteForSale` — запись сразу становится его.
+ */
 export async function listSitesForClient(
   clientId: string,
 ): Promise<{ ok: true; sites: SiteHit[] } | { ok: false; error: string }> {
@@ -163,8 +180,15 @@ export async function listSitesForClient(
   if (!client) return { ok: false, error: "Клиент не найден" };
 
   const sites = await db.site.findMany({
-    where: { clientId: id },
+    where: {
+      clientId: id,
+      ...siteListScope({
+        canSeeAllClients: auth.canSeeAllClients,
+        actorId: auth.managerId,
+      }),
+    },
     orderBy: [{ status: "asc" }, { name: "asc" }],
+    take: SITE_PICKER_TAKE,
     select: {
       id: true,
       name: true,

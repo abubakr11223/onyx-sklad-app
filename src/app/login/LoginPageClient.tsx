@@ -33,6 +33,8 @@ const LogoSphere3D = dynamic(
 interface LoginPageClientProps {
   next: string;
   loginError: boolean;
+  /** Аудит 2026-08-10 — превышено число попыток (пароль мог быть верным). */
+  throttledError?: boolean;
   magicError: boolean;
   tgDeepLink: string | null;
 }
@@ -43,6 +45,7 @@ const EASE_OUT_EXPO: [number, number, number, number] = [0.16, 1, 0.3, 1];
 export function LoginPageClient({
   next,
   loginError,
+  throttledError = false,
   magicError,
   tgDeepLink,
 }: LoginPageClientProps) {
@@ -114,6 +117,12 @@ export function LoginPageClient({
         {loginError && (
           <div className="login-alert" role="alert">
             Неверный логин или пароль.
+          </div>
+        )}
+        {throttledError && (
+          <div className="login-alert" role="alert">
+            Слишком много попыток входа. Подождите 15 минут и попробуйте снова —
+            пароль менять не нужно.
           </div>
         )}
         {magicError && (

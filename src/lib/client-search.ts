@@ -19,6 +19,16 @@ export const CLIENT_SEARCH_MAX_TAKE = 50;
 /** Sale form dropdown: tighter list for typing. */
 export const CLIENT_SEARCH_SALE_TAKE = 20;
 
+/**
+ * Object picker in the sale form (objects of the chosen client).
+ *
+ * Живёт ЗДЕСЬ, а не рядом с действием: `client-actions.ts` помечен
+ * «use server», и в таком модуле КАЖДЫЙ экспорт обязан быть async-функцией.
+ * Экспорт простой константы оттуда ломает модуль целиком («The module has no
+ * exports at all») и вместе с ним всю форму продажи.
+ */
+export const SITE_PICKER_TAKE = 50;
+
 export type ClientSearchHit = {
   id: string;
   name: string;

@@ -41,6 +41,13 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # Аудит 2026-08-10 — раньше lint в CI НЕ запускался вовсе, и в main тихо
+      # накопилось 8 ошибок (react-hooks/purity, immutability, prefer-const).
+      # `eslint .` падает только на ERROR; предупреждения (unused vars в тестах)
+      # проходят — чтобы шаг был обязательным, а не «красным всегда».
+      - name: Lint
+        run: npm run lint
+
       # `next build` включает typecheck + оптимизацию. Ошибка типов = failed CI.
       - name: Build
         run: npm run build

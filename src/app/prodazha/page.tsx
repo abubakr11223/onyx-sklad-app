@@ -234,19 +234,31 @@ export default async function ProdazhaPage({
 
   // Apply caps (take was cap+1): never silent truncate — flag for UI notice.
   const typesCap = takeCapPlusOne(stoneTypesRawAll, CATALOG_STONE_TYPES_CAP);
-  let nestedTruncated = false;
-  const stoneTypesRaw = typesCap.items.map((st) => {
+  // Флаг «вложенный список обрезан» ВЫВОДИМ из результата map, а не копим
+  // мутацией внешней переменной внутри колбэка (react-hooks/immutability).
+  // Поведение то же: обрезка на любом уровне (партии / остатки / плиты)
+  // обязана зажечь уведомление — тихое усечение здесь запрещено.
+  const cappedTypes = typesCap.items.map((st) => {
     const batchesCap = takeCapPlusOne(st.batches, CATALOG_BATCHES_CAP);
-    if (batchesCap.truncated) nestedTruncated = true;
     const piecesCap = takeCapPlusOne(st.pieces, CATALOG_PIECES_CAP);
-    if (piecesCap.truncated) nestedTruncated = true;
-    const batches = batchesCap.items.map((b) => {
+    const capped = batchesCap.items.map((b) => {
       const slabsCap = takeCapPlusOne(b.slabs, CATALOG_SLABS_CAP);
-      if (slabsCap.truncated) nestedTruncated = true;
-      return { ...b, slabs: slabsCap.items };
+      return { truncated: slabsCap.truncated, batch: { ...b, slabs: slabsCap.items } };
     });
-    return { ...st, batches, pieces: piecesCap.items };
+    return {
+      truncated:
+        batchesCap.truncated ||
+        piecesCap.truncated ||
+        capped.some((c) => c.truncated),
+      item: {
+        ...st,
+        batches: capped.map((c) => c.batch),
+        pieces: piecesCap.items,
+      },
+    };
   });
+  const stoneTypesRaw = cappedTypes.map((r) => r.item);
+  const nestedTruncated = cappedTypes.some((r) => r.truncated);
   const catalogTruncated =
     isCapNoticeVisible(typesCap.truncated, stoneTypesTotal, typesCap.shown) ||
     nestedTruncated;
