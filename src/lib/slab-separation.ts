@@ -29,7 +29,18 @@ export class SlabSeparationError extends Error {
 export interface SeparateSlabInput {
   batchId: string;
   stoneTypeId: string;
-  photoRequestId: string;
+  /**
+   * ТЗ №16 A1 — НЕОБЯЗАТЕЛЕН.
+   *
+   * Раньше поле было обязательным, и механизм выделения оказался приварен к
+   * фотозапросу: шоу-рум и «Разбить → Плита» не могли им пользоваться, хотя
+   * колонка `Slab.photoRequestId` в схеме давно `String?`. То есть запрет был
+   * только на уровне типа, а не данных — ровно та причина, по которой в шоу-руме
+   * была видна одна-единственная плита (ТЗ №16 §2).
+   *
+   * null → плита выделена не по фотозапросу (витрина, разбитие, ручной отбор).
+   */
+  photoRequestId?: string | null;
   block: string;
   landmark: string;
   needsCheck: boolean;
@@ -71,6 +82,10 @@ export async function separateSlabInTx(
       areaAdjustedM2: true,
       slabsSoldDirect: true,
       areaSoldDirectM2: true,
+      // ТЗ №16 A1 — габариты партии наследуются плитой (см. ниже).
+      lengthMm: true,
+      widthMm: true,
+      thicknessMm: true,
       slabs: { select: { areaM2: true } },
       pieces: { where: { originSlabId: null }, select: { areaM2: true } },
     },
@@ -110,15 +125,29 @@ export async function separateSlabInTx(
 
   // (3) label = «Плита №N», N = существующие плиты + 1. Под row-lock партии
   //     нумерация сериализована → гонки @@unique([batchId,label]) нет.
+  // (4) ТЗ №16 A1 — габариты наследуются от партии.
+  //
+  // Раньше выделенная плита рождалась БЕЗ размеров. После ТЗ №12 длина и ширина
+  // обязательны на приёмке, то есть у партии они есть всегда, а поиск по размеру
+  // (`poisk-search.ts`) фильтрует плиты по `lengthMm`/`widthMm`. Плита без
+  // размеров просто не находилась — витрина и «Разбить» отдавали камень, который
+  // менеджер потом не мог подобрать под заказ. Копируем, а не считаем: это тот же
+  // физический формат плиты, замер уточняется позже (`isAreaEstimated`).
+  //
+  // Площадь НЕ копируем: она у партии общая (areaTotalM2), а не на плиту, и §3
+  // выше уже посчитал новую плиту как `areaM2: null` (замер придёт позже).
   const slab = await tx.slab.create({
     data: {
       batchId: input.batchId,
       stoneTypeId: input.stoneTypeId,
       label: `Плита №${batch.slabs.length + 1}`,
+      lengthMm: batch.lengthMm,
+      widthMm: batch.widthMm,
+      thicknessMm: batch.thicknessMm,
       block: input.block,
       landmark: input.landmark,
       needsCheck: input.needsCheck,
-      photoRequestId: input.photoRequestId,
+      photoRequestId: input.photoRequestId ?? null,
       separatedById: input.separatedById,
     },
     select: { id: true },

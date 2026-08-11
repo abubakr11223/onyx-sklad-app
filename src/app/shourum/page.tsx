@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDateTime } from "@/lib/datetime";
 import { listShowroom, MAX_SHOWROOM_PAGE } from "@/lib/showroom";
+import { computeFreeRemainder } from "@/lib/inventory";
+import { formatGabarit } from "@/lib/dimensions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -48,7 +50,9 @@ export default async function ShourumPage({
   const items = await listShowroom(db, { take: MAX_SHOWROOM_PAGE });
 
   // Bounded picker: AVAILABLE units for «Отправить в шоу-рум».
-  const [availSlabs, availPieces, clients] = await Promise.all([
+  // ТЗ №16 §4 — плюс партии: основной источник, поимённых плит на складе почти
+  // нет (ADR-004), поэтому раньше витрине было нечего показывать.
+  const [availSlabs, availPieces, clients, batchRows] = await Promise.all([
     caps.canSendToShowroom
       ? db.slab.findMany({
           where: { status: "AVAILABLE", needsCheck: false },
@@ -89,7 +93,58 @@ export default async function ShourumPage({
           select: { id: true, name: true },
         })
       : Promise.resolve([]),
+    caps.canSendToShowroom
+      ? db.batch.findMany({
+          where: { needsCheck: false },
+          orderBy: [
+            { stoneType: { name: "asc" } },
+            { arrivedAt: "desc" },
+            { id: "desc" },
+          ],
+          take: 100,
+          select: {
+            id: true,
+            slabsTotal: true,
+            areaTotalM2: true,
+            slabsSoldDirect: true,
+            areaSoldDirectM2: true,
+            slabsAdjusted: true,
+            areaAdjustedM2: true,
+            lengthMm: true,
+            widthMm: true,
+            stoneType: { select: { name: true } },
+            slabs: { select: { areaM2: true } },
+            pieces: { where: { originSlabId: null }, select: { areaM2: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
+
+  // Свободный остаток считаем той же формулой §3, что и домен (ADR-005) —
+  // партия без свободных плит в списке не нужна: выделение всё равно откажет.
+  const batches = batchRows
+    .map((b) => {
+      const free = computeFreeRemainder(
+        {
+          slabsTotal: b.slabsTotal,
+          areaTotalM2: b.areaTotalM2 == null ? null : Number(b.areaTotalM2),
+          slabsAdjusted: b.slabsAdjusted,
+          areaAdjustedM2: Number(b.areaAdjustedM2),
+          slabsSoldDirect: b.slabsSoldDirect,
+          areaSoldDirectM2: Number(b.areaSoldDirectM2),
+        },
+        b.slabs.map((s) => ({ areaM2: s.areaM2 == null ? null : Number(s.areaM2) })),
+        b.pieces.map((p) => ({ areaM2: p.areaM2 == null ? null : Number(p.areaM2) })),
+      );
+      return {
+        id: b.id,
+        stoneName: b.stoneType.name,
+        slabsFree: free.slabsFree,
+        areaFreeM2: free.areaFreeM2,
+        gabarit: formatGabarit(b.lengthMm, b.widthMm),
+      };
+    })
+    .filter((b) => b.slabsFree === null || b.slabsFree > 0);
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -132,8 +187,72 @@ export default async function ShourumPage({
           <h2 className="mb-2 text-base font-semibold text-ink">
             Отправить в шоу-рум
           </h2>
+          {/* ТЗ №16 §4 — «Из партии»: основной путь. На складе поимённых плит
+              почти нет (ADR-004), поэтому раньше в списке была одна плита и
+              отправлять было нечего. Здесь плита выделяется из партии и уходит
+              на витрину одной транзакцией. */}
           <form action={sendToShowroomAction} className="flex flex-col gap-3">
-            <Field id="unitPick" label="Камень (AVAILABLE)">
+            <input type="hidden" name="source" value="BATCH" />
+            <Field id="batchId" label="Из партии">
+              <select
+                name="batchId"
+                required
+                className={inputClass}
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Выберите партию…
+                </option>
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.stoneName}
+                    {b.gabarit !== "—" ? ` · ${b.gabarit}` : ""} · свободно{" "}
+                    {b.slabsFree === null ? "—" : `${b.slabsFree} плит`}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              id="qty"
+              name="qty"
+              label="Сколько плит"
+              inputMode="numeric"
+              placeholder="1"
+              defaultValue="1"
+              className={inputClass}
+            />
+            <Field
+              id="standNoteBatch"
+              name="standNote"
+              label="Стенд / комментарий"
+              placeholder="Витрина у входа"
+              className={inputClass}
+            />
+            {batches.length === 0 && (
+              <p className="text-xs text-ink/50">
+                Партий со свободными плитами нет.
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="min-h-12 w-full sm:w-auto"
+              disabled={batches.length === 0}
+            >
+              Выделить и отправить
+            </Button>
+          </form>
+
+          {/* ТЗ №16 §4 — «Готовая плита» и «Бой / остаток»: уже выделенные
+              единицы. Раньше здесь стоял select `unitPick`, а действие ждало
+              targetType/unitId, которые никто не заполнял (в подсказке так и
+              было написано: «если форма не разобрала выбор…»). Теперь значение
+              разбирает сервер. */}
+          <form
+            action={sendToShowroomAction}
+            className="mt-5 flex flex-col gap-3 border-t border-line pt-4"
+          >
+            <input type="hidden" name="source" value="UNIT" />
+            <Field id="unitPick" label="Готовая плита / бой-остаток">
               <select
                 name="unitPick"
                 required
@@ -157,10 +276,6 @@ export default async function ShourumPage({
                 ))}
               </select>
             </Field>
-            {/* Split unitPick into targetType + unitId via hidden fields filled by... 
-                use two hidden inputs set from select name pattern in action. */}
-            <input type="hidden" name="targetType" id="sr-tt" value="" />
-            <input type="hidden" name="unitId" id="sr-uid" value="" />
             <Field
               id="standNote"
               name="standNote"
@@ -168,11 +283,11 @@ export default async function ShourumPage({
               placeholder="Витрина у входа"
               className={inputClass}
             />
-            <p className="text-xs text-ink/50">
-              Выберите камень и укажите стенд. (Если форма не разобрала
-              выбор — используйте кнопки ниже из списка наличия.)
-            </p>
-            <Button type="submit" className="min-h-12 w-full sm:w-auto">
+            <Button
+              type="submit"
+              variant="secondary"
+              className="min-h-12 w-full sm:w-auto"
+            >
               Отправить в шоу-рум
             </Button>
           </form>

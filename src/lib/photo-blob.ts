@@ -34,6 +34,8 @@ export interface StorePhotoBlobParams {
   slabId?: string | null;
   pieceId?: string | null;
   batchPatternId?: string | null;
+  /** ТЗ №16 B — фото партии целиком (общий вид поставки). */
+  batchId?: string | null;
   photoRequestId?: string | null;
 }
 
@@ -76,6 +78,7 @@ export async function createPhotoRecord(
     slabId?: string | null;
     pieceId?: string | null;
     batchPatternId?: string | null;
+    batchId?: string | null;
     photoRequestId?: string | null;
   },
 ): Promise<{ id: string; url: string }> {
@@ -88,6 +91,7 @@ export async function createPhotoRecord(
     slabId: params.slabId ?? null,
     pieceId: params.pieceId ?? null,
     batchPatternId: params.batchPatternId ?? null,
+    batchId: params.batchId ?? null,
     photoRequestId: params.photoRequestId ?? null,
   };
   const photo = await client.photo.create({ data, select: { id: true } });
@@ -116,6 +120,7 @@ export async function storePhotoBlob(
     slabId: params.slabId,
     pieceId: params.pieceId,
     batchPatternId: params.batchPatternId,
+    batchId: params.batchId,
     photoRequestId: params.photoRequestId,
   });
 }

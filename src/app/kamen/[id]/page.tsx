@@ -351,6 +351,14 @@ export default async function KamenPage({
             slabsSoldDirect: true,
             areaSoldDirectM2: true,
             locations: { orderBy: { createdAt: "asc" } },
+            // ТЗ №16 B — общее фото партии (как пришла). Отдельно от фото узора:
+            // для однородной партии без узоров это единственное фото камня.
+            photos: {
+              where: { kind: "BATCH" },
+              select: { id: true, takenAt: true },
+              orderBy: { createdAt: "desc" },
+              take: 4,
+            },
             // ТЗ №3 — узор-подгруппы партии + их фото (образец узора, kind SAMPLE).
             // Для B2C: менеджер показывает клиенту конкретный узор с готовым фото.
             patterns: {
@@ -1254,6 +1262,41 @@ export default async function KamenPage({
                 {/* SK-1b (1): добавить новую локацию к партии — только склад. */}
                 {caps.canManageWarehouse && (
                   <AddLocationForm batchId={b.id} backTo={"/kamen/" + id} />
+                )}
+
+                {/* ТЗ №16 B — общее фото партии. СНАРУЖИ блока узоров: именно
+                    однородная партия (узоров нет) раньше была «слепой» — ни
+                    одного фото. Узор — конкретный рисунок для B2C, партия —
+                    как поставка пришла; одно другое не заменяет. */}
+                {b.photos.length > 0 && (
+                  <div className="mt-3 border-t border-line pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
+                      Фото партии
+                    </p>
+                    <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {b.photos.map((ph) => (
+                        <li key={ph.id}>
+                          <a
+                            href={"/api/photo/" + ph.id}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={"/api/photo/" + ph.id}
+                              alt="Фото партии"
+                              loading="lazy"
+                              className="aspect-square w-full rounded-lg object-cover"
+                            />
+                          </a>
+                          <p className="mt-1 text-[11px] text-ink/45">
+                            {formatTashkentDate(ph.takenAt)}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
 
                 {/* ТЗ №3 — узоры партии с фото (B2C: предложить клиенту узор). */}

@@ -27,6 +27,7 @@ import Alert from "@/components/ui/Alert";
 import { intakeErrorItems } from "./intake-form-errors";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
 import { areaDiscrepancyPct, areaM2FromCm } from "@/lib/dimensions";
+import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 
 /** W7-A2 — mint client mutationId (crypto.randomUUID when available). */
 function newMutationId(): string {
@@ -998,6 +999,32 @@ export default function IntakeForm({
             value={values.supplierNote}
             onChange={setField("supplierNote")}
           />
+
+          {/* ТЗ №16 B — общее фото партии. Фото узора (в подгруппах) остаётся:
+              узор — конкретный рисунок для B2C, партия — как поставка пришла
+              (паллета, контейнер, состояние). Однородная партия без узоров
+              раньше вообще не имела фото — камень был «слепой». */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="batchPhoto"
+              className="text-sm font-semibold text-ink"
+            >
+              Фото партии
+            </label>
+            <input
+              id="batchPhoto"
+              name="batchPhoto"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+            />
+            <p className="text-xs text-ink/50">
+              Общий вид поставки — как камень пришёл. До {MAX_BATCH_PHOTOS} фото.
+              Необязательно, но помогает при споре с поставщиком.
+            </p>
+          </div>
         </div>
       </Card>
 

@@ -59,6 +59,13 @@ export default async function PriemkaEditBatchPage({
       widthMm: true,
       thicknessMm: true,
       stoneType: { select: { name: true } },
+      // ТЗ №16 B — уже приложенные фото партии (общий вид поставки).
+      photos: {
+        where: { kind: "BATCH" },
+        select: { id: true },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      },
       patterns: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -143,6 +150,7 @@ export default async function PriemkaEditBatchPage({
       <BatchEditForm
         batchId={batch.id}
         stoneName={batch.stoneType.name}
+        batchPhotos={batch.photos.map((p) => ({ id: p.id }))}
         canEditQuantity={canEditQuantity}
         hasMovements={hasMovements}
         minSlabsHint={minSlabs}

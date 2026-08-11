@@ -19,6 +19,7 @@ import {
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { parseThicknessCm } from "@/lib/dimensions";
 import { strOf, allOf } from "@/lib/form";
+import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 import { ensureFormError } from "@/lib/form-errors";
 import { putPhotoBlob } from "@/lib/photo-blob";
 
@@ -260,6 +261,42 @@ export async function submitBatchEdit(
       actorId,
       canEditQuantity,
     });
+
+    // ТЗ №16 B / §106 — «фото партии должно быть доступно и в редактировании».
+    // ПОСЛЕ доменной транзакции: партия уже изменена, а загрузка в Blob — сеть,
+    // и её сбой не должен откатывать правку. Фото только добавляются: §1.9
+    // «фото хранится вечно, DELETE нет».
+    const batchPhotoFiles = formData
+      .getAll("batchPhoto")
+      .filter((f): f is File => f instanceof File && f.size > 0)
+      .slice(0, MAX_BATCH_PHOTOS);
+    if (batchPhotoFiles.length > 0) {
+      const { storePhotoBlob } = await import("@/lib/photo-blob");
+      const now = new Date();
+      for (let i = 0; i < batchPhotoFiles.length; i++) {
+        const file = batchPhotoFiles[i];
+        if (
+          !file.type.startsWith("image/") ||
+          file.size > MAX_PATTERN_PHOTO_BYTES
+        ) {
+          continue;
+        }
+        try {
+          await storePhotoBlob({
+            pathPrefix: `batches/${batchId}/${now.getTime()}-${i}`,
+            bytes: Buffer.from(await file.arrayBuffer()),
+            mediaType: file.type,
+            kind: "BATCH",
+            takenAt: now,
+            takenById: actorId,
+            batchId,
+          });
+        } catch (err) {
+          console.error("[priemka/edit] фото партии загрузка упала:", err);
+        }
+      }
+    }
+
     redirect(
       `/priemka?edited=1&batch=${encodeURIComponent(result.batchId)}&n=${result.changes.length}`,
     );

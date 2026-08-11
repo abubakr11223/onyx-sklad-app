@@ -82,6 +82,10 @@ enum PhotoKind {
   SAMPLE // vid namunasi
   INTERIOR_AI // QR-kartochka interyerlari (TZ §6.7)
   DRAWING // boy chertyoji
+  /// ТЗ №16 B — общее фото партии при приёмке (как пришла: паллета, контейнер).
+  /// Не заменяет фото узора: узор — конкретный рисунок для B2C, партия — вся
+  /// поставка. Складское фото, в публичный allowlist /api/photo НЕ входит.
+  BATCH
 }
 
 /// data-model.md §1.10.
@@ -255,6 +259,7 @@ model Batch {
   samples        Sample[]
   patterns       BatchPattern[]
   shipmentLines  ShipmentLine[]
+  photos         Photo[] // ТЗ №16 B — общее фото партии
 
   @@index([stoneTypeId])
   @@index([arrivedAt])
@@ -562,6 +567,11 @@ model Photo {
   pieceId        String?
   photoRequestId String?
   batchPatternId String? // ТЗ №3 — фото узор-подгруппы
+  /// ТЗ №16 B — фото партии целиком. ВНИМАНИЕ: любой новый «владелец» фото
+  /// обязан попасть в CHECK `Photo_owner_check` — иначе INSERT падает уже в
+  /// проде, а не в тестах. Ровно это случилось с batchPatternId (миграция
+  /// 20260724102513): фото узора молча не сохранялось.
+  batchId        String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -571,11 +581,13 @@ model Photo {
   piece        Piece?        @relation(fields: [pieceId], references: [id], onDelete: Restrict)
   photoRequest PhotoRequest? @relation(fields: [photoRequestId], references: [id], onDelete: Restrict)
   batchPattern BatchPattern? @relation(fields: [batchPatternId], references: [id], onDelete: Cascade)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: Restrict)
 
   @@index([slabId])
   @@index([pieceId])
   @@index([stoneTypeId, kind])
   @@index([batchPatternId])
+  @@index([batchId])
 }
 
 /// §1.10 — harakatlar tarixi. Log yozuvi asosiy amal bilan BITTA tranzaksiyada.

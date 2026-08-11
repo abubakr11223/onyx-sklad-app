@@ -35,6 +35,8 @@ export type EditLocation = {
 export type EditBatchProps = {
   batchId: string;
   stoneName: string;
+  /** ТЗ №16 B — уже приложенные фото партии (kind BATCH). */
+  batchPhotos: Array<{ id: string }>;
   canEditQuantity: boolean;
   hasMovements: boolean;
   minSlabsHint: number | null;
@@ -240,6 +242,52 @@ export default function BatchEditForm(props: EditBatchProps) {
             label="Поставщик / документ"
             defaultValue={props.supplierNote ?? ""}
           />
+
+          {/* ТЗ №16 B / §106 — фото партии доступно и в редактировании.
+              Только добавление: §1.9 «фото хранится вечно, DELETE нет». */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="batchPhoto"
+              className="text-sm font-semibold text-ink"
+            >
+              Фото партии
+            </label>
+            {props.batchPhotos.length > 0 && (
+              <ul className="mb-1 flex flex-wrap gap-2">
+                {props.batchPhotos.map((ph) => (
+                  <li key={ph.id}>
+                    <a
+                      href={`/api/photo/${ph.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/photo/${ph.id}`}
+                        alt="Фото партии"
+                        loading="lazy"
+                        className="h-16 w-16 rounded-lg object-cover"
+                      />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <input
+              id="batchPhoto"
+              name="batchPhoto"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+            />
+            <p className="text-xs text-ink/50">
+              {props.batchPhotos.length > 0
+                ? "Новые фото добавятся к существующим."
+                : "Общий вид поставки — как камень пришёл."}
+            </p>
+          </div>
         </div>
       </Card>
 

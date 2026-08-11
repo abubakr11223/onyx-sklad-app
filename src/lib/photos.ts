@@ -17,6 +17,15 @@ export const MAX_PHOTO_STALE_MONTHS = 120;
 /** Pastki chegara — kamida 1 oy (0 yoki manfiy — mantiqsiz). */
 export const MIN_PHOTO_STALE_MONTHS = 1;
 
+/**
+ * ТЗ №16 B — сколько общих фото партии принимаем за одну приёмку.
+ * Потолок нужен не для красоты: каждый файл это отдельная загрузка в Blob и
+ * отдельная строка Photo, а приёмка идёт со склада по слабой сети.
+ * Живёт здесь (а не рядом с формой или действием), потому что нужен обоим:
+ * форма — «use client», действие — «use server», общий модуль обязан быть чистым.
+ */
+export const MAX_BATCH_PHOTOS = 4;
+
 // ──────────────────── Sof helperlar (DB YO'Q — unit-test) ────────────────────
 
 /**

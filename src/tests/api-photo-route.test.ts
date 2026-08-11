@@ -3,6 +3,7 @@
 // автоматически публично доступен, нужно явно расширить allowlist.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { QR_PUBLIC_PHOTO_KINDS } from "@/lib/qr-showroom";
 
 const M = vi.hoisted(() => ({
   photoFindFirst: vi.fn(),
@@ -27,14 +28,14 @@ beforeEach(() => {
 });
 
 describe("GET /api/photo/[id] — kind allowlist (ТЗ №7 #26)", () => {
-  it("whitelist ровно [SAMPLE, SLAB, PIECE, INTERIOR_AI, DRAWING]", async () => {
+  it("whitelist ровно [SAMPLE, SLAB, PIECE, INTERIOR_AI, DRAWING, BATCH]", async () => {
     M.photoFindFirst.mockResolvedValue(null);
     await GET(new Request("https://onyx.test/api/photo/x"), { params: params("x") });
     expect(M.photoFindFirst).toHaveBeenCalledTimes(1);
     const where = M.photoFindFirst.mock.calls[0][0].where;
     expect(where.id).toBe("x");
     expect(where.kind).toEqual({
-      in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "DRAWING"],
+      in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "DRAWING", "BATCH"],
     });
   });
 
@@ -85,7 +86,7 @@ describe("GET /api/photo/[id] — kind allowlist (ТЗ №7 #26)", () => {
     expect(M.downloadFile).not.toHaveBeenCalled();
   });
 
-  it("регрессия: если из allowlist уберут что-то из существующих 5 — тест провалится", async () => {
+  it("регрессия: если из allowlist уберут что-то из существующих — тест провалится", async () => {
     // Явно фиксируем список: любое сокращение — сломает контракт QR show-room.
     M.photoFindFirst.mockResolvedValue(null);
     await GET(new Request("https://onyx.test/api/photo/x"), { params: params("x") });
@@ -95,6 +96,23 @@ describe("GET /api/photo/[id] — kind allowlist (ТЗ №7 #26)", () => {
     expect(kinds).toContain("PIECE");    // бой/остаток
     expect(kinds).toContain("INTERIOR_AI"); // §6.7 AI-интерьеры
     expect(kinds).toContain("DRAWING");  // чертёж боя
-    expect(kinds).toHaveLength(5);
+    // ТЗ №16 B — фото партии. Добавлено ОСОЗНАННО: складские страницы отдают
+    // картинку через этот же маршрут, иначе сотрудник видел бы 404. Доступа это
+    // не расширяет — фото лежит в Blob с access:"public", маршрут лишь прячет
+    // URL за cuid. На клиентскую QR-карточку BATCH не попадает: там свой,
+    // более узкий список QR_PUBLIC_PHOTO_KINDS (см. тест ниже).
+    expect(kinds).toContain("BATCH");
+    expect(kinds).toHaveLength(6);
+  });
+
+  it("ТЗ №16 B — фото партии НЕ попадает на клиентскую QR-карточку", async () => {
+    // Клиент по QR видит камень, а не паллету на складе. Список QR — отдельный
+    // и намеренно уже: если BATCH когда-нибудь просочится сюда, тест упадёт.
+    expect([...QR_PUBLIC_PHOTO_KINDS]).not.toContain("BATCH");
+    expect([...QR_PUBLIC_PHOTO_KINDS]).toEqual([
+      "INTERIOR_AI",
+      "SAMPLE",
+      "SLAB",
+    ]);
   });
 });

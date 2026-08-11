@@ -19,6 +19,7 @@ import {
   type IntakeInput,
 } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
+import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 import { ensureFormError } from "@/lib/form-errors";
 import {
   createIntakeWithReceipt,
@@ -210,6 +211,46 @@ export async function submitIntake(
         } catch (err) {
           // Фото не критично — партия сохранена; узор без фото уйдёт в фотозапрос ниже.
           console.error("[priemka] узор-фото загрузка упала:", err);
+        }
+      }
+    }
+
+    // ТЗ №16 B — общее фото партии. Отдельно от фото узора: узор — конкретный
+    // рисунок для B2C, партия — как поставка пришла (паллета, состояние). Для
+    // однородной партии без узоров это ЕДИНСТВЕННОЕ фото: раньше такой камень
+    // был «слепым».
+    //
+    // Тот же принцип, что у фото узора: вне транзакции (партия уже сохранена),
+    // сбой загрузки не откатывает приёмку, и на replay сюда не заходим —
+    // повторная отправка формы не наплодит дублей в Blob.
+    const batchPhotoFiles = formData
+      .getAll("batchPhoto")
+      .filter((f): f is File => f instanceof File && f.size > 0)
+      .slice(0, MAX_BATCH_PHOTOS);
+    if (batchPhotoFiles.length > 0) {
+      const { storePhotoBlob } = await import("@/lib/photo-blob");
+      const now = new Date();
+      for (let i = 0; i < batchPhotoFiles.length; i++) {
+        const file = batchPhotoFiles[i];
+        if (
+          !file.type.startsWith("image/") ||
+          file.size > MAX_PATTERN_PHOTO_BYTES
+        ) {
+          continue; // не картинка / слишком большое — молча пропускаем
+        }
+        try {
+          await storePhotoBlob({
+            pathPrefix: `batches/${summary.batchId}/${now.getTime()}-${i}`,
+            bytes: Buffer.from(await file.arrayBuffer()),
+            mediaType: file.type,
+            kind: "BATCH",
+            takenAt: now, // «фиксируется дата съёмки» (ТЗ №16 §7)
+            takenById: actorId,
+            batchId: summary.batchId,
+          });
+        } catch (err) {
+          // Не критично — партия сохранена, фото можно добавить в редактировании.
+          console.error("[priemka] фото партии загрузка упала:", err);
         }
       }
     }
