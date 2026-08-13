@@ -57,6 +57,10 @@ enum Role {
   OWNER
   MANAGER
   WAREHOUSE
+  /// Согласовано 2026-08-12 — зав. складом: всё, что может складчик, плюс
+  /// изменение количества партии. Отдельная роль, а не флаг: владелец должен
+  /// видеть её в «Сотрудниках» и переключать.
+  WAREHOUSE_LEAD
   PARTNER
 }
 
@@ -803,6 +807,10 @@ model Shipment {
   clientId     String?
   siteId       String?
   note         String?
+  /// ТЗ №15 §8.5 — «приоритет/срочность задачи»: клиент ждёт, складчик берёт
+  /// эту задачу первой. Обычный флаг, а не отдельный статус: срочность не
+  /// меняет жизненный цикл отгрузки, только порядок в очереди.
+  isUrgent     Boolean      @default(false)
   createdAt    DateTime     @default(now())
   /// Set when every line is fully shipped (derived DONE).
   completedAt  DateTime?

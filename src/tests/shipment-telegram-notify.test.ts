@@ -120,7 +120,7 @@ describe("notifyWarehouseOfShipment", () => {
     expect(userFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          role: "WAREHOUSE",
+          role: { in: ["WAREHOUSE", "WAREHOUSE_LEAD"] },
           isActive: true,
           telegramId: { not: null },
         },

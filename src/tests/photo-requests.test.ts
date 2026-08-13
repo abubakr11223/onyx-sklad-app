@@ -91,11 +91,12 @@ describe("createAndDispatchPhotoRequest", () => {
       comment: null,
     });
 
-    // findMany where-фильтр: WAREHOUSE + isActive + telegramId not null.
+    // Согласовано 2026-08-12: фото-задания идут И складчику, И зав. складом.
+    // findMany where-фильтр: обе складские роли + isActive + telegramId not null.
     expect(userFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          role: "WAREHOUSE",
+          role: { in: ["WAREHOUSE", "WAREHOUSE_LEAD"] },
           isActive: true,
           telegramId: { not: null },
         },

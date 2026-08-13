@@ -16,7 +16,10 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import Field, { inputClass } from "@/components/ui/Field";
-import { confirmShipmentAction } from "./actions";
+import {
+  confirmShipmentAction,
+  toggleShipmentUrgentAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Отгрузки — Onyx" };
@@ -238,6 +241,8 @@ export default async function OtgruzkiPage({
                       {s.isShowroom && (
                         <Badge variant="warning">ШОУ-РУМ</Badge>
                       )}
+                      {/* ТЗ №15 §8.5 — клиент ждёт: задача идёт первой в очереди. */}
+                      {s.isUrgent && <Badge variant="danger">СРОЧНО</Badge>}
                     </div>
                     <p className="text-sm text-ink/70">
                       {s.clientName ?? "—"}
@@ -315,6 +320,33 @@ export default async function OtgruzkiPage({
                   >
                     {s.statusLabel}
                   </Badge>
+                </div>
+
+                {/* ТЗ №15 §8.3 — накладная к товару: печатается со страницы. */}
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Link
+                    href={`/otgruzki/${s.id}`}
+                    className="text-sm text-gold-deep underline"
+                  >
+                    Накладная →
+                  </Link>
+                  {/* ТЗ №15 §8.5 — срочность ставит тот, кто говорит с клиентом. */}
+                  {caps.canSell && tab === "open" && s.status !== "CANCELLED" && (
+                    <form action={toggleShipmentUrgentAction}>
+                      <input type="hidden" name="shipmentId" value={s.id} />
+                      <input
+                        type="hidden"
+                        name="urgent"
+                        value={s.isUrgent ? "0" : "1"}
+                      />
+                      <button
+                        type="submit"
+                        className="text-sm text-ink/60 underline"
+                      >
+                        {s.isUrgent ? "Снять «срочно»" : "Отметить срочной"}
+                      </button>
+                    </form>
+                  )}
                 </div>
 
                 {tab === "open" &&

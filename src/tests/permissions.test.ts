@@ -27,6 +27,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canConfirmShipment: true,
     canSeeShowroom: true,
     canSendToShowroom: true,
+    canEditBatchQuantity: true,
   },
   MANAGER: {
     canSeePrices: true,
@@ -49,6 +50,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canConfirmShipment: false,
     canSeeShowroom: true,
     canSendToShowroom: true,
+    canEditBatchQuantity: false,
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -71,6 +73,33 @@ const EXPECTED: Record<Role, Capabilities> = {
     canConfirmShipment: true,
     canSeeShowroom: true,
     canSendToShowroom: true,
+    canEditBatchQuantity: false,
+  },
+  // Согласовано 2026-08-12: зав. складом = складчик + количество.
+  // Если хоть одно поле здесь разойдётся со складчиком — он молча
+  // потеряет функцию склада (фото-задания, отгрузки, шоу-рум).
+  WAREHOUSE_LEAD: {
+    canSeePrices: false,
+    canSeePurchasePrice: false,
+    canSell: false,
+    canReserve: false,
+    canRequestPhoto: false,
+    canViewPhotoTasks: true, // §3/§7/§5.9 — vazifalar ko'rinadi; CREATE yo'q
+    canManageWarehouse: true,
+    canSeeExactRemainder: true,
+    canSeeAllReservations: false,
+    requestsRouteToManager: false,
+    canSeeHistory: false,
+    canManageAccounts: false,
+    canSeeLeads: false,
+    canSeeDebts: false,
+    canSeeClients: false,
+    canSeeAllClients: false,
+    canSeeShipments: true,
+    canConfirmShipment: true,
+    canSeeShowroom: true,
+    canSendToShowroom: true,
+    canEditBatchQuantity: true,
   },
   PARTNER: {
     canSeePrices: false,
@@ -93,6 +122,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canConfirmShipment: false,
     canSeeShowroom: false,
     canSendToShowroom: false,
+    canEditBatchQuantity: false,
   },
 };
 

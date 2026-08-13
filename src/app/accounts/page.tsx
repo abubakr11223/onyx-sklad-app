@@ -12,8 +12,14 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getRealSessionUser } from "@/lib/session";
 import { roleLabel } from "@/lib/role-labels";
+import { isWarehouseRole } from "@/lib/permissions";
 import type { Role } from "@/lib/permissions";
-import { CREATABLE_ROLES, MIN_PASSWORD_LENGTH } from "@/lib/accounts";
+import {
+  CREATABLE_ROLES,
+  MIN_PASSWORD_LENGTH,
+  TOGGLEABLE_ROLES,
+  isToggleableRole,
+} from "@/lib/accounts";
 import {
   createAccount,
   deleteAccount,
@@ -122,7 +128,9 @@ export default async function AccountsPage({
   const ownerTelegramIds = users
     .filter((u) => u.role === "OWNER" && u.telegramId)
     .map((u) => u.telegramId);
-  const warehouseRows = users.filter((u) => u.role === "WAREHOUSE");
+  // Зав. складом тоже получает фото-задания — панель здоровья Telegram
+  // обязана его учитывать, иначе «все привязаны» будет ложью.
+  const warehouseRows = users.filter((u) => isWarehouseRole(u.role));
   const linkedWarehouse = warehouseRows.filter(
     (u) => u.isActive && u.telegramId,
   );
@@ -539,14 +547,13 @@ export default async function AccountsPage({
         {users.map((u) => {
           const isOwner = u.role === "OWNER";
           const isSelf = u.id === me?.id;
-          // Смена роли — только бинарный тумблер MANAGER↔WAREHOUSE (PARTNER в него
-          // не входит: у него отдельный флоу заявок, а не складско-менеджерский).
-          const isRoleToggleable =
-            u.role === "MANAGER" || u.role === "WAREHOUSE";
+          // Смена роли (2026-08-12): ролей стало три — менеджер, складчик и
+          // зав. складом, поэтому бинарного тумблера больше нет, здесь выбор.
+          // PARTNER не входит: у него отдельный флоу заявок.
+          const isRoleToggleable = isToggleableRole(u.role);
           // Деактивация / сброс пароля — для любого НЕ-владельца (вкл. PARTNER,
           // A1): владелец должен уметь управлять созданными им партнёр-аккаунтами.
           const isManageable = !isOwner;
-          const otherRole = u.role === "MANAGER" ? "WAREHOUSE" : "MANAGER";
 
           return (
             <li key={u.id}>
@@ -567,7 +574,7 @@ export default async function AccountsPage({
                     <p className="text-sm">
                       {u.phone ? (
                         <span className="tnum text-ink/60">📞 {u.phone}</span>
-                      ) : u.role === "WAREHOUSE" ? (
+                      ) : isWarehouseRole(u.role) ? (
                         <span className="text-warning">
                           телефон не задан — Telegram не привяжется
                         </span>
@@ -579,13 +586,13 @@ export default async function AccountsPage({
                       {u.telegramId ? (
                         <span className="tnum text-ink/60">
                           ✈️ TG ID: {u.telegramId}
-                          {u.role === "WAREHOUSE" &&
+                          {isWarehouseRole(u.role) &&
                             isDemoWarehouseAccount(u) && (
                               <span className="ml-1 font-semibold text-warning">
                                 · демо
                               </span>
                             )}
-                          {u.role === "WAREHOUSE" &&
+                          {isWarehouseRole(u.role) &&
                             telegramIdMatchesOwner(
                               u.telegramId,
                               ownerTelegramIds,
@@ -595,7 +602,7 @@ export default async function AccountsPage({
                               </span>
                             )}
                         </span>
-                      ) : u.role === "WAREHOUSE" ? (
+                      ) : isWarehouseRole(u.role) ? (
                         <span className="text-warning">
                           Telegram не привязан — фотозапросы не придут
                         </span>
@@ -628,16 +635,32 @@ export default async function AccountsPage({
                     (владелец) управляется в блоке «Мой аккаунт» вверху. */}
                 {u.isActive && isManageable && (
                   <div className="mt-4 flex flex-col gap-3 border-t border-ink/10 pt-4">
-                    {/* Смена роли — только MANAGER↔WAREHOUSE. */}
+                    {/* Смена роли — выбор из складско-менеджерских ролей.
+                        Зав. складом отличается от складчика одним правом:
+                        менять количество партии. */}
                     {isRoleToggleable && (
                       <form
                         action={changeRole}
                         className="flex flex-wrap items-end gap-2"
                       >
                         <input type="hidden" name="userId" value={u.id} />
-                        <input type="hidden" name="role" value={otherRole} />
+                        <label className="sr-only" htmlFor={`role-${u.id}`}>
+                          Роль
+                        </label>
+                        <select
+                          id={`role-${u.id}`}
+                          name="role"
+                          defaultValue={u.role}
+                          className={inputClass + " w-auto"}
+                        >
+                          {TOGGLEABLE_ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {roleLabel(r as Role)}
+                            </option>
+                          ))}
+                        </select>
                         <Button type="submit" variant="secondary" size="sm">
-                          Сделать: {roleLabel(otherRole as Role)}
+                          Сменить роль
                         </Button>
                       </form>
                     )}

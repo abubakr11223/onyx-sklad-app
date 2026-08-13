@@ -149,7 +149,7 @@ export interface ShipmentNotifyDeps {
     user: {
       findMany(args: {
         where: {
-          role: "WAREHOUSE";
+          role: { in: ("WAREHOUSE" | "WAREHOUSE_LEAD")[] };
           isActive: true;
           telegramId: { not: null };
         };
@@ -476,7 +476,12 @@ export async function notifyWarehouseOfShipment(
 
   // Bound worker query (WAREHOUSE staff is small; hard cap avoids runaway).
   const workers = await db.user.findMany({
-    where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
+    // Зав. складом — тоже склад: задачи на отгрузку приходят и ему (2026-08-12).
+    where: {
+      role: { in: ["WAREHOUSE", "WAREHOUSE_LEAD"] },
+      isActive: true,
+      telegramId: { not: null },
+    },
     select: { id: true, telegramId: true, name: true, phone: true },
     take: 50,
   });

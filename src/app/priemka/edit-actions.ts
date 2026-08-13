@@ -46,7 +46,10 @@ export async function submitBatchEdit(
 
   // Access placeholder (ТЗ №14 §3.2): quantity → OWNER only; dims/details → warehouse.
   // canSeeHistory is OWNER-only in permissions.ts — use as owner proxy without new cap.
-  const canEditQuantity = caps.canSeeHistory === true;
+  // Согласовано 2026-08-12: владелец + зав. складом (см. комментарий на
+  // странице редактирования). Домен `applyBatchEdit` всё равно перепроверяет
+  // этот флаг и отдельно держит защиту «не ниже проданного/забронированного».
+  const canEditQuantity = caps.canEditBatchQuantity;
 
   const str = strOf(formData);
   const all = allOf(formData);

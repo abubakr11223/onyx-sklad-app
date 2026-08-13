@@ -123,7 +123,11 @@ export default async function PriemkaEditBatchPage({
   const hasMovements = batchHasMovements(totals, agg, hold);
   const minSlabs = minSlabsTotalFloor(totals, agg, hold);
   // OWNER-only quantity (placeholder access policy).
-  const canEditQuantity = caps.canSeeHistory === true;
+  // Согласовано 2026-08-12: количество меняют владелец и зав. складом.
+  // Раньше здесь стояло `caps.canSeeHistory === true` — обходной признак
+  // «значит владелец». С появлением зав. складом он стал неверным: журнал
+  // действий ему не нужен, а количество — нужно.
+  const canEditQuantity = caps.canEditBatchQuantity;
 
   const arrivedAtIso = batch.arrivedAt.toISOString().slice(0, 10);
   const blocks = gridBlocks.map((b) => ({

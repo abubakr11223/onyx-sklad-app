@@ -145,7 +145,7 @@ export default async function FotozaprosPage({
     await Promise.all([
       canManageRequests
         ? db.user.findMany({
-            where: { role: "WAREHOUSE" },
+            where: { role: { in: ["WAREHOUSE", "WAREHOUSE_LEAD"] } },
             orderBy: { name: "asc" },
             take: 100,
             select: {

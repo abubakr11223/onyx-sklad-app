@@ -13,7 +13,25 @@
  * import qilmaymiz — shunda modul DB'siz qoladi va izolyatsiyada testlanadi.
  * A'zolari Prisma `Role` enum a'zolari bilan birebir mos (structural).
  */
-export type Role = "OWNER" | "MANAGER" | "WAREHOUSE" | "PARTNER";
+export type Role =
+  | "OWNER"
+  | "MANAGER"
+  | "WAREHOUSE"
+  | "WAREHOUSE_LEAD"
+  | "PARTNER";
+
+/**
+ * Складской персонал: обычный складчик И зав. складом.
+ *
+ * ⚠️ ИСПОЛЬЗУЙТЕ ЭТО, а не `role === "WAREHOUSE"`. Зав. складом — это складчик
+ * со всеми его функциями плюс право на количество. Любая прямая сверка с
+ * «WAREHOUSE» ТИХО отбирает у него склад: фото-задания, отгрузки, шоу-рум,
+ * приёмку. Ошибка не падает и не видна в тестах — просто человек перестаёт
+ * получать задания.
+ */
+export function isWarehouseRole(role: string): boolean {
+  return role === "WAREHOUSE" || role === "WAREHOUSE_LEAD";
+}
 
 /**
  * Bir foydalanuvchining «nima qila oladi / nima ko'ra oladi» to'plami (TZ §3).
@@ -100,12 +118,27 @@ export interface Capabilities {
   canSeeShowroom: boolean;
   /** Send unit to showroom (same roles as canSeeShowroom for now). */
   canSendToShowroom: boolean;
+  /**
+   * Менять КОЛИЧЕСТВО партии (плиты / м² / счётчики узоров) при редактировании.
+   * Согласовано 2026-08-12: владелец + зав. складом. Обычный складчик правит
+   * размеры, дату, поставщика, узоры и локации, но не количество — оно влияет
+   * на остаток, брони, долги и продажи.
+   *
+   * Раньше это право вычислялось как `caps.canSeeHistory` («значит владелец») —
+   * обходной признак, который с появлением зав. складом сразу стал неверным:
+   * ему нужно количество, но не нужен журнал действий всех сотрудников.
+   */
+  canEditBatchQuantity: boolean;
 }
 
 /**
  * Ruxsat matritsasi (TZ §3) — sof lookup, side-effektsiz.
  *
- * | huquq                    | OWNER | MANAGER          | WAREHOUSE | PARTNER |
+ * Согласовано 2026-08-12: WAREHOUSE_LEAD («Зав. складом») = WAREHOUSE во всём,
+ * плюс `canEditBatchQuantity`. Отдельного столбца нет намеренно — как только он
+ * появится, две колонки начнут расходиться при правках.
+ *
+ * | huquq                    | OWNER | MANAGER          | WAREHOUSE(+LEAD) | PARTNER |
  * |--------------------------|-------|------------------|-----------|---------|
  * | canSeePrices             | true  | true             | false     | false   |
  * | canSeePurchasePrice      | true* | = opts           | false     | false   |
@@ -123,6 +156,7 @@ export interface Capabilities {
  * | canSeeDebts              | true  | false            | false     | false   |
  * | canSeeClients            | true  | true             | false     | false   |
  * | canSeeAllClients         | true  | false            | false     | false   |
+ * | canEditBatchQuantity     | true  | false            | LEAD only | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -155,6 +189,7 @@ export const DENY_ALL: Capabilities = {
   canConfirmShipment: false,
   canSeeShowroom: false,
   canSendToShowroom: false,
+  canEditBatchQuantity: false,
 };
 
 export function capabilitiesFor(
@@ -184,6 +219,7 @@ export function capabilitiesFor(
         canConfirmShipment: true,
         canSeeShowroom: true,
         canSendToShowroom: true,
+        canEditBatchQuantity: true, // владелец — всегда
       };
     case "MANAGER":
       return {
@@ -209,8 +245,14 @@ export function capabilitiesFor(
         canConfirmShipment: false, // design D4 — warehouse/owner confirm
         canSeeShowroom: true,
         canSendToShowroom: true,
+        canEditBatchQuantity: false, // менеджер не трогает складской учёт
       };
     case "WAREHOUSE":
+    case "WAREHOUSE_LEAD":
+      // Согласовано 2026-08-12: зав. складом — ЭТО складчик, со всеми его
+      // функциями, плюс право на количество. Поэтому одна ветка на две роли:
+      // отдельный блок неизбежно разошёлся бы при следующей правке, и зав.
+      // складом молча потерял бы фото-задания или подтверждение отгрузки.
       return {
         canSeePrices: false,
         canSeePurchasePrice: false,
@@ -232,6 +274,8 @@ export function capabilitiesFor(
         canConfirmShipment: true,
         canSeeShowroom: true,
         canSendToShowroom: true,
+        // Единственное отличие двух складских ролей.
+        canEditBatchQuantity: role === "WAREHOUSE_LEAD",
       };
     case "PARTNER":
       return {
@@ -255,6 +299,7 @@ export function capabilitiesFor(
         canConfirmShipment: false,
         canSeeShowroom: false,
         canSendToShowroom: false,
+        canEditBatchQuantity: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

@@ -10,6 +10,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   OWNER: "Владелец",
   MANAGER: "Менеджер",
   WAREHOUSE: "Складчик",
+  WAREHOUSE_LEAD: "Зав. складом",
   PARTNER: "Дизайнер-партнёр",
 };
 

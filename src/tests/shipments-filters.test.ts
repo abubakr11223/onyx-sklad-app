@@ -7,8 +7,9 @@
 // Отдельно важен второй инвариант: фильтр по менеджеру НЕ должен становиться
 // способом посмотреть чужие задачи. Менеджер видит только свои; параметр
 // `manager` применяется лишь тем, кто и так видит все.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  listShipments,
   shipmentFiltersActive,
   shipmentFiltersFromSearchParams,
   shipmentsListWhere,
@@ -189,3 +190,28 @@ describe("shipmentFiltersFromSearchParams — разбор URL", () => {
     ).toBe(true);
   });
 });
+
+// ───────────────────── ТЗ №15 §8.5 — «Срочно» ─────────────────────
+// Срочность — это сообщение «клиент ждёт». Она не меняет жизненный цикл
+// отгрузки, только порядок в очереди: складчик открывает список и сразу
+// видит, за что браться первым.
+describe("Очередь: срочные задачи идут первыми", () => {
+  it("порядок сортировки — сначала isUrgent, потом свежие", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const db = {
+      shipment: { findMany },
+    } as unknown as Parameters<typeof listShipments>[0];
+
+    await listShipments(db, {
+      canSeeAll: true,
+      actorId: "owner",
+      tab: "open",
+    });
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { isUrgent: "desc" },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+  });
+})

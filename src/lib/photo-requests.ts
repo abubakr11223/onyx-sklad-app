@@ -258,7 +258,7 @@ export interface PhotoRequestDeps {
     user: {
       findMany(args: {
         where: {
-          role: "WAREHOUSE";
+          role: { in: ("WAREHOUSE" | "WAREHOUSE_LEAD")[] };
           isActive: true;
           telegramId: { not: null };
         };
@@ -453,7 +453,12 @@ export async function createAndDispatchPhotoRequest(
   // *real* WAREHOUSE worker gets the Telegram task. W11-A: demo seed rows are
   // excluded — they often hold the owner's personal chat id after seed-demo.
   const workers = await db.user.findMany({
-    where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
+    // Зав. складом получает фото-задания наравне со складчиком (2026-08-12).
+    where: {
+      role: { in: ["WAREHOUSE", "WAREHOUSE_LEAD"] },
+      isActive: true,
+      telegramId: { not: null },
+    },
     select: { id: true, telegramId: true, name: true, phone: true },
   });
   const { eligible, skippedDemo } = partitionDispatchWorkers(workers);
@@ -577,7 +582,11 @@ export async function redispatchPendingPhotoRequests(
   if (pending.length === 0) return { retried: 0, delivered: 0 };
 
   const workers = await db.user.findMany({
-    where: { role: "WAREHOUSE", isActive: true, telegramId: { not: null } },
+    where: {
+      role: { in: ["WAREHOUSE", "WAREHOUSE_LEAD"] },
+      isActive: true,
+      telegramId: { not: null },
+    },
     select: { id: true, telegramId: true, name: true, phone: true },
   });
   // W11-A: never re-nag demo seed chats (same wrong-chat risk as create).

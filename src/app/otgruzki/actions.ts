@@ -100,3 +100,41 @@ export async function confirmShipmentAction(formData: FormData): Promise<void> {
   if (photoWarn) q.set("warn", photoWarn);
   redirect(`/otgruzki?${q.toString()}`);
 }
+
+/**
+ * ТЗ №15 §8.5 — пометить задачу срочной / снять пометку.
+ *
+ * Ставит тот, кто оформил (менеджер) или владелец: срочность — это сообщение
+ * «клиент ждёт», и решает его тот, кто говорит с клиентом. Складчик пометку
+ * видит, но не меняет — иначе очередь перестанет что-либо значить.
+ */
+export async function toggleShipmentUrgentAction(
+  formData: FormData,
+): Promise<void> {
+  const caps = await getCapabilities();
+  if (!caps.canSell) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Срочность отмечает менеджер"));
+  }
+  const actorId = await currentActorId();
+  if (!actorId) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Нет пользователя"));
+  }
+
+  const shipmentId = String(formData.get("shipmentId") ?? "").trim();
+  const next = String(formData.get("urgent") ?? "") === "1";
+  if (!shipmentId) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Не указана отгрузка"));
+  }
+
+  // Менеджер меняет только свои задачи; владелец — любые.
+  const where = caps.canSeeAllClients
+    ? { id: shipmentId }
+    : { id: shipmentId, managerId: actorId };
+  const res = await db.shipment.updateMany({ where, data: { isUrgent: next } });
+  if (res.count === 0) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Отгрузка не найдена"));
+  }
+
+  revalidatePath("/otgruzki");
+  redirect("/otgruzki?ok=urgent");
+}

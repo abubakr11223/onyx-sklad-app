@@ -3,7 +3,7 @@
 // Server-action'lar (accounts/actions.ts) shu funksiyalarni chaqiradi va
 // qo'shimcha ravishda canManageAccounts'ni SERVERDA qayta tekshiradi.
 
-import type { Role } from "@/lib/permissions";
+import { isWarehouseRole, type Role } from "@/lib/permissions";
 
 /**
  * Bu forma orqali YARATILISHI/O'ZGARTIRILISHI mumkin bo'lgan rollar.
@@ -12,7 +12,12 @@ import type { Role } from "@/lib/permissions";
  * egasi partnyorga login/parol beradi. PARTNER — eng kam huquqli rol, shuning
  * uchun uni yaratish xavfsiz. MANAGER / WAREHOUSE — avvalgidek.
  */
-export const CREATABLE_ROLES = ["MANAGER", "WAREHOUSE", "PARTNER"] as const;
+export const CREATABLE_ROLES = [
+  "MANAGER",
+  "WAREHOUSE",
+  "WAREHOUSE_LEAD",
+  "PARTNER",
+] as const;
 export type CreatableRole = (typeof CREATABLE_ROLES)[number];
 
 /** Parolning minimal uzunligi (OWN-03 xavfsizlik talabi). */
@@ -30,7 +35,12 @@ export function isCreatableRole(role: string): role is CreatableRole {
  * hech qachon. Bu to'plam createAccount uchun emas, faqat changeRole gate'i uchun
  * (UI'dagi isRoleToggleable bilan bir xil shartnoma).
  */
-export const TOGGLEABLE_ROLES = ["MANAGER", "WAREHOUSE"] as const;
+// Согласовано 2026-08-12: складчика можно повысить до зав. складом и обратно.
+export const TOGGLEABLE_ROLES = [
+  "MANAGER",
+  "WAREHOUSE",
+  "WAREHOUSE_LEAD",
+] as const;
 export type ToggleableRole = (typeof TOGGLEABLE_ROLES)[number];
 export function isToggleableRole(role: string): role is ToggleableRole {
   return (TOGGLEABLE_ROLES as readonly string[]).includes(role);
@@ -126,7 +136,7 @@ export function validateNewAccount(
   if (rawPhone) {
     if (!isValidPhone(rawPhone)) return { ok: false, error: "phone" };
     phone = canonicalPhone(rawPhone);
-  } else if (input.role === "WAREHOUSE") {
+  } else if (isWarehouseRole(input.role)) {
     return { ok: false, error: "phone" };
   }
 

@@ -6,6 +6,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { createShowroomShipment } from "@/lib/shipments";
+import { isWarehouseRole } from "@/lib/permissions";
 import {
   SlabSeparationError,
   separateSlabInTx,
@@ -39,12 +40,12 @@ function fail(code: ShowroomErrorCode, message: string): ShowroomFail {
 
 /** Manager + warehouse + owner may send (design D5 placeholder). */
 export function roleCanSendToShowroom(role: string): boolean {
-  return role === "OWNER" || role === "MANAGER" || role === "WAREHOUSE";
+  return role === "OWNER" || role === "MANAGER" || isWarehouseRole(role);
 }
 
 /** Return to stock: warehouse or seller (design D6 placeholder). */
 export function roleCanReturnFromShowroom(role: string): boolean {
-  return role === "OWNER" || role === "MANAGER" || role === "WAREHOUSE";
+  return role === "OWNER" || role === "MANAGER" || isWarehouseRole(role);
 }
 
 /**

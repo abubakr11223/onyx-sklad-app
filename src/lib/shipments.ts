@@ -4,6 +4,7 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
+import { isWarehouseRole } from "@/lib/permissions";
 import { formatGabarit, thicknessToNumber } from "@/lib/dimensions";
 import {
   parseTashkentDayEnd,
@@ -331,7 +332,7 @@ export async function confirmShipment(args: {
       if (!actor?.isActive) {
         throw new ShipmentError("FORBIDDEN", "Пользователь не найден");
       }
-      if (actor.role !== "OWNER" && actor.role !== "WAREHOUSE") {
+      if (actor.role !== "OWNER" && !isWarehouseRole(actor.role)) {
         throw new ShipmentError(
           "FORBIDDEN",
           "Отгрузку подтверждает складчик или владелец",
@@ -525,6 +526,8 @@ export type ShipmentListItem = {
   gabarit: string | null;
   /** ТЗ №15 §3.1 — комментарий менеджера к задаче. */
   note: string | null;
+  /** ТЗ №15 §8.5 — клиент ждёт: складчик берёт такую задачу первой. */
+  isUrgent: boolean;
   locationSnapshot: string | null;
   qtyOrderedSlabs: number | null;
   qtyOrderedAreaM2: number | null;
@@ -681,7 +684,9 @@ export async function listShipments(
 
   const rows = await database.shipment.findMany({
     where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    // ТЗ №15 §8.5 — срочные сверху, дальше свежие. Порядок именно такой:
+    // складчик открывает очередь и сразу видит, что клиент ждёт.
+    orderBy: [{ isUrgent: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     take,
     select: {
       id: true,
@@ -742,6 +747,7 @@ export async function listShipments(
       // ТЗ №15 §3.1 — «Комментарий менеджера (если есть)». Писался при создании
       // отгрузки, но в очередь не выбирался, поэтому складчик его не видел.
       note: true,
+      isUrgent: true,
       lines: {
         select: {
           id: true,
@@ -861,6 +867,7 @@ export async function listShipments(
       // шум, поэтому приводим к null и не рисуем строку вовсе.
       gabarit: gabarit && gabarit !== "—" ? gabarit : null,
       note: r.note ?? null,
+      isUrgent: r.isUrgent === true,
       locationSnapshot: line0?.locationSnapshot ?? null,
       qtyOrderedSlabs: line0?.qtyOrderedSlabs ?? null,
       qtyOrderedAreaM2:
@@ -875,4 +882,217 @@ export async function listShipments(
       targetType: line0?.targetType ?? "SLAB",
     };
   });
+}
+
+// ───────────────────── ТЗ №15 §8.3 — накладная отгрузки ─────────────────────
+
+export type ShipmentDocLine = {
+  stoneName: string;
+  what: string;
+  gabarit: string | null;
+  qtyOrdered: string | null;
+  qtyShipped: string | null;
+  locationSnapshot: string | null;
+};
+
+export type ShipmentDocument = {
+  id: string;
+  /** Короткий человекочитаемый номер — по нему ищут бумагу. */
+  number: string;
+  kind: string;
+  kindLabel: string;
+  status: DerivedShipmentStatus;
+  statusLabel: string;
+  createdAt: Date;
+  completedAt: Date | null;
+  clientName: string | null;
+  siteName: string | null;
+  managerName: string;
+  /** Кто физически выдал (из Истории). null — ещё не подтверждено. */
+  issuedByName: string | null;
+  issuedAt: Date | null;
+  note: string | null;
+  returnDueDate: Date | null;
+  lines: ShipmentDocLine[];
+};
+
+const KIND_RU: Record<string, string> = {
+  SALE: "Продажа",
+  SAMPLE: "Образец",
+  SHOWROOM: "Шоу-рум",
+};
+
+/** Номер накладной: последние 8 символов id, заглавными. Коротко и различимо. */
+export function shipmentDocNumber(id: string): string {
+  return id.slice(-8).toUpperCase();
+}
+
+/**
+ * Накладная по одной отгрузке (ТЗ №15 §8.3): что, сколько, кому, когда, кто выдал.
+ *
+ * Область видимости та же, что у списка: менеджер видит только свои отгрузки.
+ * Без этого ссылка на документ стала бы обходом области — id отгрузки виден в
+ * URL, и чужую накладную можно было бы открыть подбором.
+ *
+ * «Кто выдал» берём из Истории (AuditLog SHIPMENT_CONFIRM): в самой Shipment
+ * такого поля нет, а подтвердить могли не тот, кто оформлял.
+ */
+export async function loadShipmentDocument(
+  database: Db,
+  args: { shipmentId: string; canSeeAll: boolean; actorId: string | null },
+): Promise<ShipmentDocument | null> {
+  const id = args.shipmentId?.trim();
+  if (!id) return null;
+
+  const ship = await database.shipment.findFirst({
+    where: {
+      id,
+      ...(args.canSeeAll
+        ? {}
+        : args.actorId
+          ? { managerId: args.actorId }
+          : { managerId: "__none__" }),
+    },
+    select: {
+      id: true,
+      kind: true,
+      note: true,
+      createdAt: true,
+      completedAt: true,
+      cancelledAt: true,
+      manager: { select: { name: true } },
+      client: { select: { name: true } },
+      site: { select: { name: true } },
+      saleRecord: { select: { customerName: true } },
+      sample: {
+        select: {
+          returnDueDate: true,
+          client: { select: { name: true } },
+        },
+      },
+      lines: {
+        take: 20,
+        select: {
+          targetType: true,
+          qtyOrderedSlabs: true,
+          qtyOrderedAreaM2: true,
+          qtyShippedSlabs: true,
+          qtyShippedAreaM2: true,
+          locationSnapshot: true,
+          slab: {
+            select: {
+              label: true,
+              lengthMm: true,
+              widthMm: true,
+              thicknessMm: true,
+              stoneType: { select: { name: true } },
+            },
+          },
+          piece: {
+            select: {
+              kind: true,
+              boundingLengthMm: true,
+              boundingWidthMm: true,
+              thicknessMm: true,
+              stoneType: { select: { name: true } },
+            },
+          },
+          batch: { select: { stoneType: { select: { name: true } } } },
+        },
+      },
+    },
+  });
+  if (!ship) return null;
+
+  const status = deriveShipmentStatus({
+    cancelledAt: ship.cancelledAt,
+    completedAt: ship.completedAt,
+    lines: ship.lines.map((l) => ({
+      targetType: l.targetType,
+      qtyOrderedSlabs: l.qtyOrderedSlabs,
+      qtyOrderedAreaM2:
+        l.qtyOrderedAreaM2 == null ? null : Number(l.qtyOrderedAreaM2.toString()),
+      qtyShippedSlabs: l.qtyShippedSlabs,
+      qtyShippedAreaM2: Number(l.qtyShippedAreaM2.toString()),
+    })),
+  });
+
+  // Кто выдал — последняя запись подтверждения в Истории.
+  const confirm = await database.auditLog.findFirst({
+    where: { action: "SHIPMENT_CONFIRM", entityType: "Shipment", entityId: ship.id },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true, user: { select: { name: true } } },
+  });
+
+  const qty = (slabs: number | null, area: number | null): string | null => {
+    const parts: string[] = [];
+    if (slabs != null && slabs > 0) parts.push(`${slabs} плит`);
+    if (area != null && area > 0) parts.push(`${area} м²`);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  };
+
+  const lines: ShipmentDocLine[] = ship.lines.map((l) => {
+    let stoneName = "—";
+    let what = "";
+    let gabarit: string | null = null;
+    if (l.slab) {
+      stoneName = l.slab.stoneType.name;
+      what = l.slab.label;
+      gabarit = formatGabarit(
+        l.slab.lengthMm,
+        l.slab.widthMm,
+        thicknessToNumber(l.slab.thicknessMm),
+      );
+    } else if (l.piece) {
+      stoneName = l.piece.stoneType.name;
+      what = l.piece.kind === "BROKEN" ? "бой" : "остаток";
+      gabarit = formatGabarit(
+        l.piece.boundingLengthMm,
+        l.piece.boundingWidthMm,
+        thicknessToNumber(l.piece.thicknessMm),
+      );
+    } else if (l.batch) {
+      stoneName = l.batch.stoneType.name;
+      what = "объём из партии";
+    }
+    return {
+      stoneName,
+      what,
+      gabarit: gabarit && gabarit !== "—" ? gabarit : null,
+      qtyOrdered: qty(
+        l.qtyOrderedSlabs,
+        l.qtyOrderedAreaM2 == null ? null : Number(l.qtyOrderedAreaM2.toString()),
+      ),
+      qtyShipped: qty(
+        l.qtyShippedSlabs,
+        Number(l.qtyShippedAreaM2.toString()),
+      ),
+      locationSnapshot: l.locationSnapshot,
+    };
+  });
+
+  return {
+    id: ship.id,
+    number: shipmentDocNumber(ship.id),
+    kind: ship.kind,
+    kindLabel: KIND_RU[ship.kind] ?? ship.kind,
+    status,
+    statusLabel: shipmentStatusLabelRu(status),
+    createdAt: ship.createdAt,
+    completedAt: ship.completedAt,
+    clientName:
+      ship.kind === "SHOWROOM"
+        ? "Шоу-рум"
+        : (ship.client?.name ??
+          ship.sample?.client?.name ??
+          ship.saleRecord?.customerName ??
+          null),
+    siteName: ship.site?.name ?? null,
+    managerName: ship.manager.name,
+    issuedByName: confirm?.user?.name ?? null,
+    issuedAt: confirm?.createdAt ?? null,
+    note: ship.note,
+    returnDueDate: ship.sample?.returnDueDate ?? null,
+    lines,
+  };
 }

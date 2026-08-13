@@ -64,7 +64,12 @@ function fail(code: SaleErrorCode, message: string): SaleFail {
 
 // ───────────────────── Чистые решения (без БД) ─────────────────────
 
-export type ActorRole = "OWNER" | "MANAGER" | "WAREHOUSE" | "PARTNER";
+export type ActorRole =
+  | "OWNER"
+  | "MANAGER"
+  | "WAREHOUSE"
+  | "WAREHOUSE_LEAD"
+  | "PARTNER";
 export type SellableUnitStatus =
   | "AVAILABLE"
   | "RESERVED"
