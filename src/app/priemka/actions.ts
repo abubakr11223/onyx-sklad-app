@@ -19,6 +19,7 @@ import {
   type IntakeInput,
 } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
+import { validateLocationsAgainstGrid } from "@/lib/warehouse-grid";
 import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 import { ensureFormError } from "@/lib/form-errors";
 import {
@@ -122,6 +123,14 @@ export async function submitIntake(
     return { errors: ensureFormError({ ...result.errors }) };
   }
   const data = result.data;
+
+  // ТЗ №17 §6 — локация только из карты склада. Форма даёт селекты, но прямой
+  // POST их обходит: без этой проверки справочник по-прежнему засорялся бы
+  // блоками-опечатками, которые приёмка создаёт сама.
+  const gridErrors = await validateLocationsAgainstGrid(data.locations);
+  if (Object.keys(gridErrors).length > 0) {
+    return { errors: ensureFormError(gridErrors) };
+  }
 
   // W7-A2 — same logical intake must carry the same mutationId (client UUID).
   // Missing/invalid → refuse (do not silently mint server-side: that would

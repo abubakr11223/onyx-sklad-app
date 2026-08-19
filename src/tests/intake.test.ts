@@ -494,7 +494,8 @@ describe("validateIntake — локации", () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.locations).toEqual([
-        { block: "А", landmark: "1", slabsHere: 25, areaHereM2: 137.5 },
+        // ТЗ №17 §3.1 — кир. «А» на входе → лат. «A» после нормализации.
+        { block: "A", landmark: "1", slabsHere: 25, areaHereM2: 137.5 },
         { block: "Г", landmark: "3", slabsHere: null, areaHereM2: null },
       ]);
     }

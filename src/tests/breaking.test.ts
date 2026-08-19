@@ -157,7 +157,7 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
         boundingWidthMm: 64,
         thicknessMm: 2,
         areaM2: 0.6,
-        block: "А",
+        block: "A", // ТЗ №17 §3.1 — кир. «А» на входе → лат. «A»
         landmark: "2",
       });
     }

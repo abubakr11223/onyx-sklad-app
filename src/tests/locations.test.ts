@@ -20,7 +20,8 @@ describe("validateLocationEdit — §5.7", () => {
     });
     expect(r).toEqual({
       ok: true,
-      data: { block: "А", landmark: "2", note: "у ворот" },
+      // ТЗ №17 §3.1 — вход кир. «А», на выходе лат. «A» (единый алфавит).
+      data: { block: "A", landmark: "2", note: "у ворот" },
     });
   });
 
@@ -144,7 +145,7 @@ describe("validateNewLocation — §5.7 добавление локации", ()
     expect(r).toEqual({
       ok: true,
       data: {
-        block: "А",
+        block: "A", // ТЗ №17 §3.1 — кир. «А» → лат. «A»
         landmark: "1–2",
         slabsHere: 40,
         areaHereM2: 12.5,
@@ -275,7 +276,7 @@ describe("validateSlabLocation — локация плиты (без note)", () 
   it("block/landmark тримятся → ok, только block/landmark", () => {
     expect(validateSlabLocation({ block: "  А ", landmark: " 2 " })).toEqual({
       ok: true,
-      data: { block: "А", landmark: "2" },
+      data: { block: "A", landmark: "2" }, // ТЗ №17 §3.1 — кир. → лат.
     });
   });
 

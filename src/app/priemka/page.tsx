@@ -11,6 +11,7 @@ import Badge from "@/components/ui/Badge";
 import IntakeForm from "./IntakeForm";
 import BatchList, { type BatchListItem } from "./BatchList";
 import { thicknessToNumber } from "@/lib/dimensions";
+import { sortLandmarks } from "@/lib/warehouse-grid";
 
 export const dynamic = "force-dynamic";
 
@@ -78,9 +79,11 @@ export default async function PriemkaPage({
     }),
   ]);
 
+  // ТЗ №17 §6 — ориентиры в селекте по возрастанию номера: строковая сортировка
+  // поставила бы «10» между «1» и «2», и складчик искал бы нужный флажок глазами.
   const blocks = gridBlocks.map((b) => ({
     letter: b.letter,
-    landmarks: b.landmarks.map((l) => l.number),
+    landmarks: sortLandmarks(b.landmarks.map((l) => l.number)),
   }));
 
   const ok = first(sp.ok) === "1";

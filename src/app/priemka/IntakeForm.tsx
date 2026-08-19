@@ -25,7 +25,7 @@ import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import { intakeErrorItems } from "./intake-form-errors";
-import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
+import WarehouseLocationSelect from "@/components/WarehouseLocationSelect";
 import { areaDiscrepancyPct, areaM2FromCm } from "@/lib/dimensions";
 import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 
@@ -292,6 +292,17 @@ export default function IntakeForm({
     (ev: React.ChangeEvent<HTMLInputElement>) =>
       setLocs((m) => ({ ...m, [id]: { ...m[id], [key]: ev.target.value } }));
 
+  /** ТЗ №17 §6 — то же, но значением (селекты локации отдают строку). */
+  const setLocValue = (id: number, key: keyof LocValues) => (value: string) =>
+    setLocs((m) => ({ ...m, [id]: { ...m[id], [key]: value } }));
+
+  /**
+   * Смена блока обнуляет ориентир: «ориентир 5» в блоке A1 и в B2 — разные
+   * места, и оставленный номер молча записал бы камень не туда.
+   */
+  const setLocBlock = (id: number) => (value: string) =>
+    setLocs((m) => ({ ...m, [id]: { ...m[id], block: value, landmark: "" } }));
+
   const addRow = () => {
     const id = nextRowId.current++;
     setRowIds((ids) => [...ids, id]);
@@ -482,9 +493,8 @@ export default function IntakeForm({
           </button>
         </Alert>
       )}
-      {/* ТЗ №6 §5.4 / #14 — общий компонент datalist сетки склада (был дубль
-          в приёмке и разбитии; единый источник = одинаковые id и поведение). */}
-      <WarehouseGridDatalists blocks={blocks} />
+      {/* ТЗ №17 §6 — datalist сетки склада больше не нужен: блок и ориентир
+          выбираются селектами (см. WarehouseLocationSelect ниже). */}
 
       {/* ── Вид камня ── */}
       <Card>
@@ -918,31 +928,17 @@ export default function IntakeForm({
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field
-                    id={`locBlock-${idx}`}
-                    name="locBlock"
-                    label={<>Блок <Req /></>}
-                    placeholder="А"
-                    value={loc.block}
-                    onChange={setLoc(id, "block")}
-                    error={e[`loc-${idx}-block`]}
-                    // ТЗ №6 §5.4 — подсказки из сетки склада (блоки).
-                    list={blocks.length > 0 ? "wh-blocks" : undefined}
-                  />
-                  <Field
-                    id={`locLandmark-${idx}`}
-                    name="locLandmark"
-                    label={<>Ориентир <Req /></>}
-                    placeholder="2 или 1–2"
-                    value={loc.landmark}
-                    onChange={setLoc(id, "landmark")}
-                    error={e[`loc-${idx}-landmark`]}
-                    // Ориентиры выбранного блока (реактивно по loc.block).
-                    list={
-                      blocks.some((b) => b.letter === loc.block)
-                        ? `wh-lm-${loc.block}`
-                        : undefined
-                    }
+                  {/* ТЗ №17 §6 — блок и ориентир выбираются из карты склада.
+                      Свободный ввод убран: он плодил дубли справочника. */}
+                  <WarehouseLocationSelect
+                    blocks={blocks}
+                    index={idx}
+                    block={loc.block}
+                    landmark={loc.landmark}
+                    onBlockChange={setLocBlock(id)}
+                    onLandmarkChange={setLocValue(id, "landmark")}
+                    blockError={e[`loc-${idx}-block`]}
+                    landmarkError={e[`loc-${idx}-landmark`]}
                   />
                   <Field
                     id={`locSlabsHere-${idx}`}

@@ -1,5 +1,12 @@
-// Аудит ТЗ №7 #6 — renameBlock переносит камень (BatchLocation/Slab/Piece.block)
-// и #16 — materializeBlock/blockHasStone работают с нормализацией буквы.
+// Карта склада — server actions.
+//   • ТЗ №7 #6  — renameBlock переносит камень (BatchLocation/Slab/Piece.block);
+//   • ТЗ №7 #16 — materializeBlock/blockHasStone работают с нормализацией кода;
+//   • ТЗ №7 #17 — race двойного submit'а на авто-блоке;
+//   • ТЗ №7 #7/#18 — bounded-площадь и наследование ориентиров;
+//   • ТЗ №17 §3.1 — единый алфавит теперь ЛАТИНИЦА (кир. коды нормализуются,
+//     кириллица без двойника отвергается: err=letter_not_latin);
+//   • ТЗ №17 §7  — защита от потери данных (камень в блоке/на ориентире) и
+//     запись изменений карты в Историю.
 // db и session моки; next/navigation.redirect ловим по throw'у NEXT_REDIRECT.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,10 +21,14 @@ const M = vi.hoisted(() => {
   const blCount = vi.fn();
   const blFindMany = vi.fn();
   const blUpdateMany = vi.fn();
+  const slabCount = vi.fn();
   const slabUpdateMany = vi.fn();
+  const pieceCount = vi.fn();
   const pieceUpdateMany = vi.fn();
   const wlDelete = vi.fn();
   const wlCreate = vi.fn();
+  const wlFindUnique = vi.fn();
+  const auditCreate = vi.fn();
   const getRealSessionUser = vi.fn();
   const dbMock: Record<string, unknown> = {
     warehouseBlock: {
@@ -32,33 +43,37 @@ const M = vi.hoisted(() => {
       findMany: blFindMany,
       updateMany: blUpdateMany,
     },
-    slab: { updateMany: slabUpdateMany },
-    piece: { updateMany: pieceUpdateMany },
-    warehouseLandmark: { delete: wlDelete, create: wlCreate },
+    slab: { count: slabCount, updateMany: slabUpdateMany },
+    piece: { count: pieceCount, updateMany: pieceUpdateMany },
+    warehouseLandmark: {
+      delete: wlDelete,
+      create: wlCreate,
+      findUnique: wlFindUnique,
+    },
+    auditLog: { create: auditCreate },
   };
   dbMock.$transaction = (cb: (tx: unknown) => Promise<unknown>) => cb(dbMock);
   return {
     wbFindUnique, wbUpdate, wbCreate, wbAggregate, wbDelete,
-    blCount, blFindMany, blUpdateMany, slabUpdateMany, pieceUpdateMany,
-    wlDelete, wlCreate, getRealSessionUser, dbMock,
+    blCount, blFindMany, blUpdateMany,
+    slabCount, slabUpdateMany, pieceCount, pieceUpdateMany,
+    wlDelete, wlCreate, wlFindUnique, auditCreate, getRealSessionUser, dbMock,
   };
 });
 const {
   wbFindUnique, wbUpdate, wbCreate, wbAggregate, wbDelete,
-  blCount, blFindMany, blUpdateMany, slabUpdateMany, pieceUpdateMany,
-  wlDelete, wlCreate, getRealSessionUser,
+  blCount, blFindMany, blUpdateMany,
+  slabCount, slabUpdateMany, pieceCount, pieceUpdateMany,
+  wlDelete, wlCreate, wlFindUnique, auditCreate, getRealSessionUser,
 } = M;
 
 vi.mock("@/lib/db", () => ({ db: M.dbMock }));
 // ТЗ №7 #13 — requireOwner теперь в lib/session.ts; мокаем оба экспорта.
-// requireOwner использует наш же mocked getRealSessionUser + throws через
-// mocked next/navigation.redirect (см. ниже). Совпадает с реальной реализацией.
 vi.mock("@/lib/session", () => ({
   getRealSessionUser: M.getRealSessionUser,
   requireOwner: async (deniedRedirect: string) => {
     const me = await M.getRealSessionUser();
     if (!me || me.role !== "OWNER") {
-      // Same shape как next/navigation.redirect ниже — тест-мок ждёт NEXT_REDIRECT.
       const err = new Error("NEXT_REDIRECT") as Error & { location: string };
       err.name = "NEXT_REDIRECT";
       err.location = deniedRedirect;
@@ -87,6 +102,7 @@ import {
   renameBlock,
   deleteBlock,
   addLandmark,
+  removeLandmark,
   setBlockMeta,
   addBlock,
 } from "@/app/karta-sklada/actions";
@@ -108,20 +124,21 @@ function fd(pairs: Record<string, string>): FormData {
   return f;
 }
 
+/** payload.kind последней записи в Историю. */
+function lastAuditKind(): string | undefined {
+  const call = auditCreate.mock.calls.at(-1);
+  return call?.[0]?.data?.payload?.kind;
+}
+
 beforeEach(() => {
-  wbFindUnique.mockReset();
-  wbUpdate.mockReset();
-  wbCreate.mockReset();
-  wbAggregate.mockReset();
-  wbDelete.mockReset();
-  blCount.mockReset();
-  blFindMany.mockReset();
-  blUpdateMany.mockReset();
-  slabUpdateMany.mockReset();
-  pieceUpdateMany.mockReset();
-  wlDelete.mockReset();
-  wlCreate.mockReset();
-  getRealSessionUser.mockReset();
+  for (const m of [
+    wbFindUnique, wbUpdate, wbCreate, wbAggregate, wbDelete,
+    blCount, blFindMany, blUpdateMany,
+    slabCount, slabUpdateMany, pieceCount, pieceUpdateMany,
+    wlDelete, wlCreate, wlFindUnique, auditCreate, getRealSessionUser,
+  ]) {
+    m.mockReset();
+  }
   getRealSessionUser.mockResolvedValue({ id: "owner1", role: "OWNER" });
   // Разумные значения по умолчанию.
   wbAggregate.mockResolvedValue({ _max: { sortOrder: 0 } });
@@ -129,48 +146,69 @@ beforeEach(() => {
   blUpdateMany.mockResolvedValue({ count: 0 });
   slabUpdateMany.mockResolvedValue({ count: 0 });
   pieceUpdateMany.mockResolvedValue({ count: 0 });
+  blCount.mockResolvedValue(0);
+  slabCount.mockResolvedValue(0);
+  pieceCount.mockResolvedValue(0);
+  auditCreate.mockResolvedValue({ id: "a1" });
+  wbUpdate.mockResolvedValue({ letter: "A1" });
 });
 
 // ═══════════════ #6 · renameBlock переносит камень ═══════════════
 
 describe("renameBlock — переносит BatchLocation/Slab/Piece.block (ТЗ №7 #6)", () => {
-  it("переименование «А»→«Б» ⇒ WarehouseBlock.letter + все *.block ко'chsin, одной транзакцией", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "А" });
+  it("переименование «A1»→«B2» ⇒ WarehouseBlock.letter + все *.block, одной транзакцией", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "A1" });
 
     await expectRedirect(
-      () => renameBlock(fd({ blockId: "wb1", letter: "Б" })),
+      () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
       "/karta-sklada?edit=1&ok=renamed",
     );
 
-    // WarehouseBlock переименован — 1 раз, на «Б».
     expect(wbUpdate).toHaveBeenCalledTimes(1);
     expect(wbUpdate.mock.calls[0][0]).toMatchObject({
       where: { id: "wb1" },
-      data: { letter: "Б" },
+      data: { letter: "B2" },
     });
-    // Камень перенесён во всех трёх моделях со СТАРОЙ буквы на НОВУЮ.
-    expect(blUpdateMany).toHaveBeenCalledTimes(1);
-    expect(blUpdateMany.mock.calls[0][0]).toEqual({
-      where: { block: "А" },
-      data: { block: "Б" },
-    });
-    expect(slabUpdateMany).toHaveBeenCalledTimes(1);
-    expect(slabUpdateMany.mock.calls[0][0]).toEqual({
-      where: { block: "А" },
-      data: { block: "Б" },
-    });
-    expect(pieceUpdateMany).toHaveBeenCalledTimes(1);
-    expect(pieceUpdateMany.mock.calls[0][0]).toEqual({
-      where: { block: "А" },
-      data: { block: "Б" },
+    for (const m of [blUpdateMany, slabUpdateMany, pieceUpdateMany]) {
+      expect(m).toHaveBeenCalledTimes(1);
+      expect(m.mock.calls[0][0]).toEqual({
+        where: { block: "A1" },
+        data: { block: "B2" },
+      });
+    }
+    // ТЗ №17 §7 — было → стало попадает в Историю.
+    expect(lastAuditKind()).toBe("KARTA_BLOCK_RENAME");
+    expect(auditCreate.mock.calls.at(-1)?.[0].data.payload).toMatchObject({
+      from: "A1",
+      to: "B2",
     });
   });
 
-  it("no-op: та же буква после нормализации («А»→«А») ⇒ никаких update", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "А" });
+  it("ТЗ №17 §3.1 — кириллический ввод «В2» нормализуется в латинский «B2»", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "A1" });
 
     await expectRedirect(
-      () => renameBlock(fd({ blockId: "wb1", letter: "А" })),
+      () => renameBlock(fd({ blockId: "wb1", letter: "В2" })), // кир. «В»
+      "/karta-sklada?edit=1&ok=renamed",
+    );
+
+    expect(wbUpdate.mock.calls[0][0].data.letter).toBe("B2"); // лат. «B»
+  });
+
+  it("ТЗ №17 §3.1 — кириллица без латинского двойника («Б») ⇒ err=letter_not_latin", async () => {
+    await expectRedirect(
+      () => renameBlock(fd({ blockId: "wb1", letter: "Б" })),
+      "/karta-sklada?edit=1&err=letter_not_latin",
+    );
+    expect(wbUpdate).not.toHaveBeenCalled();
+    expect(blUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("no-op: тот же код после нормализации ⇒ никаких update и записи в Историю", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "A1" });
+
+    await expectRedirect(
+      () => renameBlock(fd({ blockId: "wb1", letter: "a1" })),
       "/karta-sklada?edit=1&ok=renamed",
     );
 
@@ -178,28 +216,26 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
     expect(blUpdateMany).not.toHaveBeenCalled();
     expect(slabUpdateMany).not.toHaveBeenCalled();
     expect(pieceUpdateMany).not.toHaveBeenCalled();
+    expect(auditCreate).not.toHaveBeenCalled();
   });
 
-  it("новая буква занята другим блоком (P2002) ⇒ err=block_taken", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "А" });
-    // updateMany на *.block пусть отработает; конфликт кинет warehouseBlock.update.
-    wbUpdate.mockRejectedValueOnce({ code: "P2002", name: "PrismaClientKnownRequestError" });
-    // Пришлось bypass instanceof — соберём фейковую ошибку и обернём как надо:
-    wbUpdate.mockReset();
+  it("новый код занят другим блоком (P2002) ⇒ err=block_taken", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "A1" });
     const { Prisma } = await import("@prisma/client");
-    const conflict = new Prisma.PrismaClientKnownRequestError("dup", {
-      code: "P2002",
-      clientVersion: "n/a",
-    });
-    wbUpdate.mockRejectedValueOnce(conflict);
+    wbUpdate.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("dup", {
+        code: "P2002",
+        clientVersion: "n/a",
+      }),
+    );
 
     await expectRedirect(
-      () => renameBlock(fd({ blockId: "wb1", letter: "Б" })),
+      () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
       "/karta-sklada?edit=1&err=block_taken",
     );
   });
 
-  it("пустая новая буква ⇒ err=letter, камень не трогается", async () => {
+  it("пустой новый код ⇒ err=letter, камень не трогается", async () => {
     await expectRedirect(
       () => renameBlock(fd({ blockId: "wb1", letter: "  " })),
       "/karta-sklada?edit=1&err=letter",
@@ -212,7 +248,7 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
     getRealSessionUser.mockResolvedValue({ id: "u2", role: "MANAGER" });
 
     await expectRedirect(
-      () => renameBlock(fd({ blockId: "wb1", letter: "Б" })),
+      () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
       "/karta-sklada?edit=1&err=denied",
     );
     expect(wbUpdate).not.toHaveBeenCalled();
@@ -222,12 +258,10 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
 
 // ═══════════════ #16 · materializeBlock + normalizeBlockLetter ═══════════════
 
-describe("materializeBlock — нормализация буквы (ТЗ №7 #16)", () => {
-  it("addLandmark на auto-блок с латинским 'E' ⇒ WarehouseBlock создаётся под КИР «Е», ориентиры собираются из обеих форм", async () => {
-    // WarehouseBlock ещё нет.
+describe("materializeBlock — нормализация кода (ТЗ №7 #16 + ТЗ №17 §3.1)", () => {
+  it("addLandmark на auto-блок с кир. «Е» ⇒ WarehouseBlock создаётся под ЛАТ «E», ориентиры из обеих форм", async () => {
     wbFindUnique.mockResolvedValue(null);
     wbCreate.mockResolvedValue({ id: "wbNew" });
-    // BatchLocation содержит ориентиры и под кир «Е», и под лат 'E' (legacy).
     blFindMany.mockResolvedValue([
       { landmark: "1" },
       { landmark: "2" },
@@ -235,99 +269,104 @@ describe("materializeBlock — нормализация буквы (ТЗ №7 #1
     ]);
 
     await expectRedirect(
-      () => addLandmark(fd({ fromLetter: "E", number: "3" })),
+      () => addLandmark(fd({ fromLetter: "Е", number: "3" })), // кир. «Е»
       "/karta-sklada?edit=1&ok=landmark",
     );
 
-    // Поиск существования — по нормализованной букве «Е» (кир).
     expect(wbFindUnique).toHaveBeenCalledWith({
-      where: { letter: "Е" },
+      where: { letter: "E" }, // лат.
       select: { id: true },
     });
-    // BatchLocation спрашивается по ОБЕИМ формам (in:[«Е», 'E']).
+    // BatchLocation спрашивается по ОБЕИМ формам (in:[«Е» кир, «E» лат]).
     expect(blFindMany).toHaveBeenCalledTimes(1);
     const where = blFindMany.mock.calls[0][0].where.block;
-    expect(where.in).toEqual(expect.arrayContaining(["Е", "E"]));
+    expect(where.in).toEqual(expect.arrayContaining(["E", "Е"]));
     expect(where.in.length).toBe(2);
-    // Создан WarehouseBlock с КИР «Е» + дедуп-ориентиры «1»,«2» (+ новый через addLandmark).
     expect(wbCreate).toHaveBeenCalledTimes(1);
     const created = wbCreate.mock.calls[0][0].data;
-    expect(created.letter).toBe("Е");
-    expect(created.landmarks.create.map((l: { number: string }) => l.number).sort()).toEqual(
-      ["1", "2"],
-    );
-    // После материализации — сам addLandmark создаёт «3».
+    expect(created.letter).toBe("E");
+    expect(
+      created.landmarks.create.map((l: { number: string }) => l.number).sort(),
+    ).toEqual(["1", "2"]);
     expect(wlCreate).toHaveBeenCalledTimes(1);
     expect(wlCreate.mock.calls[0][0].data).toMatchObject({
       blockId: "wbNew",
       number: "3",
     });
+    expect(lastAuditKind()).toBe("KARTA_LANDMARK_ADD");
   });
 
   it("materializeBlock: если WarehouseBlock уже есть (норм. форма) ⇒ create НЕ вызывается", async () => {
     wbFindUnique.mockResolvedValue({ id: "wbExisting" });
 
     await expectRedirect(
-      () => setBlockMeta(fd({ fromLetter: "e", note: "у ворот" })),
+      () => setBlockMeta(fd({ fromLetter: "е", note: "у ворот" })),
       "/karta-sklada?edit=1&ok=meta",
     );
 
     expect(wbFindUnique).toHaveBeenCalledWith({
-      where: { letter: "Е" }, // 'e' → «Е»
+      where: { letter: "E" }, // кир. «е» → лат. «E»
       select: { id: true },
     });
     expect(wbCreate).not.toHaveBeenCalled();
     expect(wbUpdate).toHaveBeenCalledWith({
       where: { id: "wbExisting" },
       data: { note: "у ворот", isFull: false, areaM2: null },
+      select: { letter: true },
     });
+    expect(lastAuditKind()).toBe("KARTA_BLOCK_META");
   });
 });
 
-// ═══════════════ #16 · deleteBlock/blockHasStone проверяет обе формы ═══════════════
+// ═══════ #16 + ТЗ №17 §7 · deleteBlock/blockHasStone ═══════
 
-describe("deleteBlock — blockHasStone ищет и норм., и raw форму (ТЗ №7 #16)", () => {
-  it("auto-блок «E» (лат.), а камень в BatchLocation записан под «Е» (кир.) ⇒ удаление БЛОКИРУЕТСЯ", async () => {
-    // Обе формы проверяются: если хоть по одной >0 — камень есть → err=block_has_stone.
+describe("deleteBlock — камень в блоке блокирует удаление", () => {
+  it("auto-блок задан кир. «Е», а камень мог быть записан любой из форм ⇒ ищем обе, удаление БЛОКИРУЕТСЯ", async () => {
     blCount.mockResolvedValue(1);
 
     await expectRedirect(
-      () => deleteBlock(fd({ fromLetter: "E" })),
+      () => deleteBlock(fd({ fromLetter: "Е" })), // кир. «Е» → норм. лат. «E»
       "/karta-sklada?edit=1&err=block_has_stone",
     );
 
-    expect(blCount).toHaveBeenCalledTimes(1);
     const where = blCount.mock.calls[0][0].where.block;
     expect(where.in).toEqual(expect.arrayContaining(["E", "Е"]));
     expect(wbDelete).not.toHaveBeenCalled();
   });
 
-  it("auto-блок без камня ни в одной форме ⇒ ok=deleted, WarehouseBlock.delete НЕ зовём (строки нет)", async () => {
+  it("ТЗ №17 §7: партийных локаций нет, но лежит ПЛИТА ⇒ удаление БЛОКИРУЕТСЯ", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "A1" });
     blCount.mockResolvedValue(0);
-
-    await expectRedirect(
-      () => deleteBlock(fd({ fromLetter: "E" })),
-      "/karta-sklada?edit=1&ok=deleted",
-    );
-
-    expect(wbDelete).not.toHaveBeenCalled();
-  });
-
-  it("сетевой блок с камнем (по нормализованной букве) ⇒ err=block_has_stone", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "Е" });
-    blCount.mockResolvedValue(1);
+    slabCount.mockResolvedValue(1);
 
     await expectRedirect(
       () => deleteBlock(fd({ blockId: "wb1" })),
       "/karta-sklada?edit=1&err=block_has_stone",
     );
-
     expect(wbDelete).not.toHaveBeenCalled();
   });
 
-  it("сетевой блок пуст ⇒ delete вызывается один раз", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "Ж" });
-    blCount.mockResolvedValue(0);
+  it("ТЗ №17 §7: лежит КУСОК (Piece) ⇒ удаление БЛОКИРУЕТСЯ", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "A1" });
+    pieceCount.mockResolvedValue(2);
+
+    await expectRedirect(
+      () => deleteBlock(fd({ blockId: "wb1" })),
+      "/karta-sklada?edit=1&err=block_has_stone",
+    );
+    expect(wbDelete).not.toHaveBeenCalled();
+  });
+
+  it("auto-блок без камня ни в одной форме ⇒ ok=deleted, delete НЕ зовём (строки нет)", async () => {
+    await expectRedirect(
+      () => deleteBlock(fd({ fromLetter: "Е" })),
+      "/karta-sklada?edit=1&ok=deleted",
+    );
+    expect(wbDelete).not.toHaveBeenCalled();
+  });
+
+  it("сетевой блок пуст ⇒ delete вызывается один раз + запись в Историю", async () => {
+    wbFindUnique.mockResolvedValue({ letter: "G1" });
 
     await expectRedirect(
       () => deleteBlock(fd({ blockId: "wb1" })),
@@ -335,6 +374,75 @@ describe("deleteBlock — blockHasStone ищет и норм., и raw форму
     );
 
     expect(wbDelete).toHaveBeenCalledWith({ where: { id: "wb1" } });
+    expect(lastAuditKind()).toBe("KARTA_BLOCK_DELETE");
+  });
+});
+
+// ═══════════════ ТЗ №17 §7 · removeLandmark ═══════════════
+
+describe("removeLandmark — ориентир с камнем не удаляется (ТЗ №17 §7)", () => {
+  it("на ориентире стоит партия ⇒ err=landmark_has_stone, delete НЕ зовём", async () => {
+    wlFindUnique.mockResolvedValue({
+      number: "5",
+      block: { id: "wb1", letter: "A1" },
+    });
+    blCount.mockResolvedValue(1);
+
+    await expectRedirect(
+      () => removeLandmark(fd({ landmarkId: "lm1" })),
+      "/karta-sklada?edit=1&err=landmark_has_stone",
+    );
+    expect(wlDelete).not.toHaveBeenCalled();
+    // Проверка адресная: ищем именно этот ориентир, а не весь блок.
+    expect(blCount.mock.calls[0][0].where.landmark).toBe("5");
+  });
+
+  it("на ориентире лежит ПЛИТА ⇒ err=landmark_has_stone", async () => {
+    wlFindUnique.mockResolvedValue({
+      number: "5",
+      block: { id: "wb1", letter: "A1" },
+    });
+    slabCount.mockResolvedValue(3);
+
+    await expectRedirect(
+      () => removeLandmark(fd({ landmarkId: "lm1" })),
+      "/karta-sklada?edit=1&err=landmark_has_stone",
+    );
+    expect(wlDelete).not.toHaveBeenCalled();
+  });
+
+  it("пустой ориентир ⇒ удаляется + запись в Историю", async () => {
+    wlFindUnique.mockResolvedValue({
+      number: "5",
+      block: { id: "wb1", letter: "A1" },
+    });
+
+    await expectRedirect(
+      () => removeLandmark(fd({ landmarkId: "lm1" })),
+      "/karta-sklada?edit=1&ok=landmark_removed",
+    );
+    expect(wlDelete).toHaveBeenCalledWith({ where: { id: "lm1" } });
+    expect(lastAuditKind()).toBe("KARTA_LANDMARK_REMOVE");
+  });
+
+  it("несуществующий ориентир ⇒ err=notfound", async () => {
+    wlFindUnique.mockResolvedValue(null);
+
+    await expectRedirect(
+      () => removeLandmark(fd({ landmarkId: "nope" })),
+      "/karta-sklada?edit=1&err=notfound",
+    );
+    expect(wlDelete).not.toHaveBeenCalled();
+  });
+
+  it("не OWNER ⇒ err=denied", async () => {
+    getRealSessionUser.mockResolvedValue({ id: "u2", role: "WAREHOUSE" });
+
+    await expectRedirect(
+      () => removeLandmark(fd({ landmarkId: "lm1" })),
+      "/karta-sklada?edit=1&err=denied",
+    );
+    expect(wlDelete).not.toHaveBeenCalled();
   });
 });
 
@@ -344,9 +452,7 @@ describe("materializeBlock — race через P2002 (ТЗ №7 #17)", () => {
   it("параллельные setBlockMeta на один авто-блок → БЕЗ 500, оба получают один id", async () => {
     const { Prisma } = await import("@prisma/client");
 
-    // Оба вызова видят existing=null (мок отдаёт null дважды подряд).
     wbFindUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-    // Первый create — успех (id=wbA); второй — P2002 (гонка).
     const conflict = new Prisma.PrismaClientKnownRequestError("dup letter", {
       code: "P2002",
       clientVersion: "n/a",
@@ -354,24 +460,19 @@ describe("materializeBlock — race через P2002 (ТЗ №7 #17)", () => {
     wbCreate
       .mockResolvedValueOnce({ id: "wbA" })
       .mockRejectedValueOnce(conflict);
-    // Второй вызов, после P2002, перечитывает — уже видит победителя.
     wbFindUnique.mockResolvedValueOnce({ id: "wbA" });
 
-    // Дальше — обычный поток setBlockMeta (update WarehouseBlock).
-    // Первый вызов вернёт ok=meta.
     const p1 = expectRedirect(
-      () => setBlockMeta(fd({ fromLetter: "К", note: "у ворот" })),
+      () => setBlockMeta(fd({ fromLetter: "K1", note: "у ворот" })),
       "/karta-sklada?edit=1&ok=meta",
     );
     const p2 = expectRedirect(
-      () => setBlockMeta(fd({ fromLetter: "К", note: "у ворот" })),
+      () => setBlockMeta(fd({ fromLetter: "K1", note: "у ворот" })),
       "/karta-sklada?edit=1&ok=meta",
     );
     await Promise.all([p1, p2]);
 
-    // create вызван РОВНО 2 раза — но только один WarehouseBlock есть в БД.
     expect(wbCreate).toHaveBeenCalledTimes(2);
-    // Оба update указывают на ОДИН И ТОТ ЖЕ id (проигравший считал победителя).
     expect(wbUpdate).toHaveBeenCalledTimes(2);
     for (const call of wbUpdate.mock.calls) {
       expect(call[0].where).toEqual({ id: "wbA" });
@@ -383,9 +484,8 @@ describe("materializeBlock — race через P2002 (ТЗ №7 #17)", () => {
     wbCreate.mockRejectedValueOnce(new Error("db down"));
 
     await expect(
-      setBlockMeta(fd({ fromLetter: "Л", note: "тест" })),
+      setBlockMeta(fd({ fromLetter: "L1", note: "тест" })),
     ).rejects.toThrow(/db down/);
-    // Update даже не пробовали.
     expect(wbUpdate).not.toHaveBeenCalled();
   });
 });
@@ -393,26 +493,35 @@ describe("materializeBlock — race через P2002 (ТЗ №7 #17)", () => {
 // ═══════════════ ТЗ №7 #7 · addBlock / setBlockMeta — bounded decimal ═══════════════
 
 describe("addBlock / setBlockMeta — переполнение площади ⇒ err=area (ТЗ №7 #7)", () => {
-  it("addBlock: 99999999999 (> Decimal(12,3) max) ⇒ err=area, WarehouseBlock.create НЕ вызывается", async () => {
+  it("addBlock: 99999999999 (> Decimal(12,3) max) ⇒ err=area, create НЕ вызывается", async () => {
     await expectRedirect(
-      () => addBlock(fd({ letter: "К", areaM2: "99999999999" })),
+      () => addBlock(fd({ letter: "K1", areaM2: "99999999999" })),
       "/karta-sklada?edit=1&err=area",
     );
     expect(wbCreate).not.toHaveBeenCalled();
   });
 
-  it("addBlock: allowZero — «0» ⇒ создаётся с areaM2=0.000 (площадь блока может быть 0)", async () => {
+  it("addBlock: allowZero — «0» ⇒ создаётся с areaM2=0.000", async () => {
     wbCreate.mockResolvedValueOnce({ id: "wbZero" });
 
     await expectRedirect(
-      () => addBlock(fd({ letter: "Ф", areaM2: "0" })),
+      () => addBlock(fd({ letter: "F1", areaM2: "0" })),
       "/karta-sklada?edit=1&ok=block",
     );
     expect(wbCreate).toHaveBeenCalledTimes(1);
     expect(wbCreate.mock.calls[0][0].data.areaM2).toBe("0.000");
+    expect(lastAuditKind()).toBe("KARTA_BLOCK_ADD");
   });
 
-  it("setBlockMeta: текстовый ввод в площадь ⇒ err=area (bounded parser отклоняет 'abc')", async () => {
+  it("addBlock: кириллица без двойника («Ж») ⇒ err=letter_not_latin (ТЗ №17 §3.1)", async () => {
+    await expectRedirect(
+      () => addBlock(fd({ letter: "Ж1", areaM2: "" })),
+      "/karta-sklada?edit=1&err=letter_not_latin",
+    );
+    expect(wbCreate).not.toHaveBeenCalled();
+  });
+
+  it("setBlockMeta: текстовый ввод в площадь ⇒ err=area", async () => {
     await expectRedirect(
       () => setBlockMeta(fd({ blockId: "wb1", areaM2: "abc" })),
       "/karta-sklada?edit=1&err=area",
@@ -423,9 +532,8 @@ describe("addBlock / setBlockMeta — переполнение площади �
 
 // ═══════════════ ТЗ №7 #18 · addBlock наследует ориентиры авто-блока ═══════════════
 
-describe("addBlock — ориентиры унаследуются от авто-блока (ТЗ №7 #18)", () => {
-  it("рука вводит букву «Д», у которой уже есть BatchLocation с ориентирами 1, 2, 2 → WarehouseBlock создаётся С этими ориентирами (дедупом)", async () => {
-    // BatchLocation содержит «Д» с ориентирами 1, 2 и один дубль 2.
+describe("addBlock — ориентиры наследуются от авто-блока (ТЗ №7 #18)", () => {
+  it("код «D1» уже есть в BatchLocation с ориентирами 1, 2, 2 → блок создаётся С ними (дедупом)", async () => {
     blFindMany.mockResolvedValueOnce([
       { landmark: "1" },
       { landmark: "2" },
@@ -434,34 +542,29 @@ describe("addBlock — ориентиры унаследуются от авто
     wbCreate.mockResolvedValueOnce({ id: "wbD" });
 
     await expectRedirect(
-      () => addBlock(fd({ letter: "Д", areaM2: "12,5" })),
+      () => addBlock(fd({ letter: "D1", areaM2: "12,5" })),
       "/karta-sklada?edit=1&ok=block",
     );
 
     expect(wbCreate).toHaveBeenCalledTimes(1);
     const data = wbCreate.mock.calls[0][0].data;
-    expect(data.letter).toBe("Д");
-    // Ориентиры перенесены с дедупом (1, 2).
-    expect(data.landmarks.create.map((l: { number: string }) => l.number).sort()).toEqual(
-      ["1", "2"],
-    );
-    // BatchLocation.findMany вызван С поиском по обеим формам буквы (норм+raw
-    // совпадают у «Д», но `in` контракт сохранён — регрессия ловится).
+    expect(data.letter).toBe("D1");
+    expect(
+      data.landmarks.create.map((l: { number: string }) => l.number).sort(),
+    ).toEqual(["1", "2"]);
     expect(blFindMany).toHaveBeenCalledTimes(1);
-    const where = blFindMany.mock.calls[0][0].where.block;
-    expect(where.in).toContain("Д");
+    expect(blFindMany.mock.calls[0][0].where.block.in).toContain("D1");
   });
 
-  it("рука вводит НОВУЮ букву без BatchLocation → WarehouseBlock создаётся с ПУСТЫМИ ориентирами", async () => {
+  it("новый код без BatchLocation → блок создаётся с ПУСТЫМИ ориентирами", async () => {
     blFindMany.mockResolvedValueOnce([]);
     wbCreate.mockResolvedValueOnce({ id: "wbFresh" });
 
     await expectRedirect(
-      () => addBlock(fd({ letter: "Ю", areaM2: "" })),
+      () => addBlock(fd({ letter: "S1", areaM2: "" })),
       "/karta-sklada?edit=1&ok=block",
     );
 
-    const data = wbCreate.mock.calls[0][0].data;
-    expect(data.landmarks.create).toEqual([]);
+    expect(wbCreate.mock.calls[0][0].data.landmarks.create).toEqual([]);
   });
 });
