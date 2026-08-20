@@ -67,13 +67,13 @@ describe("presentReservationAlternative — canSeeExactRemainder gate", () => {
     stoneTypeName: "Травертин Classic",
     kindRu: "Плита №2",
     detail: "280×190 см",
-    place: "Блок А, ор. 2",
+    place: "Блок А · ориентир 2",
     freeText: null,
   };
 
   it("high visibility: place kept (manager/owner)", () => {
     const a = presentReservationAlternative(raw, true);
-    expect(a.place).toBe("Блок А, ор. 2");
+    expect(a.place).toBe("Блок А · ориентир 2");
     expect(a.detail).toBe("280×190 см");
     expect(a.inStockLabel).toBeNull();
   });
@@ -190,7 +190,7 @@ describe("findReservationAlternatives", () => {
     );
     expect(alts).toHaveLength(1);
     expect(alts[0].target).toBe("SLAB:s2");
-    expect(alts[0].place).toBe("Блок Б, ор. 3");
+    expect(alts[0].place).toBe("Блок Б · ориентир 3");
     expect(alts[0].kindRu).toBe("Плита №2");
     // where: exclude failed + AVAILABLE only
     const where = (M.slabFindMany.mock.calls[0][0] as { where: Record<string, unknown> })

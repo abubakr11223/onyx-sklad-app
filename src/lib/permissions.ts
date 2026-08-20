@@ -129,6 +129,12 @@ export interface Capabilities {
    * ему нужно количество, но не нужен журнал действий всех сотрудников.
    */
   canEditBatchQuantity: boolean;
+  /**
+   * ТЗ №17 §6 — редактирование карты склада (блоки/ориентиры). Складчик
+   * выбирает локацию из готового справочника, а заводит блоки владелец или
+   * зав. складом: иначе справочник снова начнёт расти из приёмки.
+   */
+  canEditWarehouseMap: boolean;
 }
 
 /**
@@ -157,6 +163,7 @@ export interface Capabilities {
  * | canSeeClients            | true  | true             | false     | false   |
  * | canSeeAllClients         | true  | false            | false     | false   |
  * | canEditBatchQuantity     | true  | false            | LEAD only | false   |
+ * | canEditWarehouseMap      | true  | false            | LEAD only | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -190,6 +197,7 @@ export const DENY_ALL: Capabilities = {
   canSeeShowroom: false,
   canSendToShowroom: false,
   canEditBatchQuantity: false,
+  canEditWarehouseMap: false,
 };
 
 export function capabilitiesFor(
@@ -220,6 +228,7 @@ export function capabilitiesFor(
         canSeeShowroom: true,
         canSendToShowroom: true,
         canEditBatchQuantity: true, // владелец — всегда
+        canEditWarehouseMap: true, // ТЗ №17 §6
       };
     case "MANAGER":
       return {
@@ -246,6 +255,7 @@ export function capabilitiesFor(
         canSeeShowroom: true,
         canSendToShowroom: true,
         canEditBatchQuantity: false, // менеджер не трогает складской учёт
+        canEditWarehouseMap: false,
       };
     case "WAREHOUSE":
     case "WAREHOUSE_LEAD":
@@ -276,6 +286,8 @@ export function capabilitiesFor(
         canSendToShowroom: true,
         // Единственное отличие двух складских ролей.
         canEditBatchQuantity: role === "WAREHOUSE_LEAD",
+        // ТЗ №17 §6 — карту размечает зав. складом, обычный складчик — нет.
+        canEditWarehouseMap: role === "WAREHOUSE_LEAD",
       };
     case "PARTNER":
       return {
@@ -300,6 +312,7 @@ export function capabilitiesFor(
         canSeeShowroom: false,
         canSendToShowroom: false,
         canEditBatchQuantity: false,
+        canEditWarehouseMap: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

@@ -26,6 +26,7 @@ import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import { CameraIcon } from "@/components/ui/Icons";
 import { formatTashkentDateTime } from "@/lib/datetime";
+import { formatLocation } from "@/lib/locations";
 
 export const metadata: Metadata = {
   title: "Запросы на фото — Onyx",
@@ -401,7 +402,7 @@ export default async function FotozaprosPage({
           {requests.map((r) => {
             const stoneName = r.batch.stoneType?.name ?? "камень";
             const loc = r.batchLocation
-              ? `Блок ${r.batchLocation.block}, ориентир ${r.batchLocation.landmark}`
+              ? formatLocation(r.batchLocation.block, r.batchLocation.landmark)
               : "локация не указана";
             const delivery = deliveryOf(r.dispatches);
             return (

@@ -179,3 +179,20 @@ export async function requireOwner(deniedRedirect: string): Promise<string> {
   if (!me || me.role !== "OWNER") redirect(deniedRedirect);
   return me.id;
 }
+
+/**
+ * ТЗ №17 §6 — карту склада правит владелец ИЛИ зав. складом. Тот же
+ * defense-in-depth, что и requireOwner (реальная сессия, не «просмотр глазами
+ * роли»), но шире на одну роль. Отдельный helper, а не параметр к requireOwner:
+ * список ролей должен быть виден в точке вызова, а не собираться на месте.
+ * Возвращает id актёра — изменения карты пишутся в Историю.
+ */
+export async function requireWarehouseMapEditor(
+  deniedRedirect: string,
+): Promise<string> {
+  const me = await getRealSessionUser();
+  if (!me || !capabilitiesFor(me.role, { canSeePurchasePrice: false }).canEditWarehouseMap) {
+    redirect(deniedRedirect);
+  }
+  return me.id;
+}

@@ -50,6 +50,7 @@ import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { SearchIcon } from "@/components/ui/Icons";
 import { formatThickness } from "@/lib/dimensions";
+import { formatLocation } from "@/lib/locations";
 
 export const metadata: Metadata = {
   title: "Поиск камня — Onyx",
@@ -153,7 +154,7 @@ export function formatTypeLocations(
   }
   if (unique.length === 0) return null;
 
-  const labels = unique.map((l) => `Блок ${l.block}, ор. ${l.landmark}`);
+  const labels = unique.map((l) => formatLocation(l.block, l.landmark));
   if (labels.length <= maxPoints) return labels.join(" · ");
   const rest = labels.length - maxPoints;
   return `${labels.slice(0, maxPoints).join(" · ")} · и ещё ${rest}`;
@@ -602,7 +603,7 @@ export default async function PoiskPage({
                   {canSeeExact && (
                     <>
                       {" "}
-                      · Блок {s.block}, ор. {s.landmark}
+                      · {formatLocation(s.block, s.landmark)}
                     </>
                   )}
                 </div>
@@ -628,7 +629,7 @@ export default async function PoiskPage({
                   {canSeeExact && (
                     <>
                       {" "}
-                      · Блок {p.block}, ор. {p.landmark}
+                      · {formatLocation(p.block, p.landmark)}
                     </>
                   )}
                 </div>
@@ -695,7 +696,7 @@ export default async function PoiskPage({
                   {/* §4.6 — lokatsiya faqat canSeeExactRemainder. */}
                   {canSeeExact && (
                     <div className="text-sm text-ink">
-                      Блок {p.block}, ориентир {p.landmark}
+                      {formatLocation(p.block, p.landmark)}
                     </div>
                   )}
                 </li>
@@ -771,7 +772,7 @@ export default async function PoiskPage({
                   </div>
                   {canSeeExact && (
                     <div className="text-sm text-ink">
-                      Блок {s.block}, ориентир {s.landmark}
+                      {formatLocation(s.block, s.landmark)}
                     </div>
                   )}
                 </li>

@@ -11,6 +11,7 @@ import {
   SlabSeparationError,
   separateSlabInTx,
 } from "@/lib/slab-separation";
+import { formatLocation } from "@/lib/locations";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -143,7 +144,7 @@ export async function sendUnitToShowroomInTx(
           select: { block: true, landmark: true },
         });
   const locationSnapshot = locRow
-    ? `Блок ${locRow.block}, ор. ${locRow.landmark}`
+    ? formatLocation(locRow.block, locRow.landmark)
     : null;
 
   const standNote = args.standNote?.trim() || null;
@@ -549,7 +550,7 @@ export async function listShowroom(
         standNote: r.standNote,
         sentAt: r.sentAt,
         sentByName: r.sentBy.name,
-        location: `Блок ${r.slab.block}, ор. ${r.slab.landmark}`,
+        location: formatLocation(r.slab.block, r.slab.landmark),
         block: r.slab.block,
         landmark: r.slab.landmark,
       });
@@ -564,7 +565,7 @@ export async function listShowroom(
         standNote: r.standNote,
         sentAt: r.sentAt,
         sentByName: r.sentBy.name,
-        location: `Блок ${r.piece.block}, ор. ${r.piece.landmark}`,
+        location: formatLocation(r.piece.block, r.piece.landmark),
         block: r.piece.block,
         landmark: r.piece.landmark,
       });

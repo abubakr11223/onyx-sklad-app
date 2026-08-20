@@ -22,6 +22,7 @@ import {
   cancelOpenShowroomShipmentForUnit,
   closeOpenShowroomPlacement,
 } from "@/lib/showroom";
+import { formatLocation } from "@/lib/locations";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -529,7 +530,7 @@ export async function issueSample(
                     select: { block: true, landmark: true },
                   });
             if (loc) {
-              locationSnapshot = `Блок ${loc.block}, ор. ${loc.landmark}`;
+              locationSnapshot = formatLocation(loc.block, loc.landmark);
             }
           }
         }

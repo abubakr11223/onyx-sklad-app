@@ -18,6 +18,7 @@ import {
 } from "@/lib/breaking";
 import { parsePositiveDecimal } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
+import { findUnknownLocations } from "@/lib/warehouse-grid";
 import { ensureFormError } from "@/lib/form-errors";
 
 export type BreakFormErrors = Record<string, string>;
@@ -84,6 +85,14 @@ export async function submitBreak(
   const mode = str("mode");
   const errors: BreakFormErrors = {};
   const pieces = parseRows(readPieceRows(formData), errors);
+
+  // ТЗ №17 §6 — локация куска только из карты склада (свободный ввод убран).
+  for (const u of await findUnknownLocations(pieces)) {
+    errors[`p-${u.index}-${u.reason}`] =
+      u.reason === "block"
+        ? `Блока «${u.block}» нет в карте склада. Выберите из списка.`
+        : `В блоке «${u.block}» нет ориентира «${u.landmark}». Выберите из списка.`;
+  }
 
   // TZ §5.6 — cause required (same taxonomy as /singan).
   const causeParsed = parseBreakCause(str("breakCause"), str("breakCauseNote"));

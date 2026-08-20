@@ -21,6 +21,7 @@ import { parseThicknessCm } from "@/lib/dimensions";
 import { strOf, allOf } from "@/lib/form";
 import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 import { ensureFormError } from "@/lib/form-errors";
+import { findUnknownLocations } from "@/lib/warehouse-grid";
 import { putPhotoBlob } from "@/lib/photo-blob";
 
 export type BatchEditFormState = {
@@ -220,6 +221,15 @@ export async function submitBatchEdit(
         }
       }
     }
+  }
+
+  // ТЗ №17 §6 — локация только из карты склада: правка партии не должна
+  // заводить блоки в обход «Карты» так же, как и приёмка.
+  for (const u of await findUnknownLocations(locations)) {
+    errors[`loc-${u.index}`] =
+      u.reason === "block"
+        ? `Блока «${u.block}» нет в карте склада. Выберите из списка.`
+        : `В блоке «${u.block}» нет ориентира «${u.landmark}». Выберите из списка.`;
   }
 
   if (Object.keys(errors).length > 0) {

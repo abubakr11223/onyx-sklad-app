@@ -11,7 +11,7 @@ describe("formatTypeLocations — compact multi-BatchLocation line", () => {
 
   it("formats a single location like the stone card lexicon", () => {
     expect(formatTypeLocations([{ block: "А", landmark: "2" }])).toBe(
-      "Блок А, ор. 2",
+      "Блок А · ориентир 2",
     );
   });
 
@@ -22,7 +22,7 @@ describe("formatTypeLocations — compact multi-BatchLocation line", () => {
         { block: "А", landmark: "2" },
         { block: "Б", landmark: "1" },
       ]),
-    ).toBe("Блок А, ор. 2 · Блок Б, ор. 1");
+    ).toBe("Блок А · ориентир 2 · Блок Б · ориентир 1");
   });
 
   it("shows at most 3 points then «и ещё N»", () => {
@@ -34,7 +34,7 @@ describe("formatTypeLocations — compact multi-BatchLocation line", () => {
       { block: "Г", landmark: "4" },
     ];
     expect(formatTypeLocations(locs)).toBe(
-      "Блок А, ор. 1 · Блок А, ор. 2 · Блок Б, ор. 1 · и ещё 2",
+      "Блок А · ориентир 1 · Блок А · ориентир 2 · Блок Б · ориентир 1 · и ещё 2",
     );
   });
 
@@ -47,6 +47,6 @@ describe("formatTypeLocations — compact multi-BatchLocation line", () => {
         ],
         1,
       ),
-    ).toBe("Блок А, ор. 1 · и ещё 1");
+    ).toBe("Блок А · ориентир 1 · и ещё 1");
   });
 });

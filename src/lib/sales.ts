@@ -26,6 +26,7 @@ import {
   closeOpenShowroomPlacement,
 } from "./showroom";
 import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
+import { formatLocation } from "@/lib/locations";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
 
@@ -808,7 +809,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
       // TZ №15 Slice 1 — OPEN shipment same TX (stock already SOLD above).
       const loc =
         "block" in unit && "landmark" in unit
-          ? `Блок ${unit.block}, ор. ${unit.landmark}`
+          ? formatLocation(unit.block, unit.landmark)
           : null;
       const { shipmentId } = await createSaleShipment(tx, {
         saleRecordId: sale.id,

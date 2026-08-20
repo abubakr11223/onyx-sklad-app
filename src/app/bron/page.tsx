@@ -52,6 +52,7 @@ import {
 import Link from "next/link";
 import { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
+import { formatLocation } from "@/lib/locations";
 
 export const metadata: Metadata = {
   title: "Брони — Onyx",
@@ -314,11 +315,11 @@ export default async function BronPage({
           s.lengthMm !== null && s.widthMm !== null
             ? ` · ${s.lengthMm}×${s.widthMm} см`
             : ""
-        } · Блок ${s.block}, ор. ${s.landmark}`,
+        } · ${formatLocation(s.block, s.landmark)}`,
       }));
       const pieces: UnitOption[] = st.pieces.map((p) => ({
         value: `PIECE:${p.id}`,
-        label: `${PIECE_KIND_RU[p.kind] ?? p.kind} · ${p.boundingLengthMm}×${p.boundingWidthMm} см · Блок ${p.block}, ор. ${p.landmark}`,
+        label: `${PIECE_KIND_RU[p.kind] ?? p.kind} · ${p.boundingLengthMm}×${p.boundingWidthMm} см · ${formatLocation(p.block, p.landmark)}`,
       }));
       const batches: BatchVolumeOption[] = st.batches
         .map((b) => {

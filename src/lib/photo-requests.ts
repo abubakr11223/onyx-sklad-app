@@ -16,6 +16,7 @@
 
 import type { Prisma } from "@prisma/client";
 import type { SendMessageOptions, SendResult } from "@/lib/telegram";
+import { formatLocation } from "@/lib/locations";
 
 // ───────────────────────── Xato ─────────────────────────
 
@@ -320,7 +321,7 @@ export function buildTaskText(
   comment: string | null,
 ): string {
   const where = location
-    ? `Блок ${location.block}, ориентир ${location.landmark}.`
+    ? `${formatLocation(location.block, location.landmark)}.`
     : "Локация не указана.";
   const lines = [
     `📷 Задача: сфотографируйте камень ${stoneTypeName}. ${where}`,

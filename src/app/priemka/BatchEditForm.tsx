@@ -9,7 +9,7 @@ import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import { batchEditErrorItems } from "./intake-form-errors";
-import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
+import { UncontrolledWarehouseLocationSelect } from "@/components/WarehouseLocationSelect";
 
 export type EditPattern = {
   id: string;
@@ -113,7 +113,6 @@ export default function BatchEditForm(props: EditBatchProps) {
       />
       <input type="hidden" name="expectedArrivedAt" value={props.arrivedAtIso} />
 
-      <WarehouseGridDatalists blocks={props.blocks} />
 
       {(() => {
         const banner = batchEditErrorItems(e);
@@ -414,19 +413,13 @@ export default function BatchEditForm(props: EditBatchProps) {
             const loc = props.locations[i];
             return (
               <div key={i} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Field
-                  id={`locBlock-${i}`}
-                  name="locBlock"
-                  label="Блок"
-                  defaultValue={loc?.block ?? ""}
-                  list={props.blocks.length ? "wh-blocks" : undefined}
-                  error={e[`loc-${i}`]}
-                />
-                <Field
-                  id={`locLm-${i}`}
-                  name="locLandmark"
-                  label="Ориентир"
-                  defaultValue={loc?.landmark ?? ""}
+                {/* ТЗ №17 §6 — локация только из карты склада (см. приёмку). */}
+                <UncontrolledWarehouseLocationSelect
+                  blocks={props.blocks}
+                  index={i}
+                  defaultBlock={loc?.block ?? ""}
+                  defaultLandmark={loc?.landmark ?? ""}
+                  blockError={e[`loc-${i}`]}
                 />
                 <Field
                   id={`locSlabs-${i}`}

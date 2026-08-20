@@ -23,6 +23,8 @@ import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 import WarehouseGridDatalists from "@/components/WarehouseGridDatalists";
 import { areaM2FromCm, formatGabarit } from "@/lib/dimensions";
+import { formatLocation } from "@/lib/locations";
+import WarehouseLocationSelect from "@/components/WarehouseLocationSelect";
 
 export interface SlabOption {
   id: string;
@@ -140,6 +142,17 @@ export default function BreakForm({
         }
         return { ...m, [id]: prev };
       });
+  /** ТЗ №17 §6 — селекты локации отдают значение, а не событие. */
+  const setPieceValue = (id: number, key: keyof PieceVals) => (value: string) =>
+    setRows((m) => ({ ...m, [id]: { ...(m[id] ?? emptyPiece()), [key]: value } }));
+
+  /** Смена блока обнуляет ориентир: тот же номер в другом блоке — другое место. */
+  const setPieceBlock = (id: number) => (value: string) =>
+    setRows((m) => ({
+      ...m,
+      [id]: { ...(m[id] ?? emptyPiece()), block: value, landmark: "" },
+    }));
+
   const setPieceRect = (id: number, isRect: boolean) =>
     setRows((m) => {
       const prev = { ...(m[id] ?? emptyPiece()), isRect };
@@ -266,7 +279,7 @@ export default function BreakForm({
                 <optgroup key={stone} label={stone}>
                   {group.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label} — блок {s.block}, ориентир {s.landmark}
+                      {s.label} — {formatLocation(s.block, s.landmark)}
                       {s.reserved ? " · есть бронь — менеджер будет уведомлён" : ""}
                     </option>
                   ))}
@@ -300,7 +313,7 @@ export default function BreakForm({
                     : ""}
                 </p>
                 <p className="mt-1 text-ink/70">
-                  Локация: блок {selectedSlab.block}, ориентир {selectedSlab.landmark}
+                  Локация: {formatLocation(selectedSlab.block, selectedSlab.landmark)}
                 </p>
                 {selectedSlab.reserved && (
                   <p className="mt-1 font-medium text-warning">Есть бронь — менеджер будет уведомлён</p>
@@ -439,29 +452,19 @@ export default function BreakForm({
                     error={e[`p-${idx}-areaM2`]}
                     readOnly={isRect}
                   />
-                  <Field
-                    id={`pBlock-${idx}`}
-                    name="pBlock"
-                    label={<>Блок <Req /></>}
-                    placeholder="А"
-                    list={blocks.length > 0 ? "wh-blocks" : undefined}
-                    value={row.block}
-                    onChange={setPiece(id, "block")}
-                    error={e[`p-${idx}-block`]}
-                  />
-                  <Field
-                    id={`pLandmark-${idx}`}
-                    name="pLandmark"
-                    label={<>Ориентир <Req /></>}
-                    placeholder="2 или 1–2"
-                    list={
-                      blocks.some((b) => b.letter === row.block)
-                        ? `wh-lm-${row.block}`
-                        : undefined
-                    }
-                    value={row.landmark}
-                    onChange={setPiece(id, "landmark")}
-                    error={e[`p-${idx}-landmark`]}
+                  {/* ТЗ №17 §6 — локация куска выбирается из карты склада:
+                      свободный ввод здесь плодил бы те же блоки-опечатки. */}
+                  <WarehouseLocationSelect
+                    blocks={blocks}
+                    index={idx}
+                    blockName="pBlock"
+                    landmarkName="pLandmark"
+                    block={row.block}
+                    landmark={row.landmark}
+                    onBlockChange={setPieceBlock(id)}
+                    onLandmarkChange={setPieceValue(id, "landmark")}
+                    blockError={e[`p-${idx}-block`]}
+                    landmarkError={e[`p-${idx}-landmark`]}
                   />
                 </div>
                 <label className="flex min-h-11 items-center gap-3 text-sm text-ink">

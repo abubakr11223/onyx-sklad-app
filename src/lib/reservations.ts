@@ -16,6 +16,7 @@ import {
 } from "@/lib/inventory";
 import { lockBatchForUpdate } from "@/lib/batch-lock";
 import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "@/lib/validators/intake";
+import { formatLocation } from "@/lib/locations";
 
 // ─────────────────────────── Konstantalar / xatolar ───────────────────────────
 
@@ -882,7 +883,7 @@ export async function findReservationAlternatives(
           s.lengthMm != null && s.widthMm != null
             ? `${s.lengthMm}×${s.widthMm} см`
             : null,
-        place: `Блок ${s.block}, ор. ${s.landmark}`,
+        place: formatLocation(s.block, s.landmark),
         freeText: null,
       });
     }
@@ -911,7 +912,7 @@ export async function findReservationAlternatives(
           stoneTypeName: p.stoneType.name,
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
           detail: `${p.boundingLengthMm}×${p.boundingWidthMm} см`,
-          place: `Блок ${p.block}, ор. ${p.landmark}`,
+          place: formatLocation(p.block, p.landmark),
           freeText: null,
         });
       }
@@ -956,7 +957,7 @@ export async function findReservationAlternatives(
         stoneTypeName: p.stoneType.name,
         kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
         detail: `${p.boundingLengthMm}×${p.boundingWidthMm} см`,
-        place: `Блок ${p.block}, ор. ${p.landmark}`,
+        place: formatLocation(p.block, p.landmark),
         freeText: null,
       });
     }
@@ -991,7 +992,7 @@ export async function findReservationAlternatives(
             s.lengthMm != null && s.widthMm != null
               ? `${s.lengthMm}×${s.widthMm} см`
               : null,
-          place: `Блок ${s.block}, ор. ${s.landmark}`,
+          place: formatLocation(s.block, s.landmark),
           freeText: null,
         });
       }
@@ -1038,7 +1039,7 @@ export async function findReservationAlternatives(
           s.lengthMm != null && s.widthMm != null
             ? `${s.lengthMm}×${s.widthMm} см`
             : null,
-        place: `Блок ${s.block}, ор. ${s.landmark}`,
+        place: formatLocation(s.block, s.landmark),
         freeText: null,
       });
     }
@@ -1066,7 +1067,7 @@ export async function findReservationAlternatives(
           stoneTypeName: p.stoneType.name,
           kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
           detail: `${p.boundingLengthMm}×${p.boundingWidthMm} см`,
-          place: `Блок ${p.block}, ор. ${p.landmark}`,
+          place: formatLocation(p.block, p.landmark),
           freeText: null,
         });
       }

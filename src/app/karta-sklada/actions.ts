@@ -10,14 +10,15 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { isLatinBlockCode, normalizeBlockLetter } from "@/lib/block-letter";
 import { MAX_DECIMAL_12_3, parseBoundedDecimal } from "@/lib/decimal";
-import { requireOwner as requireOwnerBase } from "@/lib/session";
+import { requireWarehouseMapEditor } from "@/lib/session";
 
 const BACK = "/karta-sklada?edit=1";
 
-// Аудит ТЗ №7 #13 — общий OWNER-gate из lib/session.ts (был локальный дубль).
+// Аудит ТЗ №7 #13 — общий gate из lib/session.ts (был локальный дубль).
+// ТЗ №17 §6 — карту правит владелец ИЛИ зав. складом (canEditWarehouseMap).
 // ТЗ №17 §7 — возвращаем actorId: изменения карты пишутся в Историю (кто, что).
-async function requireOwner(): Promise<string> {
-  return requireOwnerBase(`${BACK}&err=denied`);
+async function requireMapEditor(): Promise<string> {
+  return requireWarehouseMapEditor(`${BACK}&err=denied`);
 }
 
 /**
@@ -179,7 +180,7 @@ async function resolveBlockId(formData: FormData): Promise<string> {
 }
 
 export async function addBlock(formData: FormData): Promise<void> {
-  const actorId = await requireOwner();
+  const actorId = await requireMapEditor();
   // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр (кир/лат дубли).
   const letter = normalizeBlockLetter(String(formData.get("letter") ?? ""));
   if (!letter) redirect(`${BACK}&err=letter`);
@@ -227,7 +228,7 @@ export async function addBlock(formData: FormData): Promise<void> {
 }
 
 export async function renameBlock(formData: FormData): Promise<void> {
-  const actorId = await requireOwner();
+  const actorId = await requireMapEditor();
   // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр (кир/лат дубли).
   const letter = normalizeBlockLetter(String(formData.get("letter") ?? ""));
   if (!letter) redirect(`${BACK}&err=letter`);
@@ -303,7 +304,7 @@ export async function renameBlock(formData: FormData): Promise<void> {
 }
 
 export async function deleteBlock(formData: FormData): Promise<void> {
-  const actorId = await requireOwner();
+  const actorId = await requireMapEditor();
   const id = String(formData.get("blockId") ?? "");
   // Авто-блок (только буква): строки WarehouseBlock ещё нет — материализовать
   // ради удаления бессмысленно. Камень в нём есть всегда (он и породил блок),
@@ -329,7 +330,7 @@ export async function deleteBlock(formData: FormData): Promise<void> {
 }
 
 export async function setBlockMeta(formData: FormData): Promise<void> {
-  const actorId = await requireOwner();
+  const actorId = await requireMapEditor();
   const id = await resolveBlockId(formData);
   const note = String(formData.get("note") ?? "").trim() || null;
   const isFull = formData.get("isFull") === "1";
@@ -356,7 +357,7 @@ export async function setBlockMeta(formData: FormData): Promise<void> {
 }
 
 export async function addLandmark(formData: FormData): Promise<void> {
-  const actorId = await requireOwner();
+  const actorId = await requireMapEditor();
   const number = String(formData.get("number") ?? "").trim();
   if (!number) redirect(`${BACK}&err=number`);
   const blockId = await resolveBlockId(formData);
@@ -374,7 +375,7 @@ export async function addLandmark(formData: FormData): Promise<void> {
 }
 
 export async function removeLandmark(formData: FormData): Promise<void> {
-  const actorId = await requireOwner();
+  const actorId = await requireMapEditor();
   const id = String(formData.get("landmarkId") ?? "");
   if (!id) redirect(`${BACK}&err=notfound`);
   // ТЗ №17 §7 — ориентир, на котором стоит камень, удалять нельзя: иначе у

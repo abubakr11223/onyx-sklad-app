@@ -19,6 +19,7 @@
 // не отправляется, индексы съезжают, и третья локация получила бы ориентир
 // второй. Пустой список = только placeholder-опция.
 
+import { useState } from "react";
 import Field, { inputClass } from "@/components/ui/Field";
 
 export interface WarehouseBlockOption {
@@ -132,5 +133,51 @@ export default function WarehouseLocationSelect({
         </select>
       </Field>
     </>
+  );
+}
+
+/**
+ * Неконтролируемый вариант — для форм, которые читают значения из DOM при
+ * сабмите (BatchEditForm на defaultValue). Внутреннее состояние нужно только
+ * ради реактивности списка ориентиров: сама форма по-прежнему берёт значения
+ * из name'ов при отправке.
+ */
+export function UncontrolledWarehouseLocationSelect({
+  blocks,
+  index,
+  defaultBlock = "",
+  defaultLandmark = "",
+  blockError,
+  landmarkError,
+  blockName,
+  landmarkName,
+}: {
+  blocks: WarehouseBlockOption[];
+  index: number;
+  defaultBlock?: string;
+  defaultLandmark?: string;
+  blockError?: string;
+  landmarkError?: string;
+  blockName?: string;
+  landmarkName?: string;
+}) {
+  const [block, setBlock] = useState(defaultBlock);
+  const [landmark, setLandmark] = useState(defaultLandmark);
+  return (
+    <WarehouseLocationSelect
+      blocks={blocks}
+      index={index}
+      block={block}
+      landmark={landmark}
+      onBlockChange={(v) => {
+        setBlock(v);
+        setLandmark(""); // другой блок — другой смысл у номера ориентира
+      }}
+      onLandmarkChange={setLandmark}
+      blockError={blockError}
+      landmarkError={landmarkError}
+      blockName={blockName}
+      landmarkName={landmarkName}
+    />
   );
 }

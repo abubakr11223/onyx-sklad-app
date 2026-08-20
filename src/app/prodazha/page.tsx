@@ -51,6 +51,7 @@ import {
   takeCapPlusOne,
   takeForCap,
 } from "@/lib/catalog-bounds";
+import { formatLocation } from "@/lib/locations";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -360,7 +361,7 @@ export default async function ProdazhaPage({
             ]
               .filter(Boolean)
               .join(" · ") || "размеры не указаны",
-            place: `Блок ${s.block}, ориентир ${s.landmark}`,
+            place: formatLocation(s.block, s.landmark),
             reservedBy: s.reservations[0]?.manager.name ?? null,
           })),
       );
@@ -376,7 +377,7 @@ export default async function ProdazhaPage({
           ]
             .filter(Boolean)
             .join(" · "),
-          place: `Блок ${p.block}, ориентир ${p.landmark}`,
+          place: formatLocation(p.block, p.landmark),
         })),
       );
 

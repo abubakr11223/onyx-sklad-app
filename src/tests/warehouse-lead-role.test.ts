@@ -25,18 +25,26 @@ const lead = () => capabilitiesFor("WAREHOUSE_LEAD", OPTS);
 const worker = () => capabilitiesFor("WAREHOUSE", OPTS);
 
 describe("Зав. складом = складчик во всём, кроме количества", () => {
-  it("матрицы совпадают по КАЖДОМУ праву, кроме canEditBatchQuantity", () => {
+  // ТЗ №17 §6 добавил второе отличие: карту склада размечает зав. складом.
+  it("матрицы совпадают по КАЖДОМУ праву, кроме количества и карты склада", () => {
     const a = worker();
     const b = lead();
     const differing = (Object.keys(a) as Array<keyof Capabilities>).filter(
       (k) => a[k] !== b[k],
     );
-    expect(differing).toEqual(["canEditBatchQuantity"]);
+    expect(differing.sort()).toEqual(
+      ["canEditBatchQuantity", "canEditWarehouseMap"].sort(),
+    );
   });
 
   it("складчик количество НЕ меняет, зав. складом — меняет", () => {
     expect(worker().canEditBatchQuantity).toBe(false);
     expect(lead().canEditBatchQuantity).toBe(true);
+  });
+
+  it("ТЗ №17 §6 — карту склада правит зав. складом, обычный складчик — нет", () => {
+    expect(worker().canEditWarehouseMap).toBe(false);
+    expect(lead().canEditWarehouseMap).toBe(true);
   });
 
   it("зав. складом сохраняет все складские функции", () => {

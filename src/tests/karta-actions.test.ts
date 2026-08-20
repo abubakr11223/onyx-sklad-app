@@ -71,9 +71,10 @@ vi.mock("@/lib/db", () => ({ db: M.dbMock }));
 // ТЗ №7 #13 — requireOwner теперь в lib/session.ts; мокаем оба экспорта.
 vi.mock("@/lib/session", () => ({
   getRealSessionUser: M.getRealSessionUser,
-  requireOwner: async (deniedRedirect: string) => {
+  // ТЗ №17 §6 — карту правит владелец ИЛИ зав. складом.
+  requireWarehouseMapEditor: async (deniedRedirect: string) => {
     const me = await M.getRealSessionUser();
-    if (!me || me.role !== "OWNER") {
+    if (!me || (me.role !== "OWNER" && me.role !== "WAREHOUSE_LEAD")) {
       const err = new Error("NEXT_REDIRECT") as Error & { location: string };
       err.name = "NEXT_REDIRECT";
       err.location = deniedRedirect;
@@ -435,7 +436,7 @@ describe("removeLandmark — ориентир с камнем не удаляе�
     expect(wlDelete).not.toHaveBeenCalled();
   });
 
-  it("не OWNER ⇒ err=denied", async () => {
+  it("обычный складчик ⇒ err=denied", async () => {
     getRealSessionUser.mockResolvedValue({ id: "u2", role: "WAREHOUSE" });
 
     await expectRedirect(
@@ -443,6 +444,20 @@ describe("removeLandmark — ориентир с камнем не удаляе�
       "/karta-sklada?edit=1&err=denied",
     );
     expect(wlDelete).not.toHaveBeenCalled();
+  });
+
+  it("ТЗ №17 §6 — зав. складом (WAREHOUSE_LEAD) карту править МОЖЕТ", async () => {
+    getRealSessionUser.mockResolvedValue({ id: "lead1", role: "WAREHOUSE_LEAD" });
+    wlFindUnique.mockResolvedValue({
+      number: "5",
+      block: { id: "wb1", letter: "A1" },
+    });
+
+    await expectRedirect(
+      () => removeLandmark(fd({ landmarkId: "lm1" })),
+      "/karta-sklada?edit=1&ok=landmark_removed",
+    );
+    expect(wlDelete).toHaveBeenCalledWith({ where: { id: "lm1" } });
   });
 });
 

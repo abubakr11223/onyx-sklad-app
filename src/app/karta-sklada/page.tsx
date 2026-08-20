@@ -41,7 +41,7 @@ type StoneHere = {
 };
 
 const ERR_RU: Record<string, string> = {
-  denied: "Редактировать карту может только владелец.",
+  denied: "Редактировать карту может только владелец или зав. складом.",
   letter: "Укажите код блока (латиница, например A1).",
   area: "Некорректная площадь.",
   number: "Укажите номер ориентира.",
@@ -107,8 +107,11 @@ export default async function KartaSkladaPage({
     getRealSessionUser(),
   ]);
 
-  const isOwner = me?.role === "OWNER";
-  const editMode = isOwner && sp.edit === "1";
+  // ТЗ №17 §6 — размечать карту может владелец ИЛИ зав. складом: блоки заводит
+  // не складчик, но и не только владелец — иначе приёмка встанет в очередь к нему.
+  const canEditMap =
+    me?.role === "OWNER" || me?.role === "WAREHOUSE_LEAD";
+  const editMode = canEditMap && sp.edit === "1";
   const okMsg = sp.ok ? OK_RU[sp.ok] : undefined;
   const errMsg = sp.err ? (ERR_RU[sp.err] ?? "Не удалось выполнить.") : undefined;
 
@@ -182,8 +185,8 @@ export default async function KartaSkladaPage({
             пустые зоны.
           </p>
         </div>
-        {/* ТЗ №6 — переключатель режима редактирования (только владелец). */}
-        {isOwner &&
+        {/* ТЗ №6 / №17 §6 — режим редактирования: владелец или зав. складом. */}
+        {canEditMap &&
           (editMode ? (
             <Link href="/karta-sklada">
               <Button variant="primary" size="sm">

@@ -52,6 +52,7 @@ import { CameraIcon } from "@/components/ui/Icons";
 import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
+import { formatLocation } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
 
@@ -197,7 +198,7 @@ function MoveQtyForm({
         </option>
         {others.map((o) => (
           <option key={o.id} value={o.id}>
-            Блок {o.block}, ор. {o.landmark}
+            {formatLocation(o.block, o.landmark)}
           </option>
         ))}
       </select>
@@ -966,7 +967,7 @@ export default async function KamenPage({
                         {m2Fmt.format(Number(s.areaM2))} м²
                       </>
                     )}{" "}
-                    · Блок {s.block}, ориентир {s.landmark}
+                    · {formatLocation(s.block, s.landmark)}
                     {s.needsCheck && <NeedsCheckBadge />}
                     {/* §6.1 шаг 8: клиент выбрал плиту №N → продажа с preselect.
                         ?slab=<id> — /prodazha server-side tekshiradi (SOLD/чужая
@@ -1059,7 +1060,7 @@ export default async function KamenPage({
                   {p.areaM2 !== null && (
                     <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
                   )}{" "}
-                  · Блок {p.block}, ориентир {p.landmark}
+                  · {formatLocation(p.block, p.landmark)}
                   {p.needsCheck && <NeedsCheckBadge />}
                   {/* SK-2: пометку «проверить» переключает только склад. */}
                   {caps.canManageWarehouse && (
@@ -1230,7 +1231,7 @@ export default async function KamenPage({
                           </form>
                         ) : (
                           <>
-                            Блок {loc.block}, ориентир {loc.landmark}
+                            {formatLocation(loc.block, loc.landmark)}
                             {loc.slabsHere !== null && <> · ~{loc.slabsHere} плит</>}
                             {loc.areaHereM2 !== null && (
                               <> · ≈{m2Fmt.format(Number(loc.areaHereM2))} м²</>
@@ -1479,7 +1480,7 @@ export default async function KamenPage({
                           />
                           <input type="hidden" name="next" value={"/kamen/" + id} />
                           <span className="text-ink/70">
-                            Блок {loc.block}, ориентир {loc.landmark}
+                            {formatLocation(loc.block, loc.landmark)}
                           </span>
                           <Button type="submit" variant="secondary" size="sm">
                             <CameraIcon width={16} height={16} />
