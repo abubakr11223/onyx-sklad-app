@@ -61,7 +61,9 @@ export async function findUnknownLocations(
       unknown.push({ index, reason: "block", block, landmark });
       return;
     }
-    if (!landmarks.has(landmark)) {
+    // ТЗ №18 §2 — пустой ориентир законен: адрес до уровня блока. Сверять с
+    // справочником нечего, блок уже найден выше.
+    if (landmark !== "" && !landmarks.has(landmark)) {
       unknown.push({ index, reason: "landmark", block, landmark });
     }
   });
@@ -99,13 +101,54 @@ export async function loadWarehouseGrid(): Promise<
   { letter: string; landmarks: string[] }[]
 > {
   const rows = await db.warehouseBlock.findMany({
-    orderBy: [{ sortOrder: "asc" }, { letter: "asc" }],
     select: { letter: true, landmarks: { select: { number: true } } },
   });
-  return rows.map((r) => ({
-    letter: r.letter,
-    landmarks: sortLandmarks(r.landmarks.map((l) => l.number)),
-  }));
+  return sortBlockOptions(
+    rows.map((r) => ({
+      letter: r.letter,
+      landmarks: sortLandmarks(r.landmarks.map((l) => l.number)),
+    })),
+  );
+}
+
+// ──────────────── ТЗ №18 §6 — порядок блоков по коду ─────────────────
+//
+// Было: порядок создания (sortOrder). На экране это выглядело как
+// «A, B, C, D1, G1, H1, F1, S1, K1, A1, A2…» — ряды одного блока
+// разбросаны по списку, F стоит после H. Складчик искал нужный код
+// глазами вместо того, чтобы взять его сразу.
+//
+// Сортировка ЕСТЕСТВЕННАЯ, а не посимвольная: обычное строковое
+// сравнение даёт «A1, A10, A11, A2» — цифры сравниваются как текст.
+// Разбираем код на буквенную и числовую часть и сравниваем число как
+// число. Сейчас все номера однозначные и разницы не видно, но как
+// только у ряда появится позиция за десяток, порядок поедет.
+//
+// Ручной сортировки не предусмотрено: порядок один и тот же на карте
+// склада и во всех выпадающих списках (приёмка, правка партии, разбить).
+
+const blockCollator = new Intl.Collator("ru-RU", { sensitivity: "base" });
+
+/** «A12» → [«A», 12]; «A» → [«A», -1] (голая буква идёт перед «A1»). */
+function splitBlockCode(code: string): [string, number] {
+  const m = code.trim().match(/^(\D*)(\d*)/);
+  const letters = (m?.[1] ?? code).trim();
+  const digits = m?.[2] ?? "";
+  return [letters, digits === "" ? -1 : Number(digits)];
+}
+
+/** Сравнение кодов блоков: сначала буква, потом номер КАК ЧИСЛО. */
+export function compareBlockCodes(a: string, b: string): number {
+  const [la, na] = splitBlockCode(a);
+  const [lb, nb] = splitBlockCode(b);
+  return blockCollator.compare(la, lb) || na - nb || blockCollator.compare(a, b);
+}
+
+/** Тот же порядок для списка блоков формы (letter + ориентиры). */
+export function sortBlockOptions<T extends { letter: string }>(
+  blocks: T[],
+): T[] {
+  return [...blocks].sort((a, b) => compareBlockCodes(a.letter, b.letter));
 }
 
 /**

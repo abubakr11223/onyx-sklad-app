@@ -14,6 +14,19 @@ import { requireWarehouseMapEditor } from "@/lib/session";
 
 const BACK = "/karta-sklada?edit=1";
 
+/**
+ * ТЗ №18 §9.1 — код назначения при переименовании уже занят.
+ *
+ * Отдельный класс, а не Prisma-ошибка: занять код может не только строка сетки
+ * (её ловит @unique → P2002), но и ОДИН ТОЛЬКО КАМЕНЬ — блок, заведённый
+ * приёмкой, живёт как BatchLocation/Slab/Piece без строки WarehouseBlock.
+ * Переименование в такой код проходило молча и сливало два блока в один:
+ * количество камня сходилось, а информация о том, где он лежал, исчезала без
+ * следа — адрес уже не восстановить. Объединение блоков — это отдельное
+ * осознанное решение, а не побочный эффект опечатки в поле «буква».
+ */
+class BlockCodeTakenError extends Error {}
+
 // Аудит ТЗ №7 #13 — общий gate из lib/session.ts (был локальный дубль).
 // ТЗ №17 §6 — карту правит владелец ИЛИ зав. складом (canEditWarehouseMap).
 // ТЗ №17 §7 — возвращаем actorId: изменения карты пишутся в Историю (кто, что).
@@ -256,6 +269,22 @@ export async function renameBlock(formData: FormData): Promise<void> {
       });
       const oldLetter = cur.letter;
       if (oldLetter === letter) return; // no-op — те же коды после нормализации
+
+      // ТЗ №18 §9.1 — код назначения свободен? Проверяем и сетку, и камень
+      // (авто-блок из приёмки строки сетки не имеет). Последовательно, а не
+      // Promise.all: внутри интерактивной транзакции запросы идут по одному
+      // соединению.
+      const takenBlock = await tx.warehouseBlock.findUnique({
+        where: { letter },
+        select: { id: true },
+      });
+      if (takenBlock) throw new BlockCodeTakenError();
+      const takenLocs = await tx.batchLocation.count({ where: { block: letter } });
+      const takenSlabs = await tx.slab.count({ where: { block: letter } });
+      const takenPieces = await tx.piece.count({ where: { block: letter } });
+      if (takenLocs + takenSlabs + takenPieces > 0) {
+        throw new BlockCodeTakenError();
+      }
       await tx.warehouseBlock.update({ where: { id }, data: { letter } });
       const [locs, slabs, pieces] = [
         await tx.batchLocation.updateMany({
@@ -293,6 +322,8 @@ export async function renameBlock(formData: FormData): Promise<void> {
       });
     });
   } catch (e) {
+    // ТЗ №18 §9.1 — занятый код: отказ вместо молчаливого слияния.
+    if (e instanceof BlockCodeTakenError) redirect(`${BACK}&err=block_taken`);
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       if (e.code === "P2002") redirect(`${BACK}&err=block_taken`);
       if (e.code === "P2025") redirect(`${BACK}&err=notfound`);

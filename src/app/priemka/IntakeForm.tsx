@@ -999,16 +999,34 @@ export default function IntakeForm({
                       </Field>
                     </div>
                   )}
-                  <Field
-                    id={`locSlabsHere-${idx}`}
-                    name="locSlabsHere"
-                    inputMode="numeric"
-                    label={<>Плит здесь <Req /></>}
-                    placeholder="25"
-                    value={loc.slabsHere}
-                    onChange={setLoc(id, "slabsHere")}
-                    error={e[`loc-${idx}-slabsHere`]}
-                  />
+                  {(() => {
+                    // ТЗ №18 (ориентир) §5 — при ЕДИНСТВЕННОЙ локации «плит
+                    // здесь» дублирует общее количество партии: складчик вводит
+                    // одно и то же дважды. Оставляем поле (партию можно принять
+                    // частями и потом дописать), но не требуем: пусто → сервер
+                    // подставит весь объём. Обязательным становится с двух
+                    // локаций, где распределение действительно несёт смысл.
+                    const whole =
+                      rowIds.length === 1 &&
+                      (!patternsEnabled || loc.pattern === "");
+                    return (
+                      <Field
+                        id={`locSlabsHere-${idx}`}
+                        name="locSlabsHere"
+                        inputMode="numeric"
+                        label={whole ? "Плит здесь" : <>Плит здесь <Req /></>}
+                        placeholder="25"
+                        value={loc.slabsHere}
+                        onChange={setLoc(id, "slabsHere")}
+                        error={e[`loc-${idx}-slabsHere`]}
+                        hint={
+                          whole && !e[`loc-${idx}-slabsHere`]
+                            ? "Пусто — здесь лежит весь приход."
+                            : undefined
+                        }
+                      />
+                    );
+                  })()}
                   {(() => {
                     // ТЗ №18 §5 — м² здесь считается из узора (плит × м²/плиту),
                     // руками не вводится. «Весь приход» — ручной ввод.
@@ -1048,7 +1066,10 @@ export default function IntakeForm({
                         name="locAreaHereM2"
                         inputMode="decimal"
                         label={
-                          patternsEnabled ? (
+                          // ТЗ №18 (ориентир) §5 — единственная локация «весь
+                          // приход»: площадь подставится из итога партии.
+                          patternsEnabled &&
+                          !(rowIds.length === 1 && loc.pattern === "") ? (
                             <>м² здесь <Req /></>
                           ) : (
                             "м² здесь"

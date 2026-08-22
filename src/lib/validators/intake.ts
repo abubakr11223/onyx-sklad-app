@@ -381,13 +381,24 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     const block = normalizeBlockLetter(loc.block);
     const landmark = loc.landmark.trim();
     if (!block) errors[`loc-${i}-block`] = "Укажите блок (например «А»)";
-    if (!landmark) errors[`loc-${i}-landmark`] = "Укажите ориентир (например «2» или «1–2»)";
+    // ТЗ №18 §2 — ориентир необязателен: пусто = «камень лежит в этом блоке,
+    // точная позиция не указана». Блок по-прежнему обязателен.
 
     // ТЗ №18 §4.1 — обязательное: без количества строка локации бессмысленна.
     // Исключение — «партия без плит» (задана только площадь): там строка
     // сверяется по м², и требовать плиты не с чего.
-    const slabsRequired = input.patternsEnabled || slabsTotal !== null;
-    const slabsHere = parsePositiveInt(loc.slabsHere);
+    // ТЗ №18 (ориентир) §5 — при ЕДИНСТВЕННОЙ локации «плит здесь» и «м² здесь»
+    // дублируют итог партии: складчик вводит одно и то же дважды. Пусто →
+    // подставляем весь объём партии. Распределение требуем только когда локаций
+    // две и более — там оно действительно несёт информацию (и суммы сверяются).
+    const wholeBatchRow =
+      input.locations.length === 1 && (loc.pattern ?? "").trim() === "";
+    const slabsRequired =
+      (input.patternsEnabled || slabsTotal !== null) && !wholeBatchRow;
+    let slabsHere = parsePositiveInt(loc.slabsHere);
+    if (slabsHere === null && wholeBatchRow && typeof slabsTotal === "number") {
+      slabsHere = slabsTotal;
+    }
     if (slabsHere === null && slabsRequired) {
       errors[`loc-${i}-slabsHere`] = "Укажите, сколько плит лежит здесь";
     } else if (slabsHere === undefined) {
@@ -424,6 +435,14 @@ export function validateIntake(input: IntakeInput): IntakeResult {
         Math.round(((p.areaM2 * slabsHere) / p.slabs) * 1000) / 1000;
     } else {
       areaHereM2 = parsePositiveDecimal(loc.areaHereM2);
+      // §5 — единственная локация: вся площадь партии лежит здесь.
+      if (
+        areaHereM2 === null &&
+        wholeBatchRow &&
+        typeof areaTotalM2 === "number"
+      ) {
+        areaHereM2 = areaTotalM2;
+      }
       if (areaHereM2 === undefined) {
         errors[`loc-${i}-areaHereM2`] = "Положительное число, например 12,5";
       } else if (
@@ -451,7 +470,6 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       typeof slabsHere === "number" || (slabsHere === null && !slabsRequired);
     if (
       block &&
-      landmark &&
       slabsOk &&
       areaHereM2 !== undefined &&
       !errors[`loc-${i}-pattern`]

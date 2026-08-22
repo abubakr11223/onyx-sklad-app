@@ -87,8 +87,8 @@ export async function submitSingan(formData: FormData): Promise<void> {
   if (!batchId) fail("Выберите партию");
   const block = str("block");
   if (!block) fail("Укажите блок (например «А»)");
+  // ТЗ №18 §2 — ориентир необязателен (кусок числится за блоком целиком).
   const landmark = str("landmark");
-  if (!landmark) fail("Укажите ориентир (например «2»)");
   // TZ §5.6 — same cause taxonomy as /razbit (both paths must record it).
   const causeParsed = parseBreakCause(str("breakCause"), str("breakCauseNote"));
   if (!causeParsed.ok) fail(causeParsed.message);

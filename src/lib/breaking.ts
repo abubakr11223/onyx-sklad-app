@@ -351,9 +351,9 @@ export function parsePieceRow(row: RawPieceRow): ParsePieceRowResult {
 
   // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
   const block = normalizeBlockLetter(row.block);
+  // ТЗ №18 §2 — ориентир необязателен: кусок может числиться за блоком целиком.
   const landmark = row.landmark.trim();
   if (!block) errors.block = "Укажите блок (например «А»)";
-  if (!landmark) errors.landmark = "Укажите ориентир (например «2»)";
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
@@ -411,8 +411,9 @@ export function assertValidPieceInput(p: PieceInput): void {
   ) {
     throw new BreakError("INVALID_PIECE", "Площадь куска — положительное число в допустимых пределах");
   }
-  if (!p.block.trim() || !p.landmark.trim()) {
-    throw new BreakError("INVALID_PIECE", "У куска должны быть блок и ориентир");
+  // ТЗ №18 §2 — ориентир необязателен, блок обязателен (без него адреса нет).
+  if (!p.block.trim()) {
+    throw new BreakError("INVALID_PIECE", "У куска должен быть блок");
   }
 }
 

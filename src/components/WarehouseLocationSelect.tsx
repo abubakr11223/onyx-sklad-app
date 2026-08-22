@@ -101,15 +101,18 @@ export default function WarehouseLocationSelect({
 
       <Field
         id={`locLandmark-${index}`}
-        label={
-          <>
-            Ориентир <span className="text-danger">*</span>
-          </>
-        }
+        // ТЗ №18 §2 — ориентир НЕОБЯЗАТЕЛЕН: звёздочки нет. Блок остаётся со
+        // звёздочкой — без него у локации нет адреса.
+        label="Ориентир"
         error={landmarkError}
         hint={
-          block && landmarks.length === 0 && !landmarkError
-            ? "В этом блоке нет ориентиров — добавьте их в «Карте склада»."
+          // ТЗ №18 §4 — подсказка вместо запрета. Прежний текст «в этом блоке
+          // нет ориентиров — добавьте их в „Карте склада"» читался как ошибка и
+          // был ею: форма не давала сохранить. Теперь говорим, что будет, если
+          // не выбирать — и показываем это в обоих случаях: и когда ориентиров
+          // в блоке нет, и когда они есть, но складчик их не выбрал.
+          block && landmark === "" && !landmarkError
+            ? "Ориентир можно не указывать — тогда камень числится за блоком целиком."
             : undefined
         }
       >
@@ -121,7 +124,9 @@ export default function WarehouseLocationSelect({
           aria-invalid={landmarkError ? true : undefined}
           onChange={(ev) => onLandmarkChange(ev.target.value)}
         >
-          <option value="">{block ? "— выберите ориентир —" : "— сначала блок —"}</option>
+          <option value="">
+            {block ? "— без ориентира —" : "— сначала блок —"}
+          </option>
           {landmark !== "" && !landmarks.includes(landmark) && (
             <option value={landmark}>{landmark} (нет в карте)</option>
           )}

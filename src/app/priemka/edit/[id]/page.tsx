@@ -21,6 +21,7 @@ import NoAccess from "@/components/NoAccess";
 import BatchEditForm from "../../BatchEditForm";
 import { buttonClass } from "@/components/ui/Button";
 import { thicknessToNumber } from "@/lib/dimensions";
+import { sortBlockOptions, sortLandmarks } from "@/lib/warehouse-grid";
 
 export const dynamic = "force-dynamic";
 
@@ -130,10 +131,13 @@ export default async function PriemkaEditBatchPage({
   const canEditQuantity = caps.canEditBatchQuantity;
 
   const arrivedAtIso = batch.arrivedAt.toISOString().slice(0, 10);
-  const blocks = gridBlocks.map((b) => ({
-    letter: b.letter,
-    landmarks: b.landmarks.map((l) => l.number),
-  }));
+  // ТЗ №18 §6 — тот же порядок блоков, что на карте и в приёмке.
+  const blocks = sortBlockOptions(
+    gridBlocks.map((b) => ({
+      letter: b.letter,
+      landmarks: sortLandmarks(b.landmarks.map((l) => l.number)),
+    })),
+  );
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">

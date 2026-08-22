@@ -125,6 +125,23 @@ function fd(pairs: Record<string, string>): FormData {
   return f;
 }
 
+/**
+ * ТЗ №18 §9.1 — renameBlock читает WarehouseBlock ДВАЖДЫ: текущий блок по id и
+ * КОД НАЗНАЧЕНИЯ по letter (свободен ли он). Мок обязан различать эти запросы,
+ * иначе блок «занимает» сам себя. takenLetters — коды, уже занятые сеткой.
+ */
+function mockCurrentBlock(letter: string, takenLetters: string[] = []): void {
+  wbFindUnique.mockImplementation(
+    async (args: { where: { id?: string; letter?: string } }) => {
+      if (args.where.id) return { letter };
+      if (args.where.letter && takenLetters.includes(args.where.letter)) {
+        return { id: "wbTaken" };
+      }
+      return null;
+    },
+  );
+}
+
 /** payload.kind последней записи в Историю. */
 function lastAuditKind(): string | undefined {
   const call = auditCreate.mock.calls.at(-1);
@@ -158,7 +175,7 @@ beforeEach(() => {
 
 describe("renameBlock — переносит BatchLocation/Slab/Piece.block (ТЗ №7 #6)", () => {
   it("переименование «A1»→«B2» ⇒ WarehouseBlock.letter + все *.block, одной транзакцией", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "A1" });
+    mockCurrentBlock("A1");
 
     await expectRedirect(
       () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
@@ -186,7 +203,7 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
   });
 
   it("ТЗ №17 §3.1 — кириллический ввод «В2» нормализуется в латинский «B2»", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "A1" });
+    mockCurrentBlock("A1");
 
     await expectRedirect(
       () => renameBlock(fd({ blockId: "wb1", letter: "В2" })), // кир. «В»
@@ -206,7 +223,7 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
   });
 
   it("no-op: тот же код после нормализации ⇒ никаких update и записи в Историю", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "A1" });
+    mockCurrentBlock("A1");
 
     await expectRedirect(
       () => renameBlock(fd({ blockId: "wb1", letter: "a1" })),
@@ -221,7 +238,7 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
   });
 
   it("новый код занят другим блоком (P2002) ⇒ err=block_taken", async () => {
-    wbFindUnique.mockResolvedValue({ letter: "A1" });
+    mockCurrentBlock("A1");
     const { Prisma } = await import("@prisma/client");
     wbUpdate.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError("dup", {
@@ -234,6 +251,46 @@ describe("renameBlock — переносит BatchLocation/Slab/Piece.block (Т�
       () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
       "/karta-sklada?edit=1&err=block_taken",
     );
+  });
+
+  // ── ТЗ №18 §9.1 — переименование в занятый код НЕ сливает блоки ──
+
+  it("код назначения занят строкой сетки ⇒ err=block_taken, update не зовём", async () => {
+    mockCurrentBlock("A1", ["B2"]);
+
+    await expectRedirect(
+      () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
+      "/karta-sklada?edit=1&err=block_taken",
+    );
+    expect(wbUpdate).not.toHaveBeenCalled();
+    expect(blUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("код назначения занят ТОЛЬКО камнем (авто-блок) ⇒ err=block_taken, слияния нет", async () => {
+    // Блок из приёмки строки WarehouseBlock не имеет — раньше переименование
+    // проходило молча и сливало два блока: количество сходилось, а информация
+    // о том, где лежал камень, исчезала без следа.
+    mockCurrentBlock("A1");
+    blCount.mockResolvedValue(3);
+
+    await expectRedirect(
+      () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
+      "/karta-sklada?edit=1&err=block_taken",
+    );
+    expect(wbUpdate).not.toHaveBeenCalled();
+    expect(blUpdateMany).not.toHaveBeenCalled();
+    expect(auditCreate).not.toHaveBeenCalled();
+  });
+
+  it("код назначения занят плитой ⇒ err=block_taken", async () => {
+    mockCurrentBlock("A1");
+    slabCount.mockResolvedValue(1);
+
+    await expectRedirect(
+      () => renameBlock(fd({ blockId: "wb1", letter: "B2" })),
+      "/karta-sklada?edit=1&err=block_taken",
+    );
+    expect(wbUpdate).not.toHaveBeenCalled();
   });
 
   it("пустой новый код ⇒ err=letter, камень не трогается", async () => {

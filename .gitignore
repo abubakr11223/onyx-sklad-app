@@ -22,3 +22,6 @@ coverage/
 # os
 .DS_Store
 .vercel
+
+# lokal zaxiralar (scripts/backup.sh, har kuni 3:30)
+backups/

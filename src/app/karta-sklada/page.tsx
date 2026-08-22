@@ -17,6 +17,8 @@ import Button from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import { inputClass } from "@/components/ui/Field";
 import { FlagIcon } from "@/components/ui/Icons";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import { compareBlockCodes } from "@/lib/warehouse-grid";
 import {
   addBlock,
   renameBlock,
@@ -40,6 +42,37 @@ type StoneHere = {
   areaHereM2: number | null;
 };
 
+/**
+ * Список камня внутри одной ячейки карты. Вынесен из разметки флажка, потому
+ * что ТЗ №18 §3 добавил вторую такую ячейку — группу «без ориентира». Один
+ * компонент = одинаковый вид и одинаковые ссылки в обеих.
+ */
+function StoneList({ stones }: { stones: StoneHere[] }) {
+  if (stones.length === 0) {
+    return <p className="text-xs text-ink/40">Пусто.</p>;
+  }
+  return (
+    <ul className="space-y-0.5">
+      {stones.map((s, i) => {
+        const qty: string[] = [];
+        if (s.slabsHere !== null) qty.push(`~${s.slabsHere} плит`);
+        if (s.areaHereM2 !== null) qty.push(`≈${m2Fmt.format(s.areaHereM2)} м²`);
+        return (
+          <li key={s.stoneTypeId + "|" + i}>
+            <Link
+              href={"/kamen/" + s.stoneTypeId}
+              className="flex min-h-11 flex-wrap items-center gap-x-2 text-ink hover:text-gold-deep hover:underline"
+            >
+              <span className="font-medium">{s.name}</span>
+              {qty.length > 0 && <Badge variant="neutral">{qty.join(" · ")}</Badge>}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 const ERR_RU: Record<string, string> = {
   denied: "Редактировать карту может только владелец или зав. складом.",
   letter: "Укажите код блока (латиница, например A1).",
@@ -48,7 +81,9 @@ const ERR_RU: Record<string, string> = {
   // ТЗ №17 §3.1 — единый алфавит: латиница (как на бумажном плане).
   letter_not_latin:
     "Код блока — только латиницей и цифрами (например A1, D3, K1).",
-  block_taken: "Блок с таким кодом уже есть.",
+  // ТЗ №18 §9.1 — код занят сеткой ИЛИ камнем: объединять блоки молча нельзя.
+  block_taken:
+    "Блок с таким кодом уже есть (или в нём уже лежит камень). Объединять блоки нельзя — сначала переместите камень.",
   landmark_taken: "Ориентир с таким номером уже есть в блоке.",
   block_has_stone: "Нельзя удалить: в блоке есть камень. Сначала переместите/спишите его.",
   // ТЗ №17 §7 — ориентир с камнем удалять нельзя (адрес не должен «повиснуть»).
@@ -123,6 +158,8 @@ export default async function KartaSkladaPage({
     isFull: boolean;
     sortOrder: number;
     landmarks: Map<string, { landmarkId: string | null; stones: StoneHere[] }>;
+    /** ТЗ №18 §3 — камень, числящийся за блоком целиком (ориентир не указан). */
+    noLandmark: StoneHere[];
   };
   const map = new Map<string, BEntry>();
 
@@ -136,35 +173,50 @@ export default async function KartaSkladaPage({
       isFull: gb.isFull,
       sortOrder: gb.sortOrder,
       landmarks: lm,
+      noLandmark: [],
     });
   }
   for (const loc of locations) {
     let b = map.get(loc.block);
     if (!b) {
-      b = { blockId: null, areaM2: null, note: null, isFull: false, sortOrder: 1e9, landmarks: new Map() };
+      b = { blockId: null, areaM2: null, note: null, isFull: false, sortOrder: 1e9, landmarks: new Map(), noLandmark: [] };
       map.set(loc.block, b);
+    }
+    const stone: StoneHere = {
+      stoneTypeId: loc.batch.stoneTypeId,
+      name: loc.batch.stoneType.name,
+      slabsHere: loc.slabsHere,
+      areaHereM2: loc.areaHereM2 === null ? null : Number(loc.areaHereM2),
+    };
+    // ТЗ №18 §3 — локация без ориентира: камень лежит в этом блоке, точная
+    // позиция не указана. Раньше он попал бы в «ориентир ""» — карточку с
+    // пустым флажком, а по факту рисковал не отобразиться нигде. Отдельная
+    // группа: камень, принятый в блок без ориентира, ВИДЕН на карте.
+    if (loc.landmark.trim() === "") {
+      b.noLandmark.push(stone);
+      continue;
     }
     let l = b.landmarks.get(loc.landmark);
     if (!l) {
       l = { landmarkId: null, stones: [] };
       b.landmarks.set(loc.landmark, l);
     }
-    l.stones.push({
-      stoneTypeId: loc.batch.stoneTypeId,
-      name: loc.batch.stoneType.name,
-      slabsHere: loc.slabsHere,
-      areaHereM2: loc.areaHereM2 === null ? null : Number(loc.areaHereM2),
-    });
+    l.stones.push(stone);
   }
 
+  // ТЗ №18 §6 — по коду блока, а не по порядку создания: ряды одного блока
+  // стоят рядом, D1 перед D2, F перед H. Сортировка естественная — A2 раньше
+  // A10 (см. compareBlockCodes). Ручной сортировки нет: порядок одинаков на
+  // карте и во всех выпадающих списках.
   const blocks = [...map.entries()]
-    .sort((a, b) => a[1].sortOrder - b[1].sortOrder || collator.compare(a[0], b[0]))
+    .sort((a, b) => compareBlockCodes(a[0], b[0]))
     .map(([letter, b]) => ({
       letter,
       blockId: b.blockId,
       areaM2: b.areaM2,
       note: b.note,
       isFull: b.isFull,
+      noLandmark: b.noLandmark,
       landmarks: [...b.landmarks.entries()]
         .sort((x, y) => collator.compare(x[0], y[0]))
         .map(([number, l]) => ({ number, landmarkId: l.landmarkId, stones: l.stones })),
@@ -258,6 +310,13 @@ export default async function KartaSkladaPage({
             ) : (
               <input type="hidden" name="fromLetter" value={blk.letter} />
             );
+            // ТЗ №18 §9.2 — блок с камнем не удаляем: кнопка гаснет, а не
+            // «срабатывает и молча отказывает». Здесь виден только партийный
+            // камень (BatchLocation); плиты и куски знает сервер — он и
+            // остаётся последней защитой (blockHasStone).
+            const stonesInBlock =
+              blk.noLandmark.length +
+              blk.landmarks.reduce((n, l) => n + l.stones.length, 0);
             return (
             <section
               key={blk.letter}
@@ -337,18 +396,43 @@ export default async function KartaSkladaPage({
                       Сохранить
                     </Button>
                   </form>
-                  <form action={deleteBlock}>
+                  <form action={deleteBlock} className="flex flex-col gap-1">
                     {idField}
-                    <Button type="submit" variant="danger" size="sm">
+                    <ConfirmSubmitButton
+                      disabled={stonesInBlock > 0}
+                      message={`Удалить блок ${blk.letter}? Вместе с ним исчезнут его ориентиры (${blk.landmarks.length}). Отменить нельзя.`}
+                      title={
+                        stonesInBlock > 0
+                          ? "Сначала переместите камень из блока"
+                          : undefined
+                      }
+                    >
                       Удалить блок
-                    </Button>
+                    </ConfirmSubmitButton>
+                    {stonesInBlock > 0 && (
+                      <p className="text-xs text-ink/50">
+                        В блоке есть камень — сначала переместите его.
+                      </p>
+                    )}
                   </form>
                 </div>
               )}
 
               {/* Ориентиры. */}
               <div className="space-y-3">
-                {blk.landmarks.length === 0 && (
+                {/* ТЗ №18 §3 — камень, принятый в блок без ориентира. Стоит
+                    ПЕРВЫМ и без флажка: это не «недозаполненный ориентир», а
+                    адрес до уровня блока. Если бы такой камень не отображался
+                    на карте, приёмка без ориентира была бы хуже блокировки. */}
+                {blk.noLandmark.length > 0 && (
+                  <div className="rounded-field border border-dashed border-ink/25 bg-paper/50 p-3">
+                    <div className="mb-2 inline-flex items-center rounded-field bg-ink/[0.06] px-2.5 py-1 text-sm font-semibold text-ink/70">
+                      без ориентира
+                    </div>
+                    <StoneList stones={blk.noLandmark} />
+                  </div>
+                )}
+                {blk.landmarks.length === 0 && blk.noLandmark.length === 0 && (
                   <p className="text-xs text-ink/40">Ориентиров пока нет.</p>
                 )}
                 {blk.landmarks.map((lm) => (
@@ -364,37 +448,24 @@ export default async function KartaSkladaPage({
                       {editMode && lm.landmarkId && (
                         <form action={removeLandmark}>
                           <input type="hidden" name="landmarkId" value={lm.landmarkId} />
-                          <Button type="submit" variant="ghost" size="sm" className="text-danger">
+                          {/* ТЗ №18 §9.2 — то же подтверждение, что у блока. */}
+                          <ConfirmSubmitButton
+                            variant="ghost"
+                            className="text-danger"
+                            disabled={lm.stones.length > 0}
+                            message={`Убрать ориентир ${lm.number} из блока ${blk.letter}?`}
+                            title={
+                              lm.stones.length > 0
+                                ? "Сначала переместите камень с этого ориентира"
+                                : undefined
+                            }
+                          >
                             Убрать
-                          </Button>
+                          </ConfirmSubmitButton>
                         </form>
                       )}
                     </div>
-                    {lm.stones.length > 0 ? (
-                      <ul className="space-y-0.5">
-                        {lm.stones.map((s, i) => {
-                          const qty: string[] = [];
-                          if (s.slabsHere !== null) qty.push(`~${s.slabsHere} плит`);
-                          if (s.areaHereM2 !== null)
-                            qty.push(`≈${m2Fmt.format(s.areaHereM2)} м²`);
-                          return (
-                            <li key={s.stoneTypeId + "|" + i}>
-                              <Link
-                                href={"/kamen/" + s.stoneTypeId}
-                                className="flex min-h-11 flex-wrap items-center gap-x-2 text-ink hover:text-gold-deep hover:underline"
-                              >
-                                <span className="font-medium">{s.name}</span>
-                                {qty.length > 0 && (
-                                  <Badge variant="neutral">{qty.join(" · ")}</Badge>
-                                )}
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-ink/40">Пусто.</p>
-                    )}
+                    <StoneList stones={lm.stones} />
                   </div>
                 ))}
 

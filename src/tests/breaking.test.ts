@@ -204,6 +204,8 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
     if (!r.ok) expect(r.errors.sidesMm).toBeTruthy();
   });
 
+  // ТЗ №18 §2 — ориентир больше не обязателен: пустой landmark ошибкой не
+  // считается (кусок числится за блоком целиком). Блок остаётся обязательным.
   it("ошибки адресованы полям: kind, стороны, габариты, локация", () => {
     const r = parsePieceRow({
       kind: "WHOLE",
@@ -223,7 +225,6 @@ describe("parsePieceRow — строка формы → PieceInput", () => {
         "boundingLengthMm",
         "boundingWidthMm",
         "kind",
-        "landmark",
         "sidesMm",
         "thicknessMm",
       ]);
@@ -267,7 +268,7 @@ describe("assertValidPieceInput — вход не из формы (Telegram-бо
       { ...validPiece, thicknessMm: 10_000 },
       { ...validPiece, areaM2: 0 },
       { ...validPiece, block: "  " },
-      { ...validPiece, landmark: "" },
+      // ТЗ №18 §2 — landmark: "" здесь больше НЕ ошибка (см. выше).
     ];
     for (const bad of cases) {
       try {

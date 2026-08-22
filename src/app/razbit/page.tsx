@@ -31,6 +31,7 @@ import Field from "@/components/ui/Field";
 import Button from "@/components/ui/Button";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
 import { thicknessToNumber } from "@/lib/dimensions";
+import { sortBlockOptions, sortLandmarks } from "@/lib/warehouse-grid";
 
 export const metadata: Metadata = {
   title: "Разбить камень — Onyx",
@@ -130,10 +131,13 @@ export default async function RazbitPage({
   const slabsCap = takeCapPlusOne(slabRowsRaw, CATALOG_SLABS_CAP);
   const batchesCap = takeCapPlusOne(batchRowsRaw, CATALOG_BATCHES_CAP);
 
-  const blocks = gridBlocks.map((b) => ({
-    letter: b.letter,
-    landmarks: b.landmarks.map((l) => l.number),
-  }));
+  // ТЗ №18 §6 — тот же порядок блоков, что на карте и в приёмке.
+  const blocks = sortBlockOptions(
+    gridBlocks.map((b) => ({
+      letter: b.letter,
+      landmarks: sortLandmarks(b.landmarks.map((l) => l.number)),
+    })),
+  );
 
   const slabs: SlabOption[] = slabsCap.items.map((s) => ({
     id: s.id,

@@ -45,14 +45,16 @@ describe("validateLocationEdit — §5.7", () => {
     });
   });
 
-  it("пустой/пробельный landmark → «Укажите ориентир»", () => {
+  // ТЗ №18 §2 — ориентир стал НЕОБЯЗАТЕЛЬНЫМ: пусто = адрес до уровня блока.
+  it("пустой/пробельный landmark → ok, landmark = «» (адрес до блока)", () => {
+    // ТЗ №17 §3.1 — кир. «А» на входе → лат. «A» после нормализации.
     expect(validateLocationEdit({ block: "А", landmark: "" })).toEqual({
-      ok: false,
-      error: "Укажите ориентир",
+      ok: true,
+      data: { block: "A", landmark: "", note: null },
     });
     expect(validateLocationEdit({ block: "А", landmark: "  " })).toEqual({
-      ok: false,
-      error: "Укажите ориентир",
+      ok: true,
+      data: { block: "A", landmark: "", note: null },
     });
   });
 
@@ -174,14 +176,20 @@ describe("validateNewLocation — §5.7 добавление локации", ()
     });
   });
 
-  it("пустой block/landmark → те же русские ошибки, что у правки", () => {
+  it("пустой block → «Укажите блок»; пустой landmark → ok (ТЗ №18 §2)", () => {
     expect(validateNewLocation({ block: "", landmark: "2" })).toEqual({
       ok: false,
       error: "Укажите блок",
     });
     expect(validateNewLocation({ block: "А", landmark: "  " })).toEqual({
-      ok: false,
-      error: "Укажите ориентир",
+      ok: true,
+      data: {
+        block: "A",
+        landmark: "",
+        slabsHere: null,
+        areaHereM2: null,
+        note: null,
+      },
     });
   });
 
@@ -287,10 +295,10 @@ describe("validateSlabLocation — локация плиты (без note)", () 
     });
   });
 
-  it("пустой landmark → «Укажите ориентир»", () => {
+  it("пустой landmark → ok: плита числится за блоком целиком (ТЗ №18 §2)", () => {
     expect(validateSlabLocation({ block: "А", landmark: "" })).toEqual({
-      ok: false,
-      error: "Укажите ориентир",
+      ok: true,
+      data: { block: "A", landmark: "" },
     });
   });
 });

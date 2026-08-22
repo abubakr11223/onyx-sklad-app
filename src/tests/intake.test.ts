@@ -456,12 +456,13 @@ describe("validateIntake — локации", () => {
     if (!r.ok) expect(r.errors.locations).toMatch(/хотя бы одну/);
   });
 
-  it("блок и ориентир обязательны, ошибки адресуются по индексу", () => {
+  // ТЗ №18 (ориентир) §2 — обязателен ТОЛЬКО блок; ориентир можно не указывать.
+  it("блок обязателен, ориентир — нет; ошибки адресуются по индексу", () => {
     const r = validateIntake(
       baseInput({
         locations: [
-          { block: "А", landmark: "2", slabsHere: "", areaHereM2: "" },
-          { block: " ", landmark: "", slabsHere: "", areaHereM2: "" },
+          { block: "А", landmark: "2", slabsHere: "20", areaHereM2: "110" },
+          { block: " ", landmark: "", slabsHere: "20", areaHereM2: "110" },
         ],
       }),
     );
@@ -469,7 +470,7 @@ describe("validateIntake — локации", () => {
     if (!r.ok) {
       expect(r.errors["loc-0-block"]).toBeUndefined();
       expect(r.errors["loc-1-block"]).toBeTruthy();
-      expect(r.errors["loc-1-landmark"]).toBeTruthy();
+      expect(r.errors["loc-1-landmark"]).toBeUndefined();
     }
   });
 
@@ -516,14 +517,19 @@ describe("validateIntake — локации", () => {
 
   // ── ТЗ №18 §4 — обязательность и сверка раскладки ──
 
-  it("ТЗ №18: «плит здесь» пусто при заданных плитах партии → ошибка", () => {
+  // ТЗ №18 (ориентир) §5 — требуем «плит здесь» только с ДВУХ локаций:
+  // при одной оно дублирует общее количество партии (см. отдельный тест ниже).
+  it("ТЗ №18: «плит здесь» пусто при ДВУХ локациях → ошибка", () => {
     const r = validateIntake(
       baseInput({
-        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
+        locations: [
+          { block: "А", landmark: "2", slabsHere: "20", areaHereM2: "110" },
+          { block: "А", landmark: "3", slabsHere: "", areaHereM2: "" },
+        ],
       }),
     );
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors["loc-0-slabsHere"]).toMatch(/сколько плит/);
+    if (!r.ok) expect(r.errors["loc-1-slabsHere"]).toMatch(/сколько плит/);
   });
 
   it("ТЗ №18: разложено не всё → locationsSum, приёмка не завершается", () => {
@@ -540,16 +546,22 @@ describe("validateIntake — локации", () => {
     const missing = validateIntake(
       baseInput({
         slabsTotal: "",
-        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
+        locations: [
+          { block: "А", landmark: "2", slabsHere: "", areaHereM2: "120" },
+          { block: "А", landmark: "3", slabsHere: "", areaHereM2: "" },
+        ],
       }),
     );
     expect(missing.ok).toBe(false);
-    if (!missing.ok) expect(missing.errors["loc-0-areaHereM2"]).toBeTruthy();
+    if (!missing.ok) expect(missing.errors["loc-1-areaHereM2"]).toBeTruthy();
 
     const mismatch = validateIntake(
       baseInput({
         slabsTotal: "",
-        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "100" }],
+        locations: [
+          { block: "А", landmark: "2", slabsHere: "", areaHereM2: "100" },
+          { block: "А", landmark: "3", slabsHere: "", areaHereM2: "20" },
+        ],
       }),
     );
     expect(mismatch.ok).toBe(false);

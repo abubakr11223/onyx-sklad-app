@@ -80,16 +80,39 @@ describe("ТЗ №18 — «Что здесь» (узор в строке лок�
     if (r.ok) expect(r.data.locations[0].patternIdx).toBeNull();
   });
 
+  // ТЗ №18 (ориентир) §5 — при ЕДИНСТВЕННОЙ локации «плит здесь»/«м² здесь»
+  // подставляются из итогов партии, поэтому требование ручного ввода для
+  // строки «весь приход» проверяем там, где оно осталось: локаций несколько.
   it("«весь приход» в партии с узорами БЕЗ м² → ошибка поля (итог не сверить)", () => {
     const r = validateIntake(
       tzInput({
         locations: [
-          { block: "A", landmark: "3", slabsHere: "16", areaHereM2: "", pattern: "" },
+          { block: "A", landmark: "3", slabsHere: "10", areaHereM2: "", pattern: "" },
+          { block: "B", landmark: "7", slabsHere: "6", areaHereM2: "0,75", pattern: "" },
         ],
       }),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors["loc-0-areaHereM2"]).toMatch(/весь приход/);
+  });
+
+  it("ТЗ №18 (ориентир) §5 — одна локация «весь приход»: плиты и м² из итога", () => {
+    const r = validateIntake(
+      tzInput({
+        locations: [
+          { block: "A", landmark: "", slabsHere: "", areaHereM2: "", pattern: "" },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.locations[0]).toMatchObject({
+        slabsHere: 16,
+        areaHereM2: 2,
+        patternIdx: null,
+        landmark: "",
+      });
+    }
   });
 
   it("§4.2 — по узору нельзя разложить больше, чем пришло", () => {

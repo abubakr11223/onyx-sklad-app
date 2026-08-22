@@ -44,8 +44,9 @@ export function validateLocationEdit(
   const block = normalizeBlockLetter(input.block);
   if (!block) return { ok: false, error: "Укажите блок" };
 
+  // ТЗ №18 §2 — ориентир НЕОБЯЗАТЕЛЕН: пусто = адрес до уровня блока
+  // (см. NO_LANDMARK ниже). Блок остаётся обязательным.
   const landmark = input.landmark.trim();
-  if (!landmark) return { ok: false, error: "Укажите ориентир" };
 
   const note = input.note?.trim() || null;
 
@@ -129,8 +130,8 @@ export function validateNewLocation(
   const block = normalizeBlockLetter(input.block);
   if (!block) return { ok: false, error: "Укажите блок" };
 
+  // ТЗ №18 §2 — ориентир необязателен (см. validateLocationEdit).
   const landmark = input.landmark.trim();
-  if (!landmark) return { ok: false, error: "Укажите ориентир" };
 
   const slabsHere = parsePositiveInt(input.slabsHere ?? "");
   if (slabsHere === undefined) {
@@ -255,6 +256,33 @@ export function validateSlabLocation(
  * разделяет две координаты сильнее запятой, а сам адрес часто стоит в строке,
  * где запятыми уже перечислено что-то другое (размеры, статус).
  */
-export function formatLocation(block: string, landmark: string): string {
-  return `Блок ${block} · ориентир ${landmark}`;
+export function formatLocation(
+  block: string,
+  landmark?: string | null,
+): string {
+  // ТЗ №18 §3 — без ориентира выводим ТОЛЬКО блок: ни «· ориентир —», ни
+  // пустого хвоста. «Блок A1» — это законченный адрес, а не обрезанный.
+  const lm = (landmark ?? "").trim();
+  return lm ? `Блок ${block} · ориентир ${lm}` : `Блок ${block}`;
+}
+
+// ───────────────── ТЗ №18 — «локация без ориентира» ──────────────────
+//
+// Хранение: landmark = "" (пустая строка), НЕ null. Причина — колонки
+// BatchLocation/Slab/Piece.landmark объявлены NOT NULL, и перевод их в
+// nullable потянул бы миграцию на боевой базе плюс `string | null` в
+// четырёх десятках мест чтения. Семантика от этого не страдает: пустая
+// строка — единственное значение, которое справочник ориентиров никогда
+// не выдаёт (номер ориентира не может быть пустым, см. addLandmark).
+//
+// Смысл значения: адрес известен ДО УРОВНЯ БЛОКА. Это нормальный рабочий
+// случай (ориентиры внутри блока зав. складом расставляет постепенно), а
+// не «недозаполненная форма».
+
+/** Значение landmark, означающее «ориентир не указан» (ТЗ №18). */
+export const NO_LANDMARK = "";
+
+/** Указан ли ориентир (после trim). Пусто → адрес до уровня блока. */
+export function hasLandmark(landmark: string | null | undefined): boolean {
+  return (landmark ?? "").trim() !== "";
 }

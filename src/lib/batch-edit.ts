@@ -705,9 +705,10 @@ export function parseLocationRow(raw: {
   | { ok: true; data: BatchEditInput["locations"][number] }
   | { ok: false; message: string } {
   const block = normalizeBlockLetter(raw.block);
+  // ТЗ №18 §2 — ориентир необязателен (пусто = адрес до уровня блока).
   const landmark = raw.landmark.trim();
-  if (!block || !landmark) {
-    return { ok: false, message: "Локация: укажите блок и ориентир" };
+  if (!block) {
+    return { ok: false, message: "Локация: укажите блок" };
   }
   const slabsHere = parseQuantityField(raw.slabsHere, "int");
   if (slabsHere === undefined) {
