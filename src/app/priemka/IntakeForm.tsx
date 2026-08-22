@@ -56,12 +56,19 @@ interface LocValues {
   landmark: string;
   slabsHere: string;
   areaHereM2: string;
+  /**
+   * ТЗ №18 §3 — «Что здесь»: id СТРОКИ узора (patRowIds), не индекс — строки
+   * узоров добавляются/убираются, а id стабилен. "" = «весь приход».
+   * В submit уходит индекс (buildInput пересчитывает по patRowIds).
+   */
+  pattern: string;
 }
 const emptyLoc = (): LocValues => ({
   block: "",
   landmark: "",
   slabsHere: "",
   areaHereM2: "",
+  pattern: "",
 });
 
 /** ТЗ №3 — значения одной узор-подгруппы (контролируемые поля строки). */
@@ -86,6 +93,7 @@ const emptyPat = (): PatValues => ({
 const LOC_FIELD_ID: Record<keyof LocValues, (i: number) => string> = {
   block: (i) => `locBlock-${i}`,
   landmark: (i) => `locLandmark-${i}`,
+  pattern: (i) => `locPattern-${i}`,
   slabsHere: (i) => `locSlabsHere-${i}`,
   areaHereM2: (i) => `locAreaHereM2-${i}`,
 };
@@ -370,7 +378,16 @@ export default function IntakeForm({
     thicknessMm: values.thicknessMm,
     supplierNote: values.supplierNote,
     arrivedAt: values.arrivedAt,
-    locations: rowIds.map((id) => locs[id] ?? emptyLoc()),
+    locations: rowIds.map((id) => {
+      const loc = locs[id] ?? emptyLoc();
+      // ТЗ №18: id строки узора → индекс в patterns (порядок = patRowIds).
+      // Узор удалили, а строка ссылалась на него → "" (весь приход).
+      const pIdx =
+        patternsEnabled && loc.pattern !== ""
+          ? patRowIds.indexOf(Number(loc.pattern))
+          : -1;
+      return { ...loc, pattern: pIdx >= 0 ? String(pIdx) : "" };
+    }),
     patternsEnabled,
     patterns: patternsEnabled ? patRowIds.map((id) => pats[id] ?? emptyPat()) : [],
   });
@@ -392,10 +409,18 @@ export default function IntakeForm({
     for (const k of simple) if (errs[k]) return k;
     if (errs.quantity) return "slabsTotal";
     for (let i = 0; i < rowIds.length; i++) {
-      for (const s of ["block", "landmark", "slabsHere", "areaHereM2"] as const) {
+      for (const s of [
+        "block",
+        "landmark",
+        "pattern",
+        "slabsHere",
+        "areaHereM2",
+      ] as const) {
         if (errs[`loc-${i}-${s}`]) return LOC_FIELD_ID[s](i);
       }
     }
+    // ТЗ №18 §4.3 — раскладка не сошлась: ведём к количеству первой строки.
+    if (errs.locationsSum) return "locSlabsHere-0";
     // ТЗ №3 — узоры.
     if (errs.patternsTotals || errs.patterns || errs.patternsSum) return "slabsTotal";
     for (let i = 0; i < patRowIds.length; i++) {
@@ -940,25 +965,113 @@ export default function IntakeForm({
                     blockError={e[`loc-${idx}-block`]}
                     landmarkError={e[`loc-${idx}-landmark`]}
                   />
+                  {/* ТЗ №18 §3 — «Что здесь»: какой узор лежит в этом месте.
+                      Список — из уже заполненных узоров ЭТОЙ формы, по описанию
+                      (складчику говорит «тёмный с прожилками», а не «Узор 2»). */}
+                  {patternsEnabled && (
+                    <div className="col-span-2">
+                      <Field
+                        id={`locPattern-${idx}`}
+                        label={<>Что здесь <Req /></>}
+                        error={e[`loc-${idx}-pattern`]}
+                      >
+                        <select
+                          id={`locPattern-${idx}`}
+                          value={loc.pattern}
+                          onChange={(ev) =>
+                            setLocValue(id, "pattern")(ev.target.value)
+                          }
+                          className={inputClass}
+                          aria-invalid={
+                            e[`loc-${idx}-pattern`] ? true : undefined
+                          }
+                        >
+                          <option value="">весь приход</option>
+                          {patRowIds.map((pid, pidx) => {
+                            const desc = (pats[pid]?.description ?? "").trim();
+                            return (
+                              <option key={pid} value={String(pid)}>
+                                {`Узор ${pidx + 1}${desc ? ` — ${desc}` : " — сначала заполните описание"}`}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </Field>
+                    </div>
+                  )}
                   <Field
                     id={`locSlabsHere-${idx}`}
                     name="locSlabsHere"
                     inputMode="numeric"
-                    label="Плит здесь"
+                    label={<>Плит здесь <Req /></>}
                     placeholder="25"
                     value={loc.slabsHere}
                     onChange={setLoc(id, "slabsHere")}
                     error={e[`loc-${idx}-slabsHere`]}
                   />
-                  <Field
-                    id={`locAreaHereM2-${idx}`}
-                    name="locAreaHereM2"
-                    inputMode="decimal"
-                    label="м² здесь"
-                    placeholder="137,5"
-                    value={loc.areaHereM2}
-                    onChange={setLoc(id, "areaHereM2")}
-                    error={e[`loc-${idx}-areaHereM2`]}
+                  {(() => {
+                    // ТЗ №18 §5 — м² здесь считается из узора (плит × м²/плиту),
+                    // руками не вводится. «Весь приход» — ручной ввод.
+                    const patRow =
+                      patternsEnabled && loc.pattern !== ""
+                        ? pats[Number(loc.pattern)]
+                        : null;
+                    if (patRow) {
+                      const pa = Number.parseFloat(
+                        patRow.areaM2.replace(",", "."),
+                      );
+                      const ps = Number.parseInt(patRow.slabs, 10);
+                      const n = Number.parseInt(loc.slabsHere, 10);
+                      const computed =
+                        pa > 0 && ps > 0 && n > 0
+                          ? Math.round(((pa * n) / ps) * 1000) / 1000
+                          : null;
+                      return (
+                        <Field
+                          id={`locAreaHereM2-${idx}`}
+                          label="м² здесь (расчёт)"
+                        >
+                          <input
+                            id={`locAreaHereM2-${idx}`}
+                            name="locAreaHereM2"
+                            value={computed === null ? "" : String(computed)}
+                            readOnly
+                            tabIndex={-1}
+                            className={inputClass + " bg-ink/[0.04] text-ink/60"}
+                          />
+                        </Field>
+                      );
+                    }
+                    return (
+                      <Field
+                        id={`locAreaHereM2-${idx}`}
+                        name="locAreaHereM2"
+                        inputMode="decimal"
+                        label={
+                          patternsEnabled ? (
+                            <>м² здесь <Req /></>
+                          ) : (
+                            "м² здесь"
+                          )
+                        }
+                        placeholder="137,5"
+                        value={loc.areaHereM2}
+                        onChange={setLoc(id, "areaHereM2")}
+                        error={e[`loc-${idx}-areaHereM2`]}
+                      />
+                    );
+                  })()}
+                  {/* Параллельные массивы формы: locPattern уходит ИНДЕКСОМ для
+                      каждой строки (в т.ч. "" = весь приход), чтобы сервер
+                      выровнял его с locBlock/locSlabsHere. */}
+                  <input
+                    type="hidden"
+                    name="locPattern"
+                    value={(() => {
+                      if (!patternsEnabled || loc.pattern === "") return "";
+                      const pIdx = patRowIds.indexOf(Number(loc.pattern));
+                      return pIdx >= 0 ? String(pIdx) : "";
+                    })()}
                   />
                 </div>
               </div>
@@ -972,6 +1085,108 @@ export default function IntakeForm({
         >
           + Добавить локацию
         </Button>
+
+        {/* ТЗ №18 §4.4 — живой счётчик раскладки: сошлось/не сошлось видно
+            ПОКА складчик стоит у камня, а не через месяц в «Отгрузках». */}
+        {(() => {
+          const rows = rowIds.map((id) => locs[id] ?? emptyLoc());
+          const tgtSlabs = Number.parseInt(values.slabsTotal, 10);
+          const tgtArea = Number.parseFloat(values.areaTotalM2.replace(",", "."));
+          const hasSlabsTgt = Number.isFinite(tgtSlabs) && tgtSlabs > 0;
+          const hasAreaTgt = Number.isFinite(tgtArea) && tgtArea > 0;
+          if (!hasSlabsTgt && !hasAreaTgt) return null;
+
+          const rowArea = (loc: LocValues): number => {
+            const patRow =
+              patternsEnabled && loc.pattern !== ""
+                ? pats[Number(loc.pattern)]
+                : null;
+            if (patRow) {
+              const pa = Number.parseFloat(patRow.areaM2.replace(",", "."));
+              const ps = Number.parseInt(patRow.slabs, 10);
+              const n = Number.parseInt(loc.slabsHere, 10);
+              return pa > 0 && ps > 0 && n > 0 ? (pa * n) / ps : 0;
+            }
+            const a = Number.parseFloat(loc.areaHereM2.replace(",", "."));
+            return Number.isFinite(a) ? a : 0;
+          };
+          const placedSlabs = rows.reduce((s, l) => {
+            const n = Number.parseInt(l.slabsHere, 10);
+            return s + (Number.isFinite(n) ? n : 0);
+          }, 0);
+          const placedArea = rows.reduce((s, l) => s + rowArea(l), 0);
+          const slabsOk = !hasSlabsTgt || placedSlabs === tgtSlabs;
+          const areaOk = !hasAreaTgt || Math.abs(placedArea - tgtArea) <= 0.01;
+          const converged = slabsOk && areaOk;
+
+          // Недобор по узорам — только когда складчик реально раскладывает
+          // по узорам (есть строки с конкретным узором).
+          const anyPatternRow =
+            patternsEnabled && rows.some((l) => l.pattern !== "");
+          const shortfalls = anyPatternRow
+            ? patRowIds
+                .map((pid, pidx) => {
+                  const p = pats[pid] ?? emptyPat();
+                  const total = Number.parseInt(p.slabs, 10);
+                  if (!Number.isFinite(total) || total <= 0) return null;
+                  const placed = rows
+                    .filter((l) => l.pattern === String(pid))
+                    .reduce((s, l) => {
+                      const n = Number.parseInt(l.slabsHere, 10);
+                      return s + (Number.isFinite(n) ? n : 0);
+                    }, 0);
+                  if (placed === total) return null;
+                  const desc = p.description.trim();
+                  return `Узор ${pidx + 1}${desc ? ` «${desc}»` : ""}: размещено ${placed} из ${total} плит`;
+                })
+                .filter((x): x is string => x !== null)
+            : [];
+
+          // ТЗ №18 §4.5 — дубль «блок + ориентир + узор»: скорее всего опечатка.
+          const seen = new Map<string, number>();
+          rows.forEach((l) => {
+            if (!l.block || !l.landmark) return;
+            const k = `${l.block}|${l.landmark}|${l.pattern}`;
+            seen.set(k, (seen.get(k) ?? 0) + 1);
+          });
+          const hasDup = [...seen.values()].some((n) => n > 1);
+
+          return (
+            <div
+              className={`mt-3 rounded-card px-3 py-2 text-sm ${
+                converged ? "bg-success/10" : "bg-warning/12"
+              }`}
+            >
+              <p className={`font-medium ${converged ? "text-success" : "text-warning"}`}>
+                Разложено: {hasSlabsTgt ? `${placedSlabs} из ${tgtSlabs} плит` : ""}
+                {hasSlabsTgt && hasAreaTgt ? " · " : ""}
+                {hasAreaTgt
+                  ? `${placedArea.toFixed(1).replace(".", ",")} из ${tgtArea.toFixed(1).replace(".", ",")} м²`
+                  : ""}{" "}
+                {converged
+                  ? "✓"
+                  : hasSlabsTgt && placedSlabs < tgtSlabs
+                    ? `— не размещено ${tgtSlabs - placedSlabs} плит ⚠`
+                    : "⚠"}
+              </p>
+              {!converged &&
+                shortfalls.map((s) => (
+                  <p key={s} className="mt-0.5 text-ink/60">
+                    {s}
+                  </p>
+                ))}
+              {hasDup && (
+                <p className="mt-0.5 font-medium text-warning">
+                  Одинаковые «блок + ориентир + узор» в двух строках — скорее
+                  всего опечатка, сложите в одну строку.
+                </p>
+              )}
+            </div>
+          );
+        })()}
+        <div className="mt-2">
+          <CrossError msg={e.locationsSum} />
+        </div>
       </Card>
 
       {/* ── Детали ── */}

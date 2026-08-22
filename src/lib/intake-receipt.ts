@@ -146,6 +146,8 @@ export async function createIntakeWithReceipt(
     stoneName = created.name;
   }
 
+  // ТЗ №18 — узоры создаются ДО локаций: строке локации нужен batchPatternId
+  // («Что здесь»). patternIdx валидатора выровнен с data.patterns → patternIds.
   const batch = await tx.batch.create({
     data: {
       stoneTypeId,
@@ -156,14 +158,6 @@ export async function createIntakeWithReceipt(
       lengthMm: data.lengthMm,
       widthMm: data.widthMm,
       thicknessMm: data.thicknessMm,
-      locations: {
-        create: data.locations.map((loc) => ({
-          block: loc.block,
-          landmark: loc.landmark,
-          slabsHere: loc.slabsHere,
-          areaHereM2: loc.areaHereM2 === null ? null : String(loc.areaHereM2),
-        })),
-      },
     },
     select: { id: true },
   });
@@ -182,6 +176,21 @@ export async function createIntakeWithReceipt(
       select: { id: true },
     });
     patternIds.push(pat.id);
+  }
+
+  for (const loc of data.locations) {
+    await tx.batchLocation.create({
+      data: {
+        batchId: batch.id,
+        block: loc.block,
+        landmark: loc.landmark,
+        slabsHere: loc.slabsHere,
+        areaHereM2: loc.areaHereM2 === null ? null : String(loc.areaHereM2),
+        batchPatternId:
+          loc.patternIdx === null ? null : (patternIds[loc.patternIdx] ?? null),
+      },
+      select: { id: true },
+    });
   }
 
   await tx.auditLog.create({
@@ -204,6 +213,11 @@ export async function createIntakeWithReceipt(
           landmark: loc.landmark,
           slabsHere: loc.slabsHere,
           areaHereM2: loc.areaHereM2,
+          // ТЗ №18 — «Что здесь» (null = весь приход).
+          batchPatternId:
+            loc.patternIdx === null
+              ? null
+              : (patternIds[loc.patternIdx] ?? null),
         })),
         lengthMm: data.lengthMm,
         widthMm: data.widthMm,

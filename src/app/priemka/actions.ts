@@ -67,6 +67,8 @@ function readInput(formData: FormData): IntakeInput {
   const landmarks = all("locLandmark");
   const slabs = all("locSlabsHere");
   const areas = all("locAreaHereM2");
+  // ТЗ №18 §3 — «Что здесь»: индекс узора ("" = весь приход).
+  const locPatterns = all("locPattern");
   // ТЗ №3 — узор-подгруппы (параллельные массивы).
   const patDesc = all("patDescription");
   const patThick = all("patThickness");
@@ -94,6 +96,7 @@ function readInput(formData: FormData): IntakeInput {
       landmark: landmarks[i] ?? "",
       slabsHere: slabs[i] ?? "",
       areaHereM2: areas[i] ?? "",
+      pattern: locPatterns[i] ?? "",
     })),
     patternsEnabled: formData.get("patternsEnabled") === "1",
     patterns: patDesc.map((description, i) => ({

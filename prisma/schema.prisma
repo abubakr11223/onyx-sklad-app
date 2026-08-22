@@ -298,6 +298,8 @@ model BatchPattern {
   photos        Photo[]
   photoRequests PhotoRequest[]
   sales         SaleRecord[]
+  /// ТЗ №18 — строки локаций, привязанные к этому узору («Что здесь»).
+  locations     BatchLocation[]
 
   @@index([batchId])
 }
@@ -311,15 +313,21 @@ model BatchLocation {
   landmark   String // «2» yoki «1–2» — erkin format
   slabsHere  Int?
   areaHereM2 Decimal? @db.Decimal(12, 3)
+  /// ТЗ №18 §3 — «Что здесь»: какой узор лежит в этом месте.
+  /// NULL = «весь приход» (старые строки и партии без узоров) — миграция данных
+  /// не нужна (§6). SetNull: удаление узора при правке не сносит локацию.
+  batchPatternId String?
   note       String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   batch         Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern  BatchPattern?  @relation(fields: [batchPatternId], references: [id], onDelete: SetNull)
   photoRequests PhotoRequest[]
 
   @@index([batchId])
   @@index([block, landmark])
+  @@index([batchPatternId])
 }
 
 /// §1.4 — Плита (L3). Yozuv faqat ajratish paytida tug'iladi (ADR-004).

@@ -17,6 +17,7 @@ export const INTAKE_FORM_TOP_KEYS = [
   "widthMm",
   "thicknessMm",
   "locations",
+  "locationsSum",
   "patterns",
   "patternsTotals",
   "patternsSum",

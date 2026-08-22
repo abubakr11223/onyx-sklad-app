@@ -23,7 +23,7 @@ function validData(overrides: Partial<ValidIntake> = {}): ValidIntake {
     thicknessMm: 2,
     supplierNote: null,
     arrivedAt: new Date("2026-07-31T00:00:00Z"),
-    locations: [{ block: "А", landmark: "1", slabsHere: null, areaHereM2: null }],
+    locations: [{ block: "А", landmark: "1", slabsHere: 10, areaHereM2: null, patternIdx: null }],
     patterns: [],
     ...overrides,
   };
@@ -80,6 +80,8 @@ function makeTx() {
     },
     batch: { create: batchCreate },
     batchPattern: { create: vi.fn() },
+    // ТЗ №18 — локации создаются отдельными записями (после узоров, с FK).
+    batchLocation: { create: vi.fn(async () => ({ id: "loc-1" })) },
     auditLog: { create: vi.fn(async () => ({})) },
   } as unknown as IntakeReceiptTx;
 

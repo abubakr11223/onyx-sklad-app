@@ -12,6 +12,11 @@ export interface IntakeLocationInput {
   landmark: string;
   slabsHere: string;
   areaHereM2: string;
+  /**
+   * ТЗ №18 §3 — «Что здесь»: индекс узора в patterns ("0", "1"…) или ""
+   * (= «весь приход»). Отсутствие поля (старые вызовы) == "".
+   */
+  pattern?: string;
 }
 
 /** ТЗ №3 — узор-подгруппа: описание + толщина + плиты + м² (сырые строки). */
@@ -61,8 +66,15 @@ export interface IntakeInput {
 export interface ValidIntakeLocation {
   block: string;
   landmark: string;
+  /**
+   * ТЗ №18 §4.1 — обязательное, когда у партии задано число плит (или узоры).
+   * null возможен ТОЛЬКО в «партии без плит» (задана одна площадь) — там
+   * раскладка сверяется по м².
+   */
   slabsHere: number | null;
   areaHereM2: number | null;
+  /** ТЗ №18 §3 — индекс узора в data.patterns; null = «весь приход». */
+  patternIdx: number | null;
 }
 
 /** Проверенная узор-подгруппа: плиты И м² обязательны (ТЗ №3, §6). */
@@ -278,31 +290,9 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     arrivedAt = new Date(`${rawDate}T00:00:00`);
   }
 
-  // ── Локации: минимум одна, у каждой блок + ориентир (TZ §5.1, §4.5) ──
-  const locations: ValidIntakeLocation[] = [];
-  if (input.locations.length === 0) {
-    errors.locations = "Добавьте хотя бы одну локацию (блок + ориентир)";
-  }
-  input.locations.forEach((loc, i) => {
-    // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
-    const block = normalizeBlockLetter(loc.block);
-    const landmark = loc.landmark.trim();
-    if (!block) errors[`loc-${i}-block`] = "Укажите блок (например «А»)";
-    if (!landmark) errors[`loc-${i}-landmark`] = "Укажите ориентир (например «2» или «1–2»)";
-    const slabsHere = parsePositiveInt(loc.slabsHere);
-    if (slabsHere === undefined) {
-      errors[`loc-${i}-slabsHere`] = "Целое положительное число";
-    }
-    const areaHereM2 = parsePositiveDecimal(loc.areaHereM2);
-    if (areaHereM2 === undefined) {
-      errors[`loc-${i}-areaHereM2`] = "Положительное число, например 12,5";
-    }
-    if (block && landmark && slabsHere !== undefined && areaHereM2 !== undefined) {
-      locations.push({ block, landmark, slabsHere, areaHereM2 });
-    }
-  });
-
   // ── Узоры в партии (подгруппы) — опционально (ТЗ №3) ──
+  // ТЗ №18: локации валидируются ПОСЛЕ узоров — строке локации нужен список
+  // проверенных узоров («Что здесь» + расчёт м² + сверка раскладки).
   // Галочка снята → пропускаем (быстрый путь для однородной партии).
   const patterns: ValidIntakePattern[] = [];
   if (input.patternsEnabled) {
@@ -370,6 +360,152 @@ export function validateIntake(input: IntakeInput): IntakeResult {
         errors.patternsSum = `Сумма плит по узорам (${sumSlabs}) не сходится с количеством партии (${slabsTotal})`;
       } else if (Math.abs(sumArea - areaTotalM2) > 0.001) {
         errors.patternsSum = `Сумма м² по узорам (${sumArea.toFixed(1)}) не сходится с площадью партии (${areaTotalM2})`;
+      }
+    }
+  }
+
+  // ── Локации: минимум одна; блок + ориентир + «плит здесь» (TZ §5.1; ТЗ №18) ──
+  // ТЗ №18 §4: «плит здесь» обязательно; раскладка должна сойтись с итогами;
+  // §3 — «Что здесь» (узор) в строке; §5 — м² считается, где размеры известны.
+  const locations: ValidIntakeLocation[] = [];
+  if (input.locations.length === 0) {
+    errors.locations = "Добавьте хотя бы одну локацию (блок + ориентир)";
+  }
+  // Все ли узор-строки прошли (только тогда пересчитываем м² и сверяем суммы).
+  const patternsAllValid =
+    !input.patternsEnabled ||
+    (input.patterns.length > 0 && patterns.length === input.patterns.length);
+  let allRowsValid = input.locations.length > 0;
+  input.locations.forEach((loc, i) => {
+    // ТЗ №7 §2 (BUG-01) — единый алфавит/регистр буквы блока (кир/лат дубли).
+    const block = normalizeBlockLetter(loc.block);
+    const landmark = loc.landmark.trim();
+    if (!block) errors[`loc-${i}-block`] = "Укажите блок (например «А»)";
+    if (!landmark) errors[`loc-${i}-landmark`] = "Укажите ориентир (например «2» или «1–2»)";
+
+    // ТЗ №18 §4.1 — обязательное: без количества строка локации бессмысленна.
+    // Исключение — «партия без плит» (задана только площадь): там строка
+    // сверяется по м², и требовать плиты не с чего.
+    const slabsRequired = input.patternsEnabled || slabsTotal !== null;
+    const slabsHere = parsePositiveInt(loc.slabsHere);
+    if (slabsHere === null && slabsRequired) {
+      errors[`loc-${i}-slabsHere`] = "Укажите, сколько плит лежит здесь";
+    } else if (slabsHere === undefined) {
+      errors[`loc-${i}-slabsHere`] = "Целое положительное число";
+    }
+
+    // ТЗ №18 §3 — «Что здесь»: "" = весь приход; иначе индекс узора.
+    const rawPat = (loc.pattern ?? "").trim();
+    let patternIdx: number | null = null;
+    if (input.patternsEnabled && rawPat !== "") {
+      const idx = /^\d+$/.test(rawPat) ? Number(rawPat) : NaN;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= input.patterns.length) {
+        errors[`loc-${i}-pattern`] =
+          "Выберите узор из списка (или «весь приход»)";
+      } else {
+        patternIdx = idx;
+      }
+    }
+
+    // ТЗ №18 §5 — м² здесь: для строки с узором СЧИТАЕТСЯ из данных узора
+    // (пропорционально его м², чтобы раскладка сходилась с ИТОГО копейка в
+    // копейку — расчёт из габарита разошёлся бы с введённой площадью узора).
+    // Для «весь приход» в партии с узорами — ручной ввод ОБЯЗАТЕЛЕН (без него
+    // сверка м² невозможна). Без узоров — ручной ввод, как раньше (необязателен).
+    let areaHereM2: number | null | undefined;
+    if (
+      input.patternsEnabled &&
+      patternIdx !== null &&
+      patternsAllValid &&
+      typeof slabsHere === "number"
+    ) {
+      const p = patterns[patternIdx];
+      areaHereM2 =
+        Math.round(((p.areaM2 * slabsHere) / p.slabs) * 1000) / 1000;
+    } else {
+      areaHereM2 = parsePositiveDecimal(loc.areaHereM2);
+      if (areaHereM2 === undefined) {
+        errors[`loc-${i}-areaHereM2`] = "Положительное число, например 12,5";
+      } else if (
+        areaHereM2 === null &&
+        input.patternsEnabled &&
+        patternIdx === null &&
+        rawPat === ""
+      ) {
+        errors[`loc-${i}-areaHereM2`] =
+          "Для «весь приход» укажите м² здесь — без него итог не сверить";
+        areaHereM2 = undefined;
+      } else if (
+        areaHereM2 === null &&
+        !input.patternsEnabled &&
+        slabsTotal === null
+      ) {
+        // «Партия без плит»: раскладка сверяется только по м² — поле нужно.
+        errors[`loc-${i}-areaHereM2`] =
+          "Укажите м² здесь — партия задана площадью";
+        areaHereM2 = undefined;
+      }
+    }
+
+    const slabsOk =
+      typeof slabsHere === "number" || (slabsHere === null && !slabsRequired);
+    if (
+      block &&
+      landmark &&
+      slabsOk &&
+      areaHereM2 !== undefined &&
+      !errors[`loc-${i}-pattern`]
+    ) {
+      locations.push({
+        block,
+        landmark,
+        slabsHere: slabsHere as number | null,
+        areaHereM2,
+        patternIdx,
+      });
+    } else {
+      allRowsValid = false;
+    }
+  });
+
+  // ТЗ №18 §4.2–4.3 — сверка раскладки (только когда все строки валидны:
+  // сначала правим поля, потом пугаем «не сходится»).
+  if (allRowsValid && locations.length === input.locations.length) {
+    const sumSlabsLoc = locations.reduce((s, l) => s + (l.slabsHere ?? 0), 0);
+    const sumAreaLoc = locations.reduce((s, l) => s + (l.areaHereM2 ?? 0), 0);
+
+    if (input.patternsEnabled && patternsAllValid) {
+      // §4.2 — по узору нельзя разложить больше, чем пришло.
+      patterns.forEach((p, pi) => {
+        const placed = locations
+          .filter((l) => l.patternIdx === pi)
+          .reduce((s, l) => s + (l.slabsHere ?? 0), 0);
+        if (placed > p.slabs) {
+          errors.locationsSum = `Узор «${p.description}»: разложено ${placed} плит, а в узоре только ${p.slabs}`;
+        }
+      });
+      // §4.3 — раскладка должна сойтись с итогами (плиты И м²).
+      if (
+        !errors.locationsSum &&
+        typeof slabsTotal === "number" &&
+        typeof areaTotalM2 === "number"
+      ) {
+        if (sumSlabsLoc !== slabsTotal) {
+          errors.locationsSum = `Разложено ${sumSlabsLoc} из ${slabsTotal} плит — приёмка не завершена, пока не разложено всё`;
+        } else if (Math.abs(sumAreaLoc - areaTotalM2) > 0.01) {
+          errors.locationsSum = `По локациям ${sumAreaLoc.toFixed(2)} м², а в партии ${areaTotalM2} м² — суммы должны сойтись`;
+        }
+      }
+    } else if (!input.patternsEnabled) {
+      // Без узоров: сверяем то, что задано на партии (минимум одно есть).
+      if (typeof slabsTotal === "number" && sumSlabsLoc !== slabsTotal) {
+        errors.locationsSum = `Разложено ${sumSlabsLoc} из ${slabsTotal} плит — приёмка не завершена, пока не разложено всё`;
+      } else if (
+        slabsTotal === null &&
+        typeof areaTotalM2 === "number" &&
+        Math.abs(sumAreaLoc - areaTotalM2) > 0.01
+      ) {
+        errors.locationsSum = `По локациям ${sumAreaLoc.toFixed(2)} м², а в партии ${areaTotalM2} м² — суммы должны сойтись`;
       }
     }
   }

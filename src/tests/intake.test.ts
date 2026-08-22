@@ -28,7 +28,8 @@ function baseInput(overrides: Partial<IntakeInput> = {}): IntakeInput {
     thicknessMm: "2",
     supplierNote: "",
     arrivedAt: "2026-07-03",
-    locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
+    // ТЗ №18 §4 — «плит здесь» обязательно, раскладка сходится с итогами.
+    locations: [{ block: "А", landmark: "2", slabsHere: "40", areaHereM2: "220" }],
     patternsEnabled: false,
     patterns: [],
     ...overrides,
@@ -176,6 +177,9 @@ describe("validateIntake — толщина дробная (ТЗ №12, реше
         patternsEnabled: true,
         slabsTotal: "50",
         areaTotalM2: "30",
+        locations: [
+          { block: "А", landmark: "2", slabsHere: "50", areaHereM2: "30" },
+        ],
         patterns: [
           {
             description: "светлый",
@@ -338,7 +342,7 @@ describe("validateIntake — количество (минимум одно из 
   });
 
   it("достаточно только плит", () => {
-    const r = validateIntake(baseInput({ slabsTotal: "12", areaTotalM2: "" }));
+    const r = validateIntake(baseInput({ slabsTotal: "12", areaTotalM2: "", locations: [{ block: "А", landmark: "2", slabsHere: "12", areaHereM2: "" }] }));
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.slabsTotal).toBe(12);
@@ -347,7 +351,7 @@ describe("validateIntake — количество (минимум одно из 
   });
 
   it("достаточно только площади, запятая как разделитель", () => {
-    const r = validateIntake(baseInput({ slabsTotal: "", areaTotalM2: "60,5" }));
+    const r = validateIntake(baseInput({ slabsTotal: "", areaTotalM2: "60,5", locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "60,5" }] }));
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.slabsTotal).toBeNull();
@@ -396,7 +400,7 @@ describe("validateIntake — количество (минимум одно из 
   });
 
   it("десятичная площадь «12,5» принимается", () => {
-    const r = validateIntake(baseInput({ slabsTotal: "", areaTotalM2: "12,5" }));
+    const r = validateIntake(baseInput({ slabsTotal: "", areaTotalM2: "12,5", locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "12,5" }] }));
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.areaTotalM2).toBe(12.5);
   });
@@ -487,7 +491,7 @@ describe("validateIntake — локации", () => {
       baseInput({
         locations: [
           { block: "А", landmark: "1", slabsHere: "25", areaHereM2: "137,5" },
-          { block: "Г", landmark: "3", slabsHere: "", areaHereM2: "" },
+          { block: "Г", landmark: "3", slabsHere: "15", areaHereM2: "82,5" },
         ],
       }),
     );
@@ -495,8 +499,8 @@ describe("validateIntake — локации", () => {
     if (r.ok) {
       expect(r.data.locations).toEqual([
         // ТЗ №17 §3.1 — кир. «А» на входе → лат. «A» после нормализации.
-        { block: "A", landmark: "1", slabsHere: 25, areaHereM2: 137.5 },
-        { block: "Г", landmark: "3", slabsHere: null, areaHereM2: null },
+        { block: "A", landmark: "1", slabsHere: 25, areaHereM2: 137.5, patternIdx: null },
+        { block: "Г", landmark: "3", slabsHere: 15, areaHereM2: 82.5, patternIdx: null },
       ]);
     }
   });
@@ -504,10 +508,60 @@ describe("validateIntake — локации", () => {
   it("ориентир-диапазон «1–2» допустим (свободный формат)", () => {
     const r = validateIntake(
       baseInput({
-        locations: [{ block: "Б", landmark: "1–2", slabsHere: "", areaHereM2: "" }],
+        locations: [{ block: "Б", landmark: "1–2", slabsHere: "40", areaHereM2: "" }],
       }),
     );
     expect(r.ok).toBe(true);
+  });
+
+  // ── ТЗ №18 §4 — обязательность и сверка раскладки ──
+
+  it("ТЗ №18: «плит здесь» пусто при заданных плитах партии → ошибка", () => {
+    const r = validateIntake(
+      baseInput({
+        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors["loc-0-slabsHere"]).toMatch(/сколько плит/);
+  });
+
+  it("ТЗ №18: разложено не всё → locationsSum, приёмка не завершается", () => {
+    const r = validateIntake(
+      baseInput({
+        locations: [{ block: "А", landmark: "2", slabsHere: "10", areaHereM2: "" }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.locationsSum).toMatch(/10 из 40/);
+  });
+
+  it("ТЗ №18: партия только площадью — м² здесь обязательно и сверяется", () => {
+    const missing = validateIntake(
+      baseInput({
+        slabsTotal: "",
+        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "" }],
+      }),
+    );
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.errors["loc-0-areaHereM2"]).toBeTruthy();
+
+    const mismatch = validateIntake(
+      baseInput({
+        slabsTotal: "",
+        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "100" }],
+      }),
+    );
+    expect(mismatch.ok).toBe(false);
+    if (!mismatch.ok) expect(mismatch.errors.locationsSum).toBeTruthy();
+
+    const ok = validateIntake(
+      baseInput({
+        slabsTotal: "",
+        locations: [{ block: "А", landmark: "2", slabsHere: "", areaHereM2: "220" }],
+      }),
+    );
+    expect(ok.ok).toBe(true);
   });
 });
 
@@ -544,7 +598,16 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
     slabs: string;
     areaM2: string;
   }[]) =>
-    baseInput({ slabsTotal: "100", areaTotalM2: "60", patternsEnabled: true, patterns });
+    baseInput({
+      slabsTotal: "100",
+      areaTotalM2: "60",
+      patternsEnabled: true,
+      patterns,
+      // ТЗ №18 — раскладка: один «весь приход» на всю партию (значение по умолчанию).
+      locations: [
+        { block: "А", landmark: "2", slabsHere: "100", areaHereM2: "60" },
+      ],
+    });
 
   it("галочка снята → узоры игнорируются, patterns=[]", () => {
     const r = validateIntake(
