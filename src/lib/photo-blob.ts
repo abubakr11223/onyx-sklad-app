@@ -9,15 +9,12 @@
 // (atomic DB; blob put is not transactional by nature).
 
 import type { PhotoKind, Prisma } from "@prisma/client";
-import { put } from "@vercel/blob";
 import { db } from "./db";
+import { extFromMime, putPhotoObject } from "./storage/photo-storage";
 
-/** MIME image/png | image/webp | остальное (image/jpeg по умолчанию) → расширение файла. */
-export function extFromMime(mime: string): "png" | "webp" | "jpg" {
-  if (mime.includes("png")) return "png";
-  if (mime.includes("webp")) return "webp";
-  return "jpg";
-}
+// extFromMime endi ombor moduli bilan umumiy (bir xil qoida ikki joyda
+// yashamasin) — eski import yo'llari buzilmasin uchun bu yerdan ham chiqaramiz.
+export { extFromMime };
 
 export interface StorePhotoBlobParams {
   /** Префикс пути в Blob (например `patterns/{batchId}/{patternId}-{ts}`).
@@ -57,12 +54,13 @@ export async function putPhotoBlob(params: {
   bytes: Buffer;
   mediaType: string;
 }): Promise<{ storageKey: string; mediaType: string }> {
-  const ext = extFromMime(params.mediaType);
-  const blob = await put(`${params.pathPrefix}.${ext}`, params.bytes, {
-    access: "public",
-    contentType: params.mediaType,
+  // ТЗ (ko'chirish) — ombor drayver ortida: Vercel Blob yoki o'z diskimiz.
+  // Bu yerda tanlov YO'Q: qaysi drayver ishlashini PHOTO_STORAGE hal qiladi.
+  return putPhotoObject({
+    pathPrefix: params.pathPrefix,
+    bytes: params.bytes,
+    mediaType: params.mediaType,
   });
-  return { storageKey: blob.url, mediaType: params.mediaType };
 }
 
 /** Insert Photo row via optional TX client (default: global db). */

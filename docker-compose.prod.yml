@@ -33,6 +33,11 @@ services:
     env_file: .env.production
     environment:
       NODE_ENV: production
+    volumes:
+      # Rasmlar shu volume'da (PHOTO_STORAGE=local, PHOTO_STORAGE_DIR=/data/photos).
+      # Vercel Blob o'rniga o'z diskimiz — ko'chgandan keyin hech qanday tashqi
+      # ombor kerak emas. Volume konteyner qayta qurilsa ham saqlanib qoladi.
+      - onyx-photos:/data/photos
     depends_on:
       db:
         condition: service_healthy
@@ -57,5 +62,6 @@ services:
 
 volumes:
   onyx-pgdata:
+  onyx-photos:
   caddy-data:
   caddy-config:

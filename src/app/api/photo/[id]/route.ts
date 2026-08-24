@@ -12,15 +12,11 @@
 // webhook o'zgarishini talab qiladi (kelgusi batch).
 import { db } from "@/lib/db";
 import { downloadFile, getFile } from "@/lib/telegram";
-
-/** file_path kengaytmasidan MIME (Telegram jpeg/png/webp beradi). */
-function contentTypeFromPath(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "png") return "image/png";
-  if (ext === "webp") return "image/webp";
-  if (ext === "gif") return "image/gif";
-  return "image/jpeg";
-}
+import {
+  contentTypeFromPath,
+  isLocalKey,
+  readLocalObject,
+} from "@/lib/storage/photo-storage";
 
 export async function GET(
   _req: Request,
@@ -60,6 +56,21 @@ export async function GET(
   // (а не Telegram file_id). Отдаём редиректом на blob (сам кэшируется CDN).
   if (/^https?:\/\//.test(photo.storageKey)) {
     return Response.redirect(photo.storageKey, 308);
+  }
+
+  // O'z diskimizdagi rasm (PHOTO_STORAGE=local — ega serveri). Redirect emas,
+  // baytlarni o'zimiz beramiz: fayl tashqaridan ochiq emas, faqat shu marshrut
+  // orqali ko'rinadi.
+  if (isLocalKey(photo.storageKey)) {
+    const obj = await readLocalObject(photo.storageKey);
+    if (!obj) return new Response("not found", { status: 404 });
+    return new Response(obj.bytes as unknown as BodyInit, {
+      headers: {
+        "Content-Type": obj.contentType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "CDN-Cache-Control": "public, s-maxage=31536000",
+      },
+    });
   }
 
   // storageKey — Telegram file_id. Token yo'q bo'lsa getFile null qaytaradi →
