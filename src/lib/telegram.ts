@@ -252,3 +252,61 @@ export async function downloadFile(filePath: string): Promise<Uint8Array | null>
   const buf = await res.arrayBuffer();
   return new Uint8Array(buf);
 }
+
+// ───────────────── Hujjat yuborish (kunlik zaxira uchun) ─────────────────
+
+/**
+ * sendDocument — faylni Telegram chatiga yuboradi (multipart/form-data).
+ *
+ * Nega alohida: apiPost JSON yuboradi, Bot API'da esa fayl faqat multipart
+ * bilan ketadi. Bot API hujjat chegarasi — 50 MB; zaxira JSON'i bundan ancha
+ * kichik (rasm fayllari bazada emas, faqat storageKey saqlanadi).
+ *
+ * sendMessage bilan bir xil shartnoma: throw QILMAYDI, natijani `SendResult`ga
+ * o'raydi — cron zaxira yuborilmagani uchun 500 bermasligi kerak.
+ */
+export async function sendDocument(
+  chatId: number | string,
+  filename: string,
+  bytes: Uint8Array,
+  caption?: string,
+): Promise<SendResult> {
+  const token = getToken();
+  if (!token) {
+    console.warn("[telegram] TELEGRAM_BOT_TOKEN o'rnatilmagan — sendDocument o'tkazib yuborildi.");
+    return { ok: false, error: "no_token" };
+  }
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  if (caption) form.append("caption", caption.slice(0, 1024));
+  form.append(
+    "document",
+    new Blob([new Uint8Array(bytes)], { type: "application/json" }),
+    filename,
+  );
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_ROOT}/bot${token}/sendDocument`, {
+      method: "POST",
+      body: form,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[telegram] sendDocument tarmoq xatosi: ${msg}`);
+    return { ok: false, error: `network: ${msg}` };
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.warn(`[telegram] sendDocument muvaffaqiyatsiz (${res.status}): ${text}`);
+    return { ok: false, error: `http_${res.status}: ${text}`.slice(0, 500) };
+  }
+  const json = (await res.json().catch(() => null)) as
+    | { ok?: boolean; result?: TgMessage }
+    | null;
+  if (!json || json.ok !== true) {
+    console.warn("[telegram] sendDocument javobi ok emas:", json);
+    return { ok: false, error: "api_not_ok" };
+  }
+  return { ok: true, messageId: json.result?.message_id ?? null };
+}
