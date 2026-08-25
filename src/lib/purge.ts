@@ -156,6 +156,10 @@ export function emptyPurgeCounts(
     slabs: 0,
     pieces: 0,
     reservations: 0,
+    shipmentLines: 0,
+    shipments: 0,
+    showroomPlacements: 0,
+    samples: 0,
     debts: 0,
     saleRecords: 0,
     photos: 0,
@@ -175,6 +179,15 @@ export function emptyPurgeCounts(
 export type PurgeTableKey =
   | "photoDispatch"
   | "photo"
+  // ТЗ №15/16 — отгрузки, образцы, шоу-рум. Они ССЫЛАЮТСЯ на SaleRecord/Sample
+  // (Shipment.saleRecordId, Shipment.sampleId, Sample.saleRecordId — Restrict),
+  // поэтому идут ПЕРЕД ними. Раньше их здесь не было, и scope=C падал на
+  // `Shipment_saleRecordId_fkey`: инструмент не знал о таблицах, появившихся
+  // после него. Любая новая таблица с FK на инвентарь обязана попасть сюда.
+  | "shipmentLine"
+  | "showroomPlacement"
+  | "shipment"
+  | "sample"
   | "debt" // TZ9: before SaleRecord — Debt.saleRecordId ON DELETE RESTRICT
   | "saleRecord"
   | "reservation"
@@ -198,6 +211,10 @@ export type PurgeTableKey =
 export const PURGE_DELETE_ORDER: readonly PurgeTableKey[] = [
   "photoDispatch",
   "photo",
+  "shipmentLine", // → Shipment (Cascade) + Slab/Piece/Batch (Restrict)
+  "showroomPlacement", // → Slab/Piece (Restrict); Shipment — SetNull
+  "shipment", // → SaleRecord / Sample (Restrict) — строго до них
+  "sample", // → SaleRecord / Slab / Piece / Batch / PhotoRequest (Restrict)
   "debt",
   "saleRecord",
   "reservation",
@@ -223,6 +240,13 @@ export interface PurgePlanCounts {
   slabs: number;
   pieces: number;
   reservations: number;
+  /** ТЗ №15/16 — отгрузки и их строки. */
+  shipmentLines: number;
+  shipments: number;
+  /** Шоу-рум: размещения плит/кусков. */
+  showroomPlacements: number;
+  /** Образцы у клиентов. */
+  samples: number;
   /** TZ9 credit debts on sales being wiped (A/B scoped; C = all). */
   debts: number;
   saleRecords: number;
@@ -329,6 +353,23 @@ export interface PurgeDb {
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
   lead: {
+    count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  // ТЗ №15/16 — см. комментарий у PurgeTableKey.
+  shipmentLine: {
+    count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  shipment: {
+    count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  showroomPlacement: {
+    count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  sample: {
     count(args?: { where?: unknown }): Promise<number>;
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
@@ -537,6 +578,24 @@ export async function planPurge(
       { batchPattern: { batch: { stoneTypeId: stIn } } },
     ],
   };
+  // ТЗ №15/16 — отгрузки/образцы/шоу-рум. В A/B берём то, что висит на
+  // выбранных видах камня; сами отгрузки — те, что ссылаются на такие продажи
+  // или образцы (иначе FK Restrict не даст удалить SaleRecord/Sample).
+  const stoneScopedWhere = {
+    OR: [
+      { slab: { stoneTypeId: stIn } },
+      { piece: { stoneTypeId: stIn } },
+      { batchId: batchIn },
+    ],
+  };
+  const sampleWhere = stoneScopedWhere;
+  const shipmentLineWhere = stoneScopedWhere;
+  const showroomWhere = {
+    OR: [{ slab: { stoneTypeId: stIn } }, { piece: { stoneTypeId: stIn } }],
+  };
+  const shipmentWhere = {
+    OR: [{ saleRecord: saleWhere }, { sample: sampleWhere }],
+  };
   // Debt hangs off SaleRecord (Restrict). Same sale scope as saleWhere.
   const debtWhere = { saleRecord: saleWhere };
   const photoWhere = {
@@ -575,6 +634,10 @@ export async function planPurge(
     slabs,
     pieces,
     reservations,
+    shipmentLines,
+    shipments,
+    showroomPlacements,
+    samples,
     debts,
     saleRecords,
     photos,
@@ -621,6 +684,26 @@ export async function planPurge(
       : noStones
         ? Promise.resolve(0)
         : db.reservation.count({ where: reservationWhere }),
+    all
+      ? db.shipmentLine.count()
+      : noStones
+        ? Promise.resolve(0)
+        : db.shipmentLine.count({ where: shipmentLineWhere }),
+    all
+      ? db.shipment.count()
+      : noStones
+        ? Promise.resolve(0)
+        : db.shipment.count({ where: shipmentWhere }),
+    all
+      ? db.showroomPlacement.count()
+      : noStones
+        ? Promise.resolve(0)
+        : db.showroomPlacement.count({ where: showroomWhere }),
+    all
+      ? db.sample.count()
+      : noStones
+        ? Promise.resolve(0)
+        : db.sample.count({ where: sampleWhere }),
     all
       ? db.debt.count()
       : noStones
@@ -698,7 +781,7 @@ export async function planPurge(
   }
   if (scope === "C") {
     notes.push(
-      "Scope C: full inventory + all Debt + SaleRecord + Reservation + Photo* + Lead + AuditLog + MutationReceipt.",
+      "Scope C: full inventory + Shipment/ShipmentLine + ShowroomPlacement + Sample + all Debt + SaleRecord + Reservation + Photo* + Lead + AuditLog + MutationReceipt.",
     );
     notes.push(
       "/istoriya will be empty after C (AuditLog wiped). One ADJUSTMENT audit row is written after wipe.",
@@ -720,6 +803,10 @@ export async function planPurge(
       slabs,
       pieces,
       reservations,
+      shipmentLines,
+      shipments,
+      showroomPlacements,
+      samples,
       debts,
       saleRecords,
       photos,
@@ -746,6 +833,10 @@ export function formatPlanReport(plan: PurgePlan): string {
     "Counts that WOULD be deleted / nulled:",
     `  PhotoDispatch:     ${c.photoDispatches}`,
     `  Photo:             ${c.photos}`,
+    `  ShipmentLine:      ${c.shipmentLines}`,
+    `  ShowroomPlacement: ${c.showroomPlacements}`,
+    `  Shipment:          ${c.shipments}`,
+    `  Sample:            ${c.samples}`,
     `  Debt:              ${c.debts}`,
     `  SaleRecord:        ${c.saleRecords}`,
     `  Reservation:       ${c.reservations}`,
@@ -841,6 +932,27 @@ export async function executePurge(
             { batchPattern: { batch: { stoneTypeId: stIn } } },
           ],
         };
+    // ТЗ №15/16 — те же рамки, что и в плане (см. planPurgeClient).
+    const stoneScopedWhere = {
+      OR: [
+        { slab: { stoneTypeId: stIn } },
+        { piece: { stoneTypeId: stIn } },
+        { batchId: batchIn },
+      ],
+    };
+    const sampleWhere = all ? {} : stoneScopedWhere;
+    const shipmentLineWhere = all ? {} : stoneScopedWhere;
+    const showroomWhere = all
+      ? {}
+      : {
+          OR: [
+            { slab: { stoneTypeId: stIn } },
+            { piece: { stoneTypeId: stIn } },
+          ],
+        };
+    const shipmentWhere = all
+      ? {}
+      : { OR: [{ saleRecord: saleWhere }, { sample: sampleWhere }] };
     const debtWhere = all ? {} : { saleRecord: saleWhere };
     const photoWhere = all
       ? {}
@@ -867,6 +979,27 @@ export async function executePurge(
     // 2 Photo
     const photos = (await tx.photo.deleteMany({ where: photoWhere })).count;
     log(`  Photo deleted: ${photos}`);
+
+    // 2a–2d ТЗ №15/16 — отгрузки, шоу-рум, образцы. СТРОГО до SaleRecord и
+    // Sample: Shipment.saleRecordId / Shipment.sampleId / Sample.saleRecordId —
+    // Restrict. Именно этого шага не хватало, и scope=C падал на
+    // `Shipment_saleRecordId_fkey`, откатывая всю транзакцию.
+    const shipmentLines = (
+      await tx.shipmentLine.deleteMany({ where: shipmentLineWhere })
+    ).count;
+    log(`  ShipmentLine deleted: ${shipmentLines}`);
+
+    const showroomPlacements = (
+      await tx.showroomPlacement.deleteMany({ where: showroomWhere })
+    ).count;
+    log(`  ShowroomPlacement deleted: ${showroomPlacements}`);
+
+    const shipments = (await tx.shipment.deleteMany({ where: shipmentWhere }))
+      .count;
+    log(`  Shipment deleted: ${shipments}`);
+
+    const samples = (await tx.sample.deleteMany({ where: sampleWhere })).count;
+    log(`  Sample deleted: ${samples}`);
 
     // 3 Debt BEFORE SaleRecord (Debt.saleRecordId ON DELETE RESTRICT — TZ9)
     const debts = (await tx.debt.deleteMany({ where: debtWhere })).count;
@@ -974,6 +1107,10 @@ export async function executePurge(
       slabs,
       pieces,
       reservations,
+      shipmentLines,
+      shipments,
+      showroomPlacements,
+      samples,
       debts,
       saleRecords,
       photos,

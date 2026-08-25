@@ -294,6 +294,48 @@ function makeFakePurgeDb(seed: {
         return { count: countOf("lead", 0) };
       },
     },
+    // ТЗ №15/16 — отгрузки/шоу-рум/образцы: без них scope=C падал на FK
+    // (Shipment_saleRecordId_fkey). Fake повторяет ту же форму, что остальные.
+    shipmentLine: {
+      count: async ({ where } = {}) => {
+        calls.push({ model: "shipmentLine", op: "count", where });
+        return countOf("shipmentLine", 0);
+      },
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "shipmentLine", op: "deleteMany", where });
+        return { count: countOf("shipmentLine", 0) };
+      },
+    },
+    shipment: {
+      count: async ({ where } = {}) => {
+        calls.push({ model: "shipment", op: "count", where });
+        return countOf("shipment", 0);
+      },
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "shipment", op: "deleteMany", where });
+        return { count: countOf("shipment", 0) };
+      },
+    },
+    showroomPlacement: {
+      count: async ({ where } = {}) => {
+        calls.push({ model: "showroomPlacement", op: "count", where });
+        return countOf("showroomPlacement", 0);
+      },
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "showroomPlacement", op: "deleteMany", where });
+        return { count: countOf("showroomPlacement", 0) };
+      },
+    },
+    sample: {
+      count: async ({ where } = {}) => {
+        calls.push({ model: "sample", op: "count", where });
+        return countOf("sample", 0);
+      },
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "sample", op: "deleteMany", where });
+        return { count: countOf("sample", 0) };
+      },
+    },
     auditLog: {
       count: async () => countOf("auditLog", 0),
       deleteMany: async ({ where } = {}) => {
@@ -608,6 +650,49 @@ describe("executePurge — order and audit marker (fake client)", () => {
     expect(deleteModels).not.toContain("stoneType");
     expect(deleteModels).not.toContain("batch");
     void first;
+  });
+});
+
+// ─── ТЗ №15/16 — регрессия: FK Shipment → SaleRecord ───
+//
+// 2026-08-25, боевая база: scope=C упал на `Shipment_saleRecordId_fkey` и
+// откатил всю транзакцию. Причина — purge.ts не знал о таблицах, добавленных
+// после него (Shipment/ShipmentLine/ShowroomPlacement/Sample). Эти тесты держат
+// порядок удаления: любая таблица, которая ССЫЛАЕТСЯ на инвентарь, обязана
+// удаляться РАНЬШЕ него.
+describe("PURGE_DELETE_ORDER — отгрузки и образцы (ТЗ №15/16)", () => {
+  const idx = (k: string) => PURGE_DELETE_ORDER.indexOf(k as never);
+
+  it("Shipment удаляется до SaleRecord и до Sample (оба Restrict)", () => {
+    expect(idx("shipment")).toBeGreaterThanOrEqual(0);
+    expect(idx("shipment")).toBeLessThan(idx("saleRecord"));
+    expect(idx("shipment")).toBeLessThan(idx("sample"));
+  });
+
+  it("ShipmentLine — до Shipment и до Slab/Piece/Batch", () => {
+    expect(idx("shipmentLine")).toBeLessThan(idx("shipment"));
+    expect(idx("shipmentLine")).toBeLessThan(idx("slab"));
+    expect(idx("shipmentLine")).toBeLessThan(idx("piece"));
+    expect(idx("shipmentLine")).toBeLessThan(idx("batch"));
+  });
+
+  it("Sample — до SaleRecord, Slab, Piece, Batch и PhotoRequest", () => {
+    for (const later of ["saleRecord", "slab", "piece", "batch", "photoRequest"]) {
+      expect(idx("sample")).toBeLessThan(idx(later));
+    }
+  });
+
+  it("ShowroomPlacement — до Slab и Piece", () => {
+    expect(idx("showroomPlacement")).toBeLessThan(idx("slab"));
+    expect(idx("showroomPlacement")).toBeLessThan(idx("piece"));
+  });
+
+  it("emptyPurgeCounts знает новые счётчики (иначе отчёт врёт)", () => {
+    const c = emptyPurgeCounts();
+    expect(c.shipments).toBe(0);
+    expect(c.shipmentLines).toBe(0);
+    expect(c.showroomPlacements).toBe(0);
+    expect(c.samples).toBe(0);
   });
 });
 
