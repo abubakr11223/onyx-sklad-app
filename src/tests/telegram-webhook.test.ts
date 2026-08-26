@@ -1410,6 +1410,42 @@ describe("W10-B separateSlabWithPhoto atomicity + receipt release", () => {
     expect(photoCreate).not.toHaveBeenCalled();
   });
 
+  // Регрессия: партия исчерпана — складчик ДОЛЖЕН получить ответ.
+  // Раньше SlabSeparationError улетала в общий catch: claim освобождался,
+  // Telegram повторял тот же update, и человек не видел ни ✅, ни ошибки.
+  it("INSUFFICIENT_REMAINDER → понятное сообщение, claim НЕ освобождается", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    const err = Object.assign(new Error("В партии не осталось свободных плит"), {
+      code: "INSUFFICIENT_REMAINDER",
+    });
+    separateSlabWithPhotoMock.mockRejectedValue(err);
+    claimTelegramUpdate.mockResolvedValueOnce("claimed");
+
+    await handleUpdate(photoUpdate({ chatId: 999, updateId: 7001 }), makeDeps());
+
+    const texts = sendMessage.mock.calls.map((c) => String(c[1]));
+    expect(texts.some((t) => t.includes("не осталось свободных плит"))).toBe(true);
+    expect(texts.some((t) => t.includes("✅"))).toBe(false);
+    // Повтор ничего не исправит — claim остаётся, цикла повторов нет.
+    expect(releaseTelegramUpdate).not.toHaveBeenCalled();
+  });
+
+  it("BATCH_NOT_FOUND → тоже отвечаем, а не молчим", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabWithPhotoMock.mockRejectedValue(
+      Object.assign(new Error("Партия не найдена"), { code: "BATCH_NOT_FOUND" }),
+    );
+    claimTelegramUpdate.mockResolvedValueOnce("claimed");
+
+    await handleUpdate(photoUpdate({ chatId: 999, updateId: 7002 }), makeDeps());
+
+    const texts = sendMessage.mock.calls.map((c) => String(c[1]));
+    expect(texts.some((t) => t.includes("Фото не сохранено"))).toBe(true);
+    expect(releaseTelegramUpdate).not.toHaveBeenCalled();
+  });
+
   it("success → claim kept (release NOT called) so replay is no-op", async () => {
     userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
     prFindMany.mockResolvedValue([PENDING_REQUEST]);

@@ -375,6 +375,19 @@ const MSG_PHOTO_NO_REQUEST = "Пока нет активного фото-зап
 const MSG_PHOTO_REQUEST_CLOSED =
   "Этот запрос уже закрыт. Обратитесь к вашему менеджеру для нового запроса.";
 const MSG_PHOTO_SAVED = "✅ Фото сохранено, спасибо!";
+// Плита не выделилась — раньше складчик не получал НИЧЕГО.
+//
+// separateSlabWithPhoto бросает SlabSeparationError («в партии не осталось
+// свободных плит», «партия не найдена»). Исключение улетало в общий catch
+// handleUpdate, тот освобождал claim — и Telegram повторял тот же update,
+// который падал снова. Складчик видел тишину: ни ✅, ни ошибки, а фото нигде.
+// Теперь ловим здесь: человек получает понятный текст и знает, что делать.
+const MSG_PHOTO_SLAB_FULL =
+  "❌ Фото не сохранено: в партии не осталось свободных плит. " +
+  "Сообщите менеджеру — нужно поправить количество в приёмке.";
+const MSG_PHOTO_SLAB_FAILED =
+  "❌ Фото не сохранено — техническая ошибка. Попробуйте ещё раз; " +
+  "если повторится — сообщите менеджеру.";
 // Audit 3.1 — bare foto + 2+ PENDING: FIFO adashmasin; reply-first saqlanadi.
 const MSG_PHOTO_AMBIGUOUS_HEADER =
   "Открыто несколько фото-запросов. Не могу выбрать автоматически — ответьте (reply) фото на нужное задание:";
@@ -1136,18 +1149,39 @@ async function handlePhoto(
   // Network: sendMessage TX DAN KEYIN (past). Fayl yuklash yo'q — faqat file_id.
   const loc = claimed.batchLocation;
   if (claimed.slabId == null) {
-    await deps.separateSlabWithPhoto(
-      {
-        batchId: claimed.batchId,
-        stoneTypeId: claimed.batch.stoneTypeId,
-        photoRequestId: claimed.id,
-        block: loc?.block ?? "?",
-        landmark: loc?.landmark ?? "?",
-        needsCheck: loc == null,
-        separatedById: user.id,
-      },
-      { storageKey: fileId, takenById: user.id },
-    );
+    try {
+      await deps.separateSlabWithPhoto(
+        {
+          batchId: claimed.batchId,
+          stoneTypeId: claimed.batch.stoneTypeId,
+          photoRequestId: claimed.id,
+          block: loc?.block ?? "?",
+          landmark: loc?.landmark ?? "?",
+          needsCheck: loc == null,
+          separatedById: user.id,
+        },
+        { storageKey: fileId, takenById: user.id },
+      );
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      // ПОСТОЯННАЯ ошибка (партия исчерпана / партия исчезла): повтор её никогда
+      // не исправит. Раньше она улетала в общий catch, тот освобождал claim, и
+      // Telegram гонял один и тот же update по кругу — а складчик не получал
+      // НИЧЕГО: ни ✅, ни ошибки. Отвечаем человеку и оставляем claim.
+      if (code === "INSUFFICIENT_REMAINDER" || code === "BATCH_NOT_FOUND") {
+        console.error("[telegram-webhook] plita ajratilmadi:", err);
+        await deps.sendMessage(
+          chatId,
+          code === "INSUFFICIENT_REMAINDER"
+            ? MSG_PHOTO_SLAB_FULL
+            : MSG_PHOTO_SLAB_FAILED,
+        );
+        return;
+      }
+      // ВРЕМЕННАЯ (обрыв БД, откат TX) — пробрасываем: claim освобождается,
+      // Telegram повторит, и фото ещё может сохраниться (W10-B).
+      throw err;
+    }
   } else {
     await deps.db.photo.create({
       data: {

@@ -68,7 +68,16 @@ export function isValidPassword(password: string): boolean {
 // raqami bilan mos kelmaydi va bog'lanish ishlamaydi.
 export function normalizePhone(s: string | null | undefined): string {
   if (!s) return "";
-  return s.replace(/\D+/g, "");
+  let d = s.replace(/\D+/g, "");
+  // telegram-webhook.ts bilan BIR XIL qoida (izoh yuqorida): xalqaro «00»
+  // prefiksi va UZ mobil raqamining qisqa shakli. Bularsiz panelda «90 123 45
+  // 67» deb kiritilgan raqam «+901234567» bo'lib saqlanardi, keyin o'sha odam
+  // uchun «+998901234567» ikkinchi yozuv sifatida qo'shilishi mumkin edi —
+  // natijada bitta telefonда IKKI akkaunt, va bot «bir nechta akkaunt» deb
+  // bog'lashdan bosh tortardi.
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length === 9 && d.startsWith("9")) d = "998" + d;
+  return d;
 }
 
 /** Telefon maqbulmi: 9–15 ta raqam (xalqaro diapazon; UZ = 12: 998 + 9). */
