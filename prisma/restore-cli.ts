@@ -17,16 +17,20 @@ import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import {
   DEFERRED_FIELDS,
+  GENERATED_COLUMNS_SQL,
   RESTORE_ALLOW_ENV,
   RESTORE_ALLOW_VALUE,
   RESTORE_ORDER,
+  buildGeneratedColumnMap,
   formatRestorePlan,
   parseRestoreArgs,
   parseSnapshotJson,
   planRestore,
   restoreUsage,
   splitDeferred,
+  stripGeneratedColumns,
   validateRestoreArgs,
+  type GeneratedColumnRow,
 } from "../src/lib/restore";
 
 /** Bir martada yuboriladigan yozuvlar soni — katta zaxirada so'rov cheklovi. */
@@ -89,11 +93,23 @@ async function main(): Promise<void> {
   const pendingUpdates: { table: string; id: string; data: Record<string, unknown> }[] = [];
 
   try {
+    // 0-bosqich: GENERATED ustunlar (Piece.boundingAreaMm2 va h.k.) —
+    // Postgres ularga ochiq qiymat qabul QILMAYDI, DB o'zi hisoblaydi.
+    // Ro'yxat sxemadan ish paytida olinadi — nom qattiq yozilmagan.
+    const genRows = await db.$queryRawUnsafe<GeneratedColumnRow[]>(
+      GENERATED_COLUMNS_SQL,
+    );
+    const generated = buildGeneratedColumnMap(genRows);
+    for (const [t, cols] of Object.entries(generated)) {
+      console.log(`  ${t}: generated ustun(lar) tashlab ketiladi — ${cols.join(", ")} (DB o'zi hisoblaydi)`);
+    }
+
     // 1-bosqich: otadan bolaga. Halqali ustunlar null bilan qo'yiladi.
     for (const table of RESTORE_ORDER) {
       const rows = snap.snapshot.rows[table] ?? [];
       if (rows.length === 0) continue;
-      const { base, updates, skipped } = splitDeferred(table, rows);
+      const { base: withGenerated, updates, skipped } = splitDeferred(table, rows);
+      const base = stripGeneratedColumns(withGenerated, generated[table] ?? []);
       if (skipped > 0) {
         console.warn(
           `⚠️  ${table}: ${skipped} yozuvda id yo'q — bog'lam tiklanmaydi.`,

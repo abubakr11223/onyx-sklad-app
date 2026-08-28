@@ -46,9 +46,50 @@ yana bitta muammo degani.
    ```
    Birinchi buyruq hech narsa yozmaydi — faqat rejani ko'rsatadi.
    Mavjud id'lar o'tkazib yuboriladi, ya'ni takror yurgizish xavfsiz.
+   GENERATED ustunlar (masalan, `Piece.boundingAreaMm2`) avtomatik tashlab
+   ketiladi — bazaning o'zi hisoblaydi; ro'yxat sxemadan ish paytida olinadi.
 6. **Telegram webhook manzilini yangilang** (yangi domen).
 7. **Cron qo'ying** (`.env.production.example` ichidagi ikki qator crontab).
 8. **DNS'ni yangi serverga qarating.** Caddy sertifikatni o'zi oladi.
+
+---
+
+## 2а. Репетиция восстановления (проверено 2026-08-28)
+
+Резервная копия без проверенного восстановления — не копия. Повторяйте
+репетицию после каждого изменения схемы. Все команды — из корня репозитория.
+
+1. Создайте черновую базу:
+   `psql "$DATABASE_URL" -c 'CREATE DATABASE onyx_restore_rehearsal;'`
+   (или `createdb onyx_restore_rehearsal`).
+2. Примените миграции к черновой базе. ВАЖНО: запускайте prisma CLI из
+   каталога **вне** репозитория — иначе он возьмёт `DATABASE_URL` из `.env`
+   и молча применит миграции к рабочей базе:
+   ```
+   cd /tmp && DATABASE_URL="postgresql://…/onyx_restore_rehearsal?schema=public" \
+     DATABASE_URL_UNPOOLED="postgresql://…/onyx_restore_rehearsal?schema=public" \
+     <repo>/node_modules/.bin/prisma migrate deploy --schema <repo>/prisma/schema.prisma
+   ```
+3. Возьмите свежую копию: `curl …/api/cron/backup` (файл придёт в Telegram)
+   или используйте уже сохранённый `onyx-backup-YYYY-MM-DD.json`.
+4. Восстановите В ЧЕРНОВУЮ базу (сначала без `--execute` — посмотрите план):
+   ```
+   DATABASE_URL="postgresql://…/onyx_restore_rehearsal?schema=public" \
+     ONYX_RESTORE_ALLOW=I_UNDERSTAND_WRITE npm run restore -- \
+     --file=onyx-backup-YYYY-MM-DD.json --execute --yes
+   ```
+5. Сверьте: количество строк по каждой таблице = числам из плана; затем
+   ```
+   psql "…/onyx_restore_rehearsal" -c 'SELECT count(*) FROM "Piece"
+     WHERE "boundingAreaMm2" <> "boundingLengthMm"*"boundingWidthMm";'
+   ```
+   — должно быть 0 (колонка GENERATED, база пересчитала сама).
+6. Удалите черновую базу:
+   `psql "$DATABASE_URL" -c 'DROP DATABASE onyx_restore_rehearsal WITH (FORCE);'`
+
+Та же репетиция автоматизирована:
+`DATABASE_URL=… npx vitest run src/tests/restore-rehearsal.integration.test.ts`
+(без `DATABASE_URL` тест пропускается).
 
 ---
 
@@ -85,7 +126,8 @@ qo'ymaydi (hammasi ishlab turadi), lekin ro'yxatdan tushmasin.
 ## 5. Ma'lumot yo'qolmasligi — qatlamlar
 
 1. **Kunlik zaxira** — `/api/cron/backup`, JSON Telegram'ga (baza tashqarisida).
-2. **Tiklash** — `npm run restore` (shu hujjat, 5-qadam). Sinalgan.
+2. **Tiklash** — `npm run restore` (shu hujjat, 5-qadam). Sinalgan —
+   mashq tartibi 2а-bo'limda, avtomatik test: `restore-rehearsal.integration.test.ts`.
 3. **Neon PITR / branch** — faqat hozirgi vaqtinchalik davr uchun.
 4. **Ega serverida** — `pg_dump` ni ham cronga qo'ying (tuzilma + ma'lumot):
    ```

@@ -59,6 +59,80 @@ export const DEFERRED_FIELDS: Record<string, string[]> = {
   slab: ["photoRequestId"],
 };
 
+// ─────────────────── GENERATED ustunlar (W2-T1) ────────────────────
+//
+// Postgres'da GENERATED ALWAYS AS … STORED ustunga (masalan,
+// Piece.boundingAreaMm2) INSERT'da qiymat berib BO'LMAYDI — DB o'zi
+// hisoblaydi, ochiq qiymat esa xato bilan qaytadi. Snapshot esa jadvalni
+// `findMany` bilan to'liq o'qiydi, ya'ni bunday ustunlar faylda BOR.
+// Yechim tiklash tomonida: ustunlar information_schema'dan ish paytida
+// aniqlanadi (nom qattiq yozilmaydi — kelajakda yangi generated ustun
+// tiklashni qayta sindirmasin) va INSERT oldidan yozuvdan olib tashlanadi.
+// Eski zaxira fayllari o'zgarishsiz tiklanadi.
+
+/**
+ * Joriy sxemadagi barcha generated ustunlar. `current_schema()` — ulanish
+ * DATABASE_URL'dagi ?schema= ga qaraydi, ya'ni sinov sxemasida ham to'g'ri.
+ * `is_generated='ALWAYS'` STORED generated'ni, `identity_generation='ALWAYS'`
+ * esa identity ustunlarni qamraydi (hozir yo'q, lekin bo'lsa ham sinmaydi).
+ */
+export const GENERATED_COLUMNS_SQL = `
+  SELECT table_name, column_name
+  FROM information_schema.columns
+  WHERE table_schema = current_schema()
+    AND (is_generated = 'ALWAYS' OR identity_generation = 'ALWAYS')
+  ORDER BY table_name, column_name
+`;
+
+export interface GeneratedColumnRow {
+  table_name: string;
+  column_name: string;
+}
+
+/**
+ * information_schema natijasini Prisma delegate nomlariga bog'laydi:
+ * jadval nomi = model nomi (PascalCase, @@map ishlatilmagan), delegate esa
+ * camelCase — solishtirish katta-kichik harfsiz. Tiklash tartibida yo'q
+ * jadvallar (masalan, snapshot'ga kirmaydigan xizmat jadvallari) tushib
+ * qoladi — ular baribir qo'yilmaydi.
+ */
+export function buildGeneratedColumnMap(
+  rows: GeneratedColumnRow[],
+): Record<string, string[]> {
+  const byLower = new Map<string, RestoreTable>();
+  for (const t of RESTORE_ORDER) byLower.set(t.toLowerCase(), t);
+
+  const map: Record<string, string[]> = {};
+  for (const r of rows) {
+    const delegate = byLower.get(r.table_name.toLowerCase());
+    if (!delegate) continue;
+    (map[delegate] ??= []).push(r.column_name);
+  }
+  return map;
+}
+
+/**
+ * INSERT oldidan generated ustunlarni olib tashlaydi. Kirish massiviga
+ * TEGMAYDI (snapshot qayta ishlatilishi mumkin); olib tashlanadigan ustun
+ * bo'lmasa — o'sha massivning o'zi qaytadi (ko'chirish tejaladi).
+ */
+export function stripGeneratedColumns(
+  rows: Record<string, unknown>[],
+  columns: string[],
+): Record<string, unknown>[] {
+  if (columns.length === 0) return rows;
+  return rows.map((row) => {
+    let copy: Record<string, unknown> | null = null;
+    for (const col of columns) {
+      if (col in row) {
+        copy ??= { ...row };
+        delete copy[col];
+      }
+    }
+    return copy ?? row;
+  });
+}
+
 export interface RestoreStep {
   table: string;
   count: number;
