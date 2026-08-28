@@ -16,9 +16,9 @@ import Field, { inputClass } from "@/components/ui/Field";
 import {
   sendToShowroomAction,
   returnFromShowroomAction,
-  sellFromShowroomAction,
   sampleFromShowroomAction,
 } from "./actions";
+import ShowroomSellDialog from "./ShowroomSellDialog";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Шоу-рум — Onyx" };
@@ -377,27 +377,17 @@ export default async function ShourumPage({
 
                   {caps.canSell && (
                     <>
-                      <form
-                        action={sellFromShowroomAction}
-                        className="flex flex-wrap items-end gap-2"
-                      >
-                        <input
-                          type="hidden"
-                          name="targetType"
-                          value={it.targetType}
+                      {/* W1-T3 — продажа через диалог: цена + валюта + способ
+                          оплаты + клиент из справочника; подтверждение — submit
+                          диалога. Один клик больше не создаёт SaleRecord без
+                          цены (та же валидация, что в /prodazha). */}
+                      <div>
+                        <ShowroomSellDialog
+                          targetType={it.targetType}
+                          unitId={it.unitId}
+                          stoneLabel={it.stoneLabel}
                         />
-                        <input type="hidden" name="unitId" value={it.unitId} />
-                        <Field
-                          id={`cust-${it.placementId}`}
-                          name="customerName"
-                          label="Клиент (продажа)"
-                          placeholder="Имя"
-                          className={inputClass}
-                        />
-                        <Button type="submit" size="sm">
-                          Продать из шоу-рума
-                        </Button>
-                      </form>
+                      </div>
 
                       <form
                         action={sampleFromShowroomAction}
