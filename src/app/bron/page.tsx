@@ -9,6 +9,7 @@ import {
   freeRemainderFromAggregate,
   getBatchRemainders,
 } from "@/lib/batch-remainders";
+import { computeFreeHint } from "./free-hint";
 import {
   DEFAULT_RESERVATION_DAYS,
   RESERVATION_DAYS_KEY,
@@ -251,7 +252,14 @@ export default async function BronPage({
               areaAdjustedM2: true,
               slabsSoldDirect: true,
               areaSoldDirectM2: true,
+              // W2-T7: та же формула hold'ов, что и охрана брони
+              // (reservations.reserveBatchVolume) — активные брони с expiresAt
+              // (истёкшие отсекает computeBatchVolumeHolds) + активные образцы.
               reservations: {
+                where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
+                select: { qtySlabs: true, qtyAreaM2: true, expiresAt: true },
+              },
+              samples: {
                 where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
                 select: { qtySlabs: true, qtyAreaM2: true },
               },
@@ -307,6 +315,8 @@ export default async function BronPage({
     stoneTypes.flatMap((st) => st.batches.map((b) => b.id)),
   );
 
+  // W2-T7: единый «сейчас» для отсечения истёкших броней в подсказке.
+  const now = new Date();
   const stones: StoneGroup[] = stoneTypes
     .map((st) => {
       const slabs: UnitOption[] = st.slabs.map((s) => ({
@@ -334,18 +344,23 @@ export default async function BronPage({
             },
             remainders.get(b.id) ?? EMPTY_AGGREGATE,
           );
-          const reservedSlabs = b.reservations.reduce(
-            (n, r) => n + (r.qtySlabs ?? 0),
-            0,
-          );
-          const reservedAreaM2 = b.reservations.reduce(
-            (n, r) => n + (toNum(r.qtyAreaM2) ?? 0),
-            0,
-          );
-          const freeSlabs =
-            free.slabsFree === null ? null : free.slabsFree - reservedSlabs;
-          const freeAreaM2 =
-            free.areaFreeM2 === null ? null : free.areaFreeM2 - reservedAreaM2;
+          // W2-T7: hold'ы — ЕДИНОЙ формулой computeBatchVolumeHolds
+          // (брони, истёкшие исключены, + образцы) — ровно как охрана брони;
+          // показ клампится в 0 (free-hint.ts).
+          const { freeSlabs, freeAreaM2 } = computeFreeHint({
+            slabsFree: free.slabsFree,
+            areaFreeM2: free.areaFreeM2,
+            reservations: b.reservations.map((r) => ({
+              qtySlabs: r.qtySlabs,
+              qtyAreaM2: toNum(r.qtyAreaM2),
+              expiresAt: r.expiresAt,
+            })),
+            samples: b.samples.map((s) => ({
+              qtySlabs: s.qtySlabs,
+              qtyAreaM2: toNum(s.qtyAreaM2),
+            })),
+            now,
+          });
           const freeParts: string[] = [];
           if (freeSlabs !== null) freeParts.push(`~${freeSlabs} плит`);
           if (freeAreaM2 !== null)
