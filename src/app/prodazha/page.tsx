@@ -10,6 +10,11 @@ import {
   freeRemainderFromAggregate,
   getBatchRemainders,
 } from "@/lib/batch-remainders";
+import {
+  computeBatchVolumeHolds,
+  findOwnActiveVolumeReservations,
+  formatHoldQty,
+} from "@/lib/volume-holds";
 import { sortNeedsCheckLast } from "@/lib/checks";
 import {
   SALE_HISTORY_PAGE_SIZE,
@@ -178,18 +183,30 @@ export default async function ProdazhaPage({
           },
         },
         pieces: {
-          where: { status: "AVAILABLE" },
+          // W1-T1: RESERVED boy ham pickerga kiradi — lekin faqat O'Z broni
+          // (yoki owner) uchun; filtr quyida, activeReservation bo'yicha.
+          where: { status: { in: ["AVAILABLE", "RESERVED"] } },
           orderBy: [{ id: "asc" }],
           take: takeForCap(CATALOG_PIECES_CAP),
           select: {
             id: true,
             kind: true,
+            status: true,
             needsCheck: true,
             boundingLengthMm: true,
             boundingWidthMm: true,
             areaM2: true,
             block: true,
             landmark: true,
+            reservations: {
+              where: { status: "ACTIVE" },
+              select: {
+                managerId: true,
+                customerName: true,
+                expiresAt: true,
+              },
+              take: 1,
+            },
           },
         },
       },
@@ -279,8 +296,12 @@ export default async function ProdazhaPage({
     st.batches.map((b) => b.id),
   );
 
+  // W1-T1: hold'lar (bron + obraztsy) «svobodno» ko'rsatkichini kesadi va
+  // «zakryt' moyu bron'» checkbox'i uchun kerak. Bitta soat nuqtasi — now.
+  const now = new Date();
+
   // History + remainder aggregates are independent after stoneTypesRaw — one RTT.
-  const [salesPage, remainders] = await Promise.all([
+  const [salesPage, remainders, volReservations, volSamples] = await Promise.all([
     histFilters !== null
       ? fetchSaleHistoryPage(db, {
           filters: histFilters,
@@ -295,7 +316,72 @@ export default async function ProdazhaPage({
           nextCursor: null as string | null,
         }),
     getBatchRemainders(db, batchIdsForRemainders),
+    batchIdsForRemainders.length > 0
+      ? db.reservation.findMany({
+          where: {
+            status: "ACTIVE",
+            targetType: "BATCH_VOLUME",
+            batchId: { in: batchIdsForRemainders },
+            expiresAt: { gt: now },
+          },
+          select: {
+            id: true,
+            batchId: true,
+            managerId: true,
+            customerName: true,
+            qtySlabs: true,
+            qtyAreaM2: true,
+            expiresAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    batchIdsForRemainders.length > 0
+      ? db.sample.findMany({
+          where: {
+            status: "ACTIVE",
+            targetType: "BATCH_VOLUME",
+            batchId: { in: batchIdsForRemainders },
+          },
+          select: { batchId: true, qtySlabs: true, qtyAreaM2: true },
+        })
+      : Promise.resolve([]),
   ]);
+
+  // batchId → строки (Decimal → number сразу, как в batch-remainders).
+  const volResByBatch = new Map<
+    string,
+    {
+      id: string;
+      managerId: string;
+      customerName: string;
+      qtySlabs: number | null;
+      qtyAreaM2: number | null;
+      expiresAt: Date;
+    }[]
+  >();
+  for (const r of volReservations) {
+    if (r.batchId === null) continue;
+    const list = volResByBatch.get(r.batchId) ?? [];
+    list.push({
+      id: r.id,
+      managerId: r.managerId,
+      customerName: r.customerName,
+      qtySlabs: r.qtySlabs,
+      qtyAreaM2: toNum(r.qtyAreaM2),
+      expiresAt: r.expiresAt,
+    });
+    volResByBatch.set(r.batchId, list);
+  }
+  const volSamplesByBatch = new Map<
+    string,
+    { qtySlabs: number | null; qtyAreaM2: number | null }[]
+  >();
+  for (const s of volSamples) {
+    if (s.batchId === null) continue;
+    const list = volSamplesByBatch.get(s.batchId) ?? [];
+    list.push({ qtySlabs: s.qtySlabs, qtyAreaM2: toNum(s.qtyAreaM2) });
+    volSamplesByBatch.set(s.batchId, list);
+  }
   const recentSales = salesPage.rows;
   const canSeeSalePrice = caps.canSeePrices;
 
@@ -366,19 +452,32 @@ export default async function ProdazhaPage({
           })),
       );
 
+      // W1-T1: RESERVED boy — faqat O'Z faol broni bo'lsa (owner hammasini
+      // ko'radi); boshqa menejer broni ro'yxatga KIRMAYDI (server ham rad etadi).
       const pieces = sortNeedsCheckLast(
-        st.pieces.map((p) => ({
-          id: p.id,
-          kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
-          needsCheck: p.needsCheck,
-          detail: [
-            `габарит ${p.boundingLengthMm}×${p.boundingWidthMm} см`,
-            p.areaM2 !== null && `≈${m2Fmt.format(Number(p.areaM2))} м²`,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          place: formatLocation(p.block, p.landmark),
-        })),
+        st.pieces
+          .filter((p) => {
+            if (p.status !== "RESERVED") return true;
+            const r = p.reservations[0];
+            if (!r || r.expiresAt.getTime() <= now.getTime()) return false;
+            return caps.canSeeAllReservations || r.managerId === actorId;
+          })
+          .map((p) => ({
+            id: p.id,
+            kindRu: PIECE_KIND_RU[p.kind] ?? p.kind,
+            needsCheck: p.needsCheck,
+            detail: [
+              `габарит ${p.boundingLengthMm}×${p.boundingWidthMm} см`,
+              p.areaM2 !== null && `≈${m2Fmt.format(Number(p.areaM2))} м²`,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            place: formatLocation(p.block, p.landmark),
+            reservedFor:
+              p.status === "RESERVED"
+                ? (p.reservations[0]?.customerName ?? null)
+                : null,
+          })),
       );
 
       const batches = st.batches.map((b) => {
@@ -395,15 +494,54 @@ export default async function ProdazhaPage({
           },
           remainders.get(b.id) ?? EMPTY_AGGREGATE,
         );
+        // W1-T1: «свободно» = §3-остаток МИНУС активные брони и образцы
+        // (единая формула volume-holds; та же, что в охране продажи/брони).
+        const resRows = volResByBatch.get(b.id) ?? [];
+        const samRows = volSamplesByBatch.get(b.id) ?? [];
+        const holds = computeBatchVolumeHolds({
+          reservations: resRows,
+          samples: samRows,
+          now,
+        });
+        const netSlabs =
+          free.slabsFree === null ? null : free.slabsFree - holds.totalSlabs;
+        const netAreaM2 =
+          free.areaFreeM2 === null
+            ? null
+            : free.areaFreeM2 - holds.totalAreaM2;
         const freeParts = [
-          free.slabsFree !== null && `~${free.slabsFree} плит`,
-          free.areaFreeM2 !== null && `≈${m2Fmt.format(free.areaFreeM2)} м²`,
+          netSlabs !== null && `~${netSlabs} плит`,
+          netAreaM2 !== null && `≈${m2Fmt.format(netAreaM2)} м²`,
         ]
           .filter(Boolean)
           .join(" · ");
+        const holdsSuffix =
+          holds.totalSlabs > 0 || holds.totalAreaM2 > 0
+            ? ` (в брони: ${formatHoldQty(
+                holds.reservationSlabs,
+                holds.reservationAreaM2,
+              )} · в образцах: ${formatHoldQty(
+                holds.sampleSlabs,
+                holds.sampleAreaM2,
+              )})`
+            : "";
+        // W1-T1: своя бронь погашаема продажей (чекбокс) — партия остаётся
+        // выбираемой, даже если весь остаток «съеден» собственной бронью.
+        const myReservations = (
+          actorId
+            ? findOwnActiveVolumeReservations(resRows, actorId, now)
+            : []
+        ).map((r) => ({
+          id: r.id,
+          label: `клиент: ${r.customerName}, ${formatHoldQty(
+            r.qtySlabs ?? 0,
+            r.qtyAreaM2 ?? 0,
+          )}`,
+        }));
         const hasFree =
-          (free.slabsFree !== null && free.slabsFree > 0) ||
-          (free.areaFreeM2 !== null && free.areaFreeM2 > 0);
+          (netSlabs !== null && netSlabs > 0) ||
+          (netAreaM2 !== null && netAreaM2 > 0) ||
+          myReservations.length > 0;
         // ТЗ №3 — узоры партии с остатком (count − sold).
         const patterns = b.patterns.map((pat) => {
           const remSlabs = pat.slabsCount - pat.slabsSold;
@@ -418,10 +556,11 @@ export default async function ProdazhaPage({
         return {
           id: b.id,
           title: `Партия от ${formatTashkentDate(b.arrivedAt)}`,
-          freeText: `свободно: ${freeParts || "нет данных"}`,
+          freeText: `свободно: ${freeParts || "нет данных"}${holdsSuffix}`,
           needsCheck: b.needsCheck,
           hasFree,
           patterns,
+          myReservations,
         };
       });
 

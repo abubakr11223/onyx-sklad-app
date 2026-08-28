@@ -442,6 +442,7 @@ function batchRow(over: Partial<Record<string, unknown>> = {}) {
     slabs: [],
     pieces: [],
     reservations: [],
+    samples: [],
     ...over,
   };
 }
@@ -532,6 +533,91 @@ describe("sellBatchVolume — объёмная продажа партии (mock
     await sellBatchVolume(INPUT);
     expect(M.shipmentCreate).not.toHaveBeenCalled();
   });
+
+  // ── W1-T1: своя бронь / образцы / явное согласие ──
+
+  const myRes = {
+    id: "myRes",
+    managerId: "mgr1",
+    customerName: "Иван",
+    manager: { name: "Азиз" },
+    qtySlabs: 8,
+    qtyAreaM2: null,
+    expiresAt: FUTURE,
+    createdAt: PAST,
+  };
+
+  it("W1-T1 (LIVE-баг): СВОЯ активная бронь без согласия режет остаток и НЕ гасится молча", async () => {
+    // free=10, своя бронь 8 → доступно 2; просят 3 → отказ, бронь остаётся ACTIVE.
+    M.batchFindUnique.mockResolvedValue(batchRow({ reservations: [myRes] }));
+
+    const res = await sellBatchVolume(INPUT); // qtySlabs: 3
+
+    expect(res.ok).toBe(false);
+    expect((res as { error: { code: string } }).error.code).toBe(
+      "INSUFFICIENT_REMAINDER",
+    );
+    expect(M.batchUpdateMany).not.toHaveBeenCalled();
+    // Ключевое: бронь НЕ переведена в COMPLETED без согласия.
+    expect(M.reservationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: consumeReservationId → гасится РОВНО эта бронь, её объём доступен продаже", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow({ reservations: [myRes] }));
+
+    const res = await sellBatchVolume({
+      ...INPUT,
+      qtySlabs: 10, // весь свободный остаток — бронь явным согласием закрыта
+      consumeReservationId: "myRes",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(
+      (res as { completedReservationIds: string[] }).completedReservationIds,
+    ).toEqual(["myRes"]);
+    expect(M.reservationUpdateMany).toHaveBeenCalledTimes(1);
+    expect(M.reservationUpdateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: "myRes", status: "ACTIVE" },
+      data: expect.objectContaining({ status: "COMPLETED" }),
+    });
+  });
+
+  it("W1-T1: чужой consumeReservationId → RESERVED_BY_OTHER (deny-by-default), записи нет", async () => {
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({
+        reservations: [{ ...myRes, id: "foreign", managerId: "OTHER" }],
+      }),
+    );
+
+    const res = await sellBatchVolume({
+      ...INPUT,
+      qtySlabs: 1,
+      consumeReservationId: "foreign",
+    });
+
+    expect(res.ok).toBe(false);
+    expect((res as { error: { code: string } }).error.code).toBe(
+      "RESERVED_BY_OTHER",
+    );
+    expect(M.batchUpdateMany).not.toHaveBeenCalled();
+    expect(M.reservationUpdateMany).not.toHaveBeenCalled();
+    expect(M.saleCreate).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: активный BATCH_VOLUME-образец режет остаток продажи", async () => {
+    // free=10, образец держит 8 → доступно 2; просят 3 → отказ.
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({ samples: [{ qtySlabs: 8, qtyAreaM2: null }] }),
+    );
+
+    const res = await sellBatchVolume(INPUT);
+
+    expect(res.ok).toBe(false);
+    expect((res as { error: { code: string } }).error.code).toBe(
+      "INSUFFICIENT_REMAINDER",
+    );
+    expect(M.batchUpdateMany).not.toHaveBeenCalled();
+  });
 });
 
 // ═══════════════ sellWholeBatch ═══════════════
@@ -562,6 +648,48 @@ describe("sellWholeBatch — «партию выкупили оптом цели
     expect(upd.data.slabsSoldDirect).toEqual({ increment: 10 });
     // AuditLog помечен wholeBatch:true.
     expect(M.auditCreate.mock.calls[0][0].data.payload.wholeBatch).toBe(true);
+  });
+
+  it("W1-T1: «целиком» продаёт остаток БЕЗ hold'ов (бронь 4 из 10 остаётся в силе)", async () => {
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({
+        reservations: [
+          {
+            id: "r1",
+            managerId: "OTHER",
+            customerName: "Пётр",
+            manager: { name: "Бек" },
+            qtySlabs: 4,
+            qtyAreaM2: null,
+            expiresAt: FUTURE,
+            createdAt: PAST,
+          },
+        ],
+      }),
+    );
+
+    const res = await sellWholeBatch(INPUT);
+
+    expect(res.ok).toBe(true);
+    // Продано только 10 − 4 = 6; бронь не гасится и не продаётся.
+    expect(M.batchUpdateMany.mock.calls[0][0].data.slabsSoldDirect).toEqual({
+      increment: 6,
+    });
+    expect(M.reservationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: весь остаток под hold'ами → «продавать нечего» (INSUFFICIENT_REMAINDER)", async () => {
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({ samples: [{ qtySlabs: 10, qtyAreaM2: null }] }),
+    );
+
+    const res = await sellWholeBatch(INPUT);
+
+    expect(res.ok).toBe(false);
+    expect((res as { error: { code: string } }).error.code).toBe(
+      "INSUFFICIENT_REMAINDER",
+    );
+    expect(M.batchUpdateMany).not.toHaveBeenCalled();
   });
 });
 

@@ -72,6 +72,18 @@ export interface PieceOption {
   needsCheck: boolean;
   detail: string;
   place: string;
+  /**
+   * W1-T1: имя клиента активной брони — только для кусков под СВОЕЙ бронью
+   * (или все — для владельца); чужие RESERVED-куски сервер в список не кладёт.
+   */
+  reservedFor?: string | null;
+}
+
+/** W1-T1: своя активная volume-бронь на партию — для чекбокса «закрыть бронь». */
+export interface MyVolumeReservation {
+  id: string;
+  /** «клиент: Иван, ≈10 м²» — готовая строка с сервера. */
+  label: string;
 }
 
 /** ТЗ №3 — узор-подгруппа как цель продажи (B2C). */
@@ -92,6 +104,8 @@ export interface BatchOption {
   hasFree: boolean;
   /** ТЗ №3 — узоры этой партии (если заведены). */
   patterns: PatternOption[];
+  /** W1-T1: мои активные volume-брони на эту партию (для явного погашения). */
+  myReservations: MyVolumeReservation[];
 }
 
 export interface StoneTypeGroup {
@@ -108,6 +122,8 @@ interface Target {
   id: string;
   title: string;
   subtitle: string;
+  /** W1-T1: мои volume-брони на выбранную партию (объёмные режимы). */
+  myReservations?: MyVolumeReservation[];
 }
 
 const initialState: SaleFormState = { errors: {}, conflict: null };
@@ -232,6 +248,9 @@ export default function SaleForm({
   const [debtComment, setDebtComment] = useState("");
   const [qtySlabs, setQtySlabs] = useState("");
   const [qtyAreaM2, setQtyAreaM2] = useState("");
+  // W1-T1: id СВОЕЙ брони, которую менеджер ЯВНО закрывает этой продажей.
+  // По умолчанию пусто (галочка снята) — бронь остаётся в силе.
+  const [consumeReservationId, setConsumeReservationId] = useState("");
   const e = state.errors;
   const isCredit = paymentMethod === "CREDIT";
   const customerName = selectedClient?.name ?? "";
@@ -297,6 +316,9 @@ export default function SaleForm({
   const pickTarget = (t: Target) => {
     setTarget(t);
     setConfirming(false);
+    // W1-T1: согласие на закрытие брони относится к КОНКРЕТНОЙ партии —
+    // при смене цели сбрасывается (deny-by-default).
+    setConsumeReservationId("");
   };
 
   const clearClient = () => {
@@ -537,6 +559,11 @@ export default function SaleForm({
                   >
                     <span className="block text-base font-semibold text-ink">
                       {p.kindRu}
+                      {p.reservedFor && (
+                        <Badge variant="warning" className="ml-2 align-middle">
+                          Забронирован под: {p.reservedFor}
+                        </Badge>
+                      )}
                       {p.needsCheck && <NeedsCheckBadge />}
                     </span>
                     <span className="block text-sm text-ink/70">
@@ -577,6 +604,7 @@ export default function SaleForm({
                           id: b.id,
                           title: `${stone.name} — объём из партии`,
                           subtitle: `${b.title} · ${b.freeText}`,
+                          myReservations: b.myReservations,
                         })
                       }
                     >
@@ -593,6 +621,7 @@ export default function SaleForm({
                           id: b.id,
                           title: `${stone.name} — вся партия целиком`,
                           subtitle: `${b.title} · ${b.freeText}`,
+                          myReservations: b.myReservations,
                         })
                       }
                     >
@@ -623,6 +652,7 @@ export default function SaleForm({
                                   id: pat.id,
                                   title: `${stone.name} — узор «${pat.description}»`,
                                   subtitle: `${b.title} · ${pat.remainText}`,
+                                  myReservations: b.myReservations,
                                 })
                               }
                             >
@@ -648,6 +678,12 @@ export default function SaleForm({
 
   const isVolume =
     target.mode === "BATCH_VOLUME" || target.mode === "PATTERN_VOLUME";
+  // W1-T1: продажа из объёма партии (в т.ч. «целиком») может ЯВНО закрыть
+  // свою бронь; на единичные SLAB/PIECE чекбокс не распространяется.
+  const isBatchSale = isVolume || target.mode === "WHOLE_BATCH";
+  const myReservations = isBatchSale ? (target.myReservations ?? []) : [];
+  const consumedReservation =
+    myReservations.find((r) => r.id === consumeReservationId) ?? null;
   // Use " · " not " / " so "12 плит · 55 м²" cannot be misread as one number.
   const qtyText = formatVolumeQtyDisplay(qtySlabs, qtyAreaM2);
 
@@ -695,6 +731,39 @@ export default function SaleForm({
             <div className="col-span-2">
               <FieldError msg={e.qty} />
             </div>
+          </div>
+        )}
+
+        {/* W1-T1: явное закрытие СВОЕЙ volume-брони этой продажей. Без галочки
+            бронь остаётся hold'ом и её объём в продажу не входит. */}
+        {myReservations.length > 0 && (
+          <div className="mb-3 rounded-card border border-gold/40 bg-gold/5 p-3">
+            <p className="mb-1.5 text-sm font-semibold text-ink">
+              У вас есть бронь на эту партию
+            </p>
+            <div className="flex flex-col gap-1">
+              {myReservations.map((r) => (
+                <label
+                  key={r.id}
+                  className="flex min-h-11 cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={consumeReservationId === r.id}
+                    onChange={(ev) =>
+                      setConsumeReservationId(ev.target.checked ? r.id : "")
+                    }
+                  />
+                  <span className="text-sm text-ink">
+                    Закрыть мою бронь ({r.label}) этой продажей
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-ink/55">
+              Без галочки бронь остаётся в силе, и её объём не участвует в этой
+              продаже.
+            </p>
           </div>
         )}
 
@@ -1273,6 +1342,14 @@ export default function SaleForm({
             <dd className="text-right font-semibold text-ink">весь свободный остаток</dd>
           </div>
         )}
+        {consumedReservation && !issueAsSample && (
+          <div className="flex justify-between gap-3 py-1">
+            <dt className="text-ink/60">Закрыть бронь</dt>
+            <dd className="text-right font-semibold text-ink">
+              {consumedReservation.label}
+            </dd>
+          </div>
+        )}
         <div className="flex justify-between gap-3 py-1">
           <dt className="text-ink/60">Клиент</dt>
           <dd className="text-right font-semibold text-ink">
@@ -1382,6 +1459,13 @@ export default function SaleForm({
             <input type="hidden" name="currency" value={currency} />
             <input type="hidden" name="debtDueDate" value={debtDueDate} />
             <input type="hidden" name="debtComment" value={debtComment} />
+            {isBatchSale && (
+              <input
+                type="hidden"
+                name="consumeReservationId"
+                value={consumeReservationId}
+              />
+            )}
           </>
         )}
         {isVolume && <input type="hidden" name="qtySlabs" value={qtySlabs} />}

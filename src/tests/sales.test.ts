@@ -9,12 +9,10 @@ import {
   decideUnitSale,
   executeVolumeSale,
   isHoldEffective,
+  resolveVolumeSaleHolds,
   roleCanSell,
-  selectCoveredOwnHolds,
-  selectOwnHoldsToComplete,
-  sumEffectiveOthersHolds,
+  type ResolvedVolumeHoldRow,
   type UnitSaleDecisionInput,
-  type VolumeHoldRow,
 } from "@/lib/sales";
 
 const MANAGER_A = "mgr-a";
@@ -25,10 +23,12 @@ const NOW = new Date("2026-07-16T12:00:00.000Z");
 const FUTURE = new Date(NOW.getTime() + 24 * HOUR);
 const PAST = new Date(NOW.getTime() - HOUR);
 
-function hold(over: Partial<VolumeHoldRow> = {}): VolumeHoldRow {
+function hold(over: Partial<ResolvedVolumeHoldRow> = {}): ResolvedVolumeHoldRow {
   return {
     id: "res-1",
     managerId: MANAGER_A,
+    customerName: "Клиент X",
+    managerName: "Менеджер A",
     qtySlabs: null,
     qtyAreaM2: null,
     expiresAt: FUTURE,
@@ -178,7 +178,7 @@ describe("checkVolumeSaleGuard — охрана объёмной продажи 
     if (!r.ok) expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
   });
 
-  it("чужая volume-бронь уменьшает доступное (data-model §3)", () => {
+  it("активный hold (бронь/образец) уменьшает доступное (data-model §3, W1-T1)", () => {
     const r = checkVolumeSaleGuard({
       free,
       othersReservedSlabs: 5,
@@ -189,7 +189,22 @@ describe("checkVolumeSaleGuard — охрана объёмной продажи 
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe("INSUFFICIENT_REMAINDER");
-      expect(r.error.message).toContain("чужой бронью");
+      expect(r.error.message).toContain("в брони/образцах");
+    }
+  });
+
+  it("W1-T1: holdsDetail попадает в сообщение (владелец видит, чья бронь держит)", () => {
+    const r = checkVolumeSaleGuard({
+      free,
+      othersReservedSlabs: 5,
+      othersReservedAreaM2: 0,
+      qtySlabs: 6,
+      qtyAreaM2: null,
+      holdsDetail: "бронь Азиз → Иван: 5 плит",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.message).toContain("бронь Азиз → Иван: 5 плит");
     }
   });
 
@@ -365,114 +380,77 @@ describe("decideUnitSale — истёкшая бронь не блокирует
   });
 });
 
-describe("sumEffectiveOthersHolds — истёкшие чужие брони не режут остаток (A2)", () => {
-  it("будущая чужая бронь учитывается", () => {
-    const holds = [hold({ id: "r1", managerId: MANAGER_B, qtySlabs: 5, qtyAreaM2: 30 })];
-    expect(sumEffectiveOthersHolds(holds, MANAGER_A, NOW)).toEqual({
-      slabs: 5,
-      areaM2: 30,
+// ───────── W1-T1: явное согласие вместо авто-погашения своих броней ─────────
+
+describe("resolveVolumeSaleHolds — брони/образцы режут остаток; гасится только явная своя (W1-T1)", () => {
+  it("без согласия СВОЯ бронь тоже блокирует (LIVE-баг: молчаливое COMPLETED запрещено)", () => {
+    const r = resolveVolumeSaleHolds({
+      reservations: [hold({ id: "own", managerId: MANAGER_A, qtyAreaM2: 10 })],
+      samples: [],
+      actorId: MANAGER_A,
+      consumeReservationId: null,
+      now: NOW,
     });
+    expect(r.consumed).toBeNull();
+    expect(r.holds.totalAreaM2).toBe(10);
   });
 
-  it("ИСТЁКШАЯ чужая бронь НЕ уменьшает доступный остаток", () => {
-    const holds = [
-      hold({ id: "r1", managerId: MANAGER_B, qtySlabs: 5, qtyAreaM2: 30, expiresAt: PAST }),
-    ];
-    expect(sumEffectiveOthersHolds(holds, MANAGER_A, NOW)).toEqual({
-      slabs: 0,
-      areaM2: 0,
+  it("согласие на СВОЮ активную бронь → consumed, её объём выходит из hold'ов", () => {
+    const r = resolveVolumeSaleHolds({
+      reservations: [
+        hold({ id: "own", managerId: MANAGER_A, qtyAreaM2: 10 }),
+        hold({ id: "other", managerId: MANAGER_B, qtyAreaM2: 4 }),
+      ],
+      samples: [],
+      actorId: MANAGER_A,
+      consumeReservationId: "own",
+      now: NOW,
     });
+    expect(r.consumed?.id).toBe("own");
+    expect(r.holds.totalAreaM2).toBe(4); // осталась только чужая
   });
 
-  it("свои брони в чужую сумму не входят; истёкшие отбрасываются", () => {
-    const holds = [
-      hold({ id: "own", managerId: MANAGER_A, qtySlabs: 9, qtyAreaM2: 99 }),
-      hold({ id: "b-live", managerId: MANAGER_B, qtySlabs: 2, qtyAreaM2: 10 }),
-      hold({ id: "b-dead", managerId: MANAGER_B, qtySlabs: 7, qtyAreaM2: 70, expiresAt: PAST }),
-    ];
-    expect(sumEffectiveOthersHolds(holds, MANAGER_A, NOW)).toEqual({
-      slabs: 2,
-      areaM2: 10,
+  it("чужая бронь НЕ погашаема (owner включительно) → бросает RESERVED_BY_OTHER", async () => {
+    await expect(async () =>
+      resolveVolumeSaleHolds({
+        reservations: [hold({ id: "other", managerId: MANAGER_B, qtySlabs: 2 })],
+        samples: [],
+        actorId: MANAGER_A,
+        consumeReservationId: "other",
+        now: NOW,
+      }),
+    ).rejects.toThrow(/другой менеджер/);
+  });
+
+  it("несуществующая/истёкшая бронь в согласии → CONFLICT (обновите страницу)", async () => {
+    await expect(async () =>
+      resolveVolumeSaleHolds({
+        reservations: [
+          hold({ id: "dead", managerId: MANAGER_A, qtySlabs: 2, expiresAt: PAST }),
+        ],
+        samples: [],
+        actorId: MANAGER_A,
+        consumeReservationId: "dead",
+        now: NOW,
+      }),
+    ).rejects.toThrow(/не активна/);
+  });
+
+  it("истёкшие брони не входят в hold'ы; образцы входят всегда (ACTIVE)", () => {
+    const r = resolveVolumeSaleHolds({
+      reservations: [
+        hold({ id: "live", managerId: MANAGER_B, qtySlabs: 2, qtyAreaM2: 10 }),
+        hold({ id: "dead", managerId: MANAGER_B, qtySlabs: 7, qtyAreaM2: 70, expiresAt: PAST }),
+      ],
+      samples: [{ qtySlabs: 1, qtyAreaM2: 3 }],
+      actorId: MANAGER_A,
+      consumeReservationId: null,
+      now: NOW,
     });
-  });
-});
-
-// ─────────────── A3: погашение только покрытых своих volume-броней ───────────────
-
-describe("selectCoveredOwnHolds — не гасит бронь, которую продажа не покрыла (A3)", () => {
-  it("(a) продажа 2 при бронях 5 и 3 → НИ одна не гасится", () => {
-    const holds = [
-      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
-      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
-    ];
-    expect(selectCoveredOwnHolds(holds, 2, null)).toEqual([]);
-  });
-
-  it("(b) продажа 3 при бронях 3 (старше) и 5 → гасится только 3", () => {
-    const holds = [
-      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
-      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
-    ];
-    expect(selectCoveredOwnHolds(holds, 3, null)).toEqual(["h3"]);
-  });
-
-  it("(c) продажа 8 при бронях 5 и 3 → гасятся обе", () => {
-    const holds = [
-      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
-      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
-    ];
-    expect(selectCoveredOwnHolds(holds, 8, null)).toEqual(["h5", "h3"]);
-  });
-
-  it("стоп на первой непокрытой: продажа 6 при 5 (старше) и 3 → только 5", () => {
-    const holds = [
-      { id: "h5", qtySlabs: 5, qtyAreaM2: null },
-      { id: "h3", qtySlabs: 3, qtyAreaM2: null },
-    ];
-    // после 5 бюджет = 1, следующую (3) не покрывает → стоп.
-    expect(selectCoveredOwnHolds(holds, 6, null)).toEqual(["h5"]);
-  });
-
-  it("бронь в м², продажа в плитах → не гасится (единица не предоставлена)", () => {
-    const holds = [{ id: "area", qtySlabs: null, qtyAreaM2: 10 }];
-    expect(selectCoveredOwnHolds(holds, 100, null)).toEqual([]);
-  });
-
-  it("бронь по обеим единицам гасится, только если покрыты ОБЕ", () => {
-    const holds = [{ id: "both", qtySlabs: 3, qtyAreaM2: 20 }];
-    expect(selectCoveredOwnHolds(holds, 3, 20)).toEqual(["both"]);
-    expect(selectCoveredOwnHolds(holds, 3, 19)).toEqual([]); // площади не хватает
-    expect(selectCoveredOwnHolds(holds, 3, null)).toEqual([]); // продажа без м²
-  });
-});
-
-describe("selectOwnHoldsToComplete — свои + не истёкшие + старейшие вперёд (A2+A3)", () => {
-  const t = (min: number) => new Date(NOW.getTime() + min * 60 * 1000);
-
-  it("(d) чужие брони не трогаются — гасятся только свои", () => {
-    const holds = [
-      hold({ id: "b", managerId: MANAGER_B, qtySlabs: 1, createdAt: t(-10) }),
-      hold({ id: "a", managerId: MANAGER_A, qtySlabs: 3, createdAt: t(-5) }),
-    ];
-    expect(selectOwnHoldsToComplete(holds, MANAGER_A, 100, null, NOW)).toEqual(["a"]);
-  });
-
-  it("сортирует свои по createdAt (старейшая вперёд) для правила бюджета", () => {
-    // Порядок в массиве обратный времени — функция должна отсортировать.
-    const holds = [
-      hold({ id: "new5", managerId: MANAGER_A, qtySlabs: 5, createdAt: t(5) }),
-      hold({ id: "old3", managerId: MANAGER_A, qtySlabs: 3, createdAt: t(-5) }),
-    ];
-    // Продажа 3: старейшая (old3, 3) покрыта → гасится; new5 (5) — нет.
-    expect(selectOwnHoldsToComplete(holds, MANAGER_A, 3, null, NOW)).toEqual(["old3"]);
-  });
-
-  it("истёкшая своя бронь не гасится (A2), даже если бюджет её покрыл бы", () => {
-    const holds = [
-      hold({ id: "dead", managerId: MANAGER_A, qtySlabs: 2, expiresAt: PAST, createdAt: t(-10) }),
-      hold({ id: "live", managerId: MANAGER_A, qtySlabs: 2, expiresAt: FUTURE, createdAt: t(-5) }),
-    ];
-    expect(selectOwnHoldsToComplete(holds, MANAGER_A, 4, null, NOW)).toEqual(["live"]);
+    expect(r.holds.totalSlabs).toBe(3); // 2 (живая бронь) + 1 (образец)
+    expect(r.holds.totalAreaM2).toBe(13); // 10 + 3
+    expect(r.holdsDetail).toContain("Менеджер A"); // чья бронь держит — видно
+    expect(r.holdsDetail).toContain("в образцах");
   });
 });
 
@@ -553,6 +531,7 @@ describe("executeVolumeSale — продажа из узора (интеграц
     slabs: [],
     pieces: [],
     reservations: [],
+    samples: [],
   };
   const free = { slabsFree: 100, areaFreeM2: 60 };
   const pattern = { id: "pat-1", slabsCount: 50, slabsSold: 0, areaM2: 30, areaSoldM2: 0 };
@@ -627,6 +606,88 @@ describe("executeVolumeSale — продажа из узора (интеграц
     const saleArg = tx.saleRecord.create.mock.calls[0][0];
     expect(saleArg.data.batchPatternId).toBeNull();
     expect(tx.shipment.create).toHaveBeenCalledTimes(1);
+  });
+
+  // ── W1-T1: hold'ы (брони + образцы) и явное согласие ──
+  const FUT = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const ownRes = {
+    id: "myRes",
+    managerId: "mgr-1",
+    customerName: "Иван",
+    manager: { name: "Азиз" },
+    qtySlabs: null,
+    qtyAreaM2: 55,
+    expiresAt: FUT,
+    createdAt: new Date(),
+  };
+
+  it("W1-T1: СВОЯ бронь без согласия режет остаток → INSUFFICIENT_REMAINDER, бронь не тронута", async () => {
+    const tx = makeTx();
+    await expect(
+      executeVolumeSale(tx as unknown as TxArg, {
+        ...common,
+        batch: { ...batch, reservations: [ownRes] },
+        qtySlabs: null,
+        qtyAreaM2: 10, // 10 + 55 (бронь) > 60 free
+        pattern: null,
+      }),
+    ).rejects.toThrow(/В партии столько нет/);
+    expect(tx.batch.updateMany).not.toHaveBeenCalled();
+    expect(tx.reservation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: с согласием гасится РОВНО названная бронь, её объём доступен продаже", async () => {
+    const tx = makeTx();
+    tx.reservation.updateMany.mockResolvedValue({ count: 1 });
+    const res = await executeVolumeSale(tx as unknown as TxArg, {
+      ...common,
+      batch: { ...batch, reservations: [ownRes] },
+      qtySlabs: null,
+      qtyAreaM2: 60, // весь остаток: бронь погашена согласием
+      pattern: null,
+      consumeReservationId: "myRes",
+    });
+    expect(res.ok).toBe(true);
+    expect(res.completedReservationIds).toEqual(["myRes"]);
+    expect(tx.reservation.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.reservation.updateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: "myRes", status: "ACTIVE" },
+      data: expect.objectContaining({ status: "COMPLETED" }),
+    });
+  });
+
+  it("W1-T1: чужую бронь погасить нельзя → RESERVED_BY_OTHER, ничего не записано", async () => {
+    const tx = makeTx();
+    await expect(
+      executeVolumeSale(tx as unknown as TxArg, {
+        ...common,
+        batch: {
+          ...batch,
+          reservations: [{ ...ownRes, id: "foreign", managerId: "mgr-2" }],
+        },
+        qtySlabs: null,
+        qtyAreaM2: 5,
+        pattern: null,
+        consumeReservationId: "foreign",
+      }),
+    ).rejects.toThrow(/другой менеджер/);
+    expect(tx.batch.updateMany).not.toHaveBeenCalled();
+    expect(tx.reservation.updateMany).not.toHaveBeenCalled();
+    expect(tx.saleRecord.create).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: активный BATCH_VOLUME-образец держит объём в охране продажи", async () => {
+    const tx = makeTx();
+    await expect(
+      executeVolumeSale(tx as unknown as TxArg, {
+        ...common,
+        batch: { ...batch, samples: [{ qtySlabs: null, qtyAreaM2: 55 }] },
+        qtySlabs: null,
+        qtyAreaM2: 10, // 10 + 55 (образец) > 60 free
+        pattern: null,
+      }),
+    ).rejects.toThrow(/в брони\/образцах/);
+    expect(tx.batch.updateMany).not.toHaveBeenCalled();
   });
 })
 

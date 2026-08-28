@@ -155,6 +155,9 @@ export async function submitSale(
   const unitId = str("unitId");
   const batchId = str("batchId");
   const batchPatternId = str("batchPatternId");
+  // W1-T1: явное согласие «закрыть мою бронь этой продажей» (только объёмные
+  // режимы). Принадлежность и активность брони проверяет sales.ts в транзакции.
+  const consumeReservationId = str("consumeReservationId") || null;
   if ((mode === "SLAB" || mode === "PIECE") && !unitId) {
     errors.form = "Не выбран камень — вернитесь на шаг выбора";
   }
@@ -232,10 +235,22 @@ export async function submitSale(
     mode === "SLAB" || mode === "PIECE"
       ? await sellUnit({ targetType: mode, unitId, ...common })
       : mode === "BATCH_VOLUME"
-        ? await sellBatchVolume({ batchId, qtySlabs, qtyAreaM2, ...common })
+        ? await sellBatchVolume({
+            batchId,
+            qtySlabs,
+            qtyAreaM2,
+            consumeReservationId,
+            ...common,
+          })
         : mode === "PATTERN_VOLUME"
-          ? await sellPatternVolume({ batchPatternId, qtySlabs, qtyAreaM2, ...common })
-          : await sellWholeBatch({ batchId, ...common });
+          ? await sellPatternVolume({
+              batchPatternId,
+              qtySlabs,
+              qtyAreaM2,
+              consumeReservationId,
+              ...common,
+            })
+          : await sellWholeBatch({ batchId, consumeReservationId, ...common });
 
   if (!result.ok) return failState(result.error);
 

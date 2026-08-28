@@ -27,6 +27,11 @@ import {
 } from "./showroom";
 import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 import { formatLocation } from "@/lib/locations";
+import {
+  computeBatchVolumeHolds,
+  formatHoldQty,
+  type BatchVolumeHolds,
+} from "@/lib/volume-holds";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
 
@@ -183,20 +188,30 @@ const AREA_EPS = 1e-6;
 export interface VolumeSaleGuardInput {
   /** Свободный остаток партии (computeFreeRemainder, data-model §3). */
   free: FreeRemainder;
-  /** Σ qtySlabs активных volume-броней ДРУГИХ менеджеров (null → 0 при суммировании). */
+  /**
+   * W1-T1: Σ qtySlabs ВСЕХ блокирующих hold'ов — активные (не истёкшие)
+   * volume-брони (чужие ВСЕГДА; свои — кроме одной явно погашаемой) +
+   * активные BATCH_VOLUME-образцы. Имя поля историческое (раньше считались
+   * только чужие брони); менять нельзя — samples.ts зовёт по этому имени.
+   */
   othersReservedSlabs: number;
-  /** Σ qtyAreaM2 активных volume-броней ДРУГИХ менеджеров. */
+  /** Σ qtyAreaM2 тех же блокирующих hold'ов. */
   othersReservedAreaM2: number;
   qtySlabs: number | null;
   qtyAreaM2: number | null;
+  /**
+   * W1-T1: расшифровка «кто держит» для сообщения об ошибке
+   * («бронь Азиз → Иван: 10 м²; в образцах: 2 плит»). null/пусто → без неё.
+   */
+  holdsDetail?: string | null;
 }
 
 /**
  * Охранная математика объёмной продажи (data-model §3):
- * остаток МИНУС чужие активные volume-брони должен покрывать продажу;
- * ничего не может увести остаток в минус. Если контроль по измерению
- * отключён (slabsTotal/areaTotalM2 = null → free = null) — по нему
- * проверки нет (§3: «дона-назорат ўчади»).
+ * остаток МИНУС активные hold'ы (брони, кроме явно погашаемой своей, +
+ * образцы) должен покрывать продажу; ничего не может увести остаток в минус.
+ * Если контроль по измерению отключён (slabsTotal/areaTotalM2 = null →
+ * free = null) — по нему проверки нет (§3: «дона-назорат ўчади»).
  */
 export function checkVolumeSaleGuard(
   input: VolumeSaleGuardInput,
@@ -220,13 +235,16 @@ export function checkVolumeSaleGuard(
   if (qtyAreaM2 !== null && qtyAreaM2 > MAX_DECIMAL_FIELD) {
     return fail("INVALID_INPUT", "Слишком большая площадь");
   }
+  const detail = input.holdsDetail?.trim()
+    ? ` (${input.holdsDetail.trim()})`
+    : "";
   if (qtySlabs !== null && free.slabsFree !== null) {
     if (qtySlabs + input.othersReservedSlabs > free.slabsFree) {
       return fail(
         "INSUFFICIENT_REMAINDER",
         `В партии столько нет: свободно ${free.slabsFree} плит` +
           (input.othersReservedSlabs > 0
-            ? `, из них ${input.othersReservedSlabs} под чужой бронью`
+            ? `, из них ${input.othersReservedSlabs} в брони/образцах${detail}`
             : ""),
       );
     }
@@ -238,7 +256,7 @@ export function checkVolumeSaleGuard(
         "INSUFFICIENT_REMAINDER",
         `В партии столько нет: свободно ≈${freeTxt} м²` +
           (input.othersReservedAreaM2 > 0
-            ? `, из них ${input.othersReservedAreaM2} м² под чужой бронью`
+            ? `, из них ${input.othersReservedAreaM2} м² в брони/образцах${detail}`
             : ""),
       );
     }
@@ -358,79 +376,90 @@ export function isHoldEffective(expiresAt: Date, now: Date): boolean {
 }
 
 /**
- * A2: Σ активных, ещё НЕ истёкших volume-броней ДРУГИХ менеджеров. Истёкшие в
- * сумму не входят (иначе продолжали бы «съедать» свободный остаток до sweep).
+ * W1-T1 — явное согласие вместо авто-погашения. Строка volume-брони с
+ * атрибуцией для сообщений об ошибке и проверки принадлежности.
  */
-export function sumEffectiveOthersHolds(
-  reservations: readonly VolumeHoldRow[],
-  actorId: string,
-  now: Date,
-): { slabs: number; areaM2: number } {
-  const others = reservations.filter(
-    (r) => r.managerId !== actorId && isHoldEffective(r.expiresAt, now),
+export interface ResolvedVolumeHoldRow extends VolumeHoldRow {
+  customerName: string;
+  managerName: string;
+}
+
+export interface ResolvedVolumeHolds {
+  /**
+   * Своя бронь, которую клиент ЯВНО согласился закрыть этой продажей
+   * (чекбокс в форме); null = согласия нет — все брони остаются hold'ами.
+   */
+  consumed: ResolvedVolumeHoldRow | null;
+  /** Блокирующие hold'ы: все активные брони КРОМЕ consumed + все образцы. */
+  holds: BatchVolumeHolds;
+  /** «бронь Азиз → Иван: 10 м²; в образцах: 2 плит» для ошибки (или null). */
+  holdsDetail: string | null;
+}
+
+/**
+ * W1-T1 — чистое разрешение hold'ов продажи:
+ *  • consumeReservationId задан → это ДОЛЖНА быть СВОЯ активная (не истёкшая)
+ *    бронь; чужая → RESERVED_BY_OTHER (в т.ч. для OWNER — чужую бронь продажей
+ *    не закрывает никто); не найдена/истекла → CONFLICT;
+ *  • блокирующая сумма = все активные брони (кроме consumed) + образцы.
+ * Никакая бронь БЕЗ согласия не гасится — она просто режет доступный остаток.
+ */
+export function resolveVolumeSaleHolds(args: {
+  reservations: readonly ResolvedVolumeHoldRow[];
+  samples: readonly { qtySlabs: number | null; qtyAreaM2: number | null }[];
+  actorId: string;
+  consumeReservationId: string | null;
+  now: Date;
+}): ResolvedVolumeHolds {
+  const active = args.reservations.filter((r) =>
+    isHoldEffective(r.expiresAt, args.now),
   );
-  return {
-    slabs: others.reduce((s, r) => s + (r.qtySlabs ?? 0), 0),
-    areaM2: others.reduce((s, r) => s + (r.qtyAreaM2 ?? 0), 0),
-  };
-}
 
-/** Собственная volume-бронь (уже отфильтрована по актору и эффективности). */
-export interface OwnHold {
-  id: string;
-  qtySlabs: number | null;
-  qtyAreaM2: number | null;
-}
-
-/**
- * A3 — консервативное погашение СВОИХ volume-броней объёмной продажей.
- * Правило (никогда не закрывает бронь, которую продажа не покрыла):
- *  • брони обрабатываются СТАРЕЙШИЕ ПЕРВЫМИ;
- *  • бюджет = проданное количество в каждой единице (плиты и/или м²);
- *  • бронь гасится ТОЛЬКО если бюджет ПОЛНОСТЬЮ покрывает её во ВСЕХ единицах,
- *    в которых она измерена (продажа обязана давать эту единицу); тогда её
- *    количество вычитается из бюджета;
- *  • на ПЕРВОЙ непокрытой броне — стоп (последующие не трогаем).
- * Если бронь измерена в единице, которой продажа не даёт (напр. бронь в м²,
- * продажа в плитах) — она непокрыта → стоп. Когда сомневаемся — НЕ гасим.
- */
-export function selectCoveredOwnHolds(
-  holdsOldestFirst: readonly OwnHold[],
-  soldSlabs: number | null,
-  soldAreaM2: number | null,
-): string[] {
-  let budgetSlabs = soldSlabs; // null = продажа не даёт этой единицы
-  let budgetArea = soldAreaM2;
-  const completed: string[] = [];
-  for (const h of holdsOldestFirst) {
-    const needsSlabs = h.qtySlabs !== null;
-    const needsArea = h.qtyAreaM2 !== null;
-    if (!needsSlabs && !needsArea) break; // бронь без размера — не трогаем
-    if (needsSlabs && (budgetSlabs === null || h.qtySlabs! > budgetSlabs)) break;
-    if (needsArea && (budgetArea === null || h.qtyAreaM2! > budgetArea + AREA_EPS)) break;
-    if (needsSlabs) budgetSlabs = (budgetSlabs as number) - (h.qtySlabs as number);
-    if (needsArea) budgetArea = (budgetArea as number) - (h.qtyAreaM2 as number);
-    completed.push(h.id);
+  let consumed: ResolvedVolumeHoldRow | null = null;
+  const consumeId = args.consumeReservationId?.trim() || null;
+  if (consumeId) {
+    const target = active.find((r) => r.id === consumeId) ?? null;
+    if (!target) {
+      throw new SaleLogicError({
+        code: "CONFLICT",
+        message:
+          "Бронь, которую вы хотели закрыть, уже не активна — обновите страницу и повторите",
+      });
+    }
+    if (target.managerId !== args.actorId) {
+      throw new SaleLogicError({
+        code: "RESERVED_BY_OTHER",
+        message: `Эту бронь держит другой менеджер (${target.managerName}, клиент: ${target.customerName}) — закрыть её своей продажей нельзя`,
+      });
+    }
+    consumed = target;
   }
-  return completed;
-}
 
-/**
- * A2+A3: из всех volume-броней партии отбирает СВОИ, ещё НЕ истёкшие,
- * сортирует старейшими вперёд и возвращает id тех, что продажа реально
- * покрыла (selectCoveredOwnHolds). Чужие и истёкшие брони не трогаются.
- */
-export function selectOwnHoldsToComplete(
-  reservations: readonly VolumeHoldRow[],
-  actorId: string,
-  soldSlabs: number | null,
-  soldAreaM2: number | null,
-  now: Date,
-): string[] {
-  const ownEffective = reservations
-    .filter((r) => r.managerId === actorId && isHoldEffective(r.expiresAt, now))
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  return selectCoveredOwnHolds(ownEffective, soldSlabs, soldAreaM2);
+  const blocking = active.filter((r) => r.id !== consumed?.id);
+  const holds = computeBatchVolumeHolds({
+    reservations: blocking,
+    samples: args.samples,
+    now: args.now,
+  });
+
+  const detailParts = blocking.map(
+    (r) =>
+      `бронь ${r.managerName} → ${r.customerName}: ${formatHoldQty(
+        r.qtySlabs ?? 0,
+        r.qtyAreaM2 ?? 0,
+      )}`,
+  );
+  if (holds.sampleSlabs > 0 || holds.sampleAreaM2 > 0) {
+    detailParts.push(
+      `в образцах: ${formatHoldQty(holds.sampleSlabs, holds.sampleAreaM2)}`,
+    );
+  }
+
+  return {
+    consumed,
+    holds,
+    holdsDetail: detailParts.length > 0 ? detailParts.join("; ") : null,
+  };
 }
 
 // ───────────────────── Транзакционные операции (БД) ─────────────────────
@@ -847,6 +876,8 @@ export interface SellBatchVolumeInput extends SalePaymentFields, SaleClientField
   customerContact?: string | null;
   price?: number | null;
   managerId: string;
+  /** W1-T1: явное согласие закрыть СВОЮ бронь этой продажей (id брони). */
+  consumeReservationId?: string | null;
 }
 
 export interface SellVolumeOk {
@@ -875,10 +906,17 @@ interface BatchForVolume {
   reservations: {
     id: string;
     managerId: string;
+    customerName?: string | null;
+    manager?: { name: string } | null;
     qtySlabs: number | null;
     qtyAreaM2: { toString(): string } | null;
     expiresAt: Date;
     createdAt: Date;
+  }[];
+  /** W1-T1: активные BATCH_VOLUME-образцы — держат объём как брони. */
+  samples: {
+    qtySlabs: number | null;
+    qtyAreaM2: { toString(): string } | null;
   }[];
 }
 
@@ -908,11 +946,18 @@ async function loadBatchForVolume(
         select: {
           id: true,
           managerId: true,
+          customerName: true,
+          manager: { select: { name: true } },
           qtySlabs: true,
           qtyAreaM2: true,
           expiresAt: true,
           createdAt: true,
         },
+      },
+      // W1-T1: активные образцы из объёма партии — тоже hold (как в issueSample).
+      samples: {
+        where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
+        select: { qtySlabs: true, qtyAreaM2: true },
       },
     },
   });
@@ -926,6 +971,20 @@ async function loadBatchForVolume(
     });
   }
   return batch;
+}
+
+/** W1-T1: брони партии → строки для resolveVolumeSaleHolds (Decimal → number). */
+function mapReservationRows(batch: BatchForVolume): ResolvedVolumeHoldRow[] {
+  return batch.reservations.map((r) => ({
+    id: r.id,
+    managerId: r.managerId,
+    customerName: r.customerName ?? "клиент не указан",
+    managerName: r.manager?.name ?? "другой менеджер",
+    qtySlabs: r.qtySlabs,
+    qtyAreaM2: toNum(r.qtyAreaM2),
+    expiresAt: r.expiresAt,
+    createdAt: r.createdAt,
+  }));
 }
 
 function batchFreeRemainder(batch: BatchForVolume): FreeRemainder {
@@ -979,6 +1038,11 @@ export async function executeVolumeSale(
     /** TZ №10+11 — directory links (optional / legacy null). */
     clientId?: string | null;
     siteId?: string | null;
+    /**
+     * W1-T1: id СВОЕЙ активной volume-брони, которую клиент явно согласился
+     * закрыть этой продажей (чекбокс). null/нет → все брони остаются hold'ами.
+     */
+    consumeReservationId?: string | null;
   },
 ): Promise<SellVolumeOk> {
   const { actor, batch, free, qtySlabs, qtyAreaM2, now } = params;
@@ -989,24 +1053,26 @@ export async function executeVolumeSale(
     debtComment: null,
   };
 
-  // A2: brони приводим к number и фильтруем истёкшие в чистых хелперах.
-  const holds: VolumeHoldRow[] = batch.reservations.map((r) => ({
-    id: r.id,
-    managerId: r.managerId,
-    qtySlabs: r.qtySlabs,
-    qtyAreaM2: toNum(r.qtyAreaM2),
-    expiresAt: r.expiresAt,
-    createdAt: r.createdAt,
-  }));
-
-  // A2: только НЕ истёкшие чужие брони режут доступный остаток.
-  const others = sumEffectiveOthersHolds(holds, actor.id, now);
+  // W1-T1: hold'ы = ВСЕ активные volume-брони (свои — тоже, кроме одной явно
+  // погашаемой) + активные образцы. Авто-погашение отменено: без галочки
+  // «закрыть мою бронь» продажа НИКОГДА не трогает бронь молча.
+  const { consumed, holds, holdsDetail } = resolveVolumeSaleHolds({
+    reservations: mapReservationRows(batch),
+    samples: batch.samples.map((s) => ({
+      qtySlabs: s.qtySlabs,
+      qtyAreaM2: toNum(s.qtyAreaM2),
+    })),
+    actorId: actor.id,
+    consumeReservationId: params.consumeReservationId ?? null,
+    now,
+  });
   const guard = checkVolumeSaleGuard({
     free,
-    othersReservedSlabs: others.slabs,
-    othersReservedAreaM2: others.areaM2,
+    othersReservedSlabs: holds.totalSlabs,
+    othersReservedAreaM2: holds.totalAreaM2,
     qtySlabs,
     qtyAreaM2,
+    holdsDetail,
   });
   if (!guard.ok) throw new SaleLogicError(guard.error);
 
@@ -1069,21 +1135,22 @@ export async function executeVolumeSale(
     }
   }
 
-  // A3: гасим ТОЛЬКО те свои volume-брони, которые продажа реально покрыла
-  // (старейшие вперёд, бюджет = проданное кол-во). Никогда не закрываем бронь,
-  // которую продажа не покрыла (иначе камень другого клиента молча освободится).
-  const completedReservationIds = selectOwnHoldsToComplete(
-    holds,
-    actor.id,
-    qtySlabs,
-    qtyAreaM2,
-    now,
-  );
-  if (completedReservationIds.length > 0) {
-    await tx.reservation.updateMany({
-      where: { id: { in: completedReservationIds }, status: "ACTIVE" },
+  // W1-T1: гасим РОВНО ту бронь, которую клиент явно согласился закрыть
+  // (чекбокс в форме) — и никакую другую. Молчаливое авто-COMPLETED отменено:
+  // бронь другого клиента без согласия никогда не освобождается продажей.
+  const completedReservationIds: string[] = [];
+  if (consumed) {
+    const res = await tx.reservation.updateMany({
+      where: { id: consumed.id, status: "ACTIVE" },
       data: { status: "COMPLETED", resolvedAt: new Date() },
     });
+    if (res.count === 0) {
+      throw new SaleLogicError({
+        code: "CONFLICT",
+        message: "Бронь изменилась параллельно — обновите страницу и повторите",
+      });
+    }
+    completedReservationIds.push(consumed.id);
   }
 
   const clientId = params.clientId?.trim() || null;
@@ -1202,6 +1269,7 @@ export async function sellBatchVolume(
         payment,
         clientId: input.clientId,
         siteId: input.siteId,
+        consumeReservationId: input.consumeReservationId ?? null,
       });
     });
   } catch (e) {
@@ -1218,6 +1286,8 @@ export interface SellPatternVolumeInput extends SalePaymentFields, SaleClientFie
   customerContact?: string | null;
   price?: number | null;
   managerId: string;
+  /** W1-T1: явное согласие закрыть СВОЮ бронь этой продажей (id брони). */
+  consumeReservationId?: string | null;
 }
 
 /**
@@ -1272,6 +1342,7 @@ export async function sellPatternVolume(
         payment,
         clientId: input.clientId,
         siteId: input.siteId,
+        consumeReservationId: input.consumeReservationId ?? null,
         pattern: {
           id: pat.id,
           slabsCount: pat.slabsCount,
@@ -1293,6 +1364,8 @@ export interface SellWholeBatchInput extends SalePaymentFields, SaleClientFields
   customerContact?: string | null;
   price?: number | null;
   managerId: string;
+  /** W1-T1: явное согласие закрыть СВОЮ бронь этой продажей (id брони). */
+  consumeReservationId?: string | null;
 }
 
 /**
@@ -1315,7 +1388,27 @@ export async function sellWholeBatch(
       const payment = validateSalePayment(input, price, customerContact);
       const batch = await loadBatchForVolume(tx, input.batchId);
       const free = batchFreeRemainder(batch);
-      const whole = computeWholeBatchSale(free);
+      // W1-T1: «целиком» = весь остаток БЕЗ занятого бронями/образцами.
+      // Раньше qty = весь free, а свои брони молча гасились; теперь hold'ы
+      // (кроме явно погашаемой своей) остаются в силе и в выкуп не входят.
+      const { holds } = resolveVolumeSaleHolds({
+        reservations: mapReservationRows(batch),
+        samples: batch.samples.map((s) => ({
+          qtySlabs: s.qtySlabs,
+          qtyAreaM2: toNum(s.qtyAreaM2),
+        })),
+        actorId: actor.id,
+        consumeReservationId: input.consumeReservationId ?? null,
+        now,
+      });
+      const whole = computeWholeBatchSale({
+        slabsFree:
+          free.slabsFree === null ? null : free.slabsFree - holds.totalSlabs,
+        areaFreeM2:
+          free.areaFreeM2 === null
+            ? null
+            : free.areaFreeM2 - holds.totalAreaM2,
+      });
       if (!whole.ok) throw new SaleLogicError(whole.error);
       return executeVolumeSale(tx, {
         actor,
@@ -1331,6 +1424,7 @@ export async function sellWholeBatch(
         payment,
         clientId: input.clientId,
         siteId: input.siteId,
+        consumeReservationId: input.consumeReservationId ?? null,
       });
     });
   } catch (e) {

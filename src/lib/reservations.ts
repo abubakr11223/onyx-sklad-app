@@ -17,6 +17,7 @@ import {
 import { lockBatchForUpdate } from "@/lib/batch-lock";
 import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "@/lib/validators/intake";
 import { formatLocation } from "@/lib/locations";
+import { computeBatchVolumeHolds } from "@/lib/volume-holds";
 
 // ─────────────────────────── Konstantalar / xatolar ───────────────────────────
 
@@ -97,7 +98,10 @@ export interface VolumeAvailability {
   /** computeFreeRemainder natijasi; null = shu o'lchov nazorati o'chgan (§3). */
   slabsFree: number | null;
   areaFreeM2: number | null;
-  /** Faol BATCH_VOLUME bronlarning yig'indisi (shu partiya bo'yicha). */
+  /**
+   * W1-T1: faol hold'lar yig'indisi — BATCH_VOLUME bronlar + faol
+   * BATCH_VOLUME obraztsy (shu partiya bo'yicha, volume-holds helperi).
+   */
   reservedSlabs: number;
   reservedAreaM2: number;
 }
@@ -169,11 +173,9 @@ export function sumActiveVolumeHolds(
   }[],
   now: Date,
 ): { reservedSlabs: number; reservedAreaM2: number } {
-  const active = holds.filter((h) => h.expiresAt.getTime() > now.getTime());
-  return {
-    reservedSlabs: active.reduce((n, h) => n + (h.qtySlabs ?? 0), 0),
-    reservedAreaM2: active.reduce((n, h) => n + (h.qtyAreaM2 ?? 0), 0),
-  };
+  // W1-T1: bitta formula — volume-holds.ts (obraztsysiz varianti).
+  const h = computeBatchVolumeHolds({ reservations: holds, samples: [], now });
+  return { reservedSlabs: h.totalSlabs, reservedAreaM2: h.totalAreaM2 };
 }
 
 /**
@@ -362,10 +364,16 @@ export async function reserveBatchVolume(
               select: { areaM2: true },
             },
             // A2: грузим все активные брони с expiresAt; истёкшие отсекаем ниже
-            // чистым sumActiveVolumeHolds (не режут остаток до sweep).
+            // чистым computeBatchVolumeHolds (не режут остаток до sweep).
             reservations: {
               where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
               select: { qtySlabs: true, qtyAreaM2: true, expiresAt: true },
+            },
+            // W1-T1: активные BATCH_VOLUME-образцы держат объём как брони
+            // (та же формула, что и в issueSample / охране продажи).
+            samples: {
+              where: { status: "ACTIVE", targetType: "BATCH_VOLUME" },
+              select: { qtySlabs: true, qtyAreaM2: true },
             },
           },
         });
@@ -391,21 +399,26 @@ export async function reserveBatchVolume(
           batch.slabs.map((s) => ({ areaM2: toNum(s.areaM2) })),
           batch.pieces.map((p) => ({ areaM2: toNum(p.areaM2) })),
         );
-        const { reservedSlabs, reservedAreaM2 } = sumActiveVolumeHolds(
-          batch.reservations.map((r) => ({
+        // W1-T1: yagona hold-formula (bronlar + obraztsy) — volume-holds.ts.
+        const holds = computeBatchVolumeHolds({
+          reservations: batch.reservations.map((r) => ({
             qtySlabs: r.qtySlabs,
             qtyAreaM2: toNum(r.qtyAreaM2),
             expiresAt: r.expiresAt,
           })),
+          samples: batch.samples.map((s) => ({
+            qtySlabs: s.qtySlabs,
+            qtyAreaM2: toNum(s.qtyAreaM2),
+          })),
           now,
-        );
+        });
 
         const decision = canReserveVolume(
           {
             slabsFree: free.slabsFree,
             areaFreeM2: free.areaFreeM2,
-            reservedSlabs,
-            reservedAreaM2,
+            reservedSlabs: holds.totalSlabs,
+            reservedAreaM2: holds.totalAreaM2,
           },
           qtySlabs,
           qtyAreaM2,

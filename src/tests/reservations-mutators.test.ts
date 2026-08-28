@@ -165,6 +165,7 @@ function batchRow(over: Partial<Record<string, unknown>> = {}) {
     slabs: [],
     pieces: [],
     reservations: [],
+    samples: [],
     ...over,
   };
 }
@@ -204,6 +205,29 @@ describe("reserveBatchVolume — B2B volume-бронь (mock-tx, ТЗ №7 #3)",
       code: "VOLUME_EXCEEDED",
     });
     expect(M.reservationCreate).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: активные BATCH_VOLUME-образцы тоже съедают остаток (free=10, образец=8, просят 3) → VOLUME_EXCEEDED", async () => {
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({ samples: [{ qtySlabs: 8, qtyAreaM2: null }] }),
+    );
+
+    await expect(reserveBatchVolume(INPUT)).rejects.toMatchObject({
+      code: "VOLUME_EXCEEDED",
+    });
+    expect(M.reservationCreate).not.toHaveBeenCalled();
+  });
+
+  it("W1-T1: истёкшая бронь + образец: считается только образец (free=10, dead-бронь 9, образец 3, просят 3) → ok", async () => {
+    M.batchFindUnique.mockResolvedValue(
+      batchRow({
+        reservations: [{ qtySlabs: 9, qtyAreaM2: null, expiresAt: PAST }],
+        samples: [{ qtySlabs: 3, qtyAreaM2: null }],
+      }),
+    );
+
+    const res = await reserveBatchVolume(INPUT); // просят 3, доступно 10−3=7
+    expect(res.reservationId).toBe("res1");
   });
 
   it("happy: free=10, holds=0, просят 3 → Reservation BATCH_VOLUME ACTIVE + AuditLog", async () => {
