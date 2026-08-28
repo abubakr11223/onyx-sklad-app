@@ -12,6 +12,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
+import { getBatchRemainders } from "@/lib/batch-remainders";
+import { computeQrHasStock } from "../stock";
 import {
   QR_PUBLIC_PHOTO_KINDS,
   buildQrPublicView,
@@ -56,13 +58,26 @@ async function loadStone(slug: string) {
         select: { id: true, kind: true, createdAt: true },
       },
       // Нейтральный признак наличия (без чисел): есть ли что-то доступное.
-      slabs: { where: { status: "AVAILABLE" }, select: { id: true }, take: 1 },
-      pieces: { where: { status: "AVAILABLE" }, select: { id: true }, take: 1 },
+      // needsCheck=false — как countedSlabs/countedPieces в /poisk (ТЗ §7.4).
+      slabs: {
+        where: { status: "AVAILABLE", needsCheck: false },
+        select: { id: true },
+        take: 1,
+      },
+      pieces: {
+        where: { status: "AVAILABLE", needsCheck: false },
+        select: { id: true },
+        take: 1,
+      },
+      // Поля для формулы §3 (computeQrHasStock → freeRemainderFromAggregate).
       batches: {
         select: {
+          id: true,
           slabsTotal: true,
-          slabsSoldDirect: true,
           areaTotalM2: true,
+          slabsAdjusted: true,
+          areaAdjustedM2: true,
+          slabsSoldDirect: true,
           areaSoldDirectM2: true,
         },
       },
@@ -106,16 +121,19 @@ export default async function QrStonePage({
     );
   }
 
-  // Нейтральное «в наличии»: любой доступный юнит или партия с остатком
-  // (приблизительно — для клиента важен факт, а не точное число).
-  const hasStock =
-    st.slabs.length > 0 ||
-    st.pieces.length > 0 ||
-    st.batches.some(
-      (b) =>
-        (b.slabsTotal ?? 0) - b.slabsSoldDirect > 0 ||
-        Number(b.areaTotalM2 ?? 0) - Number(b.areaSoldDirectM2) > 0,
-    );
+  // Нейтральное «в наличии» — по ОФИЦИАЛЬНОЙ формуле §3 (те же helpers, что
+  // /poisk и /kamen): свободный остаток учитывает отделённые плиты, прямые бои
+  // и корректировки. Клиенту уходит только boolean — без чисел.
+  const remainders = await getBatchRemainders(
+    db,
+    st.batches.map((b) => b.id),
+  );
+  const hasStock = computeQrHasStock(
+    st.batches,
+    remainders,
+    st.slabs.length,
+    st.pieces.length,
+  );
 
   const propRows = propertyRows(st.properties);
   const isStaff = caps.canSeeExactRemainder;
