@@ -108,11 +108,15 @@ export async function submitBatchEdit(
 
   const supplierNote = str("supplierNote").trim() || null;
 
-  // Locations
+  // Locations. locId — id существующей строки BatchLocation (пусто = новая):
+  // строка с id правится на месте, чтобы пережили привязка «Что здесь»
+  // (ТЗ №18 §3) и ссылки фотозапросов. locPattern — id узора («» = весь приход).
+  const locIds = all("locId");
   const locBlocks = all("locBlock");
   const locLms = all("locLandmark");
   const locSlabs = all("locSlabs");
   const locAreas = all("locArea");
+  const locPatterns = all("locPattern");
   const locations: BatchEditInput["locations"] = [];
   for (let i = 0; i < Math.max(locBlocks.length, 1); i++) {
     const block = locBlocks[i] ?? "";
@@ -128,7 +132,11 @@ export async function submitBatchEdit(
       errors[`loc-${i}`] = parsed.message;
       continue;
     }
-    locations.push(parsed.data);
+    locations.push({
+      ...parsed.data,
+      id: (locIds[i] ?? "").trim() || null,
+      batchPatternId: (locPatterns[i] ?? "").trim() || null,
+    });
   }
 
   // Patterns (text) + optional photo ops (aligned by index with patId).

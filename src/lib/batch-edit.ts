@@ -28,6 +28,7 @@ import {
   parseQuantityField,
 } from "@/lib/validators/intake";
 import { normalizeBlockLetter } from "@/lib/block-letter";
+import { formatLocation } from "@/lib/locations";
 
 // ───────────────────────── errors ─────────────────────────
 
@@ -223,10 +224,19 @@ export type BatchEditInput = {
   supplierNote: string | null;
   arrivedAt: Date;
   locations: {
+    /**
+     * id существующей строки BatchLocation («оставить, но поправить»). null /
+     * отсутствует = новая строка. Строка с id обновляется НА МЕСТЕ: на неё
+     * могут ссылаться фотозапросы (FK Restrict), и привязка «Что здесь»
+     * (batchPatternId, ТЗ №18 §3) живёт в этой же строке.
+     */
+    id?: string | null;
     block: string;
     landmark: string;
     slabsHere: number | null;
     areaHereM2: number | null;
+    /** ТЗ №18 §3 — «Что здесь»: id узора партии; null = «весь приход». */
+    batchPatternId?: string | null;
   }[];
   patterns: {
     id: string;
@@ -330,6 +340,7 @@ export async function applyBatchEdit(
             landmark: true,
             slabsHere: true,
             areaHereM2: true,
+            batchPatternId: true,
           },
         },
       },
@@ -412,6 +423,82 @@ export async function applyBatchEdit(
           `Узор «${old.description}»: нельзя меньше ${soldArea} м² (уже продано)`,
           "patterns",
         );
+      }
+    }
+
+    // ── Локации: принадлежность id и «Что здесь» этой партии ──
+    const existingLocIds = new Set(batch.locations.map((l) => l.id));
+    const keptLocIds = new Set<string>();
+    for (const l of input.locations) {
+      if (l.id) {
+        if (!existingLocIds.has(l.id) || keptLocIds.has(l.id)) {
+          throw new BatchEditError(
+            "INVALID_INPUT",
+            "Локация не принадлежит этой партии — обновите страницу",
+            "locations",
+          );
+        }
+        keptLocIds.add(l.id);
+      }
+      if (l.batchPatternId && !existingPat.has(l.batchPatternId)) {
+        throw new BatchEditError(
+          "INVALID_INPUT",
+          "Узор в строке локации не принадлежит этой партии",
+          "locations",
+        );
+      }
+    }
+
+    // ── ТЗ №18 §4 — сверка раскладки при правке (та же, что в приёмке, но
+    // терпимо к незаполненным строкам: «плит здесь» в правке необязательно,
+    // старые партии заводились без раскладки). Строгая сверка — только когда
+    // раскладка задана полностью. ──
+    if (input.locations.length > 0) {
+      // §4.2 — по узору нельзя разложить больше, чем в узоре (новые значения).
+      for (const p of input.patterns) {
+        const placed = input.locations
+          .filter((l) => (l.batchPatternId ?? null) === p.id)
+          .reduce((s, l) => s + (l.slabsHere ?? 0), 0);
+        if (placed > p.slabsCount) {
+          throw new BatchEditError(
+            "INVALID_INPUT",
+            `Узор «${p.description}»: разложено ${placed} плит, а в узоре только ${p.slabsCount}`,
+            "locations",
+          );
+        }
+      }
+      // §4.3 — суммы сходятся с итогами партии (плиты и м²).
+      if (
+        input.slabsTotal !== null &&
+        input.locations.every((l) => l.slabsHere !== null)
+      ) {
+        const sumSlabs = input.locations.reduce(
+          (s, l) => s + (l.slabsHere ?? 0),
+          0,
+        );
+        if (sumSlabs !== input.slabsTotal) {
+          throw new BatchEditError(
+            "INVALID_INPUT",
+            `Разложено ${sumSlabs} из ${input.slabsTotal} плит — суммы по локациям должны сойтись`,
+            "locations",
+          );
+        }
+      }
+      if (
+        input.areaTotalM2 !== null &&
+        input.locations.every((l) => l.areaHereM2 !== null)
+      ) {
+        const sumArea = input.locations.reduce(
+          (s, l) => s + (l.areaHereM2 ?? 0),
+          0,
+        );
+        if (Math.abs(sumArea - input.areaTotalM2) > 0.01) {
+          throw new BatchEditError(
+            "INVALID_INPUT",
+            `По локациям ${sumArea.toFixed(2)} м², а в партии ${input.areaTotalM2} м² — суммы должны сойтись`,
+            "locations",
+          );
+        }
       }
     }
 
@@ -518,18 +605,19 @@ export async function applyBatchEdit(
       }
     }
 
-    // Locations: compare serialised
+    // Locations: compare serialised (ТЗ №18 §3 — привязка «Что здесь» тоже
+    // содержимое строки: правка только узора — это правка локации).
     const oldLoc = batch.locations
       .map(
         (l) =>
-          `${l.block}|${l.landmark}|${l.slabsHere ?? ""}|${l.areaHereM2 ?? ""}`,
+          `${l.block}|${l.landmark}|${l.slabsHere ?? ""}|${l.areaHereM2 ?? ""}|${l.batchPatternId ?? ""}`,
       )
       .sort()
       .join(";");
     const newLoc = input.locations
       .map(
         (l) =>
-          `${l.block}|${l.landmark}|${l.slabsHere ?? ""}|${l.areaHereM2 ?? ""}`,
+          `${l.block}|${l.landmark}|${l.slabsHere ?? ""}|${l.areaHereM2 ?? ""}|${l.batchPatternId ?? ""}`,
       )
       .sort()
       .join(";");
@@ -599,19 +687,68 @@ export async function applyBatchEdit(
       }
     }
 
-    // Locations: replace all (order not significant).
+    // Locations: diff по id вместо «снести всё и создать заново». Причины:
+    //  • строка с id обновляется НА МЕСТЕ — привязка «Что здесь» (ТЗ №18 §3)
+    //    и ссылки фотозапросов (FK Restrict) переживают правку;
+    //  • удаление строки, на которую смотрит фотозапрос, раньше падало с
+    //    Prisma P2003 (500 у складчика) — теперь либо перевешиваем фотозапрос
+    //    на равнозначную выжившую строку (тот же блок+ориентир), либо
+    //    отказываем понятной ошибкой. Всё в одной транзакции — отказ
+    //    откатывает правку целиком, без частичной записи.
     if (oldLoc !== newLoc) {
-      await tx.batchLocation.deleteMany({ where: { batchId: batch.id } });
-      if (input.locations.length > 0) {
-        await tx.batchLocation.createMany({
-          data: input.locations.map((l) => ({
-            batchId: batch.id,
+      const survivors: { id: string; block: string; landmark: string }[] = [];
+      for (const l of input.locations) {
+        const data = {
+          block: l.block,
+          landmark: l.landmark,
+          slabsHere: l.slabsHere,
+          areaHereM2: l.areaHereM2 === null ? null : l.areaHereM2.toFixed(3),
+          batchPatternId: l.batchPatternId ?? null,
+        };
+        if (l.id) {
+          await tx.batchLocation.update({ where: { id: l.id }, data });
+          survivors.push({ id: l.id, block: l.block, landmark: l.landmark });
+        } else {
+          const created = await tx.batchLocation.create({
+            data: { batchId: batch.id, ...data },
+            select: { id: true },
+          });
+          survivors.push({
+            id: created.id,
             block: l.block,
             landmark: l.landmark,
-            slabsHere: l.slabsHere,
-            areaHereM2:
-              l.areaHereM2 === null ? null : l.areaHereM2.toFixed(3),
-          })),
+          });
+        }
+      }
+
+      const toDelete = batch.locations.filter((l) => !keptLocIds.has(l.id));
+      if (toDelete.length > 0) {
+        const refs = await tx.photoRequest.findMany({
+          where: { batchLocationId: { in: toDelete.map((l) => l.id) } },
+          select: { batchLocationId: true },
+        });
+        if (refs.length > 0) {
+          const referenced = new Set(refs.map((r) => r.batchLocationId));
+          for (const del of toDelete) {
+            if (!referenced.has(del.id)) continue;
+            const survivor = survivors.find(
+              (s) => s.block === del.block && s.landmark === del.landmark,
+            );
+            if (!survivor) {
+              throw new BatchEditError(
+                "INVALID_INPUT",
+                `На локацию «${formatLocation(del.block, del.landmark)}» есть фотозапрос — сначала закройте его или оставьте локацию в списке`,
+                "locations",
+              );
+            }
+            await tx.photoRequest.updateMany({
+              where: { batchLocationId: del.id },
+              data: { batchLocationId: survivor.id },
+            });
+          }
+        }
+        await tx.batchLocation.deleteMany({
+          where: { id: { in: toDelete.map((l) => l.id) } },
         });
       }
     }

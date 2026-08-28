@@ -90,10 +90,13 @@ export default async function PriemkaEditBatchPage({
       locations: {
         orderBy: { createdAt: "asc" },
         select: {
+          id: true,
           block: true,
           landmark: true,
           slabsHere: true,
           areaHereM2: true,
+          // ТЗ №18 §3 — «Что здесь»: привязка узора к строке локации.
+          batchPatternId: true,
         },
       },
     },
@@ -190,6 +193,7 @@ export default async function PriemkaEditBatchPage({
           photoId: p.photos[0]?.id ?? null,
         }))}
         locations={batch.locations.map((l) => ({
+          id: l.id,
           block: l.block,
           landmark: l.landmark,
           slabsHere: l.slabsHere,
@@ -197,6 +201,7 @@ export default async function PriemkaEditBatchPage({
             l.areaHereM2 === null || l.areaHereM2 === undefined
               ? null
               : Number(l.areaHereM2),
+          batchPatternId: l.batchPatternId,
         }))}
         blocks={blocks}
       />
