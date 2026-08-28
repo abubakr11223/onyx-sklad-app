@@ -1829,3 +1829,91 @@ describe("image document attaches like photo", () => {
     expect(sendMessage.mock.calls[0][1]).toMatch(/Стикер/i);
   });
 });
+
+// ── W2-T4 — edited_message: foto/hujjat tahriri qayta ishlanMAYDI ──
+// Telegram tahrirni YANGI update_id bilan yuboradi (update_id-claim ushlamaydi),
+// lekin chat+message_id o'sha-o'sha. Kontrakt: media'li edited_message →
+// yon ta'sirsiz muloyim javob (ikkinchi «Плита №N» / Photo YO'Q).
+
+/** photoUpdate ni edited_message ko'rinishiga o'giradi (yangi update_id bilan). */
+function asEdited(upd: TgUpdate, editedUpdateId: number): TgUpdate {
+  return { update_id: editedUpdateId, edited_message: upd.message };
+}
+
+describe("W2-T4 edited_message — foto oqimi", () => {
+  it("edited_message + photo → hech qanday plita/Photo YO'Q, muloyim javob bor", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+
+    const original = photoUpdate({ chatId: 999, updateId: 9001, messageId: 300 });
+    await handleUpdate(asEdited(original, 9002), makeDeps());
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(prUpdate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][0]).toBe(999);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/не обрабатывается/i);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/новое фото/i);
+  });
+
+  it("edited_message + image document → yon ta'sir YO'Q, muloyim javob bor", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+
+    const original = documentUpdate({
+      chatId: 999,
+      mimeType: "image/jpeg",
+      updateId: 9010,
+      messageId: 301,
+    });
+    await handleUpdate(asEdited(original, 9011), makeDeps());
+
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+    expect(photoCreate).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/не обрабатывается/i);
+  });
+
+  it("stsenariy: yangi foto ISHLAYDI, keyingi tahrir dublikat plita YARATMAYDI", async () => {
+    userFindFirst.mockResolvedValue({ id: "w1", role: "WAREHOUSE" });
+    prFindMany.mockResolvedValue([PENDING_REQUEST]);
+    separateSlabWithPhotoMock.mockResolvedValue("slabX");
+
+    // 1) Asl xabar — plita ajratiladi (avvalgidek).
+    const original = photoUpdate({ chatId: 999, updateId: 9020, messageId: 302 });
+    await handleUpdate(original, makeDeps());
+    expect(separateSlabWithPhotoMock).toHaveBeenCalledTimes(1);
+
+    // 2) O'sha xabar tahrirlanadi — Telegram YANGI update_id yuboradi:
+    //    update_id-claim ushlamaydi, lekin media-tahrir yo'li plita yaratmaydi.
+    await handleUpdate(asEdited(original, 9021), makeDeps());
+    expect(separateSlabWithPhotoMock).toHaveBeenCalledTimes(1); // hali ham 1
+    expect(photoCreate).not.toHaveBeenCalled(); // Photo — separateSlabWithPhoto ichida edi
+  });
+
+  it("edited_message'ning update_id'si ham claim qilinadi; already_seen → javob ham YO'Q", async () => {
+    const original = photoUpdate({ chatId: 999, updateId: 9030, messageId: 303 });
+    claimTelegramUpdate.mockResolvedValueOnce("already_seen");
+    await handleUpdate(asEdited(original, 9031), makeDeps());
+
+    expect(claimTelegramUpdate).toHaveBeenCalledWith(9031);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(separateSlabWithPhotoMock).not.toHaveBeenCalled();
+  });
+
+  it("edited_message MATN (media'siz) — avvalgidek ishlanadi (yordam matni)", async () => {
+    const upd: TgUpdate = {
+      update_id: 9040,
+      edited_message: {
+        message_id: 304,
+        from: { id: 999 },
+        chat: { id: 999 },
+        text: "salom",
+      },
+    };
+    await handleUpdate(upd, makeDeps());
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot/i);
+  });
+});

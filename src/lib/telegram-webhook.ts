@@ -413,6 +413,9 @@ const MSG_UNSUPPORTED_STICKER =
   "Стикеры бот не принимает. Отправьте фото камня по заданию.";
 const MSG_UNSUPPORTED_ANIMATION =
   "GIF/анимацию бот не принимает. Отправьте обычное фото.";
+// W2-T4 — edited_message foto oqimi uchun qayta ishlanMAYDI (pastda qarang).
+const MSG_EDITED_MEDIA_IGNORED =
+  "Изменение сообщения не обрабатывается — отправьте новое фото отдельным сообщением.";
 const MSG_UNKNOWN_HELP =
   "Onyx bot: отправьте фото по заданию (лучше ответом/reply на сообщение бота). " +
   "/start — привязка номера. /login — вход на сайт. /singan — битый камень.";
@@ -578,6 +581,24 @@ export async function handleUpdate(
     if (!message) return; // callback_query va h.k. — chat yo'q / e'tiborsiz.
 
     const chatId = message.chat.id;
+
+    // W2-T4 — edited_message KONTRAKTI: foto/hujjat tahriri qayta ishlanMAYDI.
+    // Telegram tahrir uchun YANGI update_id beradi (update_id-claim ushlamaydi),
+    // lekin chat+message_id o'sha-o'sha — qayta ishlash ikkinchi «Плита №N» va
+    // ikkinchi Photo yaratadi (dublikat plita bug'i). DB'da chat+message_id
+    // xaritasi saqlanmaydi (sxema o'zgarmaydi), shuning uchun race-siz yechim:
+    // media'li tahrirni butunlay e'tiborsiz qoldirib, muloyim javob beramiz.
+    // Matn tahrirlari (masalan /login) avvalgidek ishlanadi — yon ta'siri
+    // idempotent, plita/foto yaratmaydi.
+    if (!update.message && update.edited_message) {
+      const editedHasMedia =
+        (Array.isArray(message.photo) && message.photo.length > 0) ||
+        message.document !== undefined;
+      if (editedHasMedia) {
+        await deps.sendMessage(chatId, MSG_EDITED_MEDIA_IGNORED);
+        return;
+      }
+    }
 
     // 1) Kontakt ulashildi → telefon bo'yicha User topib bog'lash.
     if (message.contact) {
