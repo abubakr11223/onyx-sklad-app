@@ -33,5 +33,13 @@ Caddyfile
 Dockerfile
 .dockerignore
 
+# zaxira nusxalari — sirlar image'ga tushmasin
+# (`**/` shart: oddiy `*.tgz` faqat kontekst ildizida ishlaydi,
+# ichki papkalardagi tarball'lar baribir kontekstga tushardi)
+backups
+_to_delete
+**/*.tar.gz
+**/*.tgz
+
 # OS
 .DS_Store
