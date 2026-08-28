@@ -598,6 +598,10 @@ export async function planPurge(
   };
   // Debt hangs off SaleRecord (Restrict). Same sale scope as saleWhere.
   const debtWhere = { saleRecord: saleWhere };
+  // ТЗ №16 B — фото партии целиком (Photo.batchId, Restrict). Без этой ветки
+  // scope=A/B падал на `Photo_batchId_fkey` при удалении Batch: фильтр Photo
+  // не знал о новом «владельце» фото. Любой новый FK на Photo обязан попасть
+  // и сюда, и в executePurge (см. Photo_owner_check в schema.prisma).
   const photoWhere = {
     OR: [
       { stoneTypeId: stIn },
@@ -605,6 +609,7 @@ export async function planPurge(
       { piece: { stoneTypeId: stIn } },
       { photoRequest: { batch: { stoneTypeId: stIn } } },
       { batchPattern: { batch: { stoneTypeId: stIn } } },
+      { batchId: batchIn },
     ],
   };
   const prWhere = { batch: { stoneTypeId: stIn } };
@@ -954,6 +959,9 @@ export async function executePurge(
       ? {}
       : { OR: [{ saleRecord: saleWhere }, { sample: sampleWhere }] };
     const debtWhere = all ? {} : { saleRecord: saleWhere };
+    // ТЗ №16 B — Photo.batchId (Restrict): фото партии удаляем ВМЕСТЕ с её
+    // инвентарём, иначе deleteMany по Batch падает на `Photo_batchId_fkey`
+    // и откатывает всю транзакцию. Тот же список веток, что и в planPurge.
     const photoWhere = all
       ? {}
       : {
@@ -963,6 +971,7 @@ export async function executePurge(
             { piece: { stoneTypeId: stIn } },
             { photoRequest: { batch: { stoneTypeId: stIn } } },
             { batchPattern: { batch: { stoneTypeId: stIn } } },
+            { batchId: batchIn },
           ],
         };
     const prWhere = all ? {} : { batch: { stoneTypeId: stIn } };
