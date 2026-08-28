@@ -11,12 +11,9 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
-import Field, { inputClass } from "@/components/ui/Field";
-import {
-  returnSampleAction,
-  extendSampleAction,
-  sellSampleAction,
-} from "./actions";
+import { inputClass } from "@/components/ui/Field";
+import { returnSampleAction, extendSampleAction } from "./actions";
+import SellSampleForm from "./SellSampleForm";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Образцы — Onyx" };
@@ -263,42 +260,9 @@ export default async function ObraztsyPage({
                             Продлить срок
                           </Button>
                         </form>
-                        <form
-                          action={sellSampleAction}
-                          className="flex flex-col gap-2 rounded-field border border-line bg-paper-2 p-2"
-                        >
-                          <input type="hidden" name="sampleId" value={s.id} />
-                          <p className="text-xs font-semibold text-ink">
-                            Оформить продажу
-                          </p>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Field id={`price-${s.id}`} label="Цена *">
-                              <input
-                                name="price"
-                                required
-                                inputMode="decimal"
-                                className={inputClass}
-                                placeholder="1500"
-                              />
-                            </Field>
-                            <Field id={`cur-${s.id}`} label="Валюта">
-                              <select name="currency" className={inputClass} defaultValue="UZS">
-                                <option value="UZS">сум</option>
-                                <option value="USD">$</option>
-                              </select>
-                            </Field>
-                            <Field id={`pay-${s.id}`} label="Оплата">
-                              <select name="paymentMethod" className={inputClass} defaultValue="CASH">
-                                <option value="CASH">Наличные</option>
-                                <option value="CARD">Карта</option>
-                                <option value="CREDIT">В долг</option>
-                              </select>
-                            </Field>
-                          </div>
-                          <Button type="submit" size="sm">
-                            Продать
-                          </Button>
-                        </form>
+                        {/* W1-T2: клиентская форма — useActionState, ввод не
+                            теряется при ошибке, цена парсится как в SaleForm. */}
+                        <SellSampleForm sampleId={s.id} />
                       </div>
                     )}
                   </li>

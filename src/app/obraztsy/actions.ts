@@ -13,6 +13,8 @@ import {
 } from "@/lib/samples";
 import { strOf } from "@/lib/form";
 import type { IssueSampleFormState } from "./issue-sample-state";
+import { validateSellSampleFields } from "./sell-sample-state";
+import type { SellSampleFormState } from "./sell-sample-state";
 
 function revalidateSamples() {
   revalidatePath("/obraztsy");
@@ -63,26 +65,54 @@ export async function extendSampleAction(formData: FormData): Promise<void> {
   redirect("/obraztsy?ok=extended");
 }
 
-export async function sellSampleAction(formData: FormData): Promise<void> {
+/**
+ * Продажа образца (useActionState в SellSampleForm).
+ * W1-T2: раньше цена шла через Number(replace(",", ".")) — «1,500» → 1.5
+ * (занижение в 1000×, утекало в сводку и долги). Теперь валидация через
+ * validateSellSampleFields — тот же parseBoundedDecimal/семантика, что у
+ * главной формы продажи (validateSalePayment). Валюта и способ оплаты
+ * обязательны — БЕЗ тихого дефолта в UZS/CASH.
+ * Failure → state с errors.form (форма держит введённые значения),
+ * success → redirect /obraztsy?ok=sold.
+ */
+export async function sellSampleAction(
+  _prev: SellSampleFormState,
+  formData: FormData,
+): Promise<SellSampleFormState> {
   const caps = await getCapabilities();
-  if (!caps.canSell) redirect("/obraztsy?err=" + encodeURIComponent("Нет доступа"));
+  if (!caps.canSell) {
+    return failFields({ form: "Нет доступа: продажу оформляет менеджер" });
+  }
   const managerId = await currentActorId();
-  if (!managerId) redirect("/obraztsy?err=" + encodeURIComponent("Нет менеджера"));
-  const sampleId = String(formData.get("sampleId") ?? "").trim();
-  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
-  const currencyRaw = String(formData.get("currency") ?? "UZS").trim();
-  const currency = currencyRaw === "USD" ? "USD" : "UZS";
-  const payRaw = String(formData.get("paymentMethod") ?? "CASH").trim();
-  const paymentMethod =
-    payRaw === "CARD" || payRaw === "CREDIT" ? payRaw : "CASH";
+  if (!managerId) {
+    return failFields({ form: "Нет менеджера — войдите снова" });
+  }
+  const str = strOf(formData);
+  const sampleId = str("sampleId");
+  if (!sampleId) {
+    return failFields({ form: "Образец не найден — обновите страницу" });
+  }
+  const v = validateSellSampleFields({
+    price: str("price"),
+    currency: str("currency"),
+    paymentMethod: str("paymentMethod"),
+  });
+  if (!v.ok) {
+    return failFields(v.errors);
+  }
   const res = await sellSample({
     sampleId,
     managerId,
-    price,
-    paymentMethod,
-    currency,
+    price: v.data.price,
+    paymentMethod: v.data.paymentMethod,
+    currency: v.data.currency,
   });
-  if (!res.ok) redirect("/obraztsy?err=" + encodeURIComponent(res.error.message));
+  if (!res.ok) {
+    if (res.error.code === "CONFLICT" || res.error.code === "NOT_ACTIVE") {
+      return { errors: {}, conflict: res.error.message };
+    }
+    return failFields({ form: res.error.message });
+  }
   revalidateSamples();
   redirect("/obraztsy?ok=sold");
 }
