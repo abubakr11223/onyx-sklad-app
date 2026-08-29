@@ -15,6 +15,7 @@ import {
   findOwnActiveVolumeReservations,
   formatHoldQty,
 } from "@/lib/volume-holds";
+import { computeFreeHint } from "@/app/bron/free-hint";
 import { sortNeedsCheckLast } from "@/lib/checks";
 import {
   SALE_HISTORY_PAGE_SIZE,
@@ -64,6 +65,38 @@ export const metadata: Metadata = {
 
 // Наличие должно быть актуальным на каждый запрос.
 export const dynamic = "force-dynamic";
+
+/**
+ * W3-T4 — узоры (ТЗ №3) показывают СВОЙ остаток: count − sold по узору.
+ * Объёмные продажи и брони партии по узорам не раскладываются, поэтому сумма
+ * остатков узоров может быть больше свободного нетто партии. Новой математики
+ * остатков не вводим (её нет) — честно предупреждаем текстом, и только когда
+ * такой объём действительно есть МИМО узоров: продажа из узора тоже поднимает
+ * счётчики партии, но в остатке узора она уже учтена (см. sales.ts).
+ */
+export const PATTERNS_VOLUME_NOTE =
+  " · узоры показаны без учёта объёмных продаж и броней";
+
+/**
+ * Export — для unit-теста (page.tsx Next module; тест берёт чистую функцию).
+ * volumeSold* — объём, проданный МИМО узоров (продажи из узора уже учтены в
+ * остатке самого узора, приписка про них была бы ложной).
+ */
+export function patternsVolumeNote(args: {
+  hasPatterns: boolean;
+  volumeSoldSlabs: number;
+  volumeSoldAreaM2: number;
+  holdSlabs: number;
+  holdAreaM2: number;
+}): string {
+  if (!args.hasPatterns) return "";
+  const hasVolume =
+    args.volumeSoldSlabs > 0 ||
+    args.volumeSoldAreaM2 > 0.0005 ||
+    args.holdSlabs > 0 ||
+    args.holdAreaM2 > 0.0005;
+  return hasVolume ? PATTERNS_VOLUME_NOTE : "";
+}
 
 const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
@@ -509,9 +542,20 @@ export default async function ProdazhaPage({
           free.areaFreeM2 === null
             ? null
             : free.areaFreeM2 - holds.totalAreaM2;
+        // W3-T4 — ПОКАЗ клампится в 0 (та же функция, что подсказка /bron):
+        // «~-2 плит» пользователю не выводим. Охрана продажи и `hasFree`
+        // считают по сырым net* — их не трогаем.
+        const shown = computeFreeHint({
+          slabsFree: free.slabsFree,
+          areaFreeM2: free.areaFreeM2,
+          reservations: resRows,
+          samples: samRows,
+          now,
+        });
         const freeParts = [
-          netSlabs !== null && `~${netSlabs} плит`,
-          netAreaM2 !== null && `≈${m2Fmt.format(netAreaM2)} м²`,
+          shown.freeSlabs !== null && `~${shown.freeSlabs} плит`,
+          shown.freeAreaM2 !== null &&
+            `≈${m2Fmt.format(shown.freeAreaM2)} м²`,
         ]
           .filter(Boolean)
           .join(" · ");
@@ -553,10 +597,29 @@ export default async function ProdazhaPage({
             hasFree: remSlabs > 0 || remArea > 0.0005,
           };
         });
+        // Продажа ИЗ узора инкрементит и счётчики партии (slabsSoldDirect /
+        // areaSoldDirectM2), и счётчики узора (см. src/lib/sales.ts). Такой
+        // объём в остатках узоров УЖЕ учтён — приписка про него была бы ложной.
+        // Поэтому берём только НЕузорную часть объёмных продаж партии.
+        const patternsSoldSlabs = b.patterns.reduce((s, p) => s + p.slabsSold, 0);
+        const patternsSoldAreaM2 = b.patterns.reduce(
+          (s, p) => s + Number(p.areaSoldM2),
+          0,
+        );
+        const patternsNote = patternsVolumeNote({
+          hasPatterns: patterns.length > 0,
+          volumeSoldSlabs: Math.max(0, b.slabsSoldDirect - patternsSoldSlabs),
+          volumeSoldAreaM2: Math.max(
+            0,
+            Number(b.areaSoldDirectM2) - patternsSoldAreaM2,
+          ),
+          holdSlabs: holds.totalSlabs,
+          holdAreaM2: holds.totalAreaM2,
+        });
         return {
           id: b.id,
           title: `Партия от ${formatTashkentDate(b.arrivedAt)}`,
-          freeText: `свободно: ${freeParts || "нет данных"}${holdsSuffix}`,
+          freeText: `свободно: ${freeParts || "нет данных"}${holdsSuffix}${patternsNote}`,
           needsCheck: b.needsCheck,
           hasFree,
           patterns,

@@ -49,7 +49,7 @@ import Badge from "@/components/ui/Badge";
 import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { SearchIcon } from "@/components/ui/Icons";
-import { formatThickness } from "@/lib/dimensions";
+import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
 import { formatLocation } from "@/lib/locations";
 
 export const metadata: Metadata = {
@@ -160,6 +160,20 @@ export function formatTypeLocations(
   return `${labels.slice(0, maxPoints).join(" · ")} · и ещё ${rest}`;
 }
 
+/**
+ * W3-T4 — толщина в /poisk: Prisma отдаёт `thicknessMm` как Decimal
+ * (NUMERIC(5,1)), а `formatThickness` ждёт number — без перевода любая
+ * толщина рисовалась как «—». Единая точка перевода Decimal → число → текст,
+ * чтобы баг не вернулся в новой строке разметки.
+ *
+ * Export — для unit-теста (page.tsx Next module; тест берёт чистую функцию).
+ */
+export function formatThicknessCm(
+  v: { toString(): string } | number | null | undefined,
+): string {
+  return formatThickness(thicknessToNumber(v));
+}
+
 export default async function PoiskPage({
   searchParams,
 }: {
@@ -265,7 +279,7 @@ export default async function PoiskPage({
     needsCheck: boolean;
     boundingLengthMm: number;
     boundingWidthMm: number;
-    thicknessMm: number | null;
+    thicknessMm: { toString(): string } | number | null;
     areaM2: { toString(): string } | null;
     block: string;
     landmark: string;
@@ -277,7 +291,7 @@ export default async function PoiskPage({
     label: string;
     lengthMm: number | null;
     widthMm: number | null;
-    thicknessMm: number | null;
+    thicknessMm: { toString(): string } | number | null;
     areaM2: { toString(): string } | null;
     block: string;
     landmark: string;
@@ -287,7 +301,7 @@ export default async function PoiskPage({
     id: string;
     lengthMm: number | null;
     widthMm: number | null;
-    thicknessMm: number | null;
+    thicknessMm: { toString(): string } | number | null;
     arrivedAt: Date;
     slabsTotal: number | null;
     areaTotalM2: { toString(): string } | null;
@@ -295,7 +309,7 @@ export default async function PoiskPage({
     patterns: Array<{
       lengthMm: number | null;
       widthMm: number | null;
-      thicknessMm: number | null;
+      thicknessMm: { toString(): string } | number | null;
       description: string;
     }>;
   };
@@ -687,7 +701,7 @@ export default async function PoiskPage({
                   <div className="text-sm text-ink/70">
                     Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
                     {canSeeExact && p.thicknessMm !== null && (
-                      <> · толщина {formatThickness(p.thicknessMm)} см</>
+                      <> · толщина {formatThicknessCm(p.thicknessMm)} см</>
                     )}
                     {canSeeExact && p.areaM2 !== null && (
                       <> · ≈{m2Fmt.format(Number(p.areaM2))} м²</>
@@ -764,7 +778,7 @@ export default async function PoiskPage({
                   <div className="text-sm text-ink/70">
                     Габарит {s.lengthMm}×{s.widthMm} см
                     {canSeeExact && s.thicknessMm != null && (
-                      <> · толщина {formatThickness(s.thicknessMm)} см</>
+                      <> · толщина {formatThicknessCm(s.thicknessMm)} см</>
                     )}
                     {canSeeExact && s.areaM2 != null && (
                       <> · ≈{m2Fmt.format(Number(s.areaM2))} м²</>
@@ -801,12 +815,12 @@ export default async function PoiskPage({
             {fittingBatches.map((b) => {
               const fmt =
                 b.lengthMm != null && b.widthMm != null
-                  ? `${b.lengthMm}×${b.widthMm}${b.thicknessMm != null ? `×${formatThickness(b.thicknessMm)}` : ""} см`
+                  ? `${b.lengthMm}×${b.widthMm}${b.thicknessMm != null ? `×${formatThicknessCm(b.thicknessMm)}` : ""} см`
                   : b.patterns
                       .filter((p) => p.lengthMm != null && p.widthMm != null)
                       .map(
                         (p) =>
-                          `${p.description}: ${p.lengthMm}×${p.widthMm}${p.thicknessMm != null ? `×${formatThickness(p.thicknessMm)}` : ""} см`,
+                          `${p.description}: ${p.lengthMm}×${p.widthMm}${p.thicknessMm != null ? `×${formatThicknessCm(p.thicknessMm)}` : ""} см`,
                       )
                       .join("; ") || "—";
               return (
