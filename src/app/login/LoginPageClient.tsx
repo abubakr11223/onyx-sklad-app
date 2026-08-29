@@ -214,7 +214,10 @@ export function LoginPageClient({
           padding: 24px 16px;
           background: var(--login-bg-base);
           color: var(--login-text-primary);
-          overflow: hidden;
+          /* Faqat gorizontal kesish: past ekranlarda (≈720px) forma pastga
+             tushsa, sahifa vertikal aylanishi (scroll) SHART — tugma
+             ko'rinmay qolmasin. */
+          overflow-x: hidden;
         }
         .login-bg-radial {
           position: absolute;
@@ -227,11 +230,34 @@ export function LoginPageClient({
         .login-logo-slot {
           position: relative;
           z-index: 1;
+          /* Slot kengligi ekranga bog'langan (aks holda u bolasining 400px
+             qat'iy kengligiga cho'ziladi va tor telefonda gorizontal chiqib
+             ketadi — max-width: 100% ham ayni o'sha 400px ga hisoblanardi). */
+          width: 100%;
           height: 48vh;
           max-height: 440px;
           display: flex;
           align-items: center;
           justify-content: center;
+        }
+        /* Logo (3D wrapper YOKI statik SVG wrapper) o'zining inline
+           width/height = size (px) bilan keladi. Slot qisqarganda (past yoki
+           tor ekran) shu qat'iy quti slotdan CHIQIB ketardi — sfera yuqoridan
+           kesilib, wordmark ustiga tushardi. max-width/max-height inline
+           width/height'ni bosib o'tadi (boshqa xossalar), shuning uchun logo
+           endi HAR DOIM slot ichida qoladi. */
+        .login-logo-slot > div {
+          max-width: 100%;
+          max-height: 100%;
+          min-width: 0;
+        }
+        /* StaticLogo <svg width={size} height={size}> — presentation
+           atributlari CSS bilan bosiladi; viewBox + preserveAspectRatio
+           sferani markazda, proporsiyani buzmasdan kichraytiradi.
+           r3f <Canvas> allaqachon o'z konteynerini 100% kuzatadi. */
+        .login-logo-slot svg {
+          width: 100%;
+          height: 100%;
         }
         @media (max-width: 640px) {
           .login-logo-slot { height: 38vh; max-height: 320px; }
@@ -284,6 +310,19 @@ export function LoginPageClient({
         }
         @media (max-width: 640px) {
           .login-card { padding: 28px 20px; }
+        }
+        /* Past ekranlar (masalan 1280x720 laptop): sfera va oraliqlarni
+           qisqartiramiz — email + parol + «Войти» birinchi ekranga sig'sin.
+           MUHIM: bu blok BARCHA (max-width: 640px) bloklaridan KEYIN
+           turadi va (min-width: 641px) bilan cheklangan — telefon (≤640px)
+           sozlamalari (38vh slot, 36px wordmark, 28px 20px karta) buzilmasin.
+           Ikkala shart ham ataylab: shartlar kesishmaydi, tartib esa kelajakda
+           qo'shiladigan qoidalar uchun ham xavfsiz. */
+        @media (max-height: 760px) and (min-width: 641px) {
+          .login-root { gap: 12px; padding: 16px; }
+          .login-logo-slot { height: 26vh; max-height: 200px; }
+          .login-wordmark { font-size: 32px; }
+          .login-card { padding: 24px 28px; }
         }
 
         .login-alert {

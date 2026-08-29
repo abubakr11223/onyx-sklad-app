@@ -272,7 +272,7 @@ export default async function KartaSkladaPage({
           <form action={addBlock} className="flex flex-wrap items-end gap-2">
             <input
               name="letter"
-              placeholder="Буква (А, Б…)"
+              placeholder="Буква (A, D…)"
               required
               aria-label="Буква блока"
               className={`${inputClass} sm:max-w-[8rem]`}
@@ -288,6 +288,11 @@ export default async function KartaSkladaPage({
               Добавить блок
             </Button>
           </form>
+          {/* ТЗ №17 §3.1 — код блока только латиницей: подсказка совпадает
+              с текстом ошибки, чтобы не вводить в заблуждение. */}
+          <p className="mt-2 text-xs text-ink/60">
+            Код блока — только латиницей и цифрами, например A1, D3.
+          </p>
         </Card>
       )}
 
@@ -358,6 +363,7 @@ export default async function KartaSkladaPage({
                     <input
                       name="letter"
                       defaultValue={blk.letter}
+                      placeholder="Буква (A, D…)"
                       aria-label="Буква"
                       className={`${inputClass} max-w-[6rem]`}
                     />
