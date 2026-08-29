@@ -120,11 +120,18 @@ export async function createAccount(formData: FormData): Promise<void> {
 /**
  * Akkauntni o'chirish — SOFT (isActive=false). Idempotent (allaqachon nofaol →
  * ok). OWNER va o'zini o'chirib bo'lmaydi.
+ *
+ * W3-T3: qaytarib bo'lmas amal — SERVERDA `confirm=yes` talab qilinadi
+ * (UI'dagi ikki bosqichli tasdiq aylanib o'tilsa ham action rad etadi).
  */
 export async function deleteAccount(formData: FormData): Promise<void> {
   const actorId = await requireOwner();
   const userId = String(formData.get("userId") ?? "");
   if (!userId) redirect("/accounts?error=notfound");
+  // Tasdiqsiz deaktivatsiya YO'Q (bir bosingda o'chib ketmasin).
+  if (String(formData.get("confirm") ?? "") !== "yes") {
+    redirect("/accounts?error=confirm");
+  }
 
   const target = await db.user.findUnique({
     where: { id: userId },
@@ -142,6 +149,36 @@ export async function deleteAccount(formData: FormData): Promise<void> {
 
   revalidatePath("/accounts");
   redirect("/accounts?ok=deleted");
+}
+
+/**
+ * W3-T3 — akkauntni QAYTA faollashtirish (isActive=true). deleteAccount'ning
+ * simmetrik tesкarisi: xuddi shu OWNER-gate, deny-by-default. tokenVersion'ga
+ * TEGILMAYDI — deaktivatsiya ham uni oshirmaydi (sessiya `isActive: true`
+ * sharti bilan o'ladi); reaktivatsiya login imkonini shunchaki qaytaradi.
+ * Idempotent (allaqachon faol → ok). OWNER nishoni bu yerga kelmaydi
+ * (uni deaktivatsiya qilib bo'lmaydi), lekin baribir rad etamiz.
+ */
+export async function reactivateAccount(formData: FormData): Promise<void> {
+  const actorId = await requireOwner();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) redirect("/accounts?error=notfound");
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!target) redirect("/accounts?error=notfound");
+  if (target.role === "OWNER") redirect("/accounts?error=owner_protected");
+  if (target.isActive) redirect("/accounts?ok=reactivated"); // idempotent
+
+  await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { isActive: true } });
+    await logAccountAction(tx, actorId, userId, { kind: "account.reactivate" });
+  });
+
+  revalidatePath("/accounts");
+  redirect("/accounts?ok=reactivated");
 }
 
 /**

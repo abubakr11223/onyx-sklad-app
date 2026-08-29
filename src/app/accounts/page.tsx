@@ -23,6 +23,7 @@ import {
 import {
   createAccount,
   deleteAccount,
+  reactivateAccount,
   changeRole,
   resetPassword,
   changePhone,
@@ -65,6 +66,7 @@ const ERROR_RU: Record<string, string> = {
   notfound: "Аккаунт не найден.",
   owner_protected: "Этот аккаунт защищён (владелец).",
   self: "Нельзя деактивировать самого себя.",
+  confirm: "Деактивация требует подтверждения — раскройте карточку и подтвердите.",
   tg_taken: "Этот Telegram уже привязан к другому аккаунту.",
   tg_format: "Telegram ID — только цифры (например 123456789).",
   flag: "Некорректное значение флага.",
@@ -73,6 +75,7 @@ const ERROR_RU: Record<string, string> = {
 const OK_RU: Record<string, string> = {
   created: "Аккаунт создан.",
   deleted: "Аккаунт деактивирован.",
+  reactivated: "Аккаунт снова активен — вход по прежнему логину и паролю открыт.",
   role: "Роль обновлена.",
   password: "Пароль сброшен.",
   phone: "Телефон обновлён.",
@@ -793,15 +796,45 @@ export default async function AccountsPage({
                       </form>
                     )}
 
-                    {/* Деактивация — только для не-владельцев и не себя. */}
+                    {/* Деактивация — только для не-владельцев и не себя.
+                        W3-T3: двухшаговое подтверждение (как шаг подтверждения
+                        в «Разбить»): сначала раскрыть, затем подтвердить.
+                        Server action без confirm=yes всё равно откажет. */}
                     {isManageable && !isSelf && (
-                      <form action={deleteAccount}>
-                        <input type="hidden" name="userId" value={u.id} />
-                        <Button type="submit" variant="danger" size="sm">
-                          Деактивировать
-                        </Button>
-                      </form>
+                      <details className="rounded-field border border-danger/30 bg-danger/[0.04] p-3">
+                        <summary className="cursor-pointer text-sm font-semibold text-danger">
+                          Деактивировать…
+                        </summary>
+                        <p className="mt-2 text-sm text-ink/70">
+                          Деактивировать сотрудника <b>{u.name}</b>? Вход будет
+                          закрыт, история сохранится. Позже можно снова
+                          активировать.
+                        </p>
+                        <form action={deleteAccount} className="mt-2">
+                          <input type="hidden" name="userId" value={u.id} />
+                          <input type="hidden" name="confirm" value="yes" />
+                          <Button type="submit" variant="danger" size="sm">
+                            Да, деактивировать {u.name}
+                          </Button>
+                        </form>
+                      </details>
                     )}
+                  </div>
+                )}
+
+                {/* W3-T3 — деактивированный аккаунт можно вернуть: вход снова
+                    откроется по прежнему логину и паролю. */}
+                {!u.isActive && isManageable && (
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-ink/10 pt-4">
+                    <p className="text-sm text-ink/60">
+                      Аккаунт деактивирован — вход закрыт, история цела.
+                    </p>
+                    <form action={reactivateAccount}>
+                      <input type="hidden" name="userId" value={u.id} />
+                      <Button type="submit" variant="secondary" size="sm">
+                        Активировать
+                      </Button>
+                    </form>
                   </div>
                 )}
               </Card>
