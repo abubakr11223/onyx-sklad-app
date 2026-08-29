@@ -5,15 +5,15 @@ import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
 import {
-  listShipments,
-  MAX_SHIPMENTS_PAGE,
+  listShipmentsPage,
+  SHIPMENTS_PAGE_SIZE,
   shipmentFiltersActive,
   shipmentFiltersFromSearchParams,
 } from "@/lib/shipments";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import Field, { inputClass } from "@/components/ui/Field";
 import {
@@ -62,14 +62,36 @@ export default async function OtgruzkiPage({
     manager: first(sp.manager),
   });
   const filtersOn = shipmentFiltersActive(filters);
+  // W3-T5 — keyset-курсор (isUrgent+createdAt+id). Раньше архив обрывался на
+  // «последних 100» без всякой ссылки дальше.
+  const after = first(sp.after) || null;
 
-  const items = await listShipments(db, {
+  const page = await listShipmentsPage(db, {
     canSeeAll,
     actorId,
     tab,
-    take: MAX_SHIPMENTS_PAGE,
     filters,
+    cursor: after,
+    pageSize: SHIPMENTS_PAGE_SIZE,
   });
+  const items = page.items;
+
+  // Ссылка «Показать ещё» несёт вкладку и все фильтры: следующая страница —
+  // продолжение ТОГО ЖЕ отфильтрованного списка.
+  const buildHref = (over: { after?: string }) => {
+    const p = new URLSearchParams();
+    if (tab === "archive") p.set("tab", "archive");
+    if (filters.client?.trim()) p.set("client", filters.client.trim());
+    if (filters.kind) p.set("kind", filters.kind);
+    if (first(sp.from)) p.set("from", first(sp.from));
+    if (first(sp.to)) p.set("to", first(sp.to));
+    if (canSeeAll && filters.managerId?.trim()) {
+      p.set("manager", filters.managerId.trim());
+    }
+    if (over.after) p.set("after", over.after);
+    const s = p.toString();
+    return "/otgruzki" + (s ? `?${s}` : "");
+  };
 
   // Список менеджеров для фильтра — только тем, кто видит все отгрузки.
   // Ограничен: сотрудников десятки, не тысячи.
@@ -219,11 +241,7 @@ export default async function OtgruzkiPage({
       {items.length === 0 ? (
         <Card>
           <p className="text-ink/60">
-            {tab === "open"
-              ? "Нет задач к отгрузке."
-              : "Архив пуст (показаны последние " +
-                MAX_SHIPMENTS_PAGE +
-                ")."}
+            {tab === "open" ? "Нет задач к отгрузке." : "Архив пуст."}
           </p>
         </Card>
       ) : (
@@ -415,6 +433,18 @@ export default async function OtgruzkiPage({
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Инвариант /poisk: ссылка есть ровно тогда, когда есть следующая строка. */}
+      {page.nextCursor && (
+        <div className="mt-4">
+          <Link
+            href={buildHref({ after: page.nextCursor })}
+            className={buttonClass("secondary", "sm")}
+          >
+            Показать ещё →
+          </Link>
+        </div>
       )}
     </main>
   );

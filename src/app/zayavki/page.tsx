@@ -15,16 +15,19 @@ import {
   LEAD_KIND_RU,
   LEAD_STATUS_FLOW,
   LEAD_STATUS_RU,
+  LEADS_PAGE_SIZE,
+  isLeadStatus,
   type LeadKind,
   type LeadStatus,
-  listLeads,
+  listLeadsPage,
 } from "@/lib/leads";
 import { advanceLead } from "./actions";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
+import { inputClass } from "@/components/ui/Field";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +72,12 @@ const OK_RU: Record<string, string> = {
 export default async function ZayavkiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    error?: string;
+    status?: string;
+    after?: string;
+  }>;
 }) {
   const caps = await getCapabilities();
   if (!caps.canSeeLeads) {
@@ -84,7 +92,28 @@ export default async function ZayavkiPage({
   const okMsg = sp.ok ? OK_RU[sp.ok] : undefined;
   const errMsg = sp.error ? (ERROR_RU[sp.error] ?? "Не удалось выполнить действие.") : undefined;
 
-  const leads = await listLeads(db);
+  const statusRaw = (sp.status ?? "").trim();
+  const status = isLeadStatus(statusRaw) ? statusRaw : undefined;
+  // W3-T5 — keyset-курсор (status+createdAt+id). Раньше очередь обрывалась на
+  // 200-й заявке молча: следующей ссылки не было вовсе.
+  const after = (sp.after ?? "").trim() || null;
+
+  const page = await listLeadsPage(db, {
+    status,
+    cursor: after,
+    pageSize: LEADS_PAGE_SIZE,
+  });
+  const leads = page.items;
+
+  // Ссылка «Показать ещё» несёт фильтр, но НЕ несёт ok/error: флеш-сообщение
+  // о прошлом действии не должно всплывать заново на второй странице.
+  const buildHref = (over: { after?: string }) => {
+    const p = new URLSearchParams();
+    if (status) p.set("status", status);
+    if (over.after) p.set("after", over.after);
+    const s = p.toString();
+    return "/zayavki" + (s ? `?${s}` : "");
+  };
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -113,9 +142,34 @@ export default async function ZayavkiPage({
         </Alert>
       )}
 
+      {/* GET-форма: фильтр остаётся в ссылке. Отправка формы сбрасывает
+          курсор — новый фильтр всегда начинается с первой страницы. */}
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1 text-sm text-ink/70">
+          Статус
+          <select
+            name="status"
+            defaultValue={status ?? ""}
+            className={inputClass}
+          >
+            <option value="">Все</option>
+            <option value="NEW">{LEAD_STATUS_RU.NEW}</option>
+            <option value="CONTACTED">{LEAD_STATUS_RU.CONTACTED}</option>
+            <option value="CLOSED">{LEAD_STATUS_RU.CLOSED}</option>
+          </select>
+        </label>
+        <Button type="submit" variant="secondary" size="sm">
+          Показать
+        </Button>
+      </form>
+
       {leads.length === 0 ? (
         <Card>
-          <p className="text-sm text-ink/60">Заявок пока нет.</p>
+          <p className="text-sm text-ink/60">
+            {status
+              ? `Заявок со статусом «${LEAD_STATUS_RU[status]}» нет.`
+              : "Заявок пока нет."}
+          </p>
         </Card>
       ) : (
         <ul className="space-y-3">
@@ -214,6 +268,18 @@ export default async function ZayavkiPage({
             );
           })}
         </ul>
+      )}
+
+      {/* Инвариант /poisk: ссылка есть ровно тогда, когда есть следующая строка. */}
+      {page.nextCursor && (
+        <div className="mt-4">
+          <Link
+            href={buildHref({ after: page.nextCursor })}
+            className={buttonClass("secondary", "sm")}
+          >
+            Показать ещё →
+          </Link>
+        </div>
       )}
     </main>
   );

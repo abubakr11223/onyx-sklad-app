@@ -9,7 +9,10 @@ import {
   CLIENT_TYPE_LABELS,
   type ClientType,
 } from "@/lib/clients";
-import { listClientsDirectory } from "@/lib/clients-directory";
+import {
+  CLIENTS_DIRECTORY_PAGE_SIZE,
+  listClientsDirectoryPage,
+} from "@/lib/clients-directory";
 import { formatCurrencySummaryLine } from "@/lib/debts-ui";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -48,15 +51,19 @@ export default async function KlientyPage({
   const type =
     typeRaw === "B2C" || typeRaw === "B2B" ? (typeRaw as ClientType) : "";
   const managerId = first(sp.managerId);
+  // W3-T5 — keyset-курсор страницы (name+id). Фильтры едут в ссылке вместе с ним.
+  const after = first(sp.after) || null;
   const actorId = await currentActorId();
 
-  const [clients, managers] = await Promise.all([
-    listClientsDirectory(db, {
+  const [page, managers] = await Promise.all([
+    listClientsDirectoryPage(db, {
       q,
       type,
       managerId: caps.canSeeAllClients ? managerId : undefined,
       canSeeAllClients: caps.canSeeAllClients,
       actorId,
+      cursor: after,
+      pageSize: CLIENTS_DIRECTORY_PAGE_SIZE,
     }),
     caps.canSeeAllClients
       ? db.user.findMany({
@@ -69,6 +76,20 @@ export default async function KlientyPage({
         })
       : Promise.resolve([] as { id: string; name: string }[]),
   ]);
+
+  const clients = page.items;
+
+  // Ссылка «Показать ещё» несёт текущие фильтры: страница 2 обязана быть
+  // страницей 2 ТОГО ЖЕ списка, а не всего справочника.
+  const buildHref = (over: { after?: string }) => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (type) p.set("type", type);
+    if (caps.canSeeAllClients && managerId) p.set("managerId", managerId);
+    if (over.after) p.set("after", over.after);
+    const s = p.toString();
+    return "/klienty" + (s ? `?${s}` : "");
+  };
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -171,6 +192,18 @@ export default async function KlientyPage({
             );
           })}
         </ul>
+      )}
+
+      {/* Инвариант /poisk: ссылка есть ровно тогда, когда есть следующая строка. */}
+      {page.nextCursor && (
+        <div className="mt-4">
+          <Link
+            href={buildHref({ after: page.nextCursor })}
+            className={buttonClass("secondary", "sm")}
+          >
+            Показать ещё →
+          </Link>
+        </div>
       )}
 
       <p className="mt-6 text-center text-sm">

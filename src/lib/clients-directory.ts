@@ -181,6 +181,61 @@ export type ClientListItem = {
   activeDebtTotals: CurrencyMoney[];
 };
 
+/** Shared select for directory list rows (list + paginated list). */
+const clientListSelect = {
+  id: true,
+  name: true,
+  type: true,
+  phone: true,
+  managerId: true,
+  manager: { select: { name: true } },
+  sales: {
+    select: {
+      returnedAt: true,
+      price: true,
+      currency: true,
+      qtySlabs: true,
+      qtyAreaM2: true,
+    },
+  },
+  debts: {
+    where: { status: "ACTIVE" },
+    select: { amount: true, currency: true, status: true },
+  },
+} satisfies Prisma.ClientSelect;
+
+type ClientListRow = Prisma.ClientGetPayload<{
+  select: typeof clientListSelect;
+}>;
+
+function mapClientListRow(r: ClientListRow): ClientListItem {
+  const sales: SaleTotRow[] = r.sales.map((s) => ({
+    returnedAt: s.returnedAt,
+    price: s.price?.toString() ?? null,
+    currency: (s.currency as MoneyCurrency | null) ?? null,
+    qtySlabs: s.qtySlabs,
+    qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
+  }));
+  const debts: DebtTotRow[] = r.debts.map((d) => ({
+    status: d.status as DebtTotRow["status"],
+    amount: d.amount.toString(),
+    currency: d.currency as MoneyCurrency,
+  }));
+  const vol = volumeTotalsFromSales(sales);
+  return {
+    id: r.id,
+    name: r.name,
+    type: r.type as ClientType,
+    phone: r.phone,
+    managerId: r.managerId,
+    managerName: r.manager.name,
+    saleCount: vol.saleCount,
+    purchaseTotals: purchaseTotalsFromSales(sales),
+    hasActiveDebt: debts.length > 0,
+    activeDebtTotals: debtTotalsFromDebts(debts),
+  };
+}
+
 export async function listClientsDirectory(
   db: Db,
   filters: ClientListFilters,
@@ -203,56 +258,119 @@ export async function listClientsDirectory(
     where,
     orderBy: [{ name: "asc" }],
     take,
-    select: {
-      id: true,
-      name: true,
-      type: true,
-      phone: true,
-      managerId: true,
-      manager: { select: { name: true } },
-      sales: {
-        select: {
-          returnedAt: true,
-          price: true,
-          currency: true,
-          qtySlabs: true,
-          qtyAreaM2: true,
-        },
-      },
-      debts: {
-        where: { status: "ACTIVE" },
-        select: { amount: true, currency: true, status: true },
-      },
-    },
+    select: clientListSelect,
   });
 
-  return rows.map((r) => {
-    const sales: SaleTotRow[] = r.sales.map((s) => ({
-      returnedAt: s.returnedAt,
-      price: s.price?.toString() ?? null,
-      currency: (s.currency as MoneyCurrency | null) ?? null,
-      qtySlabs: s.qtySlabs,
-      qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
-    }));
-    const debts: DebtTotRow[] = r.debts.map((d) => ({
-      status: d.status as DebtTotRow["status"],
-      amount: d.amount.toString(),
-      currency: d.currency as MoneyCurrency,
-    }));
-    const vol = volumeTotalsFromSales(sales);
-    return {
-      id: r.id,
-      name: r.name,
-      type: r.type as ClientType,
-      phone: r.phone,
-      managerId: r.managerId,
-      managerName: r.manager.name,
-      saleCount: vol.saleCount,
-      purchaseTotals: purchaseTotalsFromSales(sales),
-      hasActiveDebt: debts.length > 0,
-      activeDebtTotals: debtTotalsFromDebts(debts),
-    };
+  return rows.map(mapClientListRow);
+}
+
+// ───────────── W3-T5: keyset pagination for /klienty ─────────────
+// Compound cursor over the list's natural sort (name ASC) + id ASC —
+// same «страницы без пропусков» contract as debts.ts / sale-history.ts.
+// Id-only cursors over a two-column order skip/duplicate on name ties.
+
+export const CLIENTS_DIRECTORY_PAGE_SIZE = 50;
+const CLIENTS_DIRECTORY_MAX_PAGE = 100;
+
+export type ClientsDirectoryCursor = {
+  name: string;
+  id: string;
+};
+
+/**
+ * Cursor: `${encodeURIComponent(name)}_${id}`. Client names may contain "_",
+ * but ids are cuid (no underscore) — parse splits on the LAST underscore.
+ */
+export function encodeClientsCursor(c: ClientsDirectoryCursor): string {
+  return `${encodeURIComponent(c.name)}_${c.id}`;
+}
+
+/** Malformed / legacy id-only → null (caller serves an empty page, not page one). */
+export function parseClientsCursor(
+  raw: string | null | undefined,
+): ClientsDirectoryCursor | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  const i = s.lastIndexOf("_");
+  if (i <= 0) return null;
+  const id = s.slice(i + 1);
+  if (!id) return null;
+  try {
+    return { name: decodeURIComponent(s.slice(0, i)), id };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Filters + compound keyset. Order: name ASC, id ASC.
+ * Next page: name > c.name OR (name = c.name AND id > c.id).
+ */
+export function clientsDirectoryWhere(
+  filters: Omit<ClientListFilters, "take">,
+  cursor: ClientsDirectoryCursor | null,
+): Prisma.ClientWhereInput {
+  const base = clientSearchWhere({
+    q: normalizeClientSearchQuery(filters.q ?? ""),
+    canSeeAllClients: filters.canSeeAllClients,
+    actorId: filters.actorId,
+    type: filters.type,
+    managerId: filters.managerId,
   });
+  if (!cursor) return base;
+  return {
+    AND: [
+      base,
+      {
+        OR: [
+          { name: { gt: cursor.name } },
+          { name: cursor.name, id: { gt: cursor.id } },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Paginated directory list. `nextCursor !== null` ⟺ more rows exist
+ * (poisk invariant): «Показать ещё» renders exactly when nextCursor is set.
+ */
+export async function listClientsDirectoryPage(
+  db: Db,
+  filters: Omit<ClientListFilters, "take"> & {
+    cursor?: string | null;
+    pageSize?: number;
+  },
+): Promise<{ items: ClientListItem[]; nextCursor: string | null }> {
+  const pageSize = Math.min(
+    CLIENTS_DIRECTORY_MAX_PAGE,
+    Math.max(1, filters.pageSize ?? CLIENTS_DIRECTORY_PAGE_SIZE),
+  );
+
+  // Non-empty but unparseable cursor → empty page, never a silent restart.
+  if (filters.cursor != null && String(filters.cursor).trim() !== "") {
+    if (!parseClientsCursor(filters.cursor)) {
+      return { items: [], nextCursor: null };
+    }
+  }
+  const cursor = parseClientsCursor(filters.cursor);
+  const where = clientsDirectoryWhere(filters, cursor);
+
+  const rows = await db.client.findMany({
+    where,
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    take: pageSize + 1,
+    select: clientListSelect,
+  });
+
+  const page = rows.slice(0, pageSize);
+  const last = page[page.length - 1];
+  const nextCursor =
+    rows.length > pageSize && last
+      ? encodeClientsCursor({ name: last.name, id: last.id })
+      : null;
+
+  return { items: page.map(mapClientListRow), nextCursor };
 }
 
 export type ClientCard = {

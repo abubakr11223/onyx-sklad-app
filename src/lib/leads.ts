@@ -210,6 +210,32 @@ export interface LeadListItem {
 /** Hard cap for manager queue — avoids unbounded scan. */
 export const LEAD_LIST_LIMIT = 200;
 
+/** Общий select строки заявки — один набор полей для списка и для страниц. */
+const leadListSelect = {
+  id: true,
+  status: true,
+  kind: true,
+  requestedSlabs: true,
+  requestedAreaM2: true,
+  contact: true,
+  note: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: { select: { name: true } },
+  stoneType: { select: { id: true, name: true } },
+  assignedManager: { select: { name: true } },
+} satisfies Prisma.LeadSelect;
+
+/**
+ * Порядок списка: сначала новые (status ASC = NEW → CONTACTED → CLOSED),
+ * внутри статуса — свежие сверху. `id` — тай-брейк для keyset-страниц.
+ */
+const LEADS_ORDER_BY: Prisma.LeadOrderByWithRelationInput[] = [
+  { status: "asc" },
+  { createdAt: "desc" },
+  { id: "desc" },
+];
+
 /**
  * Список лидов для менеджера/владельца. По умолчанию — все, новые сверху
  * (индекс status, createdAt). Опционально фильтр по статусу. Always bounded.
@@ -226,21 +252,139 @@ export async function listLeads(
     where: opts.status ? { status: opts.status } : undefined,
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take,
-    select: {
-      id: true,
-      status: true,
-      kind: true,
-      requestedSlabs: true,
-      requestedAreaM2: true,
-      contact: true,
-      note: true,
-      createdAt: true,
-      updatedAt: true,
-      createdBy: { select: { name: true } },
-      stoneType: { select: { id: true, name: true } },
-      assignedManager: { select: { name: true } },
-    },
+    select: leadListSelect,
   });
+}
+
+// ───────────── W3-T5: keyset-страницы для /zayavki ─────────────
+// Очередь заявок росла молча: после 200-й строки заявка просто исчезала со
+// страницы — «ни один интерес не теряется» переставало быть правдой.
+//
+// Составной курсор по ПОЛНОМУ порядку (status, createdAt, id), как в
+// debts.ts / sale-history.ts. Курсор только по id поверх многоколоночного
+// порядка пропускает и дублирует строки на совпадающих createdAt.
+
+export const LEADS_PAGE_SIZE = 50;
+
+export type LeadsListCursor = {
+  status: LeadStatus;
+  createdAt: Date;
+  id: string;
+};
+
+/** Курсор: `${status}_${createdAt.toISOString()}_${id}`. */
+export function encodeLeadsCursor(c: LeadsListCursor): string {
+  return `${c.status}_${c.createdAt.toISOString()}_${c.id}`;
+}
+
+/** Мусор / легаси-курсор «только id» → null (пустая страница, не рестарт). */
+export function parseLeadsCursor(
+  raw: string | null | undefined,
+): LeadsListCursor | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  const i1 = s.indexOf("_");
+  if (i1 <= 0) return null;
+  const status = s.slice(0, i1);
+  if (!isLeadStatus(status)) return null;
+  const i2 = s.indexOf("_", i1 + 1);
+  if (i2 <= i1 + 1) return null;
+  const id = s.slice(i2 + 1);
+  if (!id) return null;
+  const createdAt = new Date(s.slice(i1 + 1, i2));
+  if (Number.isNaN(createdAt.getTime())) return null;
+  return { status, createdAt, id };
+}
+
+/** Статусы, идущие СТРОГО после данного в порядке LEAD_STATUSES (status ASC). */
+export function leadStatusesAfter(status: LeadStatus): LeadStatus[] {
+  const i = LEAD_STATUSES.indexOf(status);
+  return i < 0 ? [] : [...LEAD_STATUSES].slice(i + 1);
+}
+
+/**
+ * Keyset-хвост для порядка status ASC, createdAt DESC, id DESC.
+ *
+ * Enum-фильтр в Prisma не умеет `gt`, поэтому шаг «статус ниже курсора» —
+ * это явный `in` по оставшимся статусам, а не сравнение.
+ */
+export function leadsKeysetWhere(
+  cursor: LeadsListCursor,
+): Prisma.LeadWhereInput {
+  const sameStatus: Prisma.LeadWhereInput = {
+    AND: [
+      { status: cursor.status },
+      {
+        OR: [
+          { createdAt: { lt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+        ],
+      },
+    ],
+  };
+  const after = leadStatusesAfter(cursor.status);
+  return after.length > 0
+    ? { OR: [sameStatus, { status: { in: after } }] }
+    : sameStatus;
+}
+
+/** Полный where страницы: фильтр по статусу + keyset (отдельной веткой AND). */
+export function leadsPageWhere(args: {
+  status?: LeadStatus;
+  cursor: LeadsListCursor | null;
+}): Prisma.LeadWhereInput | undefined {
+  const base: Prisma.LeadWhereInput | undefined = args.status
+    ? { status: args.status }
+    : undefined;
+  if (!args.cursor) return base;
+  const keyset = leadsKeysetWhere(args.cursor);
+  return base ? { AND: [base, keyset] } : keyset;
+}
+
+/**
+ * Страница очереди заявок. `nextCursor !== null` ⟺ есть ещё строки
+ * (инвариант /poisk): «Показать ещё» рисуется ровно тогда, когда курсор задан.
+ */
+export async function listLeadsPage(
+  db: Db,
+  opts: {
+    status?: LeadStatus;
+    cursor?: string | null;
+    pageSize?: number;
+  } = {},
+): Promise<{ items: LeadListItem[]; nextCursor: string | null }> {
+  const pageSize = Math.min(
+    LEAD_LIST_LIMIT,
+    Math.max(1, opts.pageSize ?? LEADS_PAGE_SIZE),
+  );
+
+  // Непустой, но неразбираемый курсор → пустая страница, без тихого рестарта.
+  if (opts.cursor != null && String(opts.cursor).trim() !== "") {
+    if (!parseLeadsCursor(opts.cursor)) {
+      return { items: [], nextCursor: null };
+    }
+  }
+  const cursor = parseLeadsCursor(opts.cursor);
+
+  const rows = await db.lead.findMany({
+    where: leadsPageWhere({ status: opts.status, cursor }),
+    orderBy: LEADS_ORDER_BY,
+    take: pageSize + 1,
+    select: leadListSelect,
+  });
+
+  const page = rows.slice(0, pageSize);
+  const last = page[page.length - 1];
+  const nextCursor =
+    rows.length > pageSize && last
+      ? encodeLeadsCursor({
+          status: last.status,
+          createdAt: last.createdAt,
+          id: last.id,
+        })
+      : null;
+
+  return { items: page, nextCursor };
 }
 
 /**

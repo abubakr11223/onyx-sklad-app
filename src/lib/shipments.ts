@@ -661,6 +661,219 @@ export function shipmentFiltersActive(f: ShipmentFilters): boolean {
   );
 }
 
+/**
+ * Общий select строки списка — используют и `listShipments` (легаси, «последние
+ * N»), и `listShipmentsPage` (keyset-страницы). Один набор полей: список не
+ * должен расходиться между вызовами.
+ */
+const shipmentListSelect = {
+  id: true,
+  kind: true,
+  createdAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  managerId: true,
+  manager: { select: { name: true } },
+  client: { select: { name: true } },
+  site: { select: { name: true } },
+  saleRecord: {
+    select: {
+      id: true,
+      soldAt: true,
+      customerName: true,
+      targetType: true,
+      qtySlabs: true,
+      qtyAreaM2: true,
+      slab: {
+        select: {
+          label: true,
+          stoneType: { select: { name: true } },
+        },
+      },
+      piece: {
+        select: {
+          kind: true,
+          stoneType: { select: { name: true } },
+        },
+      },
+      batch: { select: { stoneType: { select: { name: true } } } },
+    },
+  },
+  sample: {
+    select: {
+      id: true,
+      returnDueDate: true,
+      targetType: true,
+      qtySlabs: true,
+      qtyAreaM2: true,
+      client: { select: { name: true } },
+      slab: {
+        select: {
+          label: true,
+          stoneType: { select: { name: true } },
+        },
+      },
+      piece: {
+        select: {
+          kind: true,
+          stoneType: { select: { name: true } },
+        },
+      },
+      batch: { select: { stoneType: { select: { name: true } } } },
+    },
+  },
+  // ТЗ №15 §3.1 — «Комментарий менеджера (если есть)». Писался при создании
+  // отгрузки, но в очередь не выбирался, поэтому складчик его не видел.
+  note: true,
+  isUrgent: true,
+  lines: {
+    select: {
+      id: true,
+      targetType: true,
+      qtyOrderedSlabs: true,
+      qtyOrderedAreaM2: true,
+      qtyShippedSlabs: true,
+      qtyShippedAreaM2: true,
+      locationSnapshot: true,
+      slab: {
+        select: {
+          label: true,
+          // ТЗ №15 §3.1 — «размеры (см)»: складчик должен видеть габарит
+          // того, что выдаёт, не открывая карточку камня.
+          lengthMm: true,
+          widthMm: true,
+          thicknessMm: true,
+          stoneType: { select: { name: true } },
+        },
+      },
+      piece: {
+        select: {
+          kind: true,
+          boundingLengthMm: true,
+          boundingWidthMm: true,
+          thicknessMm: true,
+          stoneType: { select: { name: true } },
+        },
+      },
+    },
+    take: 5,
+  },
+} satisfies Prisma.ShipmentSelect;
+
+type ShipmentListRow = Prisma.ShipmentGetPayload<{
+  select: typeof shipmentListSelect;
+}>;
+
+function mapShipmentListRow(r: ShipmentListRow): ShipmentListItem {
+  const lines = r.lines.map((l) => ({
+    targetType: l.targetType,
+    qtyOrderedSlabs: l.qtyOrderedSlabs,
+    qtyOrderedAreaM2:
+      l.qtyOrderedAreaM2 == null
+        ? null
+        : Number(l.qtyOrderedAreaM2.toString()),
+    qtyShippedSlabs: l.qtyShippedSlabs,
+    qtyShippedAreaM2: Number(l.qtyShippedAreaM2.toString()),
+  }));
+  const status = deriveShipmentStatus({
+    cancelledAt: r.cancelledAt,
+    completedAt: r.completedAt,
+    lines,
+  });
+  const sale = r.saleRecord;
+  const sample = r.sample;
+  const line0 = r.lines[0];
+  let stoneLabel = "—";
+  if (sale?.slab) {
+    stoneLabel = `${sale.slab.stoneType.name} — ${sale.slab.label}`;
+  } else if (sale?.piece) {
+    const k = sale.piece.kind === "BROKEN" ? "бой" : "остаток";
+    stoneLabel = `${sale.piece.stoneType.name} — ${k}`;
+  } else if (sale?.batch) {
+    stoneLabel = `${sale.batch.stoneType.name} — объём`;
+  } else if (sample?.slab) {
+    stoneLabel = `${sample.slab.stoneType.name} — ${sample.slab.label}`;
+  } else if (sample?.piece) {
+    const k = sample.piece.kind === "BROKEN" ? "бой" : "остаток";
+    stoneLabel = `${sample.piece.stoneType.name} — ${k}`;
+  } else if (sample?.batch) {
+    stoneLabel = `${sample.batch.stoneType.name} — объём (образец)`;
+  } else if (line0?.slab) {
+    stoneLabel = `${line0.slab.stoneType.name} — ${line0.slab.label}`;
+  } else if (line0?.piece) {
+    const k = line0.piece.kind === "BROKEN" ? "бой" : "остаток";
+    stoneLabel = `${line0.piece.stoneType.name} — ${k}`;
+  }
+  // ТЗ №15 §3.1 «размеры (см)». Берём с СТРОКИ отгрузки — это ровно та
+  // единица, которую складчик несёт. Объёмная продажа габарита не имеет
+  // (партия, а не конкретная плита) → null, и в UI строка просто не рисуется.
+  const gabarit = line0?.slab
+    ? formatGabarit(
+        line0.slab.lengthMm,
+        line0.slab.widthMm,
+        thicknessToNumber(line0.slab.thicknessMm),
+      )
+    : line0?.piece
+      ? formatGabarit(
+          line0.piece.boundingLengthMm,
+          line0.piece.boundingWidthMm,
+          thicknessToNumber(line0.piece.thicknessMm),
+        )
+      : null;
+  return {
+    id: r.id,
+    status,
+    statusLabel: shipmentStatusLabelRu(status),
+    kind: r.kind,
+    isSample: r.kind === "SAMPLE",
+    isShowroom: r.kind === "SHOWROOM",
+    createdAt: r.createdAt,
+    completedAt: r.completedAt,
+    managerId: r.managerId,
+    managerName: r.manager.name,
+    clientName:
+      r.kind === "SHOWROOM"
+        ? "Шоу-рум"
+        : (r.client?.name ??
+          sample?.client?.name ??
+          sale?.customerName ??
+          null),
+    siteName: r.site?.name ?? null,
+    saleId: sale?.id ?? null,
+    sampleId: sample?.id ?? null,
+    soldAt: sale?.soldAt ?? null,
+    returnDueDate: sample?.returnDueDate ?? null,
+    stoneLabel,
+    // formatGabarit отдаёт «—», когда длина/ширина не заданы: в списке это
+    // шум, поэтому приводим к null и не рисуем строку вовсе.
+    gabarit: gabarit && gabarit !== "—" ? gabarit : null,
+    note: r.note ?? null,
+    isUrgent: r.isUrgent === true,
+    locationSnapshot: line0?.locationSnapshot ?? null,
+    qtyOrderedSlabs: line0?.qtyOrderedSlabs ?? null,
+    qtyOrderedAreaM2:
+      line0?.qtyOrderedAreaM2 == null
+        ? null
+        : Number(line0.qtyOrderedAreaM2.toString()),
+    qtyShippedSlabs: line0?.qtyShippedSlabs ?? 0,
+    qtyShippedAreaM2: line0
+      ? Number(line0.qtyShippedAreaM2.toString())
+      : 0,
+    lineId: line0?.id ?? "",
+    targetType: line0?.targetType ?? "SLAB",
+  };
+}
+
+/**
+ * ТЗ №15 §8.5 — срочные сверху, дальше свежие. Порядок именно такой:
+ * складчик открывает очередь и сразу видит, что клиент ждёт.
+ */
+const SHIPMENTS_ORDER_BY: Prisma.ShipmentOrderByWithRelationInput[] = [
+  { isUrgent: "desc" },
+  { createdAt: "desc" },
+  { id: "desc" },
+];
+
 /** Bounded list. SALE + SAMPLE + SHOWROOM. tab=open → not cancelled & not completed; archive → completed/cancelled. */
 export async function listShipments(
   database: Db,
@@ -684,204 +897,156 @@ export async function listShipments(
 
   const rows = await database.shipment.findMany({
     where,
-    // ТЗ №15 §8.5 — срочные сверху, дальше свежие. Порядок именно такой:
-    // складчик открывает очередь и сразу видит, что клиент ждёт.
-    orderBy: [{ isUrgent: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    orderBy: SHIPMENTS_ORDER_BY,
     take,
-    select: {
-      id: true,
-      kind: true,
-      createdAt: true,
-      completedAt: true,
-      cancelledAt: true,
-      managerId: true,
-      manager: { select: { name: true } },
-      client: { select: { name: true } },
-      site: { select: { name: true } },
-      saleRecord: {
-        select: {
-          id: true,
-          soldAt: true,
-          customerName: true,
-          targetType: true,
-          qtySlabs: true,
-          qtyAreaM2: true,
-          slab: {
-            select: {
-              label: true,
-              stoneType: { select: { name: true } },
-            },
-          },
-          piece: {
-            select: {
-              kind: true,
-              stoneType: { select: { name: true } },
-            },
-          },
-          batch: { select: { stoneType: { select: { name: true } } } },
-        },
-      },
-      sample: {
-        select: {
-          id: true,
-          returnDueDate: true,
-          targetType: true,
-          qtySlabs: true,
-          qtyAreaM2: true,
-          client: { select: { name: true } },
-          slab: {
-            select: {
-              label: true,
-              stoneType: { select: { name: true } },
-            },
-          },
-          piece: {
-            select: {
-              kind: true,
-              stoneType: { select: { name: true } },
-            },
-          },
-          batch: { select: { stoneType: { select: { name: true } } } },
-        },
-      },
-      // ТЗ №15 §3.1 — «Комментарий менеджера (если есть)». Писался при создании
-      // отгрузки, но в очередь не выбирался, поэтому складчик его не видел.
-      note: true,
-      isUrgent: true,
-      lines: {
-        select: {
-          id: true,
-          targetType: true,
-          qtyOrderedSlabs: true,
-          qtyOrderedAreaM2: true,
-          qtyShippedSlabs: true,
-          qtyShippedAreaM2: true,
-          locationSnapshot: true,
-          slab: {
-            select: {
-              label: true,
-              // ТЗ №15 §3.1 — «размеры (см)»: складчик должен видеть габарит
-              // того, что выдаёт, не открывая карточку камня.
-              lengthMm: true,
-              widthMm: true,
-              thicknessMm: true,
-              stoneType: { select: { name: true } },
-            },
-          },
-          piece: {
-            select: {
-              kind: true,
-              boundingLengthMm: true,
-              boundingWidthMm: true,
-              thicknessMm: true,
-              stoneType: { select: { name: true } },
-            },
-          },
-        },
-        take: 5,
-      },
-    },
+    select: shipmentListSelect,
   });
 
-  return rows.map((r) => {
-    const lines = r.lines.map((l) => ({
-      targetType: l.targetType,
-      qtyOrderedSlabs: l.qtyOrderedSlabs,
-      qtyOrderedAreaM2:
-        l.qtyOrderedAreaM2 == null
-          ? null
-          : Number(l.qtyOrderedAreaM2.toString()),
-      qtyShippedSlabs: l.qtyShippedSlabs,
-      qtyShippedAreaM2: Number(l.qtyShippedAreaM2.toString()),
-    }));
-    const status = deriveShipmentStatus({
-      cancelledAt: r.cancelledAt,
-      completedAt: r.completedAt,
-      lines,
-    });
-    const sale = r.saleRecord;
-    const sample = r.sample;
-    const line0 = r.lines[0];
-    let stoneLabel = "—";
-    if (sale?.slab) {
-      stoneLabel = `${sale.slab.stoneType.name} — ${sale.slab.label}`;
-    } else if (sale?.piece) {
-      const k = sale.piece.kind === "BROKEN" ? "бой" : "остаток";
-      stoneLabel = `${sale.piece.stoneType.name} — ${k}`;
-    } else if (sale?.batch) {
-      stoneLabel = `${sale.batch.stoneType.name} — объём`;
-    } else if (sample?.slab) {
-      stoneLabel = `${sample.slab.stoneType.name} — ${sample.slab.label}`;
-    } else if (sample?.piece) {
-      const k = sample.piece.kind === "BROKEN" ? "бой" : "остаток";
-      stoneLabel = `${sample.piece.stoneType.name} — ${k}`;
-    } else if (sample?.batch) {
-      stoneLabel = `${sample.batch.stoneType.name} — объём (образец)`;
-    } else if (line0?.slab) {
-      stoneLabel = `${line0.slab.stoneType.name} — ${line0.slab.label}`;
-    } else if (line0?.piece) {
-      const k = line0.piece.kind === "BROKEN" ? "бой" : "остаток";
-      stoneLabel = `${line0.piece.stoneType.name} — ${k}`;
-    }
-    // ТЗ №15 §3.1 «размеры (см)». Берём с СТРОКИ отгрузки — это ровно та
-    // единица, которую складчик несёт. Объёмная продажа габарита не имеет
-    // (партия, а не конкретная плита) → null, и в UI строка просто не рисуется.
-    const gabarit = line0?.slab
-      ? formatGabarit(
-          line0.slab.lengthMm,
-          line0.slab.widthMm,
-          thicknessToNumber(line0.slab.thicknessMm),
-        )
-      : line0?.piece
-        ? formatGabarit(
-            line0.piece.boundingLengthMm,
-            line0.piece.boundingWidthMm,
-            thicknessToNumber(line0.piece.thicknessMm),
-          )
-        : null;
-    return {
-      id: r.id,
-      status,
-      statusLabel: shipmentStatusLabelRu(status),
-      kind: r.kind,
-      isSample: r.kind === "SAMPLE",
-      isShowroom: r.kind === "SHOWROOM",
-      createdAt: r.createdAt,
-      completedAt: r.completedAt,
-      managerId: r.managerId,
-      managerName: r.manager.name,
-      clientName:
-        r.kind === "SHOWROOM"
-          ? "Шоу-рум"
-          : (r.client?.name ??
-            sample?.client?.name ??
-            sale?.customerName ??
-            null),
-      siteName: r.site?.name ?? null,
-      saleId: sale?.id ?? null,
-      sampleId: sample?.id ?? null,
-      soldAt: sale?.soldAt ?? null,
-      returnDueDate: sample?.returnDueDate ?? null,
-      stoneLabel,
-      // formatGabarit отдаёт «—», когда длина/ширина не заданы: в списке это
-      // шум, поэтому приводим к null и не рисуем строку вовсе.
-      gabarit: gabarit && gabarit !== "—" ? gabarit : null,
-      note: r.note ?? null,
-      isUrgent: r.isUrgent === true,
-      locationSnapshot: line0?.locationSnapshot ?? null,
-      qtyOrderedSlabs: line0?.qtyOrderedSlabs ?? null,
-      qtyOrderedAreaM2:
-        line0?.qtyOrderedAreaM2 == null
-          ? null
-          : Number(line0.qtyOrderedAreaM2.toString()),
-      qtyShippedSlabs: line0?.qtyShippedSlabs ?? 0,
-      qtyShippedAreaM2: line0
-        ? Number(line0.qtyShippedAreaM2.toString())
-        : 0,
-      lineId: line0?.id ?? "",
-      targetType: line0?.targetType ?? "SLAB",
-    };
+  return rows.map(mapShipmentListRow);
+}
+
+// ───────────── W3-T5: keyset-страницы для /otgruzki (очередь + архив) ─────────────
+// Раньше и очередь, и архив обрывались на «последних 100» без всякой ссылки
+// дальше: сотая отгрузка была последней, которую вообще можно увидеть.
+//
+// Составной курсор по ПОЛНОМУ порядку сортировки (isUrgent, createdAt, id) —
+// тот же контракт «страницы без пропусков», что в debts.ts / sale-history.ts.
+// Курсор только по id поверх многоколоночного порядка теряет и дублирует
+// строки на совпадающих createdAt (баг чинили дважды).
+
+export const SHIPMENTS_PAGE_SIZE = 50;
+
+export type ShipmentsListCursor = {
+  isUrgent: boolean;
+  createdAt: Date;
+  id: string;
+};
+
+/** Курсор: `${1|0}_${createdAt.toISOString()}_${id}`. */
+export function encodeShipmentsCursor(c: ShipmentsListCursor): string {
+  return `${c.isUrgent ? "1" : "0"}_${c.createdAt.toISOString()}_${c.id}`;
+}
+
+/**
+ * Разбор курсора. Мусор / легаси-курсор «только id» → null: вызывающий отдаёт
+ * пустую страницу, а не молча первую (иначе «Показать ещё» зациклится).
+ */
+export function parseShipmentsCursor(
+  raw: string | null | undefined,
+): ShipmentsListCursor | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  const i1 = s.indexOf("_");
+  if (i1 !== 1) return null;
+  const flag = s.slice(0, i1);
+  if (flag !== "0" && flag !== "1") return null;
+  const i2 = s.indexOf("_", i1 + 1);
+  if (i2 <= i1 + 1) return null;
+  const id = s.slice(i2 + 1);
+  if (!id) return null;
+  const createdAt = new Date(s.slice(i1 + 1, i2));
+  if (Number.isNaN(createdAt.getTime())) return null;
+  return { isUrgent: flag === "1", createdAt, id };
+}
+
+/**
+ * Keyset-хвост для порядка isUrgent DESC, createdAt DESC, id DESC.
+ *
+ * Boolean-фильтр в Prisma не умеет `lt`, поэтому шаг «isUrgent ниже курсора»
+ * выражен явно: после срочной строки идут все НЕсрочные (isUrgent: false),
+ * после несрочной — ничего ниже уже нет.
+ */
+export function shipmentsKeysetWhere(
+  cursor: ShipmentsListCursor,
+): Prisma.ShipmentWhereInput {
+  const sameUrgency: Prisma.ShipmentWhereInput = {
+    isUrgent: cursor.isUrgent,
+    OR: [
+      { createdAt: { lt: cursor.createdAt } },
+      { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+    ],
+  };
+  return cursor.isUrgent
+    ? { OR: [sameUrgency, { isUrgent: false }] }
+    : sameUrgency;
+}
+
+/**
+ * Полный where страницы: фильтры + область видимости + keyset.
+ * Keyset приходит ОТДЕЛЬНОЙ веткой AND: у базового where уже бывает свой OR
+ * (вкладка «архив», поиск по клиенту), склеивать их на одном уровне нельзя.
+ */
+export function shipmentsPageWhere(args: {
+  canSeeAll: boolean;
+  actorId: string | null;
+  tab: "open" | "archive";
+  filters?: ShipmentFilters;
+  cursor: ShipmentsListCursor | null;
+}): Prisma.ShipmentWhereInput {
+  const base = shipmentsListWhere({
+    canSeeAll: args.canSeeAll,
+    actorId: args.actorId,
+    tab: args.tab,
+    filters: args.filters,
   });
+  if (!args.cursor) return base;
+  return { AND: [base, shipmentsKeysetWhere(args.cursor)] };
+}
+
+/**
+ * Страница списка отгрузок. `nextCursor !== null` ⟺ есть ещё строки
+ * (инвариант /poisk): «Показать ещё» рисуется ровно тогда, когда курсор задан.
+ */
+export async function listShipmentsPage(
+  database: Db,
+  args: {
+    canSeeAll: boolean;
+    actorId: string | null;
+    tab: "open" | "archive";
+    filters?: ShipmentFilters;
+    cursor?: string | null;
+    pageSize?: number;
+  },
+): Promise<{ items: ShipmentListItem[]; nextCursor: string | null }> {
+  const pageSize = Math.min(
+    MAX_SHIPMENTS_PAGE,
+    Math.max(1, args.pageSize ?? SHIPMENTS_PAGE_SIZE),
+  );
+
+  // Непустой, но неразбираемый курсор → пустая страница, без тихого рестарта.
+  if (args.cursor != null && String(args.cursor).trim() !== "") {
+    if (!parseShipmentsCursor(args.cursor)) {
+      return { items: [], nextCursor: null };
+    }
+  }
+  const cursor = parseShipmentsCursor(args.cursor);
+  const where = shipmentsPageWhere({
+    canSeeAll: args.canSeeAll,
+    actorId: args.actorId,
+    tab: args.tab,
+    filters: args.filters,
+    cursor,
+  });
+
+  const rows = await database.shipment.findMany({
+    where,
+    orderBy: SHIPMENTS_ORDER_BY,
+    take: pageSize + 1,
+    select: shipmentListSelect,
+  });
+
+  const page = rows.slice(0, pageSize);
+  const last = page[page.length - 1];
+  const nextCursor =
+    rows.length > pageSize && last
+      ? encodeShipmentsCursor({
+          isUrgent: last.isUrgent === true,
+          createdAt: last.createdAt,
+          id: last.id,
+        })
+      : null;
+
+  return { items: page.map(mapShipmentListRow), nextCursor };
 }
 
 // ───────────────────── ТЗ №15 §8.3 — накладная отгрузки ─────────────────────
