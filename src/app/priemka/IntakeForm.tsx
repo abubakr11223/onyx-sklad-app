@@ -193,6 +193,10 @@ export default function IntakeForm({
         DRAFT_KEY,
         JSON.stringify({
           values,
+          // W3-T6 — режим «Из каталога / Новый вид» тоже в черновике: без него
+          // restore показывал каталог, поля нового вида были скрыты, и складчик
+          // думал, что черновик потерял данные (live 2026-08-28).
+          isNewType,
           locs,
           rowIds,
           patternsEnabled,
@@ -205,7 +209,7 @@ export default function IntakeForm({
       /* localStorage может быть недоступен — не критично */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mutationId intentionally omitted (see comment above)
-  }, [values, locs, rowIds, patternsEnabled, patRowIds, pats]);
+  }, [values, isNewType, locs, rowIds, patternsEnabled, patRowIds, pats]);
 
   // При монтировании: успех (?ok=1) → чистим черновик; иначе — восстанавливаем.
   // Microtask: setState sync effect emas. finally: draftReady=true (ref).
@@ -227,7 +231,10 @@ export default function IntakeForm({
         const raw = localStorage.getItem(DRAFT_KEY);
         if (!raw) return;
         const d = JSON.parse(raw) as {
-          values?: typeof values;
+          // Partial: старые черновики не содержат полей, добавленных позже
+          // (newDescription, newBasePrice, размеры…) — см. merge ниже.
+          values?: Partial<typeof values>;
+          isNewType?: boolean;
           locs?: typeof locs;
           rowIds?: number[];
           patternsEnabled?: boolean;
@@ -235,7 +242,26 @@ export default function IntakeForm({
           pats?: typeof pats;
           mutationId?: string;
         };
-        if (d.values) setValues(d.values);
+        // BUG-01: МЕРЖ поверх дефолтов, не замена. Черновик, записанный старой
+        // версией формы, не содержит полей, добавленных позже (newDescription,
+        // newBasePrice, размеры) — при замене они стали бы undefined, input'ы
+        // превратились бы в НЕконтролируемые, и ответ submitIntake с { errors }
+        // авто-сбросил бы введённое складчиком. Явный arrivedAt из черновика
+        // по-прежнему побеждает; отсутствующий — остаётся defaultDate.
+        if (d.values) setValues((v) => ({ ...v, ...d.values }));
+        // W3-T6 — восстанавливаем режим «Новый вид». Старый черновик без поля:
+        // если заполнено название нового вида (а каталожный вид не выбран) —
+        // это явно был режим «Новый вид», включаем его, чтобы поля были видны.
+        if (typeof d.isNewType === "boolean") {
+          setIsNewType(d.isNewType);
+        } else if (
+          d.values &&
+          typeof d.values.newName === "string" &&
+          d.values.newName.trim() !== "" &&
+          !d.values.stoneTypeId
+        ) {
+          setIsNewType(true);
+        }
         if (d.locs) setLocs(d.locs);
         if (Array.isArray(d.rowIds) && d.rowIds.length) {
           setRowIds(d.rowIds);

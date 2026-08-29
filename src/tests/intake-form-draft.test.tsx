@@ -139,6 +139,202 @@ describe("IntakeForm — черновик и hydrated-гейт", () => {
     ).toBeNull();
   });
 
+  // ── W3-T6 — режим «Из каталога / Новый вид» в черновике ──
+
+  it("W3-T6: старый черновик БЕЗ isNewType восстанавливается без падения (режим — каталог)", async () => {
+    // Старый payload: поля новых видов пустые, isNewType отсутствует.
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        values: {
+          stoneTypeId: "",
+          newName: "",
+          newRockType: "",
+          newColor: "",
+          slabsTotal: "40",
+          areaTotalM2: "220",
+          supplierNote: "OLD-NO-MODE",
+          arrivedAt: "2026-07-01",
+        },
+        locs: { 0: { block: "", landmark: "", slabsHere: "", areaHereM2: "" } },
+        rowIds: [0],
+        patternsEnabled: false,
+        patRowIds: [0],
+        pats: { 0: { description: "", thicknessMm: "", slabs: "", areaM2: "" } },
+      }),
+    );
+
+    render(<IntakeForm stoneTypes={[]} defaultDate="2026-07-25" />);
+
+    await screen.findByDisplayValue("OLD-NO-MODE");
+    // Режим по умолчанию — «Из каталога»: полей нового вида нет.
+    expect(screen.queryByPlaceholderText(/травертин noce/i)).toBeNull();
+  });
+
+  it("W3-T6: старый черновик без isNewType, но с заполненным newName → включается «Новый вид»", async () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        values: {
+          stoneTypeId: "",
+          newName: "Травертин Тест",
+          newRockType: "травертин",
+          newColor: "",
+          slabsTotal: "",
+          areaTotalM2: "",
+          supplierNote: "",
+          arrivedAt: "2026-07-01",
+        },
+        locs: { 0: { block: "", landmark: "", slabsHere: "", areaHereM2: "" } },
+        rowIds: [0],
+        patternsEnabled: false,
+        patRowIds: [0],
+        pats: { 0: { description: "", thicknessMm: "", slabs: "", areaM2: "" } },
+      }),
+    );
+
+    render(<IntakeForm stoneTypes={[]} defaultDate="2026-07-25" />);
+
+    // Поля «Нового вида» видимы сразу — с восстановленными значениями.
+    await screen.findByDisplayValue("Травертин Тест");
+    expect(screen.getByDisplayValue("травертин")).toBeTruthy();
+  });
+
+  it("W3-T6/BUG-01: старый частичный черновик мержится поверх дефолтов — новые поля остаются КОНТРОЛИРУЕМЫМИ", async () => {
+    // Черновик, записанный ДО W6-C и ТЗ №12: нет newDescription, newBasePrice,
+    // lengthMm/widthMm/thicknessMm и даже arrivedAt. Ветка вывода режима
+    // включает «Новый вид», поэтому эти поля монтируются. Если restore заменял
+    // бы весь values, они получили бы value={undefined} = неконтролируемые,
+    // и ответ submitIntake с { errors } стёр бы введённое складчиком.
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        values: {
+          stoneTypeId: "",
+          newName: "Оникс Легаси",
+          newRockType: "оникс",
+          newColor: "",
+          slabsTotal: "40",
+          areaTotalM2: "220",
+          supplierNote: "LEGACY-PARTIAL",
+        },
+        locs: { 0: { block: "", landmark: "", slabsHere: "", areaHereM2: "" } },
+        rowIds: [0],
+        patternsEnabled: false,
+        patRowIds: [0],
+        pats: { 0: { description: "", thicknessMm: "", slabs: "", areaM2: "" } },
+      }),
+    );
+
+    render(
+      <IntakeForm stoneTypes={[]} defaultDate="2026-07-25" canSeePrices />,
+    );
+
+    // Режим «Новый вид» выведен → поля видны, значения из черновика на месте.
+    await screen.findByDisplayValue("Оникс Легаси");
+    expect(screen.getByDisplayValue("оникс")).toBeTruthy();
+
+    // Поля, которых в старом черновике НЕТ, — контролируемые пустые строки.
+    const desc = screen.getByPlaceholderText(
+      /Светлый травертин/i,
+    ) as HTMLTextAreaElement;
+    expect(desc.value).toBe("");
+    expect((screen.getByPlaceholderText("например 95") as HTMLInputElement).value)
+      .toBe("");
+    for (const ph of ["280", "160", "2 или 1,8"]) {
+      expect((screen.getByPlaceholderText(ph) as HTMLInputElement).value).toBe("");
+    }
+
+    // Отсутствующий в черновике arrivedAt не стал undefined — остался дефолт.
+    expect(
+      (document.getElementById("arrivedAt") as HTMLInputElement).value,
+    ).toBe("2026-07-25");
+
+    // Главный пин мержа: пересохранённый черновик содержит ВСЕ ключи values
+    // (при замене вместо мержа undefined-поля выпали бы из JSON).
+    await waitFor(() => {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      expect(raw).toBeTruthy();
+      const saved = JSON.parse(raw!);
+      expect(saved.values.supplierNote).toBe("LEGACY-PARTIAL");
+      expect(saved.values.arrivedAt).toBe("2026-07-25");
+      for (const key of [
+        "newDescription",
+        "newBasePrice",
+        "lengthMm",
+        "widthMm",
+        "thicknessMm",
+      ]) {
+        expect(saved.values[key]).toBe("");
+      }
+    });
+  });
+
+  it("W3-T6: новый черновик round-trip'ит isNewType (сохраняется и восстанавливается)", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const { unmount } = render(
+      <IntakeForm stoneTypes={[]} defaultDate="2026-07-25" />,
+    );
+    await flushDraftGate();
+
+    // Пользователь переключается на «Новый вид» и вводит название.
+    fireEvent.click(screen.getByRole("button", { name: "Новый вид" }));
+    const name = await screen.findByPlaceholderText(/травертин noce/i);
+    fireEvent.change(name, { target: { value: "Оникс Round-Trip" } });
+
+    await waitFor(() => {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      expect(raw).toBeTruthy();
+      const saved = JSON.parse(raw!);
+      expect(saved.isNewType).toBe(true);
+      expect(saved.values.newName).toBe("Оникс Round-Trip");
+    });
+
+    unmount();
+    cleanup();
+
+    // Повторный mount: режим «Новый вид» активен, поля видны сразу.
+    render(<IntakeForm stoneTypes={[]} defaultDate="2026-07-25" />);
+    await screen.findByDisplayValue("Оникс Round-Trip");
+    expect(screen.getByText(/восстановлен незаконченный черновик/i)).toBeTruthy();
+  });
+
+  it("W3-T6: «Очистить и начать заново» удаляет черновик вместе с isNewType", async () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        values: {
+          stoneTypeId: "",
+          newName: "Удаляемый вид",
+          newRockType: "гранит",
+          newColor: "",
+          slabsTotal: "",
+          areaTotalM2: "",
+          supplierNote: "",
+          arrivedAt: "2026-07-01",
+        },
+        isNewType: true,
+        locs: { 0: { block: "", landmark: "", slabsHere: "", areaHereM2: "" } },
+        rowIds: [0],
+        patternsEnabled: false,
+        patRowIds: [0],
+        pats: { 0: { description: "", thicknessMm: "", slabs: "", areaM2: "" } },
+      }),
+    );
+
+    const { fireEvent } = await import("@testing-library/react");
+    render(<IntakeForm stoneTypes={[]} defaultDate="2026-07-25" />);
+
+    await screen.findByDisplayValue("Удаляемый вид");
+    fireEvent.click(
+      screen.getByRole("button", { name: /очистить и начать заново/i }),
+    );
+
+    // Черновик стёрт целиком (полная перезагрузка в jsdom не выполняется,
+    // но ключ localStorage должен исчезнуть сразу).
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
   it("bo'sh localStorage mount → user inputsiz DRAFT_KEY null qoladi", async () => {
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
     render(<IntakeForm stoneTypes={[]} defaultDate="2026-07-25" />);
