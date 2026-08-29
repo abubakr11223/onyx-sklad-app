@@ -14,11 +14,10 @@ import { formatTashkentDate } from "@/lib/datetime";
 import NoAccess from "@/components/NoAccess";
 import { decodeShapeDraft } from "@/lib/singan";
 import { renderChertyoj } from "@/lib/chertyoj";
-import { submitSingan } from "./actions";
-import { BREAK_CAUSES } from "@/lib/breaking";
-import Button, { buttonClass } from "@/components/ui/Button";
+import SinganForm, { type SinganBatchOption } from "./SinganForm";
+import { sortBlockOptions, sortLandmarks } from "@/lib/warehouse-grid";
+import { buttonClass } from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
-import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
 
 export const metadata: Metadata = {
@@ -69,7 +68,6 @@ export default async function SinganPage({
   const photoWarn = first(sp.photoWarn) === "1";
   const stoneId = first(sp.stone);
   const causeLabel = first(sp.cause);
-  const err = first(sp.err);
 
   // ── Yakuniy panel: sof muvaffaqiyat yoki piece OK + photo yo'q (photoWarn) ──
   if (ok) {
@@ -173,190 +171,62 @@ export default async function SinganPage({
 
   // AI-chertyoj: tomonlar 1..N raqamlangan. SVG'ni BIZ validatsiyadan o'tgan
   // polygon'dan renderChertyoj bilan yasadik (yozuvlar escapeXml qilinadi) —
-  // shuning uchun dangerouslySetInnerHTML bu yerda xavfsiz.
+  // shuning uchun dangerouslySetInnerHTML bu yerda xavfsiz (SinganForm ichida).
   const svg = renderChertyoj(draft.vertices);
-  const sideNumbers = draft.vertices.map((_, i) => i + 1);
 
-  const batchRows = await db.batch.findMany({
-    orderBy: [{ stoneType: { name: "asc" } }, { arrivedAt: "desc" }],
-    select: {
-      id: true,
-      arrivedAt: true,
-      slabsTotal: true,
-      areaTotalM2: true,
-      stoneType: { select: { name: true } },
-    },
+  const [batchRows, gridBlocks] = await Promise.all([
+    db.batch.findMany({
+      orderBy: [{ stoneType: { name: "asc" } }, { arrivedAt: "desc" }],
+      select: {
+        id: true,
+        arrivedAt: true,
+        slabsTotal: true,
+        areaTotalM2: true,
+        stoneType: { select: { name: true } },
+      },
+    }),
+    // ТЗ №17 §6 — блок выбирается из карты склада (как в приёмке и /razbit).
+    db.warehouseBlock.findMany({
+      select: { letter: true, landmarks: { select: { number: true } } },
+    }),
+  ]);
+
+  const batches: SinganBatchOption[] = batchRows.map((b) => {
+    const qty = [
+      b.slabsTotal !== null && `${b.slabsTotal} плит`,
+      b.areaTotalM2 !== null && `${m2Fmt.format(Number(b.areaTotalM2))} м²`,
+    ]
+      .filter(Boolean)
+      .join(" / ");
+    return {
+      id: b.id,
+      label:
+        `${b.stoneType.name} — ${formatTashkentDate(b.arrivedAt)}` +
+        (qty ? ` (${qty})` : ""),
+    };
   });
+
+  // ТЗ №18 §6 — тот же порядок блоков, что на карте склада и в приёмке.
+  const blocks = sortBlockOptions(
+    gridBlocks.map((b) => ({
+      letter: b.letter,
+      landmarks: sortLandmarks(b.landmarks.map((l) => l.number)),
+    })),
+  );
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
       <PageHeader subtitle="AI распознал форму куска. Измерьте каждую сторону рулеткой и введите размеры в см — номера сторон совпадают с чертежом." />
 
-      {err && (
-        <Alert variant="danger" className="mb-6">
-          {err}
-        </Alert>
-      )}
-
-      <div className="mb-6 flex justify-center rounded-card border border-ink/10 bg-paper-2/60 p-4">
-        {/* SVG — bizning renderChertyoj mahsuloti (validatsiya + ekranlash).
-            Ko'rsatish usuli O'ZGARMADI: inline-SVG dangerouslySetInnerHTML orqali. */}
-        <div dangerouslySetInnerHTML={{ __html: svg }} />
-      </div>
-
-      <form action={submitSingan} className="flex flex-col gap-6">
-        <input type="hidden" name="d" value={first(sp.d) ?? ""} />
-
-        {/* ── Стороны ── */}
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold text-ink">
-            Стороны, см ({draft.vertices.length})
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            {sideNumbers.map((n) => (
-              <Field
-                key={n}
-                id={`side_${n}`}
-                name={`side_${n}`}
-                inputMode="numeric"
-                label={`Сторона ${n}`}
-                placeholder="напр. 118"
-                required
-              />
-            ))}
-          </div>
-        </Card>
-
-        {/* ── Габариты и площадь ── */}
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold text-ink">Габариты и площадь</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              id="boundingLengthMm"
-              name="boundingLengthMm"
-              inputMode="numeric"
-              label="Длина, см"
-              required
-            />
-            <Field
-              id="boundingWidthMm"
-              name="boundingWidthMm"
-              inputMode="numeric"
-              label="Ширина, см"
-              required
-            />
-            <Field
-              id="thicknessMm"
-              name="thicknessMm"
-              inputMode="numeric"
-              label="Толщина, см"
-              placeholder="необязательно"
-            />
-            <Field
-              id="areaM2"
-              name="areaM2"
-              inputMode="decimal"
-              label="Площадь, м²"
-              placeholder="необязательно"
-            />
-          </div>
-        </Card>
-
-        {/* ── Партия и место ── */}
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold text-ink">Партия и место</h2>
-          <div className="flex flex-col gap-4">
-            <Field id="kind" label="Тип">
-              <select
-                id="kind"
-                name="kind"
-                defaultValue="BROKEN"
-                className={inputClass}
-              >
-                <option value="BROKEN">Бой</option>
-                <option value="OFFCUT">Остаток</option>
-              </select>
-            </Field>
-            <Field id="batchId" label="Партия (камень)">
-              <select id="batchId" name="batchId" required className={inputClass}>
-                <option value="">— выберите партию —</option>
-                {batchRows.map((b) => {
-                  const qty = [
-                    b.slabsTotal !== null && `${b.slabsTotal} плит`,
-                    b.areaTotalM2 !== null &&
-                      `${m2Fmt.format(Number(b.areaTotalM2))} м²`,
-                  ]
-                    .filter(Boolean)
-                    .join(" / ");
-                  return (
-                    <option key={b.id} value={b.id}>
-                      {b.stoneType.name} — {formatTashkentDate(b.arrivedAt)}
-                      {qty && ` (${qty})`}
-                    </option>
-                  );
-                })}
-              </select>
-            </Field>
-            <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">
-              Кусок списывает <strong>1 плиту</strong> из свободного остатка
-              партии (учёт §3).
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <Field
-                id="block"
-                name="block"
-                label="Блок"
-                placeholder="напр. А"
-                required
-              />
-              <Field
-                id="landmark"
-                name="landmark"
-                label="Ориентир"
-                placeholder="напр. 2"
-                required
-              />
-            </div>
-            {/* TZ §5.6 — same cause list as /razbit (both paths → AuditLog). */}
-            <Field id="breakCause" label="Причина">
-              <select
-                id="breakCause"
-                name="breakCause"
-                required
-                defaultValue=""
-                className={inputClass}
-              >
-                <option value="" disabled>
-                  — выберите —
-                </option>
-                {BREAK_CAUSES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.labelRu}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field
-              id="breakCauseNote"
-              name="breakCauseNote"
-              label="Пояснение (если «Другое»)"
-              placeholder="необязательно, до 80 символов"
-            />
-          </div>
-        </Card>
-
-        {/* Липкая нижняя панель отправки — CTA под большим пальцем на мобиле;
-            на десктопе (md:) возвращается в обычный поток. Реальный submit
-            серверного экшена (без JS) сохраняется. */}
-        <div
-          className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
-                     md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
-        >
-          <Button type="submit" className="min-h-14 w-full text-lg font-bold">
-            Сохранить
-          </Button>
-        </div>
-      </form>
+      {/* W3-T2 — ошибки больше не редиректят на ?err= (введённое стиралось):
+          форма клиентская, ошибки показываются на полях, значения остаются. */}
+      <SinganForm
+        d={first(sp.d) ?? ""}
+        svg={svg}
+        sideCount={draft.vertices.length}
+        batches={batches}
+        blocks={blocks}
+      />
     </main>
   );
 }
