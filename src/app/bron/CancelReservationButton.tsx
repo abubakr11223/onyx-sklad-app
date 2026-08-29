@@ -1,12 +1,42 @@
 "use client";
 
 // «Снять бронь» через модал-подтверждение (вместо инлайн-<details>). Серверный
-// action приходит пропом (стандартный паттерн server action → client). На отправке
-// показываем тост; сам action делает revalidate — бронь уходит из списка.
+// action приходит пропом (стандартный паттерн server action → client).
+//
+// W3-T1: раньше тост «Бронь снята» показывался в onSubmit — ДО ответа сервера.
+// При отказе (чужая бронь, нет доступа) менеджер видел зелёный «снята» и рядом
+// красную ошибку. Успех подтверждает только сервер: redirect /bron?cancelled=1
+// рисует баннер на странице. Здесь остаётся лишь состояние «идёт снятие».
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { toast } from "@/components/ui/toast";
+
+/** Кнопки внутри <form> — useFormStatus виден только потомкам формы. */
+function CancelActions({ onClose }: { onClose: () => void }) {
+  const { pending } = useFormStatus();
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        className="flex-1"
+        disabled={pending}
+        onClick={onClose}
+      >
+        Отмена
+      </Button>
+      <Button
+        type="submit"
+        variant="danger"
+        className="flex-1"
+        disabled={pending}
+      >
+        {pending ? "Снятие…" : "Да, снять"}
+      </Button>
+    </>
+  );
+}
 
 export default function CancelReservationButton({
   reservationId,
@@ -30,26 +60,9 @@ export default function CancelReservationButton({
           Камень <span className="font-medium text-ink">«{label}»</span> вернётся
           «В наличии». Отменить это нельзя.
         </p>
-        <form
-          action={action}
-          onSubmit={() => {
-            toast("Бронь снята", "success");
-            setOpen(false);
-          }}
-          className="mt-5 flex gap-2.5"
-        >
+        <form action={action} className="mt-5 flex gap-2.5">
           <input type="hidden" name="reservationId" value={reservationId} />
-          <Button
-            type="button"
-            variant="ghost"
-            className="flex-1"
-            onClick={() => setOpen(false)}
-          >
-            Отмена
-          </Button>
-          <Button type="submit" variant="danger" className="flex-1">
-            Да, снять
-          </Button>
+          <CancelActions onClose={() => setOpen(false)} />
         </form>
       </Modal>
     </>

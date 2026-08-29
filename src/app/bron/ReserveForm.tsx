@@ -14,6 +14,11 @@ import {
   reserveErrorItems,
   reserveRenderedKeys,
 } from "./reserve-form-errors";
+import {
+  emptyReserveValues,
+  nextReserveValues,
+  type ReserveValues,
+} from "./reserve-form-values";
 import { leftoverErrorMessages } from "@/lib/form-errors";
 import type { ReservationAlternative } from "@/lib/reservations";
 import Button from "@/components/ui/Button";
@@ -72,6 +77,18 @@ export default function ReserveForm({
   );
   const [stoneId, setStoneId] = useState("");
   const [target, setTarget] = useState("");
+  // W3-T1: управляемые поля — переживают отказ сервера (React 19 сбрасывает
+  // только неуправляемые). Сброс делаем сами и только на успехе.
+  const [values, setValues] = useState<ReserveValues>(emptyReserveValues);
+  const [seenState, setSeenState] = useState(state);
+  if (seenState !== state) {
+    // Правка состояния во время рендера (штатный приём React), а не эффект:
+    // ответ сервера уже пришёл, лишнего кадра со «старыми» полями не будет.
+    setSeenState(state);
+    setValues((prev) => nextReserveValues(prev, state));
+  }
+  const setValue = (key: keyof ReserveValues) => (v: string) =>
+    setValues((prev) => ({ ...prev, [key]: v }));
   const e = state.errors;
 
   const stone = stones.find((s) => s.id === stoneId) ?? null;
@@ -245,6 +262,8 @@ export default function ReserveForm({
               inputMode="numeric"
               label="Плит"
               placeholder="10"
+              value={values.qtySlabs}
+              onChange={(ev) => setValue("qtySlabs")(ev.target.value)}
               error={e.qtySlabs}
             />
             <Field
@@ -253,6 +272,8 @@ export default function ReserveForm({
               inputMode="decimal"
               label="м²"
               placeholder="55 или 12,5"
+              value={values.qtyAreaM2}
+              onChange={(ev) => setValue("qtyAreaM2")(ev.target.value)}
               error={e.qtyAreaM2}
             />
           </div>
@@ -264,6 +285,8 @@ export default function ReserveForm({
         name="customerName"
         label={<>Клиент <Req /></>}
         placeholder="Иван Петров"
+        value={values.customerName}
+        onChange={(ev) => setValue("customerName")(ev.target.value)}
         error={e.customerName}
       />
 
@@ -273,6 +296,8 @@ export default function ReserveForm({
           name="customerContact"
           label="Контакт"
           placeholder="+998 …"
+          value={values.customerContact}
+          onChange={(ev) => setValue("customerContact")(ev.target.value)}
         />
         <Field
           id="bron-days"
@@ -280,6 +305,8 @@ export default function ReserveForm({
           inputMode="numeric"
           label="Срок, дней"
           placeholder={`по умолчанию ${defaultDays}`}
+          value={values.days}
+          onChange={(ev) => setValue("days")(ev.target.value)}
           error={e.days}
         />
       </div>
