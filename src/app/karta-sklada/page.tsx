@@ -49,7 +49,7 @@ type StoneHere = {
  */
 function StoneList({ stones }: { stones: StoneHere[] }) {
   if (stones.length === 0) {
-    return <p className="text-xs text-ink/40">Пусто.</p>;
+    return <p className="text-xs text-ink/60">Пусто.</p>;
   }
   return (
     <ul className="space-y-0.5">
@@ -439,7 +439,7 @@ export default async function KartaSkladaPage({
                   </div>
                 )}
                 {blk.landmarks.length === 0 && blk.noLandmark.length === 0 && (
-                  <p className="text-xs text-ink/40">Ориентиров пока нет.</p>
+                  <p className="text-xs text-ink/60">Ориентиров пока нет.</p>
                 )}
                 {blk.landmarks.map((lm) => (
                   <div

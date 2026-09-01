@@ -28,8 +28,8 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           padding: "1.5rem",
-          background: "#f5f2ea",
-          color: "#16181d",
+          background: "#0a0806",
+          color: "#f4ebda",
           fontFamily:
             "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
           textAlign: "center",
@@ -46,7 +46,7 @@ export default function GlobalError({
           >
             Что-то пошло не так
           </h1>
-          <p style={{ marginTop: "0.5rem", color: "#5a5c62" }}>
+          <p style={{ marginTop: "0.5rem", color: "#b3a894" }}>
             Приложение временно недоступно. Попробуйте ещё раз.
           </p>
           <button
@@ -58,8 +58,8 @@ export default function GlobalError({
               padding: "0 1.25rem",
               borderRadius: "10px",
               border: "none",
-              background: "#16181d",
-              color: "#f5f2ea",
+              background: "#e0a94a",
+              color: "#221503",
               fontSize: "1rem",
               fontWeight: 600,
               cursor: "pointer",

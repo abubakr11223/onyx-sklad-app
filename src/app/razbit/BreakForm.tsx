@@ -297,7 +297,7 @@ export default function BreakForm({
                   className="h-20 w-20 shrink-0 rounded-lg object-cover"
                 />
               ) : (
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-ink/[0.04] text-center text-[10px] text-ink/40">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-ink/[0.04] text-center text-[10px] text-ink/60">
                   нет фото
                 </div>
               )}

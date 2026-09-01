@@ -329,7 +329,7 @@ export default async function FotozaprosPage({
                         </span>
                       )}
                       {!u.isActive && (
-                        <span className="ml-1.5 text-ink/40">· неактивен</span>
+                        <span className="ml-1.5 text-ink/60">· неактивен</span>
                       )}
                     </span>
                     <p className="tnum text-ink/60">

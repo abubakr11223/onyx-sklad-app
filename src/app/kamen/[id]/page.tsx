@@ -1022,7 +1022,7 @@ export default async function KamenPage({
                         ))}
                       </div>
                     ) : (
-                      <span className="ml-2 align-middle text-xs text-ink/40">
+                      <span className="ml-2 align-middle text-xs text-ink/60">
                         без фото
                       </span>
                     )}
@@ -1410,7 +1410,7 @@ export default async function KamenPage({
                             );
                           })()}
                           {pat.slabsSold > 0 && (
-                            <p className="tnum text-xs text-ink/40">
+                            <p className="tnum text-xs text-ink/60">
                               продано {pat.slabsSold} из {pat.slabsCount}
                             </p>
                           )}

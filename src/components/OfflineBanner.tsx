@@ -23,7 +23,7 @@ export default function OfflineBanner() {
   return (
     <div
       role="status"
-      className="sticky top-0 z-50 bg-warning/95 px-4 py-2 text-center text-sm font-semibold text-ink shadow-pop"
+      className="sticky top-0 z-50 bg-warning/95 px-4 py-2 text-center text-sm font-semibold text-on-gold shadow-pop"
     >
       Нет связи — работаем офлайн. Приёмка сохранится черновиком; продажа и бронь
       будут доступны после восстановления связи.

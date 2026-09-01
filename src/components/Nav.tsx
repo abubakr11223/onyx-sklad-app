@@ -46,10 +46,10 @@ export default function Nav({
     [
       "group relative flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium transition",
       active
-        ? "bg-[linear-gradient(90deg,rgb(169_131_47/0.22),rgb(169_131_47/0.04))] text-[#f7edd8] " +
+        ? "bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-gold)_20%,transparent),transparent)] text-ink-2 " +
           "before:absolute before:-left-2 before:top-2 before:bottom-2 before:w-[3px] " +
           "before:rounded-full before:bg-gold-soft before:content-['']"
-        : "text-side-ink hover:bg-white/5 hover:text-[#f3ecdd]",
+        : "text-side-ink hover:bg-white/5 hover:text-ink",
     ].join(" ");
 
   const item = (it: NavItem) => {

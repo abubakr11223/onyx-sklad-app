@@ -210,7 +210,7 @@ export default async function QrStonePage({
                     : "aspect-square w-full rounded-card object-cover"
                 }
               />
-              <span className="absolute bottom-2 left-2 rounded-full bg-ink/70 px-2 py-0.5 text-xs font-medium text-paper">
+              <span className="absolute bottom-2 left-2 rounded-full bg-paper/75 px-2 py-0.5 text-xs font-medium text-ink">
                 {photoKindLabelRu(p.kind)}
               </span>
             </a>

@@ -150,7 +150,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
           aria-modal="true"
           aria-label="Просмотр фото"
           onClick={close}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/85 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-paper/90 p-4 backdrop-blur-sm"
         >
           <button
             ref={closeButtonRef}
@@ -158,7 +158,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
             onClick={close}
             aria-label="Закрыть"
             className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-field
-                       bg-paper/10 text-paper transition hover:bg-paper/20
+                       bg-ink/10 text-ink transition hover:bg-ink/20
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
           >
             <svg
@@ -189,8 +189,8 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               }}
               aria-label="Предыдущее фото"
               className="absolute left-4 top-1/2 flex h-11 min-h-11 w-11 -translate-y-1/2
-                         items-center justify-center rounded-field bg-ink/40 text-paper
-                         transition hover:bg-ink/60 hover:text-gold
+                         items-center justify-center rounded-field bg-ink/15 text-ink
+                         transition hover:bg-ink/25 hover:text-gold
                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
             >
               <svg
@@ -217,8 +217,8 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               }}
               aria-label="Следующее фото"
               className="absolute right-4 top-1/2 flex h-11 min-h-11 w-11 -translate-y-1/2
-                         items-center justify-center rounded-field bg-ink/40 text-paper
-                         transition hover:bg-ink/60 hover:text-gold
+                         items-center justify-center rounded-field bg-ink/15 text-ink
+                         transition hover:bg-ink/25 hover:text-gold
                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
             >
               <svg
@@ -239,8 +239,8 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
           {hasMultiple && (
             <div
               aria-live="polite"
-              className="absolute left-4 top-4 rounded-field bg-ink/40 px-2 py-1
-                         text-sm text-paper/70"
+              className="absolute left-4 top-4 rounded-field bg-ink/15 px-2 py-1
+                         text-sm text-ink/80"
             >
               {(openIndex ?? 0) + 1} / {photos.length}
             </div>
@@ -256,7 +256,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               alt="фото камня"
               className="max-h-[80vh] max-w-full rounded-card object-contain"
             />
-            <figcaption className="text-sm text-paper/80">
+            <figcaption className="text-sm text-ink/80">
               {open.caption}
               {open.stale && (
                 <Badge variant="warning" className="ml-2 align-middle">

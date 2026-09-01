@@ -87,7 +87,7 @@ export default function SharePhotoButton({
     <button
       type="button"
       onClick={() => void onShare()}
-      className="max-w-[4.5rem] truncate text-left text-[11px] font-medium leading-tight text-gold-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-1"
+      className="max-w-[4.5rem] truncate text-left text-[11px] font-medium leading-tight text-gold-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-1 focus-visible:ring-offset-paper"
       title={
         status === "idle"
           ? "Поделиться фото с клиентом (ссылка)"

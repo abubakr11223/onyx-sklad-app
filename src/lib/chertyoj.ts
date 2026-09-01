@@ -133,6 +133,10 @@ export function renderChertyoj(vertices: Vertex[], opts: ChertyojOptions = {}): 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
     `viewBox="0 0 ${width} ${height}">` +
+    // Чертёж — это «лист бумаги»: своя светлая подложка. Без неё подписи
+    // сторон (#111827) пропадали на тёмном фоне приложения, а на печати и
+    // при отправке клиенту лист должен выглядеть одинаково.
+    `<rect x="0" y="0" width="${width}" height="${height}" rx="10" fill="#f2ead9"/>` +
     `<polygon points="${pointsAttr}" fill="rgba(37,99,235,0.08)" ` +
     `stroke="#1d4ed8" stroke-width="2" stroke-linejoin="round"/>` +
     dots +

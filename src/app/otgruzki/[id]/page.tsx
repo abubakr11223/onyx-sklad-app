@@ -48,7 +48,7 @@ export default async function ShipmentDocPage({
         <Link href="/otgruzki" className="text-sm text-ink/60 underline">
           ← К отгрузкам
         </Link>
-        <span className="text-sm text-ink/40">
+        <span className="text-sm text-ink/60">
           Печать: Ctrl/⌘ + P
         </span>
       </div>

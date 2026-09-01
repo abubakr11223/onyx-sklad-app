@@ -138,7 +138,7 @@ export default async function Home() {
     <>
       <span
         aria-hidden="true"
-        className="flex size-11 shrink-0 items-center justify-center rounded-field bg-gold/12 text-gold-deep transition group-hover:bg-gold group-hover:text-ink"
+        className="flex size-11 shrink-0 items-center justify-center rounded-field bg-gold/12 text-gold-deep transition group-hover:bg-gold group-hover:text-on-gold"
       >
         <section.Icon width={22} height={22} />
       </span>

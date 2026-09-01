@@ -211,7 +211,7 @@ export default async function AccountsPage({
                       </span>
                     )}
                     {!u.isActive && (
-                      <span className="ml-1.5 text-ink/40">· неактивен</span>
+                      <span className="ml-1.5 text-ink/60">· неактивен</span>
                     )}
                     <p className="tnum text-ink/60">
                       {linked ? (
@@ -582,7 +582,7 @@ export default async function AccountsPage({
                           телефон не задан — Telegram не привяжется
                         </span>
                       ) : (
-                        <span className="text-ink/40">телефон не задан</span>
+                        <span className="text-ink/60">телефон не задан</span>
                       )}
                     </p>
                     <p className="text-sm">
@@ -610,7 +610,7 @@ export default async function AccountsPage({
                           Telegram не привязан — фотозапросы не придут
                         </span>
                       ) : (
-                        <span className="text-ink/40">Telegram не привязан</span>
+                        <span className="text-ink/60">Telegram не привязан</span>
                       )}
                     </p>
                   </div>
