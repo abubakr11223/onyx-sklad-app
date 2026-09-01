@@ -1,7 +1,14 @@
-// TZ №8 v2 §8.1 — statik SVG logo (3D fallback). Sfera bilan bir xil oltin
-// palitrada: markazda #C9A55C to'lgan doira + 6 elliptik kontur (lenta-globus
-// imitatsiyasi, TubeGeometry ekvivalenti). Rangi va o'lchami sfera bilan mos
-// bo'lishi UCHUN Suspense/reduced-motion o'tishlarida "sakrash" bo'lmaydi.
+// TZ №8 v2 §8.1 — statik logotip (3D fallback).
+//
+// 2026-09-01: oldin bu yerda SVG bilan CHIZILGAN sfera imitatsiyasi turardi
+// (doira + 6 ellips). Ega uni ham, 3D versiyani ham rad etdi: haqiqiy
+// logotipga o'xshamas edi. Endi bu yerda kompaniyaning HAQIQIY logotipi —
+// `/logo/onyx-sphere.jpg`, doira bo'yicha kesilgan.
+//
+// Nega baribir <svg>: slot qoidalari (`.login-logo-slot svg { width/height:
+// 100% }`) va TZ testlari SVG konteynerga bog'langan. viewBox proporsiyani
+// saqlaydi, <image> ichida esa aynan o'sha fayl turadi — 3D versiyaga o'tishda
+// rasm brauzer keshidan olinadi, ya'ni miltillash yo'q.
 //
 // `variant`:
 //  - "static": harakatsiz (reduced-motion, JS o'chirilgan).
@@ -9,6 +16,7 @@
 //  - "breathing": opacity 0.4→0.8→0.4 (Suspense loading — 3D yuklanmoqda).
 
 import type { CSSProperties } from "react";
+import { LOGO_SPHERE_SRC } from "./logo-asset";
 
 interface StaticLogoProps {
   variant?: "static" | "glow" | "breathing";
@@ -21,15 +29,6 @@ export function StaticLogo({
   size = 240,
   ariaHidden = true,
 }: StaticLogoProps) {
-  // 6 ta lenta — 3D dagi CatmullRomCurve inclination'ga mos (15°→90° qadam 15°).
-  const bandRotations = [15, 30, 45, 60, 75, 90];
-  const bandStyle: CSSProperties = {
-    fill: "none",
-    stroke: "url(#login-static-gold)",
-    strokeWidth: 1.5,
-    opacity: 0.65,
-  };
-
   const wrapperStyle: CSSProperties = {
     width: size,
     height: size,
@@ -59,39 +58,25 @@ export function StaticLogo({
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          <radialGradient id="login-static-gold" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%" stopColor="#F5E7C0" />
-            <stop offset="50%" stopColor="#E9CF8F" />
-            <stop offset="100%" stopColor="#C9A55C" />
-          </radialGradient>
-          <radialGradient id="login-static-core" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%" stopColor="#E9CF8F" stopOpacity="0.9" />
-            <stop offset="70%" stopColor="#C9A55C" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#8B6A2E" stopOpacity="0.4" />
-          </radialGradient>
+          {/* Rasm kvadrat, sfera esa unga aniq ichdan tegib turadi — burchaklar
+              kesiladi, aks holda fonda qora kvadrat ko'rinardi. */}
+          <clipPath id="login-logo-clip">
+            <circle cx="0" cy="0" r="94" />
+          </clipPath>
         </defs>
 
-        {/* Yumshoq halo */}
-        <circle cx="0" cy="0" r="82" fill="#E9CF8F" opacity="0.06" />
+        {/* Yumshoq halo — sfera atrofidagi iliq nur */}
+        <circle cx="0" cy="0" r="99" fill="#E9CF8F" opacity="0.05" />
 
-        {/* Markaziy sfera imitatsiyasi (yumshoq gradient) */}
-        <circle cx="0" cy="0" r="60" fill="url(#login-static-core)" opacity="0.35" />
-
-        {/* 6 ta lenta — inclination bo'yicha aylantirilgan ellipslar */}
-        {bandRotations.map((deg) => (
-          <ellipse
-            key={deg}
-            cx="0"
-            cy="0"
-            rx="70"
-            ry="24"
-            transform={`rotate(${deg})`}
-            style={bandStyle}
-          />
-        ))}
-
-        {/* Ustki nur — highlight nuqtasi (metalness taassuroti) */}
-        <circle cx="-18" cy="-22" r="8" fill="#F5E7C0" opacity="0.4" />
+        <image
+          href={LOGO_SPHERE_SRC}
+          x="-94"
+          y="-94"
+          width="188"
+          height="188"
+          preserveAspectRatio="xMidYMid slice"
+          clipPath="url(#login-logo-clip)"
+        />
       </svg>
 
       {/* Anim CSS — inline, faqat shu komponent uchun. Reduced-motion CSS'da
