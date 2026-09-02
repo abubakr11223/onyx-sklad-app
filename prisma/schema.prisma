@@ -117,6 +117,12 @@ enum AuditAction {
   /// TZ №15 Slice 3 — unit sent to / returned from showroom.
   SHOWROOM_SEND
   SHOWROOM_RETURN
+  /// Audit 2026-09-02 — zaxira olindi (tizim amali, userId = null).
+  /// Egaga «zaxira kelmayapti» degan savolga javob shu yozuvlardan chiqadi.
+  BACKUP
+  /// Audit 2026-09-02 — butun baza tashqariga eksport qilindi. Bu eng katta
+  /// o'qish amali; kalit sizib chiqsa, iz shu yerda qoladi.
+  EXPORT
 }
 
 /// data-model.md §1.12 / ADR-006.

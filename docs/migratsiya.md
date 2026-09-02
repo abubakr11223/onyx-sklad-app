@@ -6,6 +6,14 @@ Vercel Blob (rasm). Oxirida hammasi **eganing o'z serveriga** ko'chadi.
 Bu hujjatning maqsadi bitta: ko'chirish kuni **kod o'zgarmasin**. Faqat
 `.env.production` to'ldiriladi va `docker compose up` beriladi.
 
+> **Zaxira, tiklash va rasmlar — alohida hujjatda:** [zaxira.md](zaxira.md).
+> U yerda: ikkinchi nusxani qanday sozlash, rasmlarni qanday ko'chirish,
+> zaxira ishlayotganini qanday tekshirish, bazani **buzib kirishgan** bo'lsa
+> nima qilish, va eng yomon holatda qancha ish yo'qolishi.
+>
+> ⚠️ Vercel akkauntini **yopishdan oldin** `npm run backup:photos` yurgizilishi
+> shart — aks holda eski rasmlar akkaunt bilan birga yo'qoladi.
+
 ---
 
 ## 1. Nima nimaga bog'langan
@@ -15,7 +23,7 @@ Bu hujjatning maqsadi bitta: ko'chirish kuni **kod o'zgarmasin**. Faqat
 | Baza | Neon Postgres | Postgres 16 (compose ichida) | Yo'q — `DATABASE_URL` |
 | Ilova | Vercel | Docker + Caddy (HTTPS) | Yo'q — `Dockerfile` tayyor |
 | Rasm | Vercel Blob | Disk (`/data/photos` volume) | Yo'q — `PHOTO_STORAGE=local` |
-| Cron | `vercel.json` | `crontab` + `curl` | Yo'q — endpoint bir xil |
+| Cron | `vercel.json` | compose ichidagi `cron` xizmati | Yo'q — endpoint bir xil |
 | Telegram bot | bot tokeni | o'sha bot tokeni | Yo'q — webhook manzili yangilanadi |
 | AI (interyer) | Anthropic API | o'sha API kaliti | Yo'q |
 

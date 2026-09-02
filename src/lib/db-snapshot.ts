@@ -1,16 +1,29 @@
 // Kunlik ma'lumot zaxirasi (snapshot) — bazadagi HAMMA ish jadvalini bitta
 // JSON'ga yig'adi.
 //
-// Nega kerak: Neon'ning o'z PITR'i bazani TIKLAYDI, lekin u Neon akkauntining
-// ichida yashaydi va reja/muddatga bog'liq. Bu yerdagi snapshot esa bazadan
-// TASHQARIDA saqlanadi (Telegram'ga hujjat sifatida ketadi, Cowork jadvalli
-// vazifasi uni Google Drive/Sheets'ga ko'chiradi). Bitta noto'g'ri purge yoki
-// o'chirilgan proyekt — ma'lumot yo'qolishiga olib kelmasin.
+// Nega kerak: baza xizmatining o'z tiklashi bazani TIKLAYDI, lekin u o'sha
+// akkauntning ichida yashaydi va o'z serverga ko'chgan kuni yo'qoladi. Bu
+// yerdagi snapshot esa bazadan TASHQARIDA saqlanadi. Bitta noto'g'ri purge
+// yoki o'chirilgan proyekt — ma'lumot yo'qolishiga olib kelmasin.
+//
+// ⚠️ ROSTI (audit 2026-09-02). Bu izohda ilgari «Cowork jadvalli vazifasi
+// nusxani Google Drive/Sheets'ga ko'chiradi» deb yozilgan edi. Bunday vazifa
+// HECH QACHON bo'lmagan — izoh yo'q himoyani bor deb ko'rsatib turgan. Hozir
+// zaxiraning yagona avtomatik manzili — Telegram. Ikkinchi nusxa QO'LDA
+// sozlanadi va u docs/zaxira.md §2 da yozilgan.
 //
 // Nima kirmaydi: LoginAttempt, ConsumedMagicLinkToken, TelegramWebhookReceipt,
 // MutationReceipt — bular xavfsizlik/idempotentlik izlari, tiklashda keraksiz
-// va tez o'sadi. Photo — faqat metadata (rasm fayllari blob-omborda, bazada
-// storageKey turadi), shuning uchun snapshot kichik bo'lib qoladi.
+// va tez o'sadi.
+//
+// Photo — faqat METADATA: rasm baytlari bu faylda YO'Q. Ya'ni bazani tiklab
+// rasmlarni tiklamasangiz, hamma surat ochilmaydigan havolaga aylanadi.
+// Rasmlar alohida ko'chiriladi: `npm run backup:photos` (docs/zaxira.md §3).
+// Bu ataylab shunday: rasmlar bilan birga fayl gigabaytlarga chiqib, kunlik
+// zaxira umuman ishlamay qolardi.
+//
+// Fayl SHAKLI (siqish, shifrlash, parol xeshlarini olib tashlash) shu modulda
+// EMAS — u src/lib/backup-file.ts da. Bu modul faqat MA'LUMOTNI yig'adi.
 //
 // Modul sof: PrismaClient interfeysining faqat findMany qismini kutadi, shuning
 // uchun unit-testda soxta (fake) client bilan tekshiriladi — DATABASE_URL kerak

@@ -183,7 +183,7 @@ async function main() {
   // ── Boy / qoldiq (poshtuchno, o'z gabaritlari bilan — TZ §4.2) ──
   // ТЗ №12: column names *Mm are LEGACY; values are centimetres (cm).
   // Mixed mm/cm was a seed bug (e.g. width 640 with length 118) — all cm here.
-  await prisma.piece.create({
+  const pieceBroken = await prisma.piece.create({
     data: {
       stoneTypeId: travertin.id,
       batchId: batch1.id, // partiyadan to'g'ridan-to'g'ri boy (originSlabId = null)
@@ -198,7 +198,7 @@ async function main() {
       createdById: warehouse.id,
     },
   });
-  await prisma.piece.create({
+  const pieceOffcut = await prisma.piece.create({
     data: {
       stoneTypeId: calacatta.id,
       batchId: batch2.id,
@@ -227,6 +227,189 @@ async function main() {
     },
   });
 
+  // ── Tiklash mashqi UCHUN: kam ishlatiladigan jadvallar ham to'ldiriladi ──
+  //
+  // Audit 2026-09-02: mashq testi har jadval uchun sanoqlarni solishtiradi,
+  // lekin 7 ta jadval bo'sh edi — ular uchun tekshiruv «0 = 0» ga aylanib,
+  // HECH NARSANI isbotlamasdi. Ya'ni ularning tiklash yo'li hech qachon
+  // haqiqiy bazada yurgizilmagan va kelajakdagi o'zgarish uni jimgina
+  // sindirishi mumkin edi. Endi har birida kamida bitta yozuv bor va
+  // mashq testi bo'sh jadvalni ko'rsa QIZARADI.
+
+  const client = await prisma.client.create({
+    data: {
+      name: "ООО «Ривьера Строй»",
+      type: "B2B",
+      phone: "+998901112233",
+      managerId: manager.id,
+    },
+  });
+
+  await prisma.site.create({
+    data: {
+      name: "ЖК Ривьера, лобби",
+      type: "COMMERCIAL",
+      address: "Ташкент, ул. Амира Темура 15",
+      clientId: client.id,
+      managerId: manager.id,
+      contactPerson: "Прораб Азиз",
+    },
+  });
+
+  // Namuna mijoz qo'lida — qaytarish muddati bilan.
+  await prisma.sample.create({
+    data: {
+      targetType: "PIECE",
+      pieceId: pieceBroken.id,
+      clientId: client.id,
+      managerId: manager.id,
+      returnDueDate: new Date(Date.now() + 14 * DAY_MS),
+      comment: "Образец для лобби",
+    },
+  });
+
+  // Vitrinaga qo'yilgan qoldiq.
+  await prisma.showroomPlacement.create({
+    data: {
+      targetType: "PIECE",
+      pieceId: pieceOffcut.id,
+      standNote: "Витрина у входа",
+      sentById: warehouse.id,
+    },
+  });
+
+  // Dizayner-hamkor so'rovi.
+  await prisma.lead.create({
+    data: {
+      createdById: manager.id,
+      stoneTypeId: onyxMed.id,
+      requestedSlabs: 4,
+      contact: "Дизайнер Нигора, +998935556677",
+      note: "Подсветка для ресепшена",
+    },
+  });
+
+  // Rasm — faqat metadata: baytlar bazada emas (docs/zaxira.md §3).
+  await prisma.photo.create({
+    data: {
+      storageKey: "local:demo/oniks-medovyj.jpg",
+      kind: "SAMPLE",
+      takenAt: new Date(),
+      stoneTypeId: onyxMed.id,
+      takenById: warehouse.id,
+    },
+  });
+
+  // Telegram orqali kirish so'rovi (hali tasdiqlanmagan).
+  await prisma.telegramAccessRequest.create({
+    data: {
+      telegramId: "900900900",
+      name: "Бахтиёр Юлдашев",
+      username: "bakhtiyor",
+      phone: "+998909009009",
+    },
+  });
+
+  // Karta katakchasi — /karta sahifasi holati.
+  await prisma.kartaCell.create({
+    data: { cellId: "demo-1-1", done: true, updatedBy: owner.id },
+  });
+
+  // Ombor to'ri (TZ №6) — bloklar va oriyentirlar, toshdan mustaqil.
+  const blockA = await prisma.warehouseBlock.create({
+    data: { letter: "A", note: "Kirish yonidagi blok", sortOrder: 1 },
+  });
+  await prisma.warehouseLandmark.create({
+    data: { blockId: blockA.id, number: "1" },
+  });
+
+  // Uzor-guruh (TZ №3) — bitta partiya ichidagi bir xil naqshli plitalar.
+  const pattern = await prisma.batchPattern.create({
+    data: {
+      batchId: batch1.id,
+      description: "Тёмные прожилки",
+      slabsCount: 6,
+      lengthMm: 280,
+      widthMm: 190,
+      thicknessMm: "2.0",
+      areaM2: "31.920", // 6 × (2,80 × 1,90) m²
+    },
+  });
+
+  // Sotuv zanjiri: sotuv → otgruzka → qator → qarz. Tiklashda bu zanjirning
+  // TARTIBI muhim (ota-bola), shuning uchun mashqda tekshirilishi shart.
+  const sale = await prisma.saleRecord.create({
+    data: {
+      managerId: manager.id,
+      customerName: client.name,
+      clientId: client.id,
+      targetType: "PIECE",
+      pieceId: pieceOffcut.id,
+      price: "1200.00",
+      currency: "USD",
+      paymentMethod: "CASH",
+      soldAt: new Date(),
+    },
+  });
+  const shipment = await prisma.shipment.create({
+    data: {
+      kind: "SALE",
+      saleRecordId: sale.id,
+      managerId: manager.id,
+      clientId: client.id,
+      note: "Самовывоз",
+    },
+  });
+  await prisma.shipmentLine.create({
+    data: {
+      shipmentId: shipment.id,
+      targetType: "PIECE",
+      pieceId: pieceOffcut.id,
+      locationSnapshot: "Блок В · ориентир 3",
+    },
+  });
+  await prisma.debt.create({
+    data: {
+      saleRecordId: sale.id,
+      clientId: client.id,
+      amount: "400.00",
+      currency: "USD",
+      dueDate: new Date(Date.now() + 30 * DAY_MS),
+      comment: "Остаток после предоплаты",
+    },
+  });
+
+  // Fotozapros va uning yuborilishi.
+  const photoReq = await prisma.photoRequest.create({
+    data: {
+      managerId: manager.id,
+      assigneeId: warehouse.id,
+      batchId: batch1.id,
+      batchPatternId: pattern.id,
+      comment: "Снимите узор при дневном свете",
+    },
+  });
+  await prisma.photoDispatch.create({
+    data: {
+      photoRequestId: photoReq.id,
+      chatId: "900900900",
+      status: "SENT",
+      attempts: 1,
+      messageId: 1001,
+    },
+  });
+
+  // Jurnal — kim nima qilgani. Tiklashda ham saqlanishi kerak.
+  await prisma.auditLog.create({
+    data: {
+      userId: manager.id,
+      action: "SALE",
+      entityType: "Piece",
+      entityId: pieceOffcut.id,
+      payload: { price: "1200.00", currency: "USD" },
+    },
+  });
+
   // ── Sozlamalar (ADR-003; data-model.md §1.11) ──
   await prisma.appConfig.createMany({
     data: [
@@ -243,6 +426,21 @@ async function main() {
     slabs: await prisma.slab.count(),
     pieces: await prisma.piece.count(),
     reservations: await prisma.reservation.count(),
+    clients: await prisma.client.count(),
+    sites: await prisma.site.count(),
+    samples: await prisma.sample.count(),
+    showroom: await prisma.showroomPlacement.count(),
+    leads: await prisma.lead.count(),
+    photos: await prisma.photo.count(),
+    tgRequests: await prisma.telegramAccessRequest.count(),
+    kartaCells: await prisma.kartaCell.count(),
+    blocks: await prisma.warehouseBlock.count(),
+    patterns: await prisma.batchPattern.count(),
+    sales: await prisma.saleRecord.count(),
+    shipments: await prisma.shipment.count(),
+    debts: await prisma.debt.count(),
+    photoRequests: await prisma.photoRequest.count(),
+    auditLog: await prisma.auditLog.count(),
     appConfig: await prisma.appConfig.count(),
     owner: owner.name,
   });

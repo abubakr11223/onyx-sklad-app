@@ -9,6 +9,14 @@
 //     natija javob tanasida (notifyFailed) ko'rinadi;
 //   • baxtli yo'l o'zgarmagan: ok:true, delivered soni, failed bo'sh.
 //
+// Audit 2026-09-02 qo'shgan shartnoma:
+//   • snapshot BITTA tranzaksiyada o'qiladi (yarim kesim — tiklashni yiqitadi);
+//   • fayl gzip qilinadi va kalit bo'lsa shifrlanadi (backup-file.ts);
+//   • muvaffaqiyatdan keyin AppConfig'ga lastBackupOkAt yoziladi — ikkinchi
+//     cron shu sanaga qarab «zaxira kelmayapti» deb ogohlantiradi;
+//   • muvaffaqiyatdan keyin AuditLog'ga BACKUP yozuvi tushadi.
+//   Oxirgi ikkisi BEST-EFFORT: ular yiqilsa ham tayyor zaxira bekor bo'lmaydi.
+//
 // DB YO'Q: @/lib/db soxta — buildSnapshot topilmagan jadvalni bo'sh deb oladi.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,23 +27,48 @@ const M = vi.hoisted(() => ({
   sendMessage: vi.fn(),
   /** Oversize testlari uchun: null bo'lmasa snapshotToJson shu satrni qaytaradi. */
   jsonOverride: null as string | null,
+  /**
+   * Hajm darvozasi testlari uchun. Fayl endi gzip qilinadi, shuning uchun
+   * «50 MB matn» siqilib chegaradan o'tib ketardi — qadoqlangan natijani
+   * to'g'ridan-to'g'ri belgilaymiz.
+   */
+  packOverride: null as { bytes: Buffer; filename: string; encrypted: boolean; redacted: string[] } | null,
+  auditCreate: vi.fn(),
+  appConfigUpsert: vi.fn(),
 }));
 
-vi.mock("@/lib/db", () => ({
-  db: {
+vi.mock("@/lib/db", () => {
+  const db = {
     // Ham snapshot'dagi "user" jadvali (argumentsiz findMany), ham OWNER
     // so'rovi (where bilan) shu delegate orqali o'tadi.
     user: { findMany: (...a: unknown[]) => M.userFindMany(...a) },
     // SNAPSHOT_TABLES ro'yxatidagi birinchi jadval — snapshot yiqilishini
     // shu orqali simulyatsiya qilamiz.
-    appConfig: { findMany: (...a: unknown[]) => M.appConfigFindMany(...a) },
-  },
-}));
+    appConfig: {
+      findMany: (...a: unknown[]) => M.appConfigFindMany(...a),
+      upsert: (...a: unknown[]) => M.appConfigUpsert(...a),
+    },
+    auditLog: { create: (...a: unknown[]) => M.auditCreate(...a) },
+    // Snapshot bitta kesimda o'qiladi; testda tranzaksiya shunchaki
+    // callback'ni o'sha soxta client bilan chaqiradi.
+    $transaction: (cb: (tx: unknown) => unknown) => cb(db),
+  };
+  return { db };
+});
 
 vi.mock("@/lib/telegram", () => ({
   sendDocument: (...a: unknown[]) => M.sendDocument(...a),
   sendMessage: (...a: unknown[]) => M.sendMessage(...a),
 }));
+
+vi.mock("@/lib/backup-file", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/backup-file")>();
+  return {
+    ...actual,
+    packBackup: (...a: Parameters<typeof actual.packBackup>) =>
+      M.packOverride ?? actual.packBackup(...a),
+  };
+});
 
 vi.mock("@/lib/db-snapshot", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/db-snapshot")>();
@@ -64,6 +97,11 @@ function req(auth = true): Request {
 beforeEach(() => {
   process.env.CRON_SECRET = SECRET;
   M.jsonOverride = null;
+  M.packOverride = null;
+  M.auditCreate.mockReset();
+  M.appConfigUpsert.mockReset();
+  M.auditCreate.mockResolvedValue({});
+  M.appConfigUpsert.mockResolvedValue({});
   M.userFindMany.mockReset();
   M.appConfigFindMany.mockReset();
   M.sendDocument.mockReset();
@@ -138,7 +176,12 @@ describe("sendDocument yiqilishi", () => {
 
 describe("50 MB chegarasi", () => {
   it("katta fayl → sendDocument CHAQIRILMAYDI, ega ogohlantiriladi, ok:false/500", async () => {
-    M.jsonOverride = "a".repeat(TELEGRAM_DOCUMENT_LIMIT_BYTES + 1);
+    M.packOverride = {
+      bytes: Buffer.alloc(TELEGRAM_DOCUMENT_LIMIT_BYTES + 1),
+      filename: "onyx-backup-test.json.gz",
+      encrypted: false,
+      redacted: [],
+    };
     const res = await GET(req());
     expect(res.status).toBe(500);
     const body = await res.json();
@@ -153,11 +196,73 @@ describe("50 MB chegarasi", () => {
   });
 
   it("roppa-rosa chegara → yuboriladi (chegara qat'iy `>` bilan)", async () => {
-    M.jsonOverride = "a".repeat(TELEGRAM_DOCUMENT_LIMIT_BYTES);
+    M.packOverride = {
+      bytes: Buffer.alloc(TELEGRAM_DOCUMENT_LIMIT_BYTES),
+      filename: "onyx-backup-test.json.gz",
+      encrypted: false,
+      redacted: [],
+    };
     const res = await GET(req());
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
     expect(M.sendDocument).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("zaxira izlari (audit 2026-09-02)", () => {
+  it("muvaffaqiyatdan keyin lastBackupOkAt yoziladi va BACKUP jurnalga tushadi", async () => {
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.heartbeat).toBe(true);
+
+    expect(M.appConfigUpsert).toHaveBeenCalledTimes(1);
+    const up = M.appConfigUpsert.mock.calls[0][0] as {
+      where: { key: string };
+      update: { value: string };
+    };
+    expect(up.where.key).toBe("lastBackupOkAt");
+    expect(up.update.value).toBe(body.takenAt);
+
+    expect(M.auditCreate).toHaveBeenCalledTimes(1);
+    const audit = M.auditCreate.mock.calls[0][0] as { data: { action: string; entityType: string } };
+    expect(audit.data.action).toBe("BACKUP");
+    expect(audit.data.entityType).toBe("Backup");
+  });
+
+  it("iz yozilmasa ham tayyor zaxira bekor bo'lmaydi", async () => {
+    // Muhim: dorining o'zi kasallikdan yomon bo'lmasin. Jurnal yoki
+    // heartbeat yiqilsa — zaxira baribir yetkazilgan, javob 200 qolishi kerak.
+    M.appConfigUpsert.mockRejectedValue(new Error("appConfig yo'q"));
+    M.auditCreate.mockRejectedValue(new Error("auditLog yo'q"));
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.heartbeat).toBe(false);
+    expect(M.sendDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("fayl siqilgan va shifrsiz rejimda parol xeshi tushib qoladi", async () => {
+    // Kalitsiz rejim: user jadvalidagi passwordHash faylga tushmasligi kerak.
+    M.userFindMany.mockImplementation((args?: unknown) =>
+      args
+        ? Promise.resolve([{ id: "u1", telegramId: OWNER_CHAT }])
+        : Promise.resolve([{ id: "u1", email: "o@x", passwordHash: "SIR" }]),
+    );
+    delete process.env.BACKUP_ENCRYPTION_KEY;
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.encrypted).toBe(false);
+    expect(body.redacted).toContain("user.passwordHash");
+
+    const sent = M.sendDocument.mock.calls[0];
+    expect(String(sent[1])).toMatch(/\.json\.gz$/);
+    const bytes = sent[2] as Buffer;
+    expect(bytes[0]).toBe(0x1f); // gzip
+    expect(bytes[1]).toBe(0x8b);
+    expect(bytes.toString("latin1")).not.toContain("SIR");
   });
 });
 

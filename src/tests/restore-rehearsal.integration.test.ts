@@ -91,6 +91,19 @@ describe.skipIf(!DB_URL)("tiklash mashqi — snapshot → qoralama baza → soli
       // Mashq ma'nosiz bo'lmasin: generated ustunli jadvalda yozuv bo'lishi
       // shart (bo'sh bazada avval `npm run seed:demo`).
       expect(pieces.length, "dev bazada Piece yo'q — npm run seed:demo yurgizing").toBeGreaterThan(0);
+
+      // Audit 2026-09-02. Mashq har jadval uchun sanoqlarni solishtiradi —
+      // lekin jadval BO'SH bo'lsa, tekshiruv «0 = 0» ga aylanib hech narsani
+      // isbotlamaydi. Ilgari 7 jadval aynan shunday «tekshirilardi»: ularning
+      // tiklash yo'li hech qachon haqiqiy bazada yurgizilmagan edi va
+      // kelajakdagi o'zgarish uni jimgina sindirishi mumkin edi.
+      // Endi bo'sh jadval — testning qizarishi. To'ldirish: prisma/seed.ts.
+      const emptyTables = SNAPSHOT_TABLES.filter((t) => (snapshot.counts[t] ?? 0) === 0);
+      expect(
+        emptyTables,
+        `bu jadvallar bo'sh — ularning tiklash yo'li tekshirilmaydi: ${emptyTables.join(", ")}. ` +
+          "Toza bazada `npx prisma migrate deploy && npx tsx prisma/seed.ts` yurgizing.",
+      ).toEqual([]);
       const backupFile = path.join(workDir, "rehearsal-backup.json");
       writeFileSync(backupFile, snapshotToJson(snapshot));
 

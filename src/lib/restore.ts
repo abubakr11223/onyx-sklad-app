@@ -299,11 +299,24 @@ export interface RawRestoreArgs {
   file: string | null;
   execute: boolean;
   confirm: boolean;
+  /**
+   * Mavjud yozuvlarni USTIDAN yozish. Audit 2026-09-02: standart rejim
+   * `skipDuplicates` — id bazada bo'lsa o'tkazib yuboriladi. Ko'chirish uchun
+   * bu to'g'ri, lekin «buzib kirishdi» ssenariysi uchun noto'g'ri: o'g'ri
+   * yozuvlarni O'CHIRMASDAN O'ZGARTIRSA (narx, qarz, summa), tiklash «✅
+   * Tiklandi» deb yozadi, buzilgan raqamlar esa joyida qoladi. Bu eng yomon
+   * turdagi xato — jim va ishonch uyg'otadigan.
+   *
+   * ⚠️ Tavsiya etilgan yo'l baribir BOSH BAZAGA tiklash (docs/zaxira.md).
+   * Bu bayroq — ikkinchi imkoniyat, ish bazasi ustida yurgizilganda esa
+   * fayldagi holat ustun keladi.
+   */
+  overwrite: boolean;
   envAllow: boolean;
 }
 
 export type RestoreArgsResult =
-  | { ok: true; file: string; execute: boolean; willWrite: boolean }
+  | { ok: true; file: string; execute: boolean; willWrite: boolean; overwrite: boolean }
   | { ok: false; error: "env" | "file" | "confirm" };
 
 export function parseRestoreArgs(
@@ -313,15 +326,18 @@ export function parseRestoreArgs(
   let file: string | null = null;
   let execute = false;
   let confirm = false;
+  let overwrite = false;
   for (const a of argv) {
     if (a.startsWith("--file=")) file = a.slice("--file=".length) || null;
     else if (a === "--execute") execute = true;
     else if (a === "--yes") confirm = true;
+    else if (a === "--overwrite") overwrite = true;
   }
   return {
     file,
     execute,
     confirm,
+    overwrite,
     envAllow: env[RESTORE_ALLOW_ENV] === RESTORE_ALLOW_VALUE,
   };
 }
@@ -335,6 +351,7 @@ export function validateRestoreArgs(raw: RawRestoreArgs): RestoreArgsResult {
     file: raw.file,
     execute: raw.execute,
     willWrite: raw.execute && raw.confirm,
+    overwrite: raw.overwrite,
   };
 }
 
@@ -350,5 +367,14 @@ export function restoreUsage(): string {
     "",
     "Mavjud id'lar o'tkazib yuboriladi (skipDuplicates) — tiklash takrorlansa",
     "ma'lumot ikkilanmaydi.",
+    "",
+    "Agar bazani BUZISHGAN bo'lsa (yozuvlar o'chirilmay, o'zgartirilgan bo'lsa)",
+    "standart rejim yetmaydi — buzilgan raqamlar joyida qoladi. Ikki yo'l:",
+    "  1) Tavsiya etilgani: bo'sh baza yaratib, o'shanga tiklash (docs/zaxira.md).",
+    "  2) Ish bazasi ustidan: --overwrite — fayldagi holat ustun keladi.",
+    "",
+    "Fayl shakllari: .json, .json.gz va .json.gz.enc — o'zi tanib oladi.",
+    "Shifrlangan fayl uchun BACKUP_ENCRYPTION_KEY zaxira olingan paytdagi",
+    "kalit bilan AYNAN bir xil bo'lishi kerak.",
   ].join("\n");
 }

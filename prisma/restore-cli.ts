@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
+import { BackupKeyError, resolveBackupKey, unpackBackup } from "../src/lib/backup-file";
 import {
   DEFERRED_FIELDS,
   GENERATED_COLUMNS_SQL,
@@ -61,11 +62,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Fayl uch shaklda bo'lishi mumkin: eski `.json`, siqilgan `.json.gz` va
+  // shifrlangan `.json.gz.enc`. Shakl KENGAYTMA bo'yicha emas, faylning bosh
+  // baytlari bo'yicha aniqlanadi — nomi o'zgartirilgan fayl ham ochiladi.
   let text: string;
   try {
-    text = readFileSync(parsed.file, "utf8");
+    text = unpackBackup(readFileSync(parsed.file), resolveBackupKey());
   } catch (e) {
-    console.error(`⛔ Fayl o'qilmadi: ${(e as Error).message}`);
+    if (e instanceof BackupKeyError) {
+      console.error(`⛔ ${e.message}`);
+    } else {
+      console.error(`⛔ Fayl o'qilmadi: ${(e as Error).message}`);
+    }
     process.exitCode = 1;
     return;
   }
@@ -89,6 +97,7 @@ async function main(): Promise<void> {
 
   const db = new PrismaClient();
   const written: Record<string, number> = {};
+  const overwritten: Record<string, number> = {};
   let updated = 0;
   const pendingUpdates: { table: string; id: string; data: Record<string, unknown> }[] = [];
 
@@ -105,6 +114,7 @@ async function main(): Promise<void> {
     }
 
     // 1-bosqich: otadan bolaga. Halqali ustunlar null bilan qo'yiladi.
+    // (overwritten — --overwrite rejimida ustidan yozilganlar sanog'i.)
     for (const table of RESTORE_ORDER) {
       const rows = snap.snapshot.rows[table] ?? [];
       if (rows.length === 0) continue;
@@ -126,7 +136,35 @@ async function main(): Promise<void> {
         count += r.count;
       }
       written[table] = count;
-      console.log(`  ${table.padEnd(24)} +${count} (fayl: ${rows.length})`);
+
+      // --overwrite: createMany faqat YANGI id'larni yozadi. Buzib kirilgan
+      // bazada esa yozuvlar joyida turib, ICHI o'zgartirilgan bo'ladi — ular
+      // shu yerda fayldagi holatga qaytariladi. Bittalab, chunki har yozuvda
+      // o'z qiymatlari bor; bu falokat yo'li, tezlik ikkinchi darajali.
+      if (parsed.overwrite && base.length > count) {
+        const upd = (db as unknown as Record<string, {
+          update: (a: { where: { id: string }; data: unknown }) => Promise<unknown>;
+        }>)[table];
+        let over = 0;
+        let failed = 0;
+        for (const row of base) {
+          const r = row as Record<string, unknown>;
+          const id = typeof r.id === "string" ? r.id : null;
+          if (id === null) continue;
+          const { id: _drop, ...data } = r;
+          void _drop;
+          try {
+            await upd.update({ where: { id }, data });
+            over += 1;
+          } catch {
+            // Yozuv bazada yo'q (endigina createMany bilan yozilgan) yoki
+            // cheklovga urildi — ikkalasi ham kutilgan, sanab o'tamiz.
+            failed += 1;
+          }
+        }
+        overwritten[table] = over;
+        console.log(`  ${table.padEnd(24)} ~${over} ustidan yozildi${failed > 0 ? ` (${failed} o'tkazildi)` : ""}`);
+      }
     }
 
     // 2-bosqich: halqani yopish (Slab.photoRequestId va h.k.).
@@ -146,9 +184,15 @@ async function main(): Promise<void> {
   }
 
   const total = Object.values(written).reduce((a, b) => a + b, 0);
+  const over = Object.values(overwritten).reduce((a, b) => a + b, 0);
   console.log("");
-  console.log(`✅ Tiklandi: ${total} yozuv, ${updated} bog'lam (${Object.keys(DEFERRED_FIELDS).join(", ")}).`);
-  console.log("Mavjud id'lar o'tkazib yuborildi — bor ma'lumot ustiga yozilmadi.");
+  console.log(`✅ Tiklandi: ${total} yangi yozuv, ${updated} bog'lam (${Object.keys(DEFERRED_FIELDS).join(", ")}).`);
+  if (parsed.overwrite) {
+    console.log(`♻️  Ustidan yozildi: ${over} mavjud yozuv (--overwrite).`);
+  } else {
+    console.log("Mavjud id'lar o'tkazib yuborildi — bor ma'lumot ustiga yozilmadi.");
+    console.log("Agar bazani BUZISHGAN bo'lsa, bu yetmaydi — docs/zaxira.md ga qarang.");
+  }
 }
 
 main().catch((e) => {

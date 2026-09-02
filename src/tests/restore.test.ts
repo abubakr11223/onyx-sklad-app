@@ -184,10 +184,35 @@ describe("darvozalar", () => {
     ).toEqual({ ok: false, error: "confirm" });
   });
 
+  // Audit 2026-09-02 — «buzib kirishdi» ssenariysi uchun ikkinchi rejim.
+  it("--overwrite tanib olinadi va standartda o'chiq turadi", () => {
+    const off = parseRestoreArgs(["--file=a.json"], {});
+    expect(off.overwrite).toBe(false);
+    const on = parseRestoreArgs(["--file=a.json", "--overwrite"], {});
+    expect(on.overwrite).toBe(true);
+  });
+
+  it("--overwrite darvozalardan o'tib natijaga tushadi", () => {
+    const r = validateRestoreArgs({
+      file: "a.json",
+      execute: true,
+      confirm: true,
+      overwrite: true,
+      envAllow: true,
+    });
+    expect(r).toEqual({
+      ok: true,
+      file: "a.json",
+      execute: true,
+      willWrite: true,
+      overwrite: true,
+    });
+  });
+
   it("bayroqsiz — quruq yurgizish (willWrite=false)", () => {
     const env = { [RESTORE_ALLOW_ENV]: RESTORE_ALLOW_VALUE };
     const r = validateRestoreArgs(parseRestoreArgs(["--file=a.json"], env));
-    expect(r).toEqual({ ok: true, file: "a.json", execute: false, willWrite: false });
+    expect(r).toEqual({ ok: true, file: "a.json", execute: false, willWrite: false, overwrite: false });
   });
 
   it("to'liq to'plam — yozishga ruxsat", () => {
@@ -195,6 +220,6 @@ describe("darvozalar", () => {
     const r = validateRestoreArgs(
       parseRestoreArgs(["--file=a.json", "--execute", "--yes"], env),
     );
-    expect(r).toEqual({ ok: true, file: "a.json", execute: true, willWrite: true });
+    expect(r).toEqual({ ok: true, file: "a.json", execute: true, willWrite: true, overwrite: false });
   });
 });

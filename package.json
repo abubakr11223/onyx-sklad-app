@@ -22,7 +22,8 @@
     "purge:inventory": "tsx prisma/purge-cli.ts",
     "restore": "tsx prisma/restore-cli.ts",
     "postinstall": "prisma generate",
-    "tg:menu": "tsx prisma/set-tg-menu-cli.ts"
+    "tg:menu": "tsx prisma/set-tg-menu-cli.ts",
+    "backup:photos": "tsx prisma/photos-export-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

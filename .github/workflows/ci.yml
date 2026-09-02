@@ -1,6 +1,11 @@
 # CI: тесты + сборка на каждом PR и push в main.
-# БД не требуется: все тесты изолированы (vi.mock для @/lib/db, in-memory моки
-# для PrismaClient; type-only import @prisma/client не выходит в рантайм).
+#
+# Основная масса тестов БД не требует (vi.mock для @/lib/db, in-memory моки).
+# НО с 2026-09-02 в CI поднимается настоящий Postgres — ради одного теста:
+# репетиции восстановления из резервной копии. Аудит показал, что она
+# пропускалась всегда (без БД `describe.skipIf` её отключал), то есть путь
+# «копия → пустая база → сверка по каждой таблице» ни разу не проверялся
+# автоматически. Непроверенная резервная копия — это не резервная копия.
 # `prisma generate` запускается автоматически через `postinstall` из package.json.
 
 name: CI
@@ -21,6 +26,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Репетиция восстановления создаёт свою черновую базу рядом с этой,
+    # поэтому пользователю нужны права CREATE DATABASE — postgres подходит.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: onyx
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/onyx?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/onyx?schema=public
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,6 +63,14 @@ jobs:
       # (`prisma generate` — нужен для type-check и import type @prisma/client).
       - name: Install dependencies
         run: npm ci
+
+      # Схема + данные. Без данных репетиция бессмысленна: сверка «0 = 0»
+      # проходит для пустой таблицы и ничего не доказывает, поэтому тест
+      # теперь падает на любой пустой таблице (см. restore-rehearsal).
+      - name: Prepare database
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
 
       - name: Run tests
         run: npm test

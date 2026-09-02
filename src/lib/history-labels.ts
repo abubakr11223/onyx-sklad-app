@@ -32,10 +32,16 @@ export const ACTION_RU: Record<string, string> = {
   SHIPMENT_CONFIRM: "Отгрузка",
   SHOWROOM_SEND: "В шоу-рум",
   SHOWROOM_RETURN: "Возврат из шоу-рума",
+  // Аудит 2026-09-02 — системные действия (userId = null). Показываются в
+  // Истории наравне с остальными: на вопрос «а копии вообще делаются?»
+  // ответ должен быть виден в приложении, а не только в логах хостинга.
+  BACKUP: "Резервная копия",
+  EXPORT: "Выгрузка базы",
 };
 
 /** AuditLog.entityType (свободная строка «Batch»/«Slab»/…) → русская подпись. */
 export const ENTITY_RU: Record<string, string> = {
+  Backup: "Резервная копия",
   Batch: "Партия",
   Slab: "Плита",
   Piece: "Бой/остаток",
@@ -70,6 +76,10 @@ export const ACTION_VARIANT: Record<string, HistoryBadgeVariant> = {
   SHIPMENT_CONFIRM: "success",
   SHOWROOM_SEND: "warning",
   SHOWROOM_RETURN: "success",
+  BACKUP: "success",
+  // Выгрузка всей базы — редкое и крупное действие: держим на виду,
+  // чтобы чужая строчка в журнале сразу бросалась в глаза.
+  EXPORT: "warning",
 };
 
 /** Подпись действия; неизвестное — как есть (лучше сырой код, чем пустота). */

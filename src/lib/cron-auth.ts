@@ -24,9 +24,27 @@ export function timingSafeEqual(a: string, b: string): boolean {
  * `curl -H "Authorization: Bearer $CRON_SECRET"`.
  */
 export function isCronAuthorized(req: Request, label: string): boolean {
-  const expected = process.env.CRON_SECRET;
+  return isAuthorizedWith(req, label, "CRON_SECRET");
+}
+
+/**
+ * Kalit nomi bilan tekshirish. Audit 2026-09-02: eksport va cron BITTA kalitda
+ * edi — biri sizib chiqsa ikkinchisi ham ochiq qolardi, va eksport kaliti
+ * hujjatlardagi curl misollarida ochiq turadi (terminal tarixida qoladi).
+ * Endi eksport o'z kalitini oladi; u berilmagan bo'lsa — eski xatti-harakat
+ * (CRON_SECRET) saqlanadi, ya'ni ko'chirish paytida hech narsa sinmaydi.
+ */
+export function isAuthorizedWith(
+  req: Request,
+  label: string,
+  envName: string,
+  fallbackEnvName?: string,
+): boolean {
+  const expected =
+    process.env[envName] ||
+    (fallbackEnvName ? process.env[fallbackEnvName] : undefined);
   if (!expected || expected.length === 0) {
-    console.warn(`[${label}] CRON_SECRET o'rnatilmagan — rad etildi.`);
+    console.warn(`[${label}] ${envName} o'rnatilmagan — rad etildi.`);
     return false;
   }
   const header = req.headers.get("authorization") ?? "";

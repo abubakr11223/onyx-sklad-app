@@ -45,6 +45,26 @@ services:
     expose:
       - "3000"
 
+  # ── Kunlik vazifalar ────────────────────────────────────────────────────
+  # Audit 2026-09-02: bu xizmat YO'Q edi. Jadval faqat Vercel'da (vercel.json)
+  # yashardi, ya'ni ko'chgan kundan boshlab kunlik zaxira va bron tozalash
+  # JIMGINA bajarilmay qolardi. Hujjatdagi qo'lda crontab varianti ham
+  # ishlamasdi (kalit bo'sh ketardi, natija /dev/null'ga).
+  #
+  # Endi jadval ilova bilan BIR JOYDA turadi: `up -d` qilinishi bilan o'zi
+  # ishlaydi, hech kim hech narsani yodda tutmasligi kerak.
+  # Jurnal: docker compose -f docker-compose.prod.yml logs cron
+  cron:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    # CRON_SECRET shu yerdan keladi — aynan shu narsa host crontab'da yetishmasdi.
+    env_file: .env.production
+    volumes:
+      - ./scripts/onyx-cron.sh:/onyx-cron.sh:ro
+    entrypoint: ["/bin/sh", "/onyx-cron.sh"]
+    depends_on:
+      - app
+
   caddy:
     image: caddy:2
     restart: unless-stopped

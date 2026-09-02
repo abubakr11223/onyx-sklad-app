@@ -17,16 +17,36 @@
 // qilmaydi, natijasi javob tanasida ko'rinadi).
 //
 // Jadval: vercel.json → crons, kuniga bir marta (Vercel Hobby cheklovi).
+import { Prisma } from "@prisma/client";
+
 import { db } from "@/lib/db";
 import { isCronAuthorized } from "@/lib/cron-auth";
+import { packBackup, resolveBackupKey } from "@/lib/backup-file";
+import { recordBackupOk } from "@/lib/backup-status";
 import {
   buildSnapshot,
   snapshotCaption,
-  snapshotFilename,
   snapshotToJson,
   snapshotTotalRows,
 } from "@/lib/db-snapshot";
 import { sendDocument, sendMessage } from "@/lib/telegram";
+
+/**
+ * Snapshot BITTA vaqt kesimida olinishi shart. Audit 2026-09-02: 26 jadval
+ * ketma-ket, umumiy tranzaksiyasiz o'qilardi. Ro'yxat otadan bolaga boradi
+ * (mijoz → obyekt → sotuv), demak o'qish orasida yangi mijoz ochilib darhol
+ * unga sotuv yozilsa — faylga SOTUV tushib, MIJOZ tushmasdi. Bunday fayl
+ * tiklashda tashqi kalit xatosi bilan yiqiladi, ya'ni zaxira «bor» ko'rinib,
+ * aynan falokat kuni ishlamay qolardi.
+ *
+ * RepeatableRead — hamma o'qish bir xil kesimni ko'radi. timeout SHART:
+ * standarti 5 soniya, 26 jadval undan uzoqroq o'qiladi.
+ */
+export const SNAPSHOT_TX_OPTIONS = {
+  isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+  timeout: 55_000,
+  maxWait: 10_000,
+} as const;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -102,12 +122,19 @@ export async function GET(req: Request): Promise<Response> {
   let total: number;
   let caption: string;
   let counts: Record<string, number>;
+  let packed: ReturnType<typeof packBackup>;
   try {
-    const snapshot = await buildSnapshot(db, takenAt);
-    json = snapshotToJson(snapshot);
+    const snapshot = await db.$transaction(
+      (tx) => buildSnapshot(tx, takenAt),
+      SNAPSHOT_TX_OPTIONS,
+    );
     total = snapshotTotalRows(snapshot);
     caption = snapshotCaption(snapshot);
     counts = snapshot.counts;
+    // Qadoqlash: gzip + (kalit bo'lsa) shifr. Kalit yo'q bo'lsa parol
+    // xeshlari faylga tushmaydi — tafsilot src/lib/backup-file.ts da.
+    packed = packBackup(snapshot, snapshotToJson, resolveBackupKey());
+    json = "";
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     console.error(`[cron/backup] snapshot yiqildi: ${error}`);
@@ -125,8 +152,12 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
-  const bytes = new TextEncoder().encode(json);
-  const filename = snapshotFilename(takenAt);
+  void json;
+  const bytes = packed.bytes;
+  const filename = packed.filename;
+  if (packed.redacted.length > 0) {
+    caption += `\n⚠️ Без шифрования: ${packed.redacted.join(", ")} не сохранены.`;
+  }
 
   if (ownersError !== null || owners.length === 0) {
     // Yuboradigan hech kim yo'q — zaxira hech kimga ketmadi, bu ham jim
@@ -221,12 +252,43 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
+  // (5) Zaxira YETIB BORDI. Ikkita iz qoldiramiz:
+  //   • AppConfig.lastBackupOkAt — ikkinchi cron shu sanani tekshirib,
+  //     zaxira kelmay qolsa egani ogohlantiradi (o'lik odam tugmasi);
+  //   • AuditLog — «zaxira kelmayapti» degan savolga javob jurnaldan chiqadi.
+  // Ikkalasi ham best-effort: yozilmasa ham tayyor zaxira bekor bo'lmaydi.
+  const heartbeat = await recordBackupOk(db, takenAt);
+  try {
+    await db.auditLog.create({
+      data: {
+        userId: null,
+        action: "BACKUP",
+        entityType: "Backup",
+        entityId: filename,
+        payload: {
+          bytes: bytes.length,
+          totalRows: total,
+          encrypted: packed.encrypted,
+          redacted: packed.redacted,
+          delivered: delivered.length,
+        },
+      },
+    });
+  } catch (e) {
+    console.warn(
+      `[cron/backup] jurnal yozuvi qo'shilmadi: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
   return Response.json({
     ok: true,
     takenAt,
     bytes: bytes.length,
     totalRows: total,
     counts,
+    encrypted: packed.encrypted,
+    redacted: packed.redacted,
+    heartbeat,
     delivered: delivered.length,
     failed,
   });
