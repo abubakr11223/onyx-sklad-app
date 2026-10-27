@@ -1,4 +1,10 @@
 // TZ №15 Slice 3 — «Шоу-рум»: list + send + return / sell / sample.
+import {
+  formatLocationsShort,
+  formatSourceLine,
+  loadPatternStock,
+  patternsOfBatch,
+} from "@/lib/pattern-stock";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -120,10 +126,34 @@ export default async function ShourumPage({
       : Promise.resolve([]),
   ]);
 
+  // ТЗ №19 B4 — плита на витрину выделяется ИЗ УЗОРА: у неё сразу размер,
+  // толщина и фото узора, остаток узора и его места −1.
+  const patternStock = await loadPatternStock(
+    db,
+    batchRows.map((b) => b.id),
+  );
   // Свободный остаток считаем той же формулой §3, что и домен (ADR-005) —
   // партия без свободных плит в списке не нужна: выделение всё равно откажет.
   const batches = batchRows
-    .map((b) => {
+    .flatMap((b) => {
+      const pats = patternsOfBatch(patternStock, b.id);
+      if (pats.length > 0) {
+        return pats.map((ps) => ({
+          id: `${b.id}:${ps.id}`,
+          stoneName: b.stoneType.name,
+          slabsFree: ps.availableSlabs as number | null,
+          label: formatSourceLine({
+            stoneName: b.stoneType.name,
+            description: ps.description,
+            lengthMm: ps.lengthMm,
+            widthMm: ps.widthMm,
+            thicknessMm: ps.thicknessMm,
+            slabsFree: ps.availableSlabs,
+            areaFreeM2: null,
+            locationText: formatLocationsShort(ps.locations),
+          }),
+        }));
+      }
       const free = computeFreeRemainder(
         {
           slabsTotal: b.slabsTotal,
@@ -136,13 +166,17 @@ export default async function ShourumPage({
         b.slabs.map((s) => ({ areaM2: s.areaM2 == null ? null : Number(s.areaM2) })),
         b.pieces.map((p) => ({ areaM2: p.areaM2 == null ? null : Number(p.areaM2) })),
       );
-      return {
-        id: b.id,
-        stoneName: b.stoneType.name,
-        slabsFree: free.slabsFree,
-        areaFreeM2: free.areaFreeM2,
-        gabarit: formatGabarit(b.lengthMm, b.widthMm),
-      };
+      const gabarit = formatGabarit(b.lengthMm, b.widthMm);
+      return [
+        {
+          id: b.id,
+          stoneName: b.stoneType.name,
+          slabsFree: free.slabsFree,
+          label: `${b.stoneType.name}${gabarit !== "—" ? ` · ${gabarit}` : ""} · свободно ${
+            free.slabsFree === null ? "—" : `${free.slabsFree} плит`
+          }`,
+        },
+      ];
     })
     .filter((b) => b.slabsFree === null || b.slabsFree > 0);
 
@@ -205,9 +239,7 @@ export default async function ShourumPage({
                 </option>
                 {batches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.stoneName}
-                    {b.gabarit !== "—" ? ` · ${b.gabarit}` : ""} · свободно{" "}
-                    {b.slabsFree === null ? "—" : `${b.slabsFree} плит`}
+                    {b.label}
                   </option>
                 ))}
               </select>

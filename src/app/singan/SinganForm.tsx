@@ -30,6 +30,8 @@ import WarehouseLocationSelect, {
 export interface SinganBatchOption {
   id: string;
   label: string;
+  /** ТЗ №19 B3 — узоры партии; есть → узор обязателен. */
+  patterns?: { id: string; label: string; thicknessMm: number | null }[];
 }
 
 const initialState: SinganFormState = { errors: {} };
@@ -90,6 +92,10 @@ export default function SinganForm({
   const [areaM2, setAreaM2] = useState(() => state.values?.areaM2 ?? "");
   const [kind, setKind] = useState(() => state.values?.kind || "BROKEN");
   const [batchId, setBatchId] = useState(() => state.values?.batchId ?? "");
+  const [batchPatternId, setBatchPatternId] = useState(
+    () => state.values?.batchPatternId ?? "",
+  );
+  const selectedBatch = batches.find((b) => b.id === batchId) ?? null;
   const [block, setBlock] = useState(() => state.values?.block ?? "");
   const [landmark, setLandmark] = useState(() => state.values?.landmark ?? "");
   const [breakCause, setBreakCause] = useState(
@@ -234,7 +240,10 @@ export default function SinganForm({
               className={inputClass}
               value={batchId}
               aria-invalid={e.batchId ? true : undefined}
-              onChange={(ev) => setBatchId(ev.target.value)}
+              onChange={(ev) => {
+                setBatchId(ev.target.value);
+                setBatchPatternId("");
+              }}
             >
               <option value="">— выберите партию —</option>
               {batches.map((b) => (
@@ -244,6 +253,32 @@ export default function SinganForm({
               ))}
             </select>
           </Field>
+          {/* ТЗ №19 B3 — смешанная партия: кусок списывается из узора. */}
+          {(selectedBatch?.patterns?.length ?? 0) > 0 && (
+            <Field id="batchPatternId" label="Узор" error={e.batchPatternId}>
+              <select
+                id="batchPatternId"
+                name="batchPatternId"
+                required
+                className={inputClass}
+                value={batchPatternId}
+                onChange={(ev) => {
+                  setBatchPatternId(ev.target.value);
+                  const pat = selectedBatch?.patterns?.find((p) => p.id === ev.target.value);
+                  if (pat?.thicknessMm != null && !thicknessMm) {
+                    setThicknessMm(String(pat.thicknessMm).replace(".", ","));
+                  }
+                }}
+              >
+                <option value="">— из какого узора —</option>
+                {selectedBatch!.patterns!.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">
             Кусок списывает <strong>1 плиту</strong> из свободного остатка
             партии (учёт §3).

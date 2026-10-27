@@ -59,6 +59,8 @@ export interface SinganValues {
   areaM2: string;
   kind: string;
   batchId: string;
+  /** ТЗ №19 B3 — узор партии (если заведены). */
+  batchPatternId: string;
   block: string;
   landmark: string;
   breakCause: string;
@@ -89,6 +91,7 @@ function readValues(formData: FormData): SinganValues {
     areaM2: str("areaM2"),
     kind: str("kind"),
     batchId: str("batchId"),
+    batchPatternId: str("batchPatternId"),
     block: str("block"),
     landmark: str("landmark"),
     breakCause: str("breakCause"),
@@ -268,6 +271,7 @@ export async function submitSingan(
       block,
       landmark,
       batchId,
+      batchPatternId: str("batchPatternId") || null,
       byUserId,
       drawingUrl,
       cause,

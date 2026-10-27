@@ -8,6 +8,9 @@ import {
   parsePositiveDecimal,
   parsePositiveInt,
   parseQuantityField,
+  patternTotals,
+  soleLocationPatternSlabs,
+  THICKNESS_REQUIRED_MSG,
   validateIntake,
   type IntakeInput,
 } from "@/lib/validators/intake";
@@ -155,11 +158,13 @@ describe("validateIntake — толщина дробная (ТЗ №12, реше
     expect(r.data.thicknessMm).toBe(2);
   });
 
-  it("пусто разрешено (толщина необязательна на уровне партии)", () => {
-    const r = validateIntake(baseInput({ thicknessMm: "" }));
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.data.thicknessMm).toBeNull();
+  it("ТЗ №19 A3 — пусто в однородной партии → ошибка thicknessMm (обязательна)", () => {
+    for (const empty of ["", "   "]) {
+      const r = validateIntake(baseInput({ thicknessMm: empty }));
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.errors.thicknessMm).toBe(THICKNESS_REQUIRED_MSG);
+    }
   });
 
   it("ноль и мусор — ошибка поля, а не тихий null", () => {
@@ -654,26 +659,72 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
     }
   });
 
-  it("сумма плит НЕ сходится → patternsSum", () => {
-    const r = validateIntake(
-      withPatterns([
-        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
-        { description: "b", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "40", areaM2: "30" }, // 90 ≠ 100
-      ]),
-    );
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.patternsSum).toBeDefined();
+  it("ТЗ №19 A1 — количество партии = ИТОГО по узорам; введённое игнорируется", () => {
+    // В «Количестве» прислано 100 / 60 (или мусор) — партия всё равно = Σ узоров.
+    for (const [slabsTotal, areaTotalM2] of [
+      ["100", "60"],
+      ["", ""],
+      ["abc", "-1"],
+    ]) {
+      const r = validateIntake(
+        baseInput({
+          slabsTotal,
+          areaTotalM2,
+          patternsEnabled: true,
+          patterns: [
+            { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "3", areaM2: "13,44" },
+            { description: "b", lengthMm: "250", widthMm: "150", thicknessMm: "3", slabs: "3", areaM2: "11.25" },
+          ],
+          locations: [
+            { block: "A1", landmark: "", slabsHere: "", areaHereM2: "", pattern: "0" },
+            { block: "A2", landmark: "", slabsHere: "", areaHereM2: "", pattern: "1" },
+          ],
+        }),
+      );
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      expect(r.data.slabsTotal).toBe(6);
+      expect(r.data.areaTotalM2).toBe(24.69);
+    }
   });
 
-  it("сумма м² НЕ сходится → patternsSum", () => {
+  it("ТЗ №19 A1 — узоры невалидны → итога нет, ошибки только у узоров (без patternsSum/quantity)", () => {
     const r = validateIntake(
       withPatterns([
-        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
-        { description: "b", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "25" }, // 55 ≠ 60
+        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "", areaM2: "30" },
       ]),
     );
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.patternsSum).toBeDefined();
+    if (r.ok) return;
+    expect(r.errors["pattern-0-slabs"]).toBeDefined();
+    expect(r.errors.patternsSum).toBeUndefined();
+    expect(r.errors.patternsTotals).toBeUndefined();
+    expect(r.errors.quantity).toBeUndefined();
+  });
+
+  it("ТЗ №19 A3 — толщина обязательна в каждом узоре", () => {
+    const r = validateIntake(
+      withPatterns([
+        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "50", areaM2: "30" },
+        { description: "b", lengthMm: "280", widthMm: "160", thicknessMm: "", slabs: "50", areaM2: "30" },
+      ]),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors["pattern-1-thickness"]).toBe(THICKNESS_REQUIRED_MSG);
+    expect(r.errors["pattern-0-thickness"]).toBeUndefined();
+    // Толщина партии с узорами не требуется — она в узорах.
+    expect(r.errors.thicknessMm).toBeUndefined();
+  });
+
+  it("ТЗ №19 A3 — с узорами пустая толщина партии не мешает", () => {
+    const r = validateIntake({
+      ...withPatterns([
+        { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "100", areaM2: "60" },
+      ]),
+      thicknessMm: "",
+    });
+    expect(r.ok).toBe(true);
   });
 
   it("пустое описание узора → pattern-0-description", () => {
@@ -687,24 +738,99 @@ describe("validateIntake — узоры в партии (ТЗ №3)", () => {
     if (!r.ok) expect(r.errors["pattern-0-description"]).toBeDefined();
   });
 
-  it("узоры без тотала м² партии → patternsTotals", () => {
-    const r = validateIntake(
-      baseInput({
-        slabsTotal: "100",
-        areaTotalM2: "",
-        patternsEnabled: true,
-        patterns: [{ description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "100", areaM2: "60" }],
-      }),
-    );
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.patternsTotals).toBeDefined();
-  });
-
   it("галочка стоит, но узоров нет → patterns", () => {
     const r = validateIntake(
       baseInput({ slabsTotal: "100", areaTotalM2: "60", patternsEnabled: true, patterns: [] }),
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.patterns).toBeDefined();
+  });
+});
+
+describe("ТЗ №19 A1 — patternTotals", () => {
+  it("складывает плиты и м², м² округляет до 3 знаков (без float-хвоста)", () => {
+    expect(
+      patternTotals([
+        { slabs: 3, areaM2: 13.44 },
+        { slabs: 3, areaM2: 11.25 },
+      ]),
+    ).toEqual({ slabs: 6, areaM2: 24.69 });
+    expect(patternTotals([{ slabs: 1, areaM2: 0.1 }, { slabs: 1, areaM2: 0.2 }]).areaM2).toBe(0.3);
+    expect(patternTotals([])).toEqual({ slabs: 0, areaM2: 0 });
+  });
+});
+
+describe("ТЗ №19 A2 — «Плит здесь» из узора", () => {
+  const slabs = (k: string) => ({ "0": 3, "1": 5 })[k] ?? null;
+
+  it("узор только в одной строке → число плит узора", () => {
+    expect(soleLocationPatternSlabs(["0", "1"], 0, slabs)).toBe(3);
+    expect(soleLocationPatternSlabs(["0", "1"], 1, slabs)).toBe(5);
+  });
+
+  it("узор в двух строках → null (делёж вручную)", () => {
+    expect(soleLocationPatternSlabs(["0", "0", "1"], 0, slabs)).toBeNull();
+    expect(soleLocationPatternSlabs(["0", "0", "1"], 2, slabs)).toBe(5);
+  });
+
+  it("«весь приход» и неизвестный/пустой узор → null", () => {
+    expect(soleLocationPatternSlabs(["", "1"], 0, slabs)).toBeNull();
+    expect(soleLocationPatternSlabs(["7"], 0, slabs)).toBeNull();
+  });
+
+  it("валидатор: пустое «плит здесь» у единственной строки узора = весь узор", () => {
+    const r = validateIntake(
+      baseInput({
+        patternsEnabled: true,
+        patterns: [
+          { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "3", areaM2: "13,44" },
+          { description: "b", lengthMm: "250", widthMm: "150", thicknessMm: "3", slabs: "3", areaM2: "11,25" },
+        ],
+        locations: [
+          { block: "A1", landmark: "", slabsHere: "", areaHereM2: "", pattern: "0" },
+          { block: "A2", landmark: "", slabsHere: "", areaHereM2: "", pattern: "1" },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.locations.map((l) => l.slabsHere)).toEqual([3, 3]);
+    expect(r.data.locations.map((l) => l.areaHereM2)).toEqual([13.44, 11.25]);
+  });
+
+  it("валидатор: узор в двух строках — пустое «плит здесь» по-прежнему ошибка", () => {
+    const r = validateIntake(
+      baseInput({
+        patternsEnabled: true,
+        patterns: [
+          { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "4", areaM2: "16" },
+        ],
+        locations: [
+          { block: "A1", landmark: "", slabsHere: "", areaHereM2: "", pattern: "0" },
+          { block: "A2", landmark: "", slabsHere: "2", areaHereM2: "", pattern: "0" },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors["loc-0-slabsHere"]).toBeDefined();
+  });
+
+  it("ручная правка сохраняется (2 + 1 при узоре 3 → ok)", () => {
+    const r = validateIntake(
+      baseInput({
+        patternsEnabled: true,
+        patterns: [
+          { description: "a", lengthMm: "280", widthMm: "160", thicknessMm: "2", slabs: "3", areaM2: "12" },
+        ],
+        locations: [
+          { block: "A1", landmark: "", slabsHere: "2", areaHereM2: "", pattern: "0" },
+          { block: "A2", landmark: "", slabsHere: "1", areaHereM2: "", pattern: "0" },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.locations.map((l) => l.slabsHere)).toEqual([2, 1]);
   });
 });

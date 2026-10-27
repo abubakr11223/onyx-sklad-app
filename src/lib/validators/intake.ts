@@ -19,7 +19,13 @@ export interface IntakeLocationInput {
   pattern?: string;
 }
 
-/** ТЗ №3 — узор-подгруппа: описание + толщина + плиты + м² (сырые строки). */
+/**
+ * ТЗ №3 — узор-подгруппа: описание + толщина + плиты + м² (сырые строки).
+ *
+ * ТЗ №19 A5 — ЕДИНИЦА: САНТИМЕТРЫ. Суффикс `Mm` в lengthMm/widthMm/thicknessMm
+ * — историческое имя (ТЗ №12 перевёл значения в см, столбцы БД не
+ * переименовывались). Ничего на 10 не умножать и не делить.
+ */
 export interface IntakePatternInput {
   description: string;
   thicknessMm: string;
@@ -53,7 +59,10 @@ export interface IntakeInput {
   supplierNote: string;
   /** «ГГГГ-ММ-ДД»; пусто = сегодня */
   arrivedAt: string;
-  /** ТЗ №12: габарит плиты партии, см (обязателен без узоров). */
+  /**
+   * ТЗ №12: габарит плиты партии, см (обязателен без узоров).
+   * ТЗ №19 A5 — суффикс `Mm` исторический, единица — САНТИМЕТРЫ.
+   */
   lengthMm: string;
   widthMm: string;
   thicknessMm: string;
@@ -100,7 +109,7 @@ export interface ValidIntake {
       };
   slabsTotal: number | null;
   areaTotalM2: number | null;
-  /** ТЗ №12: см. */
+  /** ТЗ №12: см (ТЗ №19 A5 — суффикс `Mm` исторический, не миллиметры). */
   lengthMm: number | null;
   widthMm: number | null;
   thicknessMm: number | null;
@@ -189,6 +198,49 @@ export function parseQuantityField(
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** ТЗ №19 A3 — общее сообщение «толщина обязательна» (партия и узор). */
+export const THICKNESS_REQUIRED_MSG =
+  "Укажите толщину, см (например 2 или 1,8) — без неё камень не найти и не продать";
+
+/**
+ * ТЗ №19 A1 — ИТОГО по узорам: количество партии с узорами вычисляется, а не
+ * вводится. м² округляем до 3 знаков (Decimal(12,3)) — без float-хвостов
+ * вида 24.690000000000001.
+ */
+export function patternTotals(
+  patterns: readonly { slabs: number; areaM2: number }[],
+): { slabs: number; areaM2: number } {
+  let slabs = 0;
+  let area = 0;
+  for (const p of patterns) {
+    slabs += p.slabs;
+    area += p.areaM2;
+  }
+  return { slabs, areaM2: Math.round(area * 1000) / 1000 };
+}
+
+/**
+ * ТЗ №19 A2 — «Плит здесь» по умолчанию для строки локации с конкретным
+ * узором: если этот узор выбран ровно в ОДНОЙ строке — весь узор лежит здесь
+ * (его число плит). Иначе null: узор разложен по нескольким местам, делёж
+ * вводится руками. «Весь приход» ("") — тоже null.
+ *
+ * `rowPatterns` — ключ узора каждой строки ("" = весь приход). Ключ любой
+ * (индекс в валидаторе, id строки в форме) — сравнивается только на равенство.
+ */
+export function soleLocationPatternSlabs(
+  rowPatterns: readonly string[],
+  rowIdx: number,
+  slabsOfPattern: (key: string) => number | null,
+): number | null {
+  const key = rowPatterns[rowIdx] ?? "";
+  if (key === "") return null;
+  const sameRows = rowPatterns.filter((k) => k === key).length;
+  if (sameRows !== 1) return null;
+  const n = slabsOfPattern(key);
+  return typeof n === "number" && Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export function validateIntake(input: IntakeInput): IntakeResult {
   const errors: IntakeErrors = {};
 
@@ -226,16 +278,25 @@ export function validateIntake(input: IntakeInput): IntakeResult {
   // BUG-02: для приёмки 0 == пусто (parseQuantityField). Отрицательное/текст
   // по-прежнему ошибка поля; правило «минимум одно» срабатывает, когда ОБА
   // пусты-или-ноль.
-  const slabsTotal = parseQuantityField(input.slabsTotal, "int");
-  const areaTotalM2 = parseQuantityField(input.areaTotalM2, "decimal");
-  if (slabsTotal === undefined) {
-    errors.slabsTotal = "Число плит — целое положительное число";
-  }
-  if (areaTotalM2 === undefined) {
-    errors.areaTotalM2 = "Площадь — положительное число, например 12,5";
-  }
-  if (slabsTotal === null && areaTotalM2 === null) {
-    errors.quantity = "Укажите число плит и/или площадь (м²) — минимум одно";
+  //
+  // ТЗ №19 A1 — с узорами количество партии ВЫЧИСЛЯЕМОЕ: = ИТОГО по узорам
+  // (считается ниже, после разбора узоров). Введённые slabsTotal/areaTotalM2
+  // игнорируются — складчик больше не вводит одно и то же дважды, а прямой
+  // POST не может прислать партию, расходящуюся с узорами.
+  let slabsTotal: number | null | undefined = null;
+  let areaTotalM2: number | null | undefined = null;
+  if (!input.patternsEnabled) {
+    slabsTotal = parseQuantityField(input.slabsTotal, "int");
+    areaTotalM2 = parseQuantityField(input.areaTotalM2, "decimal");
+    if (slabsTotal === undefined) {
+      errors.slabsTotal = "Число плит — целое положительное число";
+    }
+    if (areaTotalM2 === undefined) {
+      errors.areaTotalM2 = "Площадь — положительное число, например 12,5";
+    }
+    if (slabsTotal === null && areaTotalM2 === null) {
+      errors.quantity = "Укажите число плит и/или площадь (м²) — минимум одно";
+    }
   }
 
   // ── ТЗ №12: габарит плиты (см) ──
@@ -260,6 +321,8 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       widthMm = rawWid;
     }
     if (input.thicknessMm.trim() === "") {
+      // ТЗ №19 A3 — толщина обязательна: без неё поиск и продажа «слепые».
+      errors.thicknessMm = THICKNESS_REQUIRED_MSG;
       thicknessMm = null;
     } else {
       // ТЗ №12 + решение владельца 2026-08-10: толщина ДРОБНАЯ (18 мм = 1,8 см).
@@ -299,13 +362,6 @@ export function validateIntake(input: IntakeInput): IntakeResult {
     if (input.patterns.length === 0) {
       errors.patterns = "Добавьте хотя бы один узор или снимите галочку";
     }
-    // Суммы сходятся И по плитам, И по м² → нужны ОБА тотала партии.
-    if (slabsTotal === null || areaTotalM2 === null) {
-      errors.patternsTotals =
-        "Для узоров укажите в «Количестве» и плиты, и площадь партии";
-    }
-    let sumSlabs = 0;
-    let sumArea = 0;
     input.patterns.forEach((p, i) => {
       const description = p.description.trim();
       if (!description) errors[`pattern-${i}-description`] = "Опишите узор";
@@ -317,9 +373,12 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       if (typeof area !== "number") {
         errors[`pattern-${i}-area`] = "Площадь — положительное число, например 12,5";
       }
+      // ТЗ №19 A3 — толщина обязательна в КАЖДОМ узоре.
       const thickness =
         p.thicknessMm.trim() === "" ? null : parseThicknessCm(p.thicknessMm);
-      if (thickness === undefined) {
+      if (thickness === null) {
+        errors[`pattern-${i}-thickness`] = THICKNESS_REQUIRED_MSG;
+      } else if (thickness === undefined) {
         errors[`pattern-${i}-thickness`] =
           "Толщина, см — положительное число, например 2 или 1,8";
       }
@@ -335,12 +394,10 @@ export function validateIntake(input: IntakeInput): IntakeResult {
         description &&
         typeof slabs === "number" &&
         typeof area === "number" &&
-        thickness !== undefined &&
+        typeof thickness === "number" &&
         typeof pLen === "number" &&
         typeof pWid === "number"
       ) {
-        sumSlabs += slabs;
-        sumArea += area;
         patterns.push({
           description,
           thicknessMm: thickness,
@@ -351,16 +408,15 @@ export function validateIntake(input: IntakeInput): IntakeResult {
         });
       }
     });
-    // Сходимость сусм — только когда ВСЕ строки валидны и тоталы заданы
-    // (иначе сначала правим поля, а не пугаем «не сходится»).
+    // ТЗ №19 A1 — количество партии = ИТОГО по узорам (только когда ВСЕ
+    // строки валидны; иначе сначала правим поля узоров). «Не сходится»
+    // (patternsSum) больше не возникает: расходиться нечему.
     const allValid =
       input.patterns.length > 0 && patterns.length === input.patterns.length;
-    if (allValid && typeof slabsTotal === "number" && typeof areaTotalM2 === "number") {
-      if (sumSlabs !== slabsTotal) {
-        errors.patternsSum = `Сумма плит по узорам (${sumSlabs}) не сходится с количеством партии (${slabsTotal})`;
-      } else if (Math.abs(sumArea - areaTotalM2) > 0.001) {
-        errors.patternsSum = `Сумма м² по узорам (${sumArea.toFixed(1)}) не сходится с площадью партии (${areaTotalM2})`;
-      }
+    if (allValid) {
+      const totals = patternTotals(patterns);
+      slabsTotal = totals.slabs;
+      areaTotalM2 = totals.areaM2;
     }
   }
 
@@ -395,15 +451,6 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       input.locations.length === 1 && (loc.pattern ?? "").trim() === "";
     const slabsRequired =
       (input.patternsEnabled || slabsTotal !== null) && !wholeBatchRow;
-    let slabsHere = parsePositiveInt(loc.slabsHere);
-    if (slabsHere === null && wholeBatchRow && typeof slabsTotal === "number") {
-      slabsHere = slabsTotal;
-    }
-    if (slabsHere === null && slabsRequired) {
-      errors[`loc-${i}-slabsHere`] = "Укажите, сколько плит лежит здесь";
-    } else if (slabsHere === undefined) {
-      errors[`loc-${i}-slabsHere`] = "Целое положительное число";
-    }
 
     // ТЗ №18 §3 — «Что здесь»: "" = весь приход; иначе индекс узора.
     const rawPat = (loc.pattern ?? "").trim();
@@ -416,6 +463,27 @@ export function validateIntake(input: IntakeInput): IntakeResult {
       } else {
         patternIdx = idx;
       }
+    }
+
+    let slabsHere = parsePositiveInt(loc.slabsHere);
+    if (slabsHere === null && wholeBatchRow && typeof slabsTotal === "number") {
+      slabsHere = slabsTotal;
+    }
+    // ТЗ №19 A2 — узор лежит в ОДНОЙ строке → пусто = весь узор здесь
+    // (то же, что форма подставляет при выборе узора).
+    if (slabsHere === null && patternIdx !== null && patternsAllValid) {
+      slabsHere = soleLocationPatternSlabs(
+        input.locations.map((l) =>
+          input.patternsEnabled ? (l.pattern ?? "").trim() : "",
+        ),
+        i,
+        (key) => patterns[Number(key)]?.slabs ?? null,
+      );
+    }
+    if (slabsHere === null && slabsRequired) {
+      errors[`loc-${i}-slabsHere`] = "Укажите, сколько плит лежит здесь";
+    } else if (slabsHere === undefined) {
+      errors[`loc-${i}-slabsHere`] = "Целое положительное число";
     }
 
     // ТЗ №18 §5 — м² здесь: для строки с узором СЧИТАЕТСЯ из данных узора

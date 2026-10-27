@@ -37,7 +37,8 @@ export async function sendToShowroomAction(formData: FormData): Promise<void> {
   const source = str("source") || "UNIT";
 
   if (source === "BATCH") {
-    const batchId = str("batchId");
+    // «<batchId>» — однородная партия, «<batchId>:<patternId>» — узор (ТЗ №19 B4).
+    const [batchId, batchPatternId] = str("batchId").split(":", 2);
     if (!batchId) redir("Не выбрана партия");
     const qtyRaw = str("qty").trim();
     const qty = qtyRaw === "" ? 1 : Number(qtyRaw.replace(",", "."));
@@ -47,6 +48,7 @@ export async function sendToShowroomAction(formData: FormData): Promise<void> {
 
     const res = await sendBatchSlabToShowroom({
       batchId,
+      batchPatternId: batchPatternId || null,
       qty,
       actorId,
       standNote: standNote || null,

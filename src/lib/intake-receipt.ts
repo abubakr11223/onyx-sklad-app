@@ -31,12 +31,20 @@ export function parseMutationId(raw: unknown): string | null {
 export interface IntakeReceiptResultJson {
   stoneName: string;
   patternIds: string[];
+  /** ТЗ №19 A4 — локация каждого узора (выровнено с patternIds). */
+  patternLocationIds?: (string | null)[];
 }
 
 export interface IntakeCreateSummary {
   stoneName: string;
   batchId: string;
   patternIds: string[];
+  /**
+   * ТЗ №19 A4 — id строки BatchLocation, где лежит каждый узор (выровнено с
+   * patternIds; null = место узора неизвестно). Уходит в фотозапрос узора,
+   * чтобы складчик знал «блок · ориентир», а не «локация не указана».
+   */
+  patternLocationIds: (string | null)[];
   /** true → domain write was skipped; returned existing batch from receipt. */
   replay: boolean;
 }
@@ -74,8 +82,48 @@ function summaryFromReceipt(
     patternIds: Array.isArray(j.patternIds)
       ? j.patternIds.filter((x): x is string => typeof x === "string")
       : [],
+    patternLocationIds: Array.isArray(j.patternLocationIds)
+      ? j.patternLocationIds.map((x) => (typeof x === "string" ? x : null))
+      : [],
     replay: true,
   };
+}
+
+/**
+ * ТЗ №19 A4 — индекс строки локации для каждого узора (длина = patternCount).
+ *  1) первая строка, где выбран именно этот узор («Что здесь»);
+ *  2) иначе — единственная строка «весь приход» (узор лежит там вместе с
+ *     остальным приходом; в т.ч. партия с одной локацией);
+ *  3) иначе null — место узора неизвестно («локация не указана»).
+ */
+export function patternLocationIndexes(
+  locations: readonly { patternIdx: number | null }[],
+  patternCount: number,
+): (number | null)[] {
+  const wholeRows = locations
+    .map((l, i) => (l.patternIdx === null ? i : -1))
+    .filter((i) => i >= 0);
+  const fallback = wholeRows.length === 1 ? wholeRows[0] : null;
+  const out: (number | null)[] = [];
+  for (let p = 0; p < patternCount; p++) {
+    const own = locations.findIndex((l) => l.patternIdx === p);
+    out.push(own >= 0 ? own : fallback);
+  }
+  return out;
+}
+
+/**
+ * ТЗ №19 E2 — уникальные блоки локаций в порядке строк («A1, A2») для
+ * читаемой строки Истории: «Приёмка · Травертин · 6 пл. / 24,69 м² · 2 узора · A1, A2».
+ */
+export function intakeLocationBlocks(
+  locations: readonly { block: string }[],
+): string[] {
+  const seen: string[] = [];
+  for (const l of locations) {
+    if (l.block && !seen.includes(l.block)) seen.push(l.block);
+  }
+  return seen;
 }
 
 /**
@@ -178,8 +226,9 @@ export async function createIntakeWithReceipt(
     patternIds.push(pat.id);
   }
 
+  const locationIds: string[] = [];
   for (const loc of data.locations) {
-    await tx.batchLocation.create({
+    const createdLoc = await tx.batchLocation.create({
       data: {
         batchId: batch.id,
         block: loc.block,
@@ -191,7 +240,13 @@ export async function createIntakeWithReceipt(
       },
       select: { id: true },
     });
+    locationIds.push(createdLoc.id);
   }
+  // ТЗ №19 A4 — где лежит каждый узор (для фотозапроса «сфотографируй узор»).
+  const patternLocationIds = patternLocationIndexes(
+    data.locations,
+    patternIds.length,
+  ).map((li) => (li === null ? null : (locationIds[li] ?? null)));
 
   await tx.auditLog.create({
     data: {
@@ -206,9 +261,13 @@ export async function createIntakeWithReceipt(
         newStoneType: data.stoneType.kind === "new",
         slabsTotal: data.slabsTotal,
         areaTotalM2: data.areaTotalM2,
+        // ТЗ №19 E2 — для читаемой строки Истории без разбора массивов.
+        patternCount: data.patterns.length,
+        locationBlocks: intakeLocationBlocks(data.locations),
         supplierNote: data.supplierNote,
         arrivedAt: data.arrivedAt.toISOString(),
-        locations: data.locations.map((loc) => ({
+        locations: data.locations.map((loc, li) => ({
+          id: locationIds[li] ?? null,
           block: loc.block,
           landmark: loc.landmark,
           slabsHere: loc.slabsHere,
@@ -222,7 +281,8 @@ export async function createIntakeWithReceipt(
         lengthMm: data.lengthMm,
         widthMm: data.widthMm,
         thicknessMm: data.thicknessMm,
-        patterns: data.patterns.map((p) => ({
+        patterns: data.patterns.map((p, pi) => ({
+          id: patternIds[pi] ?? null,
           description: p.description,
           thicknessMm: p.thicknessMm,
           lengthMm: p.lengthMm,
@@ -238,6 +298,7 @@ export async function createIntakeWithReceipt(
   const resultJson = {
     stoneName,
     patternIds,
+    patternLocationIds,
   } as Prisma.InputJsonValue;
 
   try {
@@ -271,6 +332,7 @@ export async function createIntakeWithReceipt(
     stoneName,
     batchId: batch.id,
     patternIds,
+    patternLocationIds,
     replay: false,
   };
 }

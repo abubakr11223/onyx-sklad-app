@@ -122,6 +122,7 @@ describe("источник «из партии» (ТЗ №16 §4)", () => {
     expect(url).toBe("/shourum?ok=sent");
     expect(sendBatchSlabToShowroom).toHaveBeenCalledWith({
       batchId: "b1",
+      batchPatternId: null, // однородная партия (ТЗ №19 B4)
       qty: 2,
       actorId: "u1",
       standNote: "витрина у входа",

@@ -9,6 +9,10 @@
 // o'chib ketadi), shuning uchun Prisma klientini yuklamaydi va unit-test qilinadi
 // (par.: src/tests/poisk-search.test.ts).
 import type { Prisma } from "@prisma/client";
+// ТЗ №19: чистые модули (без Prisma-клиента) — тестируется без БД.
+import { formatGabarit, thicknessToNumber } from "./dimensions";
+import { pieceFitsRequest } from "./inventory";
+import { formatLocationsShort, locationsForPattern } from "./pattern-stock";
 
 /**
  * Material (вид/тип/цвет) OR-filtri — `q` bo'yicha name/rockType/color
@@ -154,6 +158,14 @@ export function batchesPlateWhere(
     OR: [
       {
         AND: [
+          // ТЗ №19 C2: формат партии решает только у однородной партии (нет
+          // узора с известным L×W). У партии с узорами подбор — по узорам ниже,
+          // иначе партия «подходит» по своему габариту, а узора под размер нет.
+          {
+            patterns: {
+              none: { lengthMm: { not: null }, widthMm: { not: null } },
+            },
+          },
           { lengthMm: { not: null } },
           { widthMm: { not: null } },
           { OR: dimOR },
@@ -172,4 +184,182 @@ export function batchesPlateWhere(
       },
     ],
   };
+}
+
+// ───────────── ТЗ №19 C2 / E3 — подбор по размеру: узор, а не партия ─────────────
+
+/** Узор партии в выдаче по размеру (поля из select'а /poisk, Decimal толщина). */
+export interface SizeSearchPattern {
+  id: string;
+  description: string;
+  lengthMm: number | null;
+  widthMm: number | null;
+  thicknessMm: { toString(): string } | number | null;
+}
+
+/** Локация партии (BatchLocation) — для «Блок A1» / «локация не указана». */
+export interface SizeSearchLocation {
+  block: string;
+  landmark: string;
+  slabsHere: number | null;
+  batchPatternId: string | null;
+}
+
+/** Партия, прошедшая SQL-фильтр batchesPlateWhere. */
+export interface SizeSearchBatch {
+  id: string;
+  lengthMm: number | null;
+  widthMm: number | null;
+  thicknessMm: { toString(): string } | number | null;
+  stoneType: { id: string; name: string };
+  /** В порядке приёмки (createdAt asc). */
+  patterns: readonly SizeSearchPattern[];
+  locations: readonly SizeSearchLocation[];
+}
+
+/** Свободно (после броней/образцов). null — величина не ведётся / не загружена. */
+export interface SizeSearchFree {
+  slabs: number | null;
+  areaM2: number | null;
+}
+
+/** Одна строка выдачи: узор смешанной партии или однородная партия целиком. */
+export interface SizeSearchHit {
+  /** patternId для узора, batchId для однородной партии (React key). */
+  key: string;
+  batchId: string;
+  patternId: string | null;
+  stoneTypeId: string;
+  stoneName: string;
+  /** Описание узора; null — однородная партия. */
+  description: string | null;
+  lengthMm: number;
+  widthMm: number;
+  thicknessMm: number | null;
+  free: SizeSearchFree;
+  /** «Блок A1» / «Блок A1, A2» / «локация не указана» (E3). */
+  locationText: string;
+  locationMissing: boolean;
+}
+
+/** Текст formatLocationsShort для пустого списка (E3). */
+export const LOCATION_MISSING = "локация не указана";
+
+const UNKNOWN_FREE: SizeSearchFree = { slabs: null, areaM2: null };
+
+/** Узор с известным форматом — только такие участвуют в подборе по размеру. */
+function hasFormat(p: SizeSearchPattern): boolean {
+  return p.lengthMm !== null && p.widthMm !== null;
+}
+
+/**
+ * ТЗ №19 C2: строки выдачи «по размеру».
+ *  - партия с узорами (хотя бы один узор с L×W) → строка на КАЖДЫЙ узор, чей
+ *    формат проходит pieceFitsRequest (запас на рез + поворот); узоры не под
+ *    размер в выдачу не попадают;
+ *  - однородная партия → одна строка по габариту партии (как раньше).
+ * Свободный остаток — из pattern-stock (узор) и batch-remainders (партия);
+ * map'ы могут быть null (PARTNER не видит чисел — не грузим).
+ * E3: нет локации → «локация не указана».
+ */
+export function sizeSearchHits(
+  batches: readonly SizeSearchBatch[],
+  reqLengthCm: number,
+  reqWidthCm: number,
+  patternFree: ReadonlyMap<string, SizeSearchFree> | null,
+  batchFree: ReadonlyMap<string, SizeSearchFree> | null,
+): SizeSearchHit[] {
+  const out: SizeSearchHit[] = [];
+  for (const b of batches) {
+    const formatted = b.patterns.filter(hasFormat);
+    if (formatted.length > 0) {
+      for (const p of formatted) {
+        const L = p.lengthMm as number;
+        const W = p.widthMm as number;
+        if (!pieceFitsRequest(L, W, reqLengthCm, reqWidthCm)) continue;
+        const locationText = formatLocationsShort(
+          locationsForPattern(b.locations, p.id),
+        );
+        out.push({
+          key: p.id,
+          batchId: b.id,
+          patternId: p.id,
+          stoneTypeId: b.stoneType.id,
+          stoneName: b.stoneType.name,
+          description: p.description.trim() || null,
+          lengthMm: L,
+          widthMm: W,
+          thicknessMm:
+            thicknessToNumber(p.thicknessMm) ?? thicknessToNumber(b.thicknessMm),
+          free: patternFree?.get(p.id) ?? UNKNOWN_FREE,
+          locationText,
+          locationMissing: locationText === LOCATION_MISSING,
+        });
+      }
+      continue;
+    }
+    if (b.lengthMm === null || b.widthMm === null) continue;
+    if (!pieceFitsRequest(b.lengthMm, b.widthMm, reqLengthCm, reqWidthCm)) continue;
+    const locationText = formatLocationsShort(b.locations);
+    out.push({
+      key: b.id,
+      batchId: b.id,
+      patternId: null,
+      stoneTypeId: b.stoneType.id,
+      stoneName: b.stoneType.name,
+      description: null,
+      lengthMm: b.lengthMm,
+      widthMm: b.widthMm,
+      thicknessMm: thicknessToNumber(b.thicknessMm),
+      free: batchFree?.get(b.id) ?? UNKNOWN_FREE,
+      locationText,
+      locationMissing: locationText === LOCATION_MISSING,
+    });
+  }
+  return out;
+}
+
+/** 1 плита · 2 плиты · 5 плит · 11 плит · 21 плита. */
+export function slabsWord(n: number): string {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a >= 11 && a <= 14) return "плит";
+  if (b === 1) return "плита";
+  if (b >= 2 && b <= 4) return "плиты";
+  return "плит";
+}
+
+const hitM2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+
+/** «3 плиты» / «≈13,4 м²» / «нет свободных»; null — количество не загружено. */
+export function formatHitQty(free: SizeSearchFree): string | null {
+  if (free.slabs !== null) {
+    return free.slabs > 0 ? `${free.slabs} ${slabsWord(free.slabs)}` : "нет свободных";
+  }
+  if (free.areaM2 !== null) {
+    return free.areaM2 > 0 ? `≈${hitM2Fmt.format(free.areaM2)} м²` : "нет свободных";
+  }
+  return null;
+}
+
+/**
+ * Строка выдачи C2:
+ *   «Травертин Классик · ТЕСТ светлый 2см · 280×160×2 см · 3 плиты · Блок A1»
+ * exact = false (PARTNER) — без количества и локации (§3 / §4.6).
+ */
+export function formatSizeHitLine(
+  hit: SizeSearchHit,
+  opts: { includeStone?: boolean; exact?: boolean } = {},
+): string {
+  const { includeStone = true, exact = true } = opts;
+  const parts: string[] = [];
+  if (includeStone) parts.push(hit.stoneName);
+  if (hit.description) parts.push(hit.description);
+  parts.push(formatGabarit(hit.lengthMm, hit.widthMm, hit.thicknessMm));
+  if (exact) {
+    const qty = formatHitQty(hit.free);
+    if (qty) parts.push(qty);
+    parts.push(hit.locationText);
+  }
+  return parts.join(" · ");
 }

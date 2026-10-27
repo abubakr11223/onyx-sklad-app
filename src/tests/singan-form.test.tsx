@@ -22,6 +22,7 @@ const submitSingan = vi.fn(
       areaM2: "",
       kind: "",
       batchId: "",
+    batchPatternId: "",
       block: "",
       landmark: "",
       breakCause: "",

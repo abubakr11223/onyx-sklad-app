@@ -70,6 +70,7 @@ async function saleSummary(saleId: string): Promise<string> {
       slab: { select: { label: true, stoneType: { select: { name: true } } } },
       piece: { select: { kind: true, stoneType: { select: { name: true } } } },
       batch: { select: { stoneType: { select: { name: true } } } },
+      batchPattern: { select: { description: true } },
     },
   });
   if (!sale) return "Продажа оформлена";
@@ -85,7 +86,10 @@ async function saleSummary(saleId: string): Promise<string> {
     ]
       .filter(Boolean)
       .join(" / ");
-    return `${sale.batch.stoneType.name} — объём из партии${qty ? ` (${qty})` : ""}`;
+    const what = sale.batchPattern
+      ? `узор «${sale.batchPattern.description}»`
+      : "объём из партии";
+    return `${sale.batch.stoneType.name} — ${what}${qty ? ` (${qty})` : ""}`;
   }
   return "Продажа оформлена";
 }
@@ -158,6 +162,9 @@ export async function submitSale(
   // W1-T1: явное согласие «закрыть мою бронь этой продажей» (только объёмные
   // режимы). Принадлежность и активность брони проверяет sales.ts в транзакции.
   const consumeReservationId = str("consumeReservationId") || null;
+  // ТЗ №19 B1 — из какого места брать (принадлежность месту проверяет sales.ts:
+  // чужой id просто не попадёт в раскладку узора).
+  const batchLocationId = str("batchLocationId") || null;
   if ((mode === "SLAB" || mode === "PIECE") && !unitId) {
     errors.form = "Не выбран камень — вернитесь на шаг выбора";
   }
@@ -240,6 +247,7 @@ export async function submitSale(
             qtySlabs,
             qtyAreaM2,
             consumeReservationId,
+            batchLocationId,
             ...common,
           })
         : mode === "PATTERN_VOLUME"
@@ -248,6 +256,7 @@ export async function submitSale(
               qtySlabs,
               qtyAreaM2,
               consumeReservationId,
+              batchLocationId,
               ...common,
             })
           : await sellWholeBatch({ batchId, consumeReservationId, ...common });

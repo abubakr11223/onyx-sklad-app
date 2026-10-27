@@ -2,6 +2,7 @@
 // Double-issue: UnitStatus SAMPLE + partial unique on Sample (DB).
 // Free stock: SAMPLE units not AVAILABLE → excluded from search like RESERVED.
 
+import { checkPatternAvailable, loadPatternStock, patternsOfBatch } from "./pattern-stock";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { lockBatchForUpdate } from "@/lib/batch-lock";
@@ -195,6 +196,8 @@ export interface IssueSampleInput {
   targetType: SampleTarget;
   unitId?: string; // SLAB / PIECE
   batchId?: string;
+  /** ТЗ №19 — образец из узора (обязателен у смешанной партии). */
+  batchPatternId?: string | null;
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
   clientId: string;
@@ -270,6 +273,7 @@ export async function issueSample(
       let slabId: string | null = null;
       let pieceId: string | null = null;
       let batchId: string | null = null;
+      let batchPatternId: string | null = null;
       let qtySlabs: number | null = null;
       let qtyAreaM2: string | null = null;
 
@@ -480,6 +484,31 @@ export async function issueSample(
           });
         }
 
+        // ТЗ №19 — смешанная партия: образец держит «свободно» КОНКРЕТНОГО узора.
+        const patternId = input.batchPatternId?.trim() || null;
+        const stock = patternsOfBatch(await loadPatternStock(tx, [bid], now), bid);
+        if (stock.length > 0 && !patternId) {
+          throw new SampleLogicError({
+            code: "INVALID_INPUT",
+            message: "В партии несколько узоров — выберите узор",
+          });
+        }
+        if (patternId) {
+          const ps = stock.find((p) => p.id === patternId);
+          if (!ps) {
+            throw new SampleLogicError({ code: "NOT_FOUND", message: "Узор не найден" });
+          }
+          const err = checkPatternAvailable(
+            ps,
+            qs != null && qs > 0 ? qs : null,
+            qa != null && qa > 0 ? qa : null,
+          );
+          if (err) {
+            throw new SampleLogicError({ code: "INSUFFICIENT_REMAINDER", message: err });
+          }
+          batchPatternId = ps.id;
+        }
+
         batchId = bid;
         qtySlabs = qs != null && qs > 0 ? qs : null;
         qtyAreaM2 = qa != null && qa > 0 ? qa.toFixed(3) : null;
@@ -494,6 +523,7 @@ export async function issueSample(
             slabId,
             pieceId,
             batchId,
+            batchPatternId,
             qtySlabs,
             qtyAreaM2,
             clientId,
@@ -546,6 +576,7 @@ export async function issueSample(
             slabId,
             pieceId,
             batchId,
+            batchPatternId,
             qtyOrderedSlabs: qtySlabs,
             qtyOrderedAreaM2:
               qtyAreaM2 != null ? Number(qtyAreaM2) : null,

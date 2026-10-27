@@ -13,11 +13,17 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "./db";
 import { lockBatchForUpdate } from "./batch-lock";
 import { computeFreeRemainder } from "./inventory";
+import {
+  allocateFromLocations,
+  loadPatternStock,
+  patternsOfBatch,
+  takeFromLocationsInTx,
+} from "./pattern-stock";
 
 /** Ошибка домена выделения плиты (код — для вызывающего, не разбор строки). */
 export class SlabSeparationError extends Error {
   constructor(
-    public code: "BATCH_NOT_FOUND" | "INSUFFICIENT_REMAINDER",
+    public code: "BATCH_NOT_FOUND" | "INSUFFICIENT_REMAINDER" | "PATTERN_REQUIRED",
     message: string,
   ) {
     super(message);
@@ -45,6 +51,14 @@ export interface SeparateSlabInput {
   landmark: string;
   needsCheck: boolean;
   separatedById: string;
+  /**
+   * ТЗ №19 §D — из какого узора выделяется плита. Плита получает размер,
+   * толщину узора, остаток узора и его места уменьшается на 1.
+   * Не задан: единственный узор партии берётся сам; при нескольких —
+   * ошибка, если requirePattern (шоу-рум), иначе плита без узора (legacy).
+   */
+  batchPatternId?: string | null;
+  requirePattern?: boolean;
 }
 
 /** Photo.SLAB yozuvi (Telegram file_id = storageKey) — separateSlab bilan bir TX. */
@@ -59,8 +73,8 @@ type SeparationDb = Pick<PrismaClient, "$transaction">;
 /** Interactive transaction client (lockBatchForUpdate + create). */
 type SeparationTx = Prisma.TransactionClient;
 
-const toNum = (d: { toString(): string } | null): number | null =>
-  d === null ? null : Number(d.toString());
+const toNum = (d: { toString(): string } | null | undefined): number | null =>
+  d == null ? null : Number(d.toString());
 
 /**
  * Core: batch-lock + §3 guard + slab.create. Caller provides `tx` so Photo
@@ -86,6 +100,10 @@ export async function separateSlabInTx(
       lengthMm: true,
       widthMm: true,
       thicknessMm: true,
+      locations: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, block: true, landmark: true, slabsHere: true, areaHereM2: true },
+      },
       slabs: { select: { areaM2: true } },
       pieces: { where: { originSlabId: null }, select: { areaM2: true } },
     },
@@ -123,6 +141,42 @@ export async function separateSlabInTx(
     );
   }
 
+  // (2b) ТЗ №19 — узор: «свободно» узора из единого расчёта и его места.
+  const stock = patternsOfBatch(await loadPatternStock(tx, [input.batchId]), input.batchId);
+  let patternId = input.batchPatternId?.trim() || null;
+  if (!patternId && stock.length === 1) patternId = stock[0].id;
+  if (!patternId && stock.length > 1 && input.requirePattern) {
+    throw new SlabSeparationError(
+      "PATTERN_REQUIRED",
+      "В партии несколько узоров — выберите, из какого узора плита",
+    );
+  }
+  const ps = patternId ? (stock.find((p) => p.id === patternId) ?? null) : null;
+  if (patternId && !ps) {
+    throw new SlabSeparationError("BATCH_NOT_FOUND", "Узор не найден в этой партии");
+  }
+  if (ps && ps.availableSlabs < 1) {
+    throw new SlabSeparationError(
+      "INSUFFICIENT_REMAINDER",
+      `В узоре «${ps.description}» нет свободных плит`,
+    );
+  }
+  const candidateLocs = ps
+    ? ps.locations
+    : (batch.locations ?? []).map((l) => ({ ...l, areaHereM2: toNum(l.areaHereM2) }));
+  const preferred =
+    candidateLocs.find((l) => l.block === input.block && l.landmark === input.landmark)?.id ??
+    null;
+  const [alloc] = allocateFromLocations(candidateLocs, 1, preferred);
+  const unitArea =
+    ps?.unitAreaM2 ??
+    (batch.lengthMm && batch.widthMm ? (batch.lengthMm * batch.widthMm) / 10_000 : 0);
+  if (alloc) await takeFromLocationsInTx(tx, [alloc], unitArea);
+  // Место плиты: заданное вызывающим, иначе место узора, откуда её взяли.
+  const unknownPlace = !input.block || input.block === "?";
+  const block = unknownPlace && alloc?.block ? alloc.block : input.block;
+  const landmark = unknownPlace && alloc?.block ? (alloc.landmark ?? "") : input.landmark;
+
   // (3) label = «Плита №N», N = существующие плиты + 1. Под row-lock партии
   //     нумерация сериализована → гонки @@unique([batchId,label]) нет.
   // (4) ТЗ №16 A1 — габариты наследуются от партии.
@@ -141,11 +195,13 @@ export async function separateSlabInTx(
       batchId: input.batchId,
       stoneTypeId: input.stoneTypeId,
       label: `Плита №${batch.slabs.length + 1}`,
-      lengthMm: batch.lengthMm,
-      widthMm: batch.widthMm,
-      thicknessMm: batch.thicknessMm,
-      block: input.block,
-      landmark: input.landmark,
+      batchPatternId: ps?.id ?? null,
+      // ТЗ №19 B4 — у плиты из узора сразу размер и толщина узора.
+      lengthMm: ps?.lengthMm ?? batch.lengthMm,
+      widthMm: ps?.widthMm ?? batch.widthMm,
+      thicknessMm: ps?.thicknessMm != null ? ps.thicknessMm.toFixed(1) : batch.thicknessMm,
+      block,
+      landmark,
       needsCheck: input.needsCheck,
       photoRequestId: input.photoRequestId ?? null,
       separatedById: input.separatedById,

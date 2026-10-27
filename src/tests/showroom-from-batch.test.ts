@@ -36,6 +36,8 @@ vi.mock("@/lib/db", () => ({
         },
         user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
         batch: { findUnique: (...a: unknown[]) => batchFindUnique(...a) },
+        // ТЗ №19 — однородная партия: узоров нет.
+        batchPattern: { findMany: async () => [] },
         slab: {
           create: (...a: unknown[]) => {
             txCalls.push("slab.create");
@@ -97,7 +99,9 @@ beforeEach(() => {
   userFindUnique.mockResolvedValue({ id: "u1", role: "MANAGER", isActive: true });
   // batch.findUnique зовут дважды: сама витрина и separateSlabInTx (остаток).
   batchFindUnique.mockImplementation((args: { select?: Record<string, unknown> }) =>
-    args?.select && "locations" in args.select
+    // Чтение витрины (locations без slabs) vs. чтение остатка при выделении
+    // (ТЗ №19: там тоже есть locations, но есть и slabs).
+    args?.select && "locations" in args.select && !("slabs" in args.select)
       ? Promise.resolve(BATCH)
       : Promise.resolve(batchRemainder()),
   );
@@ -194,7 +198,7 @@ describe("sendBatchSlabToShowroom — количество", () => {
 describe("sendBatchSlabToShowroom — отказы", () => {
   it("остаток партии исчерпан → внятная причина, ничего не создано", async () => {
     batchFindUnique.mockImplementation((args: { select?: Record<string, unknown> }) =>
-      args?.select && "locations" in args.select
+      args?.select && "locations" in args.select && !("slabs" in args.select)
         ? Promise.resolve(BATCH)
         : Promise.resolve(batchRemainder({ slabsTotal: 10, slabsSoldDirect: 10 })),
     );
@@ -259,7 +263,7 @@ describe("sendBatchSlabToShowroom — данные новой плиты", () =>
 
   it("у партии нет локаций → «?», операция не падает", async () => {
     batchFindUnique.mockImplementation((args: { select?: Record<string, unknown> }) =>
-      args?.select && "locations" in args.select
+      args?.select && "locations" in args.select && !("slabs" in args.select)
         ? Promise.resolve({ ...BATCH, locations: [] })
         : Promise.resolve(batchRemainder()),
     );

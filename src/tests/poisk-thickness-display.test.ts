@@ -44,9 +44,11 @@ describe("/poisk page.tsx — Decimal не уходит в formatThickness на�
     const direct = src.match(/formatThickness\(/g) ?? [];
     expect(direct.length).toBe(1);
     expect(src).toContain("return formatThickness(thicknessToNumber(v));");
-    // 4 места вывода (бой/остатки, именованные плиты, формат партии, узоры
-    // партии) + само объявление хелпера.
-    expect((src.match(/formatThicknessCm\(/g) ?? []).length).toBe(5);
+    // 2 места вывода (бой/остатки, именованные плиты) + само объявление
+    // хелпера. ТЗ №19 C2: формат партии/узора рисует formatSizeHitLine
+    // (poisk-search.ts) — Decimal → thicknessToNumber → formatGabarit.
+    expect((src.match(/formatThicknessCm\(/g) ?? []).length).toBe(3);
+    expect(src).toContain("formatSizeHitLine(h,");
   });
 
   it("типы строк честно допускают Decimal (не только number)", () => {

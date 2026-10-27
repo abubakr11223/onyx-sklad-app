@@ -28,6 +28,12 @@ const createReservation = vi.fn();
 vi.mock("@/app/bron/actions", () => ({
   createReservation: (...args: unknown[]) => createReservation(...args),
 }));
+// ТЗ №19 B2 — клиент брони из справочника: поиск — server action продажи.
+const CLIENT = { id: "c-1", name: "Иван Петров", phone: "+998901234567", type: "B2C" as const };
+vi.mock("@/app/prodazha/client-actions", () => ({
+  searchClientsForSale: async () => ({ ok: true, clients: [CLIENT] }),
+  createClientForSale: async () => ({ ok: true, client: CLIENT }),
+}));
 
 const STONES: StoneGroup[] = [
   {
@@ -58,6 +64,15 @@ function pickStoneAndTarget(targetValue: string) {
   fireEvent.change(screen.getByLabelText(/что бронируем/i), {
     target: { value: targetValue },
   });
+}
+
+/** Клиент выбирается из справочника: ввод → подсказка → клик. */
+async function pickClient() {
+  fireEvent.change(screen.getByPlaceholderText(/имя или телефон клиента/i), {
+    target: { value: "Иван" },
+  });
+  const hit = await screen.findByRole("button", { name: /Иван Петров/ }, { timeout: 2000 });
+  fireEvent.click(hit);
 }
 
 const submit = async () => {
@@ -100,7 +115,7 @@ describe("nextReserveValues — чистая часть (без React)", () => {
 });
 
 describe("ReserveForm — ввод переживает отказ сервера", () => {
-  it("отказ по валидации: клиент, контакт и срок остаются в полях, ошибка озвучена", async () => {
+  it("отказ по валидации: клиент и срок остаются, ошибка озвучена", async () => {
     createReservation.mockResolvedValue({
       errors: { form: "Срок — целое число дней", days: "Срок — целое число дней" },
       alternatives: [],
@@ -108,13 +123,7 @@ describe("ReserveForm — ввод переживает отказ сервер�
 
     renderForm();
     pickStoneAndTarget("SLAB:s-1");
-
-    fireEvent.change(screen.getByLabelText(/клиент/i), {
-      target: { value: "Иван Петров" },
-    });
-    fireEvent.change(screen.getByLabelText(/контакт/i), {
-      target: { value: "+998 90 123-45-67" },
-    });
+    await pickClient();
     fireEvent.change(screen.getByLabelText(/срок, дней/i), {
       target: { value: "3x" },
     });
@@ -128,10 +137,8 @@ describe("ReserveForm — ввод переживает отказ сервер�
     });
 
     // Главное: НИЧЕГО не потеряно — перенабирать не нужно.
-    expect(screen.getByDisplayValue("Иван Петров")).toBeTruthy();
-    expect(screen.getByDisplayValue("+998 90 123-45-67")).toBeTruthy();
+    expect(screen.getByText("Иван Петров")).toBeTruthy();
     expect(screen.getByDisplayValue("3x")).toBeTruthy();
-    // Цель брони тоже не слетает.
     expect(
       (screen.getByLabelText(/что бронируем/i) as HTMLSelectElement).value,
     ).toBe("SLAB:s-1");
@@ -145,15 +152,13 @@ describe("ReserveForm — ввод переживает отказ сервер�
 
     renderForm();
     pickStoneAndTarget("BATCH:b-1");
+    await pickClient();
 
-    fireEvent.change(screen.getByLabelText("Плит"), {
+    fireEvent.change(screen.getByLabelText(/сколько плит/i), {
       target: { value: "40" },
     });
     fireEvent.change(screen.getByLabelText("м²"), {
       target: { value: "12,5" },
-    });
-    fireEvent.change(screen.getByLabelText(/клиент/i), {
-      target: { value: "ООО Стройка" },
     });
 
     await submit();
@@ -166,31 +171,13 @@ describe("ReserveForm — ввод переживает отказ сервер�
 
     expect(screen.getByDisplayValue("40")).toBeTruthy();
     expect(screen.getByDisplayValue("12,5")).toBeTruthy();
-    expect(screen.getByDisplayValue("ООО Стройка")).toBeTruthy();
   });
 
-  it("успешный ответ сервера (без ошибок) → поля очищаются осознанно", async () => {
-    // Боевой экшен на успехе делает redirect; здесь моделируем «чистый» ответ,
-    // чтобы проверить именно ветку сброса.
-    createReservation.mockResolvedValue({
-      errors: {},
-      alternatives: [],
-    } satisfies ReserveFormState);
-
+  it("без клиента из справочника бронь не отправить", () => {
     renderForm();
     pickStoneAndTarget("SLAB:s-1");
-    fireEvent.change(screen.getByLabelText(/клиент/i), {
-      target: { value: "Иван Петров" },
-    });
-
-    await submit();
-
-    await waitFor(() => {
-      expect(screen.queryByDisplayValue("Иван Петров")).toBeNull();
-    });
-    // Успех не празднуется формой: баннер «Бронь оформлена» рисует страница
-    // по ответу сервера (?ok=1), внутри формы никакого alert нет.
-    expect(screen.queryByRole("alert")).toBeNull();
+    const btn = screen.getByRole("button", { name: /забронировать/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
   });
 
   it("во время отправки кнопка заблокирована — двойная бронь невозможна", async () => {
@@ -204,9 +191,7 @@ describe("ReserveForm — ввод переживает отказ сервер�
 
     renderForm();
     pickStoneAndTarget("SLAB:s-1");
-    fireEvent.change(screen.getByLabelText(/клиент/i), {
-      target: { value: "Иван Петров" },
-    });
+    await pickClient();
 
     const btn = screen.getByRole("button", { name: /забронировать/i });
     await act(async () => {

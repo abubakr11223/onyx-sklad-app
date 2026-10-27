@@ -5,7 +5,7 @@
 
 import { db } from "@/lib/db";
 import {
-  findClientByNormalizedPhone,
+  classifyNewClientDuplicate,
   siteListScope,
   type ClientType,
   type SiteType,
@@ -79,19 +79,31 @@ export async function searchClientsForSale(
 }
 
 /**
- * Создать клиента в справочнике. При совпадении телефона (нормализованно) —
- * НЕ плодит дубль: возвращает existing + reason=duplicate.
+ * Создать клиента в справочнике (ТЗ №11 §9.1, ТЗ №19 E1).
+ * - Телефон совпал (нормализованно) → НЕ плодит дубль: reason=duplicate +
+ *   existing — форма предлагает выбрать существующего.
+ * - Имя совпало, телефон другой → reason=same_name + similar (с телефонами,
+ *   чтобы два «Тимура» различались). Создать можно повторным вызовом с
+ *   `allowSameName: true` («Всё равно создать»).
  */
 export async function createClientForSale(input: {
   name: string;
   type: string;
   phone: string;
+  /** Подтверждение «это другой человек» после предупреждения same_name. */
+  allowSameName?: boolean;
 }): Promise<
   | { ok: true; client: ClientHit }
   | {
       ok: false;
       reason: "duplicate";
       existing: ClientHit;
+      error: string;
+    }
+  | {
+      ok: false;
+      reason: "same_name";
+      similar: ClientHit[];
       error: string;
     }
   | { ok: false; reason: "validation" | "auth"; error: string; errors?: Record<string, string> }
@@ -107,23 +119,34 @@ export async function createClientForSale(input: {
 
   // Soft dedup: scan recent/all phones (normalized). Index is raw string —
   // we load candidates and match in process (phones stored with various masks).
+  // Тот же список проверяем и на совпадение имени (ТЗ №19 E1).
   const candidates = await db.client.findMany({
     select: { id: true, name: true, phone: true, type: true },
     orderBy: { createdAt: "desc" },
     take: 2000,
   });
-  const dup = findClientByNormalizedPhone(candidates, v.data.phone);
-  if (dup) {
+  const toHit = (c: (typeof candidates)[number]): ClientHit => ({
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    type: c.type as ClientType,
+  });
+  const dup = classifyNewClientDuplicate(candidates, v.data);
+  if (dup.kind === "phone") {
     return {
       ok: false,
       reason: "duplicate",
-      existing: {
-        id: dup.id,
-        name: dup.name,
-        phone: dup.phone,
-        type: dup.type as ClientType,
-      },
-      error: `Клиент с таким телефоном уже есть: ${dup.name}. Выберите его.`,
+      existing: toHit(dup.existing),
+      error: `Клиент с таким телефоном уже есть: ${dup.existing.name}. Выберите его.`,
+    };
+  }
+  if (dup.kind === "name" && !input.allowSameName) {
+    return {
+      ok: false,
+      reason: "same_name",
+      similar: dup.similar.map(toHit),
+      error:
+        "Есть клиент с таким именем. Если это он — выберите его; если другой человек — создайте нового.",
     };
   }
 

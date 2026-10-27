@@ -44,6 +44,8 @@ import {
   getBatchRemainders,
   getBatchReservationHolds,
 } from "./batch-remainders";
+import type { PatternStock } from "./pattern-stock";
+import { formatDim, formatThickness, thicknessToNumber } from "./dimensions";
 
 /**
  * Bitta chaqiruvda DB'dan o'qiladigan vid qatorlarining QATTIQ chegarasi
@@ -76,6 +78,20 @@ export interface PoiskBatchRow {
   slabsSoldDirect: number;
   areaSoldDirectM2: DecimalLike;
   _count: { patterns: number };
+  /** ТЗ №19 C3: формат плиты однородной партии, см (optional — старые фикстуры). */
+  lengthMm?: number | null;
+  widthMm?: number | null;
+  thicknessMm?: DecimalLike | number | null;
+}
+
+/**
+ * ТЗ №19 C3: свободно по ОДНОЙ партии (формула §3 − брони, не ниже 0).
+ * null — величина у партии не ведётся (slabsTotal / areaTotalM2 = null).
+ */
+export interface BatchAvailable {
+  batchId: string;
+  slabs: number | null;
+  areaM2: number | null;
 }
 
 /** /poisk kartochkasi uchun kerakli vid maydonlari (page.tsx:105-124). */
@@ -112,6 +128,8 @@ export interface PoiskTypeRow {
    * UI shows «требует проверки»; free numbers stay clamped ≥ 0.
    */
   remainderNegative: boolean;
+  /** ТЗ №19 C3: свободно по каждой партии вида (порядок st.batches). */
+  batchStock: BatchAvailable[];
 }
 
 export interface FetchPoiskTypesPageArgs {
@@ -199,6 +217,10 @@ async function fetchTypeRows(
           areaAdjustedM2: true,
           slabsSoldDirect: true,
           areaSoldDirectM2: true,
+          // ТЗ №19 C3 — формат плиты однородной партии (строки по форматам).
+          lengthMm: true,
+          widthMm: true,
+          thicknessMm: true,
           // ТЗ №3 / §4 — сколько узор-подгрупп в партии (индикатор «раскрыть»).
           _count: { select: { patterns: true } },
         },
@@ -245,6 +267,7 @@ export function buildTypeRows(
     let areaKnown = false;
     let areaUnknown = false;
     let remainderNegative = false;
+    const batchStock: BatchAvailable[] = [];
     for (const b of st.batches) {
       const agg = remainders.get(b.id) ?? EMPTY_AGGREGATE;
       const hold = holds.get(b.id) ?? EMPTY_HOLD;
@@ -273,6 +296,7 @@ export function buildTypeRows(
         areaTotalSum += free.areaFreeM2;
         reservedAreaSum += hold.reservedAreaM2;
       }
+      batchStock.push(availableFromFree(b.id, free, hold));
     }
 
     // Erkin = max(0, jami − band) — invariant buzilsa ham manfiy ko'rsatilmaydi.
@@ -316,8 +340,161 @@ export function buildTypeRows(
       patternsCount,
       hasAvailability,
       remainderNegative,
+      batchStock,
     };
   });
+}
+
+/** Свободно партии после броней, не ниже 0 (как «свободно» карточки вида). */
+function availableFromFree(
+  batchId: string,
+  free: { slabsFree: number | null; areaFreeM2: number | null },
+  hold: BatchReservationHold,
+): BatchAvailable {
+  return {
+    batchId,
+    slabs:
+      free.slabsFree === null
+        ? null
+        : Math.max(0, free.slabsFree - hold.reservedSlabs),
+    areaM2:
+      free.areaFreeM2 === null
+        ? null
+        : Math.max(0, free.areaFreeM2 - hold.reservedAreaM2),
+  };
+}
+
+/** Поля партии для формулы §3 (подмножество PoiskBatchRow). */
+export type BatchCountersRow = Pick<
+  PoiskBatchRow,
+  | "id"
+  | "slabsTotal"
+  | "areaTotalM2"
+  | "slabsAdjusted"
+  | "areaAdjustedM2"
+  | "slabsSoldDirect"
+  | "areaSoldDirectM2"
+>;
+
+/**
+ * ТЗ №19 C2: свободно по партиям (однородным) для выдачи «по размеру» — те же
+ * агрегаты и брони, что у карточки вида (getBatchRemainders + holds), два
+ * SQL-запроса на весь набор, без N+1.
+ */
+export async function loadBatchAvailability(
+  db: PrismaClient,
+  batches: readonly BatchCountersRow[],
+  now: Date = new Date(),
+): Promise<Map<string, BatchAvailable>> {
+  const out = new Map<string, BatchAvailable>();
+  if (batches.length === 0) return out;
+  const ids = batches.map((b) => b.id);
+  const [remainders, holds] = await Promise.all([
+    getBatchRemainders(db, ids),
+    getBatchReservationHolds(db, ids, now),
+  ]);
+  for (const b of batches) {
+    const free = freeRemainderFromAggregate(
+      {
+        slabsTotal: b.slabsTotal,
+        areaTotalM2: toNum(b.areaTotalM2),
+        slabsAdjusted: b.slabsAdjusted,
+        areaAdjustedM2: Number(b.areaAdjustedM2),
+        slabsSoldDirect: b.slabsSoldDirect,
+        areaSoldDirectM2: Number(b.areaSoldDirectM2),
+      },
+      remainders.get(b.id) ?? EMPTY_AGGREGATE,
+    );
+    out.set(b.id, availableFromFree(b.id, free, holds.get(b.id) ?? EMPTY_HOLD));
+  }
+  return out;
+}
+
+// ───────────── ТЗ №19 C3 — строки по форматам в карточке вида ─────────────
+
+/** Узор для сводки форматов (подмножество PatternStock — тест без БД). */
+export type FormatPatternStock = Pick<
+  PatternStock,
+  "batchId" | "lengthMm" | "widthMm" | "thicknessMm" | "availableSlabs"
+>;
+
+/** Один формат плиты вида: L×W×T (null — не указан) и свободных плит. */
+export interface TypeFormatEntry {
+  lengthMm: number | null;
+  widthMm: number | null;
+  thicknessMm: number | null;
+  slabs: number;
+}
+
+/**
+ * ТЗ №19 C3: свободные плиты вида по форматам. Формат — габарит узора (у
+ * партии с узорами; пустое поле узора → поле партии), у однородной партии —
+ * габарит партии. Количество — свободно после броней/образцов: узор — из
+ * pattern-stock (availableSlabs), партия — batchStock. Порядок — первое
+ * появление (партии по приходу, узоры по приёмке). Нули не показываем.
+ */
+export function typeFormatSummary(
+  batches: readonly Pick<
+    PoiskBatchRow,
+    "id" | "lengthMm" | "widthMm" | "thicknessMm"
+  >[],
+  batchStock: readonly BatchAvailable[],
+  patternStock: ReadonlyMap<string, FormatPatternStock>,
+): TypeFormatEntry[] {
+  const patternsByBatch = new Map<string, FormatPatternStock[]>();
+  for (const p of patternStock.values()) {
+    const arr = patternsByBatch.get(p.batchId) ?? [];
+    arr.push(p);
+    patternsByBatch.set(p.batchId, arr);
+  }
+  const freeByBatch = new Map(batchStock.map((s) => [s.batchId, s.slabs]));
+
+  const byKey = new Map<string, TypeFormatEntry>();
+  const add = (
+    L: number | null,
+    W: number | null,
+    T: number | null,
+    slabs: number | null,
+  ) => {
+    if (slabs === null || slabs <= 0) return;
+    const key = `${L ?? ""}×${W ?? ""}×${T ?? ""}`;
+    const cur = byKey.get(key);
+    if (cur) cur.slabs += slabs;
+    else byKey.set(key, { lengthMm: L, widthMm: W, thicknessMm: T, slabs });
+  };
+
+  for (const b of batches) {
+    const bL = b.lengthMm ?? null;
+    const bW = b.widthMm ?? null;
+    const bT = thicknessToNumber(b.thicknessMm);
+    const pats = patternsByBatch.get(b.id);
+    if (pats && pats.length > 0) {
+      for (const p of pats) {
+        add(p.lengthMm ?? bL, p.widthMm ?? bW, p.thicknessMm ?? bT, p.availableSlabs);
+      }
+    } else {
+      add(bL, bW, bT, freeByBatch.get(b.id) ?? null);
+    }
+  }
+  return [...byKey.values()];
+}
+
+/** «220×160×2 — 50 пл. · 280×160×2 — 3 пл.»; пусто → null (строку не рисуем). */
+export function formatTypeFormatsLine(
+  entries: readonly TypeFormatEntry[],
+): string | null {
+  if (entries.length === 0) return null;
+  return entries
+    .map((e) => {
+      const fmt =
+        e.lengthMm !== null && e.widthMm !== null
+          ? `${formatDim(e.lengthMm)}×${formatDim(e.widthMm)}${
+              e.thicknessMm !== null ? `×${formatThickness(e.thicknessMm)}` : ""
+            }`
+          : "формат не указан";
+      return `${fmt} — ${e.slabs} пл.`;
+    })
+    .join(" · ");
 }
 
 /** Bitta bo'lak xom qator uchun agregatlarni oladi (page.tsx:131-170). */

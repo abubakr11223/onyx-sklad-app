@@ -24,9 +24,11 @@ import type { ReservationAlternative } from "@/lib/reservations";
 import Button from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
+import ClientPicker from "./ClientPicker";
+import type { ClientHit } from "@/app/prodazha/client-actions";
 
 export interface UnitOption {
-  /** "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>" */
+  /** "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>" | "PATTERN:<id>" (ТЗ №19) */
   value: string;
   label: string;
 }
@@ -35,6 +37,8 @@ export interface BatchVolumeOption extends UnitOption {
   /** null = нет данных по этому измерению (учёт отключён, §3). */
   freeSlabs: number | null;
   freeAreaM2: number | null;
+  /** ТЗ №19 E4 — партия «проверить»: видна, но бронь закрыта. */
+  disabled?: boolean;
 }
 
 export interface StoneGroup {
@@ -77,6 +81,8 @@ export default function ReserveForm({
   );
   const [stoneId, setStoneId] = useState("");
   const [target, setTarget] = useState("");
+  // ТЗ №19 B2 — клиент из справочника (ТЗ №11), не свободный текст.
+  const [client, setClient] = useState<ClientHit | null>(null);
   // W3-T1: управляемые поля — переживают отказ сервера (React 19 сбрасывает
   // только неуправляемые). Сброс делаем сами и только на успехе.
   const [values, setValues] = useState<ReserveValues>(emptyReserveValues);
@@ -92,7 +98,7 @@ export default function ReserveForm({
   const e = state.errors;
 
   const stone = stones.find((s) => s.id === stoneId) ?? null;
-  const isBatch = target.startsWith("BATCH:");
+  const isBatch = target.startsWith("BATCH:") || target.startsWith("PATTERN:");
   const batchOption = isBatch
     ? (stone?.batches.find((b) => b.value === target) ?? null)
     : null;
@@ -235,9 +241,9 @@ export default function ReserveForm({
               </optgroup>
             )}
             {stone.batches.length > 0 && (
-              <optgroup label="Объём из партии (B2B)">
+              <optgroup label="Объём из партии / узор">
                 {stone.batches.map((o) => (
-                  <option key={o.value} value={o.value}>
+                  <option key={o.value} value={o.value} disabled={o.disabled}>
                     {o.label}
                   </option>
                 ))}
@@ -252,15 +258,15 @@ export default function ReserveForm({
         <div className="rounded-card border border-warning/40 bg-warning/10 p-4">
           <p className="mb-3 text-sm text-warning">
             Свободно под бронь:{" "}
-            {freeParts.length > 0 ? freeParts.join(" · ") : "нет данных"}. Укажите
-            плиты и/или м².
+            {freeParts.length > 0 ? freeParts.join(" · ") : "нет данных"}. Укажите,
+            сколько плит бронируете — «свободно» уменьшится, факт остатка нет.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field
               id="bron-qty-slabs"
               name="qtySlabs"
               inputMode="numeric"
-              label="Плит"
+              label={<>Сколько плит <Req /></>}
               placeholder="10"
               value={values.qtySlabs}
               onChange={(ev) => setValue("qtySlabs")(ev.target.value)}
@@ -280,25 +286,14 @@ export default function ReserveForm({
         </div>
       )}
 
-      <Field
-        id="bron-customer"
-        name="customerName"
-        label={<>Клиент <Req /></>}
-        placeholder="Иван Петров"
-        value={values.customerName}
-        onChange={(ev) => setValue("customerName")(ev.target.value)}
-        error={e.customerName}
-      />
+      <div>
+        <p className="mb-1.5 text-sm font-semibold text-ink">
+          Клиент <Req />
+        </p>
+        <ClientPicker value={client} onChange={setClient} error={e.customerName} />
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field
-          id="bron-contact"
-          name="customerContact"
-          label="Контакт"
-          placeholder="+998 …"
-          value={values.customerContact}
-          onChange={(ev) => setValue("customerContact")(ev.target.value)}
-        />
         <Field
           id="bron-days"
           name="days"
@@ -318,7 +313,7 @@ export default function ReserveForm({
       <div className="mt-2">
         <Button
           type="submit"
-          disabled={pending || !target}
+          disabled={pending || !target || !client}
           className="min-h-14 w-full text-lg font-bold"
         >
           {pending ? "Бронирование…" : "Забронировать"}

@@ -60,6 +60,8 @@ function makeDb(batchOrNull: BatchState | null) {
   const tx = {
     $queryRaw: (...a: unknown[]) => queryRaw(...a),
     batch: { findUnique: (...a: unknown[]) => findUnique(...a) },
+    // ТЗ №19 — однородная партия: узоров нет.
+    batchPattern: { findMany: async () => [] },
     slab: { create: (...a: unknown[]) => slabCreate(...a) },
     photo: { create: (...a: unknown[]) => photoCreate(...a) },
   };

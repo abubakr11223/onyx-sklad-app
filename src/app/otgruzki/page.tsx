@@ -275,7 +275,7 @@ export default async function OtgruzkiPage({
                     {s.gabarit && (
                       <p className="tnum text-sm text-ink/80">{s.gabarit}</p>
                     )}
-                    {s.locationSnapshot && (
+                    {s.lines.length <= 1 && s.locationSnapshot && (
                       <p className="text-sm text-ink">{s.locationSnapshot}</p>
                     )}
                     {/* ТЗ №15 §3.1 — комментарий менеджера к задаче. */}
@@ -295,7 +295,8 @@ export default async function OtgruzkiPage({
                       {" · "}
                       {formatTashkentDateTime(s.createdAt)}
                     </p>
-                    {(s.qtyOrderedSlabs != null ||
+                    {s.lines.length <= 1 &&
+                      (s.qtyOrderedSlabs != null ||
                       s.qtyOrderedAreaM2 != null) && (
                       <p className="tnum text-sm text-ink/80">
                         Заказано:{" "}
@@ -367,8 +368,52 @@ export default async function OtgruzkiPage({
                   )}
                 </div>
 
+                {/* ТЗ №19 C1 — продажа затронула два узора/места: строка на
+                    каждое, складчик отмечает каждую отдельно. */}
+                {s.lines.length > 1 && (
+                  <ul className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+                    {s.lines.map((l) => (
+                      <li
+                        key={l.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-line p-2"
+                      >
+                        <div className="min-w-0 text-sm">
+                          {l.patternLabel && (
+                            <p className="font-medium text-ink">{l.patternLabel}</p>
+                          )}
+                          <p className="tnum text-ink/80">
+                            {[
+                              l.qtyOrderedSlabs != null && `${l.qtyOrderedSlabs} плит`,
+                              l.qtyOrderedAreaM2 != null && `${l.qtyOrderedAreaM2} м²`,
+                            ]
+                              .filter(Boolean)
+                              .join(" / ")}
+                            {l.locationSnapshot ? ` · ${l.locationSnapshot}` : ""}
+                          </p>
+                        </div>
+                        {l.fullyShipped ? (
+                          <Badge variant="success">Отгружено</Badge>
+                        ) : (
+                          tab === "open" &&
+                          caps.canConfirmShipment &&
+                          s.status !== "CANCELLED" && (
+                            <form action={confirmShipmentAction}>
+                              <input type="hidden" name="shipmentId" value={s.id} />
+                              <input type="hidden" name="lineId" value={l.id} />
+                              <Button type="submit" size="sm">
+                                Отгрузить строку
+                              </Button>
+                            </form>
+                          )
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 {tab === "open" &&
                   caps.canConfirmShipment &&
+                  s.lines.length <= 1 &&
                   s.status !== "CANCELLED" && (
                     <form
                       action={confirmShipmentAction}

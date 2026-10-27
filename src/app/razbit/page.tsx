@@ -31,6 +31,17 @@ import Field from "@/components/ui/Field";
 import Button from "@/components/ui/Button";
 import BreakForm, { type BatchOption, type SlabOption } from "./BreakForm";
 import { thicknessToNumber } from "@/lib/dimensions";
+import {
+  EMPTY_AGGREGATE,
+  freeRemainderFromAggregate,
+  getBatchRemainders,
+} from "@/lib/batch-remainders";
+import {
+  formatLocationsShort,
+  formatSourceLine,
+  loadPatternStock,
+  patternsOfBatch,
+} from "@/lib/pattern-stock";
 import { sortBlockOptions, sortLandmarks } from "@/lib/warehouse-grid";
 
 export const metadata: Metadata = {
@@ -116,6 +127,11 @@ export default async function RazbitPage({
           arrivedAt: true,
           slabsTotal: true,
           areaTotalM2: true,
+          slabsAdjusted: true,
+          areaAdjustedM2: true,
+          slabsSoldDirect: true,
+          areaSoldDirectM2: true,
+          thicknessMm: true,
           stoneType: { select: { name: true } },
         },
       }),
@@ -153,17 +169,52 @@ export default async function RazbitPage({
     photoId: s.photos[0]?.id ?? null,
   }));
 
-  const batches: BatchOption[] = batchesCap.items.map((b) => ({
-    id: b.id,
-    stoneName: b.stoneType.name,
-    arrived: formatTashkentDate(b.arrivedAt),
-    qty: [
-      b.slabsTotal !== null && `${b.slabsTotal} плит`,
-      b.areaTotalM2 !== null && `${m2Fmt.format(Number(b.areaTotalM2))} м²`,
-    ]
-      .filter(Boolean)
-      .join(" / "),
-  }));
+  // ТЗ №19 B3 — список показывает СВОБОДНЫЙ остаток (не принятый) и узоры
+  // партии с их «свободно» из единого расчёта.
+  const batchIds = batchesCap.items.map((b) => b.id);
+  const [remainders, patternStock] = await Promise.all([
+    getBatchRemainders(db, batchIds),
+    loadPatternStock(db, batchIds),
+  ]);
+  const batches: BatchOption[] = batchesCap.items.map((b) => {
+    const free = freeRemainderFromAggregate(
+      {
+        slabsTotal: b.slabsTotal,
+        areaTotalM2: b.areaTotalM2 === null ? null : Number(b.areaTotalM2),
+        slabsAdjusted: b.slabsAdjusted,
+        areaAdjustedM2: Number(b.areaAdjustedM2),
+        slabsSoldDirect: b.slabsSoldDirect,
+        areaSoldDirectM2: Number(b.areaSoldDirectM2),
+      },
+      remainders.get(b.id) ?? EMPTY_AGGREGATE,
+    );
+    return {
+      id: b.id,
+      stoneName: b.stoneType.name,
+      arrived: formatTashkentDate(b.arrivedAt),
+      qty: `свободно ${[
+        free.slabsFree !== null && `${Math.max(0, free.slabsFree)} плит`,
+        free.areaFreeM2 !== null && `${m2Fmt.format(Math.max(0, free.areaFreeM2))} м²`,
+      ]
+        .filter(Boolean)
+        .join(" / ")}`,
+      thicknessMm: thicknessToNumber(b.thicknessMm),
+      patterns: patternsOfBatch(patternStock, b.id).map((ps) => ({
+        id: ps.id,
+        label: formatSourceLine({
+          description: ps.description,
+          lengthMm: ps.lengthMm,
+          widthMm: ps.widthMm,
+          thicknessMm: ps.thicknessMm,
+          slabsFree: ps.slabsFree,
+          areaFreeM2: ps.areaFreeM2,
+          locationText: formatLocationsShort(ps.locations),
+        }),
+        thicknessMm: ps.thicknessMm,
+        hasFree: ps.slabsFree > 0,
+      })),
+    };
+  });
 
   const ok = first(sp.ok) === "1";
   const okText = OK_TEXT[first(sp.action) ?? ""];

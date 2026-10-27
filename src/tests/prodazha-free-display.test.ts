@@ -100,8 +100,10 @@ describe("приписка про узоры (W3-T4 c)", () => {
   });
 
   it("текст короткий, русский и не тревожный", () => {
+    // ТЗ №19: брони/образцы узора уже в его остатке — приписка только про
+    // legacy-объём, проданный мимо узоров.
     expect(PATTERNS_VOLUME_NOTE).toBe(
-      " · узоры показаны без учёта объёмных продаж и броней",
+      " · часть объёма продана до учёта по узорам — сверьте узоры в карточке камня",
     );
   });
 });
@@ -203,8 +205,9 @@ describe("/prodazha page.tsx — показ отделён от охраны", (
     expect(src).toContain("(netAreaM2 !== null && netAreaM2 > 0)");
   });
 
-  it("остаток узора считается прежней формулой (новой математики нет)", () => {
-    expect(src).toContain("const remSlabs = pat.slabsCount - pat.slabsSold;");
+  it("ТЗ №19: остаток узора — из единого расчёта pattern-stock, не count − sold", () => {
+    expect(src).toContain("patternsOfBatch(patternStock, b.id)");
+    expect(src).not.toContain("const remSlabs = pat.slabsCount - pat.slabsSold;");
   });
 
   it("в приписку идёт объём МИМО узоров (продажи из узора вычтены)", () => {

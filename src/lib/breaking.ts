@@ -13,6 +13,13 @@ import type { PieceKind, UnitStatus, Prisma } from "@prisma/client";
 import { db } from "./db";
 import { computeFreeRemainder } from "./inventory";
 import { lockBatchForUpdate } from "./batch-lock";
+import {
+  allocateFromLocations,
+  loadPatternStock,
+  patternsOfBatch,
+  takeFromLocationsInTx,
+  type LocationAllocation,
+} from "./pattern-stock";
 import { normalizeBlockLetter } from "./block-letter";
 import {
   areaM2FromCm,
@@ -736,6 +743,83 @@ export async function splitSlab(params: SplitSlabParams): Promise<SplitSlabResul
   });
 }
 
+// ─────────── ТЗ №19 B3 — бой из узора: узор, место, толщина ───────────
+
+/**
+ * Каждый кусок прямого боя списывает ПЛИТУ из узора и из его места (а не из
+ * абстрактного остатка партии). Смешанная партия без узора → ошибка; толщина
+ * куска по умолчанию — толщина узора. Вызывается под row-lock партии.
+ */
+async function attributeDirectPieces(
+  tx: Prisma.TransactionClient,
+  batchId: string,
+  batchPatternId: string | null | undefined,
+  rows: readonly { block: string; landmark: string; thicknessMm?: number | null }[],
+): Promise<{
+  batchPatternId: string | null;
+  defaultThicknessMm: number | null;
+  allocations: LocationAllocation[];
+  unitAreaM2: number;
+}> {
+  const stock = patternsOfBatch(await loadPatternStock(tx, [batchId]), batchId);
+  const patternId = batchPatternId?.trim() || null;
+  if (stock.length > 0 && !patternId) {
+    throw new BreakError(
+      "INVALID_PIECE",
+      "В партии несколько узоров — выберите, из какого узора бой",
+    );
+  }
+  const first = rows[0];
+  const preferBy = (locs: readonly { id: string; block: string; landmark: string }[]) =>
+    first ? (locs.find((l) => l.block === first.block && l.landmark === first.landmark)?.id ??
+      locs.find((l) => l.block === first.block)?.id ?? null) : null;
+
+  if (patternId) {
+    const ps = stock.find((p) => p.id === patternId);
+    if (!ps) throw new BreakError("BATCH_NOT_FOUND", "Узор не найден в этой партии");
+    if (ps.slabsFree < rows.length) {
+      throw new BreakError(
+        "INSUFFICIENT_REMAINDER",
+        `В узоре «${ps.description}» свободно ${Math.max(0, ps.slabsFree)} плит — бой списать не из чего`,
+      );
+    }
+    return {
+      batchPatternId: ps.id,
+      defaultThicknessMm: ps.thicknessMm,
+      allocations: allocateFromLocations(ps.locations, rows.length, preferBy(ps.locations)),
+      unitAreaM2: ps.unitAreaM2,
+    };
+  }
+  const batch = await tx.batch.findUnique({
+    where: { id: batchId },
+    select: {
+      lengthMm: true,
+      widthMm: true,
+      thicknessMm: true,
+      slabsTotal: true,
+      areaTotalM2: true,
+      locations: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, block: true, landmark: true, slabsHere: true, areaHereM2: true },
+      },
+    },
+  });
+  const locs = (batch?.locations ?? []).map((l) => ({ ...l, areaHereM2: toNum(l.areaHereM2) }));
+  const area = batch ? toNum(batch.areaTotalM2) : null;
+  const unitAreaM2 =
+    batch?.lengthMm && batch.widthMm
+      ? (batch.lengthMm * batch.widthMm) / 10_000
+      : batch?.slabsTotal && area
+        ? area / batch.slabsTotal
+        : 0;
+  return {
+    batchPatternId: null,
+    defaultThicknessMm: batch?.thicknessMm == null ? null : Number(batch.thicknessMm.toString()),
+    allocations: allocateFromLocations(locs, rows.length, preferBy(locs)),
+    unitAreaM2,
+  };
+}
+
 // ──────────────────── registerDirectPiece — бой без плиты ────────────────────
 
 export interface RegisterDirectPieceParams extends PieceInput {
@@ -751,6 +835,8 @@ export interface RegisterDirectPieceParams extends PieceInput {
   drawingUrl?: string | null;
   /** TZ §5.6 — required cause (metadata; same field as /razbit). */
   cause: BreakCause;
+  /** ТЗ №19 B3 — узор, из которого бой (обязателен, если в партии узоры). */
+  batchPatternId?: string | null;
 }
 
 export interface RegisterDirectPieceResult {
@@ -846,16 +932,21 @@ export async function registerDirectPiece(
       );
     }
 
+    // ТЗ №19 B3 — узор и место, откуда ушла плита.
+    const attr = await attributeDirectPieces(tx, batch.id, params.batchPatternId, [params]);
+    await takeFromLocationsInTx(tx, attr.allocations, attr.unitAreaM2);
+
     const piece = await tx.piece.create({
       data: {
         stoneTypeId: batch.stoneTypeId,
         batchId: batch.id,
+        batchPatternId: attr.batchPatternId,
         originSlabId: null,
         kind: params.kind,
         sidesMm: params.sidesMm,
         boundingLengthMm: params.boundingLengthMm,
         boundingWidthMm: params.boundingWidthMm,
-        thicknessMm: params.thicknessMm,
+        thicknessMm: params.thicknessMm ?? attr.defaultThicknessMm,
         areaM2: areaM2 === null ? null : String(areaM2),
         drawingUrl: params.drawingUrl ?? null, // §5.5b — AI-chertyoj (ixtiyoriy)
         block: params.block,
@@ -873,6 +964,7 @@ export async function registerDirectPiece(
         entityId: piece.id,
         payload: {
           batchId: batch.id,
+          batchPatternId: attr.batchPatternId,
           direct: true, // без выделенной плиты
           // §3 always −1; flag kept true for journal clarity (checkbox removed).
           decrementSlabs: true,
@@ -915,6 +1007,8 @@ export interface RegisterDirectPiecesManyParams {
   drawingUrl?: string | null;
   /** TZ §5.6 — required cause (one cause for the whole multi-row submit). */
   cause: BreakCause;
+  /** ТЗ №19 B3 — узор, из которого бой (обязателен, если в партии узоры). */
+  batchPatternId?: string | null;
 }
 
 export interface RegisterDirectPiecesManyResult {
@@ -1017,6 +1111,15 @@ export async function registerDirectPiecesMany(
       );
     }
 
+    // ТЗ №19 B3 — каждый кусок списывает плиту из узора и его места.
+    const attr = await attributeDirectPieces(
+      tx,
+      batch.id,
+      params.batchPatternId,
+      params.rows,
+    );
+    await takeFromLocationsInTx(tx, attr.allocations, attr.unitAreaM2);
+
     const pieceIds: string[] = [];
     for (const pp of prepared) {
       const p = pp.input;
@@ -1024,12 +1127,13 @@ export async function registerDirectPiecesMany(
         data: {
           stoneTypeId: batch.stoneTypeId,
           batchId: batch.id,
+          batchPatternId: attr.batchPatternId,
           originSlabId: null,
           kind: p.kind,
           sidesMm: p.sidesMm,
           boundingLengthMm: p.boundingLengthMm,
           boundingWidthMm: p.boundingWidthMm,
-          thicknessMm: p.thicknessMm,
+          thicknessMm: p.thicknessMm ?? attr.defaultThicknessMm,
           areaM2: pp.areaM2 === null ? null : String(pp.areaM2),
           drawingUrl: params.drawingUrl ?? null,
           block: p.block,
@@ -1048,6 +1152,7 @@ export async function registerDirectPiecesMany(
           entityId: piece.id,
           payload: {
             batchId: batch.id,
+            batchPatternId: attr.batchPatternId,
             direct: true,
             batchRows: params.rows.length, // A4: часть атомарной многострочной записи
             decrementSlabs: true, // §3 always

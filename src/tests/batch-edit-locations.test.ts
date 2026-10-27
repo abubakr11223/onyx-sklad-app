@@ -117,7 +117,18 @@ function batchRow(over: Record<string, unknown> = {}) {
     supplierNote: "doc-1",
     arrivedAt: new Date("2026-08-01T12:00:00Z"),
     stoneType: { name: "Травертин" },
-    patterns: [{ ...patternRow }],
+    // ТЗ №19 §D — итог партии = Σ узоров: второй узор (в форме не правится)
+    // добирает партию до 10 пл. / 50 м².
+    patterns: [
+      { ...patternRow },
+      {
+        ...patternRow,
+        id: "pat2",
+        description: "тёмный",
+        slabsCount: 5,
+        areaM2: { toString: () => "30.000" },
+      },
+    ],
     locations: [
       {
         id: "loc1",
@@ -338,7 +349,8 @@ describe("applyBatchEdit — фотозапрос держит локацию (F
             id: "loc2",
             block: "B",
             landmark: "2",
-            slabsHere: 4,
+            // ТЗ №19 §D — узор 5→6 ⇒ партия = 6 + 5 = 11 плит.
+            slabsHere: 5,
             areaHereM2: null,
             batchPatternId: null,
           },
@@ -494,5 +506,59 @@ describe("applyBatchEdit — сверка раскладки на правке (
     );
     expect(res.changes.some((c) => c.field === "locations")).toBe(true);
     expect(M.locationUpdate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("applyBatchEdit — ТЗ №19 §D: итог партии с узорами вычисляется", () => {
+  it("владелец правит узор → итог партии = Σ узоров (введённое игнорируется)", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow());
+    const res = await applyBatchEdit(
+      baseInput({
+        // Форма прислала мусорный итог — сервер его не берёт.
+        slabsTotal: 999,
+        areaTotalM2: 999,
+        locations: [
+          {
+            id: "loc1",
+            block: "A",
+            landmark: "1",
+            slabsHere: 6,
+            areaHereM2: null,
+            batchPatternId: "pat1",
+          },
+          {
+            id: "loc2",
+            block: "B",
+            landmark: "2",
+            slabsHere: 5,
+            areaHereM2: null,
+            batchPatternId: null,
+          },
+        ],
+        patterns: [{ ...inputPattern, slabsCount: 6, areaM2: 24 }],
+      }),
+    );
+    const byField = Object.fromEntries(
+      res.changes.map((c) => [c.field, c.new]),
+    );
+    // 6 + 5 (pat2) = 11 плит; 24 + 30 = 54 м².
+    expect(byField.slabsTotal).toBe(11);
+    expect(byField.areaTotalM2).toBe(54);
+  });
+
+  it("без права на количество итог партии не трогается (правка размеров проходит)", async () => {
+    M.batchFindUnique.mockResolvedValue(batchRow());
+    const res = await applyBatchEdit(
+      baseInput({
+        canEditQuantity: false,
+        slabsTotal: 999,
+        areaTotalM2: 999,
+        lengthMm: 120,
+      }),
+    );
+    const fields = res.changes.map((c) => c.field);
+    expect(fields).toContain("lengthMm");
+    expect(fields).not.toContain("slabsTotal");
+    expect(fields).not.toContain("areaTotalM2");
   });
 });

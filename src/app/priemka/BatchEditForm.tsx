@@ -136,6 +136,25 @@ export default function BatchEditForm(props: EditBatchProps) {
       areaM2: nArea(p.areaM2),
     })),
   );
+  // ТЗ №19 §D — у партии с узорами «Плиты / Площадь» = Σ узоров (только
+  // чтение; сервер считает итог сам — applyBatchEdit). Без узоров — как было.
+  const hasPatterns = props.patterns.length > 0;
+  const patSum = patRows.reduce(
+    (acc, r) => {
+      const sc = Number.parseInt(r.slabsCount, 10);
+      const ar = Number.parseFloat(r.areaM2.replace(",", "."));
+      return {
+        slabs: acc.slabs + (Number.isFinite(sc) ? sc : 0),
+        area: acc.area + (Number.isFinite(ar) ? ar : 0),
+      };
+    },
+    { slabs: 0, area: 0 },
+  );
+  const shownSlabsTotal = hasPatterns ? String(patSum.slabs) : vals.slabsTotal;
+  const shownAreaTotal = hasPatterns
+    ? nArea(Math.round(patSum.area * 1000) / 1000)
+    : vals.areaTotalM2;
+
   const setPat =
     (idx: number, key: keyof Omit<PatRow, "id">) =>
     (ev: React.ChangeEvent<HTMLInputElement>) =>
@@ -262,15 +281,22 @@ export default function BatchEditForm(props: EditBatchProps) {
 
       <Card>
         <h2 className="mb-3 text-lg font-semibold">Количество</h2>
+        {hasPatterns && (
+          <p className="-mt-2 mb-3 text-sm text-ink/55">
+            Партия с узорами: плиты и площадь — сумма узоров. Правьте узоры ниже.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field
             id="slabsTotal"
             name="slabsTotal"
-            label="Плиты"
+            label={hasPatterns ? "Плиты (из узоров)" : "Плиты"}
             inputMode="numeric"
-            value={vals.slabsTotal}
+            value={shownSlabsTotal}
             onChange={setVal("slabsTotal")}
-            readOnly={!props.canEditQuantity}
+            readOnly={hasPatterns || !props.canEditQuantity}
+            tabIndex={hasPatterns ? -1 : undefined}
+            className={hasPatterns ? "tnum bg-ink/[0.04] text-ink/60" : undefined}
             error={e.slabsTotal}
             hint={
               props.minSlabsHint !== null
@@ -281,11 +307,13 @@ export default function BatchEditForm(props: EditBatchProps) {
           <Field
             id="areaTotalM2"
             name="areaTotalM2"
-            label="Площадь, м²"
+            label={hasPatterns ? "Площадь, м² (из узоров)" : "Площадь, м²"}
             inputMode="decimal"
-            value={vals.areaTotalM2}
+            value={shownAreaTotal}
             onChange={setVal("areaTotalM2")}
-            readOnly={!props.canEditQuantity}
+            readOnly={hasPatterns || !props.canEditQuantity}
+            tabIndex={hasPatterns ? -1 : undefined}
+            className={hasPatterns ? "tnum bg-ink/[0.04] text-ink/60" : undefined}
             error={e.areaTotalM2}
           />
         </div>
@@ -315,7 +343,17 @@ export default function BatchEditForm(props: EditBatchProps) {
           <Field
             id="thicknessMm"
             name="thicknessMm"
-            label="Толщина, см"
+            label={
+              // ТЗ №19 A3 — однородной партии толщина обязательна; с узорами
+              // она задаётся в каждом узоре.
+              hasPatterns ? (
+                "Толщина, см"
+              ) : (
+                <>
+                  Толщина, см <span className="text-danger">*</span>
+                </>
+              )
+            }
             inputMode="decimal"
             value={vals.thicknessMm}
             onChange={setVal("thicknessMm")}
@@ -414,7 +452,11 @@ export default function BatchEditForm(props: EditBatchProps) {
                   <Field
                     id={`patTh-${i}`}
                     name="patThickness"
-                    label="Толщ., см"
+                    label={
+                      <>
+                        Толщ., см <span className="text-danger">*</span>
+                      </>
+                    }
                     inputMode="decimal"
                     value={patRows[i]?.thicknessMm ?? ""}
                     onChange={setPat(i, "thicknessMm")}

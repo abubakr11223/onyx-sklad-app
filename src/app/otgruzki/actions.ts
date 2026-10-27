@@ -70,6 +70,8 @@ export async function confirmShipmentAction(formData: FormData): Promise<void> {
       actorId,
       qtySlabs,
       qtyAreaM2,
+      // ТЗ №19 C1 — строка задачи (узор · место), которую отмечает складчик.
+      lineId: str("lineId") || null,
     });
   } catch (e) {
     const msg =

@@ -86,13 +86,24 @@ export interface MyVolumeReservation {
   label: string;
 }
 
+/** ТЗ №19 — место хранения как источник списания («Блок A1 · 3 пл.»). */
+export interface SourceLocationOption {
+  id: string;
+  label: string;
+}
+
 /** ТЗ №3 — узор-подгруппа как цель продажи (B2C). */
 export interface PatternOption {
   id: string;
   description: string;
-  /** «осталось: 50 плит · 30 м²» — остаток узора (count − sold), с сервера. */
+  /**
+   * ТЗ №19 — единая строка источника с сервера:
+   * «ТЕСТ светлый 2см · 280×160×2 см · свободно 3 пл. / 13,4 м² · Блок A1».
+   */
   remainText: string;
   hasFree: boolean;
+  /** ТЗ №19 B1 — места узора; больше одного → спрашиваем, откуда брать. */
+  locations: SourceLocationOption[];
 }
 
 export interface BatchOption {
@@ -102,8 +113,13 @@ export interface BatchOption {
   freeText: string;
   needsCheck: boolean;
   hasFree: boolean;
-  /** ТЗ №3 — узоры этой партии (если заведены). */
+  /**
+   * ТЗ №3 — узоры этой партии (если заведены). ТЗ №19 B1: есть узоры →
+   * «Продать объём» скрыт, продажа только узором или «Выкупить целиком».
+   */
   patterns: PatternOption[];
+  /** ТЗ №19 — места однородной партии (выбор «откуда брать»). */
+  locations: SourceLocationOption[];
   /** W1-T1: мои активные volume-брони на эту партию (для явного погашения). */
   myReservations: MyVolumeReservation[];
 }
@@ -124,6 +140,8 @@ interface Target {
   subtitle: string;
   /** W1-T1: мои volume-брони на выбранную партию (объёмные режимы). */
   myReservations?: MyVolumeReservation[];
+  /** ТЗ №19 — места источника (узора / однородной партии). */
+  locations?: SourceLocationOption[];
 }
 
 const initialState: SaleFormState = { errors: {}, conflict: null };
@@ -203,6 +221,8 @@ export default function SaleForm({
   const [stone, setStone] = useState<StoneTypeGroup | null>(boot.stone);
   const [target, setTarget] = useState<Target | null>(boot.target);
   const [confirming, setConfirming] = useState(false);
+  // ТЗ №19 B1 — из какого места брать (узор/партия лежит в нескольких).
+  const [batchLocationId, setBatchLocationId] = useState("");
   // TZ №10+11 §6 — клиент из справочника (не свободный текст).
   const [clientQuery, setClientQuery] = useState("");
   const [clientHits, setClientHits] = useState<ClientHit[]>([]);
@@ -216,6 +236,9 @@ export default function SaleForm({
   const [newClientBusy, setNewClientBusy] = useState(false);
   const [newClientError, setNewClientError] = useState<string | null>(null);
   const [dupHint, setDupHint] = useState<ClientHit | null>(null);
+  // ТЗ №19 E1 — «есть клиент с таким именем» (телефон другой): создать можно,
+  // но сначала показываем тёзок с телефонами.
+  const [nameHint, setNameHint] = useState<ClientHit[] | null>(null);
   // Объект (необязательно)
   const [siteMode, setSiteMode] = useState<"none" | "existing" | "new">("none");
   const [sites, setSites] = useState<SiteHit[]>([]);
@@ -319,6 +342,7 @@ export default function SaleForm({
     // W1-T1: согласие на закрытие брони относится к КОНКРЕТНОЙ партии —
     // при смене цели сбрасывается (deny-by-default).
     setConsumeReservationId("");
+    setBatchLocationId(t.locations?.[0]?.id ?? "");
   };
 
   const clearClient = () => {
@@ -328,12 +352,14 @@ export default function SaleForm({
     setSiteMode("none");
     setShowNewSite(false);
     setDupHint(null);
+    setNameHint(null);
   };
 
   const selectClient = async (c: ClientHit) => {
     setSelectedClient(c);
     setShowNewClient(false);
     setDupHint(null);
+    setNameHint(null);
     setClientHits([]);
     setClientQuery("");
     setClientSearchError(null);
@@ -356,6 +382,7 @@ export default function SaleForm({
     setClientSearchBusy(true);
     setClientSearchError(null);
     setDupHint(null);
+    setNameHint(null);
     try {
       const res = await searchClientsForSale(q);
       if (!res.ok) {
@@ -392,15 +419,17 @@ export default function SaleForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on query
   }, [clientQuery, selectedClient]);
 
-  const submitNewClient = async () => {
+  const submitNewClient = async (allowSameName = false) => {
     setNewClientBusy(true);
     setNewClientError(null);
     setDupHint(null);
+    setNameHint(null);
     try {
       const res = await createClientForSale({
         name: newClientName,
         type: newClientType,
         phone: newClientPhone,
+        allowSameName,
       });
       if (res.ok) {
         await selectClient(res.client);
@@ -412,6 +441,10 @@ export default function SaleForm({
       if (res.reason === "duplicate") {
         setDupHint(res.existing);
         setNewClientError(res.error);
+        return;
+      }
+      if (res.reason === "same_name") {
+        setNameHint(res.similar);
         return;
       }
       setNewClientError(res.error);
@@ -593,23 +626,28 @@ export default function SaleForm({
                   </div>
                   <div className="text-sm text-ink/70">{b.freeText}</div>
                   <div className="mt-2 flex gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={b.needsCheck || !b.hasFree}
-                      className="flex-1"
-                      onClick={() =>
-                        pickTarget({
-                          mode: "BATCH_VOLUME",
-                          id: b.id,
-                          title: `${stone.name} — объём из партии`,
-                          subtitle: `${b.title} · ${b.freeText}`,
-                          myReservations: b.myReservations,
-                        })
-                      }
-                    >
-                      Продать объём
-                    </Button>
+                    {/* ТЗ №19 B1 — у партии с узорами «объём из партии» нет:
+                        продажа не может обойти узор. */}
+                    {b.patterns.length === 0 && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={b.needsCheck || !b.hasFree}
+                        className="flex-1"
+                        onClick={() =>
+                          pickTarget({
+                            mode: "BATCH_VOLUME",
+                            id: b.id,
+                            title: `${stone.name} — объём из партии`,
+                            subtitle: `${b.title} · ${b.freeText}`,
+                            myReservations: b.myReservations,
+                            locations: b.locations,
+                          })
+                        }
+                      >
+                        Продать объём
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       size="sm"
@@ -653,6 +691,7 @@ export default function SaleForm({
                                   title: `${stone.name} — узор «${pat.description}»`,
                                   subtitle: `${b.title} · ${pat.remainText}`,
                                   myReservations: b.myReservations,
+                                  locations: pat.locations,
                                 })
                               }
                             >
@@ -731,6 +770,30 @@ export default function SaleForm({
             <div className="col-span-2">
               <FieldError msg={e.qty} />
             </div>
+          </div>
+        )}
+
+        {/* ТЗ №19 B1 — «если локаций несколько — спросить, из какой». */}
+        {isVolume && (target.locations?.length ?? 0) > 1 && (
+          <div className="mb-3">
+            <label htmlFor="f-batchLocation" className="mb-1.5 block text-sm font-semibold text-ink">
+              Откуда брать
+            </label>
+            <select
+              id="f-batchLocation"
+              className={inputClass}
+              value={batchLocationId}
+              onChange={(ev) => setBatchLocationId(ev.target.value)}
+            >
+              {target.locations!.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-ink/55">
+              Если здесь меньше плит, чем продаёте, остаток возьмётся из других мест узора.
+            </p>
           </div>
         )}
 
@@ -846,6 +909,7 @@ export default function SaleForm({
                   onClick={() => {
                     setShowNewClient((v) => !v);
                     setDupHint(null);
+                    setNameHint(null);
                     setNewClientError(null);
                   }}
                 >
@@ -867,7 +931,10 @@ export default function SaleForm({
                   label="Имя / название"
                   placeholder="Иван Петров / ООО «Стройка»"
                   value={newClientName}
-                  onChange={(ev) => setNewClientName(ev.target.value)}
+                  onChange={(ev) => {
+                    setNewClientName(ev.target.value);
+                    setNameHint(null);
+                  }}
                   error={e.newClientName}
                 />
                 <div>
@@ -919,14 +986,43 @@ export default function SaleForm({
                     </Button>
                   </Alert>
                 )}
+                {nameHint && nameHint.length > 0 && (
+                  <Alert variant="warning" title="Есть клиент с таким именем" className="mt-1">
+                    <p className="text-sm">
+                      Проверьте телефон: если это он — выберите. Если другой человек —
+                      «Всё равно создать».
+                    </p>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {nameHint.map((c) => (
+                        <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm">
+                            <span className="font-semibold text-ink">{c.name}</span> · {c.phone}
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void selectClient(c)}
+                          >
+                            Выбрать
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </Alert>
+                )}
                 <FieldError msg={newClientError ?? undefined} />
                 <Button
                   type="button"
                   disabled={newClientBusy}
-                  onClick={() => void submitNewClient()}
+                  onClick={() => void submitNewClient(nameHint !== null)}
                   className="mt-1"
                 >
-                  {newClientBusy ? "Сохранение…" : "Сохранить клиента"}
+                  {newClientBusy
+                    ? "Сохранение…"
+                    : nameHint
+                      ? "Всё равно создать"
+                      : "Сохранить клиента"}
                 </Button>
               </div>
             </div>
@@ -1336,6 +1432,15 @@ export default function SaleForm({
             <dd className="text-right font-semibold text-ink">{qtyText}</dd>
           </div>
         )}
+        {isVolume && (target.locations?.length ?? 0) > 0 && (
+          <div className="flex justify-between gap-3 py-1">
+            <dt className="text-ink/60">Откуда</dt>
+            <dd className="text-right text-sm text-ink">
+              {(target.locations!.find((l) => l.id === batchLocationId) ??
+                target.locations![0]).label}
+            </dd>
+          </div>
+        )}
         {target.mode === "WHOLE_BATCH" && (
           <div className="flex justify-between gap-3 py-1">
             <dt className="text-ink/60">Объём</dt>
@@ -1423,6 +1528,9 @@ export default function SaleForm({
           <input type="hidden" name="batchPatternId" value={target.id} />
         ) : (
           <input type="hidden" name="batchId" value={target.id} />
+        )}
+        {isVolume && batchLocationId && (
+          <input type="hidden" name="batchLocationId" value={batchLocationId} />
         )}
         <input type="hidden" name="clientId" value={selectedClient?.id ?? ""} />
         <input

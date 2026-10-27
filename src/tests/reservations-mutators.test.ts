@@ -20,6 +20,7 @@ const M = vi.hoisted(() => {
     reservationFindMany: fn(), // expireOverdueReservations
     auditCreate: fn(),
     queryRaw: fn(), // lockBatchForUpdate
+    patternCount: fn(), // ТЗ №19 — однородная партия: узоров нет
   };
 });
 
@@ -35,6 +36,7 @@ const tx = {
     updateMany: M.reservationUpdateMany,
   },
   auditLog: { create: M.auditCreate },
+  batchPattern: { count: M.patternCount },
   $queryRaw: M.queryRaw,
 };
 
@@ -77,6 +79,7 @@ beforeEach(() => {
   // Разумные дефолты.
   M.userFindUnique.mockResolvedValue({ id: "mgr1", role: "MANAGER", isActive: true });
   M.appConfigFindUnique.mockResolvedValue(null); // default дней
+  M.patternCount.mockResolvedValue(0);
   M.slabUpdateMany.mockResolvedValue({ count: 1 });
   M.pieceUpdateMany.mockResolvedValue({ count: 1 });
   M.reservationCreate.mockResolvedValue({ id: "res1" });

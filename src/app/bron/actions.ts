@@ -17,6 +17,7 @@ import {
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 import { strOf } from "@/lib/form";
 import { ensureFormError } from "@/lib/form-errors";
+import { db } from "@/lib/db";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
@@ -49,34 +50,45 @@ export async function createReservation(
 
   const str = strOf(formData);
 
-  const target = str("target"); // "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>"
-  const customerName = str("customerName");
-  const customerContact = str("customerContact") || null;
+  // "SLAB:<id>" | "PIECE:<id>" | "BATCH:<id>" | "PATTERN:<id>" (ТЗ №19 B2)
+  const target = str("target");
   const daysRaw = parsePositiveInt(str("days"));
 
   const errors: Record<string, string> = {};
   const [targetKind, targetId] = target.split(":", 2);
-  if (!targetId || !["SLAB", "PIECE", "BATCH"].includes(targetKind)) {
-    errors.target = "Выберите камень или объём из партии";
+  if (!targetId || !["SLAB", "PIECE", "BATCH", "PATTERN"].includes(targetKind)) {
+    errors.target = "Выберите камень, объём партии или узор";
   }
-  if (!customerName) {
-    errors.customerName = "Укажите клиента — анонимных броней не бывает";
+  // ТЗ №19 B2 — клиент из справочника (ТЗ №11): бронь попадает в его карточку.
+  const clientId = str("clientId");
+  const client = clientId
+    ? await db.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, name: true, phone: true },
+      })
+    : null;
+  if (!client) {
+    errors.customerName = "Выберите клиента из справочника — анонимных броней не бывает";
   }
+  const customerName = client?.name ?? "";
+  const customerContact = client?.phone ?? null;
   if (daysRaw === undefined) {
     errors.days = "Срок — целое число дней";
   }
 
   let qtySlabs: number | null = null;
   let qtyAreaM2: number | null = null;
-  if (targetKind === "BATCH") {
+  const isVolume = targetKind === "BATCH" || targetKind === "PATTERN";
+  if (isVolume) {
     const qs = parsePositiveInt(str("qtySlabs"));
     const qa = parsePositiveDecimal(str("qtyAreaM2"));
     if (qs === undefined) errors.qtySlabs = "Целое число плит";
     if (qa === undefined) errors.qtyAreaM2 = "Число, например 12,5";
     qtySlabs = qs ?? null;
     qtyAreaM2 = qa ?? null;
-    if (qtySlabs === null && qtyAreaM2 === null && !errors.qtySlabs && !errors.qtyAreaM2) {
-      errors.qtySlabs = "Укажите количество: плиты и/или м²";
+    // ТЗ №19 B2 — «Сколько плит» обязательно (м² — дополнительно).
+    if (qtySlabs === null && !errors.qtySlabs) {
+      errors.qtySlabs = "Укажите, сколько плит бронируете";
     }
   }
 
@@ -93,9 +105,21 @@ export async function createReservation(
   }
 
   try {
-    if (targetKind === "BATCH") {
+    if (isVolume) {
+      const pattern =
+        targetKind === "PATTERN"
+          ? await db.batchPattern.findUnique({
+              where: { id: targetId },
+              select: { id: true, batchId: true },
+            })
+          : null;
+      if (targetKind === "PATTERN" && !pattern) {
+        throw new ReservationError("NOT_FOUND", "Узор не найден — обновите страницу");
+      }
       await reserveBatchVolume({
-        batchId: targetId,
+        batchId: pattern?.batchId ?? targetId,
+        batchPatternId: pattern?.id ?? null,
+        clientId: client?.id ?? null,
         qtySlabs,
         qtyAreaM2,
         customerName,
@@ -109,6 +133,7 @@ export async function createReservation(
         unitId: targetId,
         customerName,
         customerContact,
+        clientId: client?.id ?? null,
         days: daysRaw ?? null,
         managerId,
       });

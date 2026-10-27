@@ -6,6 +6,12 @@
 // W10-A: without `?d=` this is an instruction landing (reachable from /razbit),
 // not a dead end — AI still starts only in Telegram (product decision).
 
+import {
+  formatLocationsShort,
+  formatSourceLine,
+  loadPatternStock,
+  patternsOfBatch,
+} from "@/lib/pattern-stock";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -191,6 +197,11 @@ export default async function SinganPage({
     }),
   ]);
 
+  // ТЗ №19 B3 — узоры партий с «свободно» из единого расчёта.
+  const patternStock = await loadPatternStock(
+    db,
+    batchRows.map((b) => b.id),
+  );
   const batches: SinganBatchOption[] = batchRows.map((b) => {
     const qty = [
       b.slabsTotal !== null && `${b.slabsTotal} плит`,
@@ -203,6 +214,19 @@ export default async function SinganPage({
       label:
         `${b.stoneType.name} — ${formatTashkentDate(b.arrivedAt)}` +
         (qty ? ` (${qty})` : ""),
+      patterns: patternsOfBatch(patternStock, b.id).map((ps) => ({
+        id: ps.id,
+        label: formatSourceLine({
+          description: ps.description,
+          lengthMm: ps.lengthMm,
+          widthMm: ps.widthMm,
+          thicknessMm: ps.thicknessMm,
+          slabsFree: ps.slabsFree,
+          areaFreeM2: ps.areaFreeM2,
+          locationText: formatLocationsShort(ps.locations),
+        }),
+        thicknessMm: ps.thicknessMm,
+      })),
     };
   });
 

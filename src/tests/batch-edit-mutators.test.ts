@@ -292,8 +292,19 @@ describe("applyBatchEdit — pattern photo (ТЗ №14 §3)", () => {
   };
 
   function withPattern(photos: { id: string }[] = []) {
+    // ТЗ №19 §D — итог партии (10 пл. / 50 м²) = Σ узоров: второй узор
+    // в форме не правится и добирает сумму.
     return batchRow({
-      patterns: [{ ...patternRow, photos }],
+      patterns: [
+        { ...patternRow, photos },
+        {
+          ...patternRow,
+          id: "pat2",
+          description: "тёмный",
+          areaM2: { toString: () => "30.000" },
+          photos: [],
+        },
+      ],
     });
   }
 

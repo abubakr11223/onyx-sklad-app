@@ -5,6 +5,7 @@ import {
   batchHasMovements,
   freeAfterVolumeHolds,
   minSlabsTotalFloor,
+  patternDerivedTotals,
 } from "@/lib/batch-edit";
 import {
   EMPTY_AGGREGATE,
@@ -118,5 +119,35 @@ describe("minSlabsTotalFloor / assertQuantityAboveFloor", () => {
       freeAfterVolumeHolds(free, { reservedSlabs: 6, reservedAreaM2: 0 })
         .slabsFree,
     ).toBe(-1);
+  });
+});
+
+describe("ТЗ №19 §D — patternDerivedTotals (итог партии = Σ узоров)", () => {
+  const cur = [
+    { id: "p1", slabsCount: 3, areaM2: 13.44 },
+    { id: "p2", slabsCount: 3, areaM2: 11.25 },
+  ];
+
+  it("партия без узоров → null (итог вводится руками)", () => {
+    expect(patternDerivedTotals([], [])).toBeNull();
+  });
+
+  it("узоры без правки → сумма текущих (м² без float-хвоста)", () => {
+    expect(patternDerivedTotals(cur, [])).toEqual({
+      slabsTotal: 6,
+      areaTotalM2: 24.69,
+    });
+  });
+
+  it("правка узора из формы перекрывает текущее значение по id", () => {
+    expect(
+      patternDerivedTotals(cur, [{ id: "p2", slabsCount: 5, areaM2: 18.75 }]),
+    ).toEqual({ slabsTotal: 8, areaTotalM2: 32.19 });
+  });
+
+  it("узор не этой партии в форме не влияет на сумму", () => {
+    expect(
+      patternDerivedTotals(cur, [{ id: "x", slabsCount: 99, areaM2: 99 }]),
+    ).toEqual({ slabsTotal: 6, areaTotalM2: 24.69 });
   });
 });

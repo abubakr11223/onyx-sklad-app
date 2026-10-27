@@ -8,6 +8,11 @@
 // + Icons) и добавлен лайтбокс фото (PhotoLightbox). Данные, server actions,
 // имена полей форм и ролевые гейты (canManageWarehouse/canSeePrices/
 // canRequestPhoto) НЕ менялись — правка чисто презентационная.
+import {
+  formatLocationsShort,
+  loadPatternStock,
+  patternsOfBatch,
+} from "@/lib/pattern-stock";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -493,9 +498,12 @@ export default async function KamenPage({
   // Единый `now` — и для бронь-фильтра, и для «свежести» фото (TZ §5.3).
   const now = new Date();
   const batchIds = st.batches.map((b) => b.id);
-  const [remainders, holds] = await Promise.all([
+  const [remainders, holds, patternStock] = await Promise.all([
     getBatchRemainders(db, batchIds),
     getBatchReservationHolds(db, batchIds, now),
+    // ТЗ №19 §D — остаток узора из единого расчёта (то же число, что в
+    // продаже, брони, разбитии и шоу-руме).
+    loadPatternStock(db, batchIds, now),
   ]);
   const batches = st.batches.map((b) => {
     const free = freeRemainderFromAggregate(
@@ -1184,8 +1192,17 @@ export default async function KamenPage({
                     см
                   </p>
                 )}
+                {/* ТЗ №19 A3 — толщина — ключевой параметр продажи и цены. */}
+                {(b.patterns.length === 0
+                  ? b.thicknessMm == null
+                  : b.patterns.some((p) => p.thicknessMm == null)) && (
+                  <p className="mt-1 text-sm font-medium text-warning">
+                    толщина не указана — укажите в правке партии
+                  </p>
+                )}
                 {b.locations.length === 0 ? (
-                  <p className="mt-1 text-ink/50">Локации не указаны.</p>
+                  // ТЗ №19 E3 — партия без места: складчик не найдёт её по карте.
+                  <p className="mt-1 text-sm font-medium text-warning">локация не указана</p>
                 ) : (
                   <ul className="mt-1 space-y-2 text-ink/70">
                     {b.locations.map((loc) => (
@@ -1307,11 +1324,23 @@ export default async function KamenPage({
                     slabsFree: null,
                     areaFreeM2: null,
                   };
+                  // ТЗ №19 §D — партия = Σ узоров. Расхождение = движения до
+                  // учёта по узорам; показываем честно, не прячем.
+                  const pats = patternsOfBatch(patternStock, b.id);
+                  const sumFree = pats.reduce((acc, p) => acc + p.slabsFree, 0);
+                  const unassigned =
+                    batchFree.slabsFree === null ? 0 : batchFree.slabsFree - sumFree;
                   return (
                   <div className="mt-3 border-t border-line pt-3">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
                       Узоры в партии
                     </p>
+                    {unassigned !== 0 && (
+                      <p className="mb-2 text-sm text-warning">
+                        Остаток партии и сумма узоров расходятся на {Math.abs(unassigned)} пл.
+                        — движения до учёта по узорам; сверьте в правке партии.
+                      </p>
+                    )}
                     <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {b.patterns.map((pat) => (
                         <li
@@ -1369,11 +1398,16 @@ export default async function KamenPage({
                             {/* ТЗ №3 §2 — статус подгруппы (из остатка): узор
                                 может быть продан, пока в партии есть другие. */}
                             {(() => {
+                              // ТЗ №19 — статус по ЕДИНОМУ остатку узора (продажи +
+                              // выделенные плиты + бой), а не только по продажам.
+                              const ps = patternStock.get(pat.id);
                               const st = patternStatus({
                                 slabsCount: pat.slabsCount,
-                                slabsSold: pat.slabsSold,
+                                slabsSold: ps ? pat.slabsCount - ps.slabsFree : pat.slabsSold,
                                 areaM2: Number(pat.areaM2),
-                                areaSoldM2: Number(pat.areaSoldM2),
+                                areaSoldM2: ps
+                                  ? Number(pat.areaM2) - ps.areaFreeM2
+                                  : Number(pat.areaSoldM2),
                               });
                               const variant =
                                 st === "AVAILABLE"
@@ -1389,24 +1423,36 @@ export default async function KamenPage({
                             })()}
                           </div>
                           {(() => {
-                            // Аудит ТЗ №7 #20 — clamp по свободному остатку партии.
+                            // ТЗ №19 §D — «свободно» узора: продажи, выделенные
+                            // плиты, бой, брони и образцы узора. Аудит №7 #20 clamp
+                            // остаётся страховкой для legacy-расхождения.
+                            const ps = patternStock.get(pat.id);
                             const clamped = clampPatternRemainder(
                               {
                                 slabsCount: pat.slabsCount,
-                                slabsSold: pat.slabsSold,
+                                slabsSold: ps ? pat.slabsCount - ps.availableSlabs : pat.slabsSold,
                                 areaM2: Number(pat.areaM2),
-                                areaSoldM2: Number(pat.areaSoldM2),
+                                areaSoldM2: ps
+                                  ? Number(pat.areaM2) - ps.availableAreaM2
+                                  : Number(pat.areaSoldM2),
                               },
                               batchFree,
                             );
                             return (
-                              <p className="tnum text-xs text-ink/60">
-                                {pat.thicknessMm !== null && (
-                                  <>{formatThickness(thicknessToNumber(pat.thicknessMm))} см · </>
+                              <>
+                                <p className="tnum text-xs text-ink/60">
+                                  {pat.thicknessMm !== null && (
+                                    <>{formatThickness(thicknessToNumber(pat.thicknessMm))} см · </>
+                                  )}
+                                  свободно {clamped.slabsRemaining} плит ·{" "}
+                                  {m2Fmt.format(clamped.areaRemainingM2)} м²
+                                </p>
+                                {ps && (
+                                  <p className="text-xs text-ink/60">
+                                    {formatLocationsShort(ps.locations)}
+                                  </p>
                                 )}
-                                осталось {clamped.slabsRemaining} плит ·{" "}
-                                {m2Fmt.format(clamped.areaRemainingM2)} м²
-                              </p>
+                              </>
                             );
                           })()}
                           {pat.slabsSold > 0 && (

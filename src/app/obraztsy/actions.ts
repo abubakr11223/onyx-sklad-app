@@ -185,6 +185,8 @@ export async function issueSampleAction(
 
   const unitId = str("unitId") || undefined;
   let batchId = str("batchId") || undefined;
+  const batchPatternId =
+    mode === "PATTERN_VOLUME" ? str("batchPatternId") || null : null;
 
   if (mode === "SLAB" || mode === "PIECE") {
     if (!unitId) {
@@ -247,6 +249,7 @@ export async function issueSampleAction(
     targetType: targetType!,
     unitId,
     batchId,
+    batchPatternId,
     qtySlabs,
     qtyAreaM2,
     clientId,

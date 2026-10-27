@@ -18,6 +18,7 @@ import { lockBatchForUpdate } from "@/lib/batch-lock";
 import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "@/lib/validators/intake";
 import { formatLocation } from "@/lib/locations";
 import { computeBatchVolumeHolds } from "@/lib/volume-holds";
+import { areaForSlabs, checkPatternAvailable, loadPatternStock } from "@/lib/pattern-stock";
 
 // ─────────────────────────── Konstantalar / xatolar ───────────────────────────
 
@@ -215,6 +216,8 @@ export interface ReserveUnitInput {
   unitId: string;
   customerName: string;
   customerContact?: string | null;
+  /** ТЗ №19 B2 — клиент из справочника (имя/телефон уже подставлены вызывающим). */
+  clientId?: string | null;
   /** null/undefined → AppConfig.reservationDays (default 3). */
   days?: number | null;
   managerId: string;
@@ -272,6 +275,7 @@ export async function reserveUnit(
           targetType: input.targetType,
           slabId: input.targetType === "SLAB" ? input.unitId : null,
           pieceId: input.targetType === "PIECE" ? input.unitId : null,
+          clientId: input.clientId?.trim() || null,
           managerId: input.managerId,
           customerName,
           customerContact: input.customerContact?.trim() || null,
@@ -311,6 +315,13 @@ export async function reserveUnit(
 
 export interface ReserveBatchVolumeInput {
   batchId: string;
+  /**
+   * ТЗ №19 B2 — бронь из узора. У партии с узорами обязателен: бронь режет
+   * «свободно» конкретного узора, не абстрактной партии.
+   */
+  batchPatternId?: string | null;
+  /** ТЗ №19 B2 — клиент из справочника (ТЗ №11): бронь видна в его карточке. */
+  clientId?: string | null;
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
   customerName: string;
@@ -334,9 +345,12 @@ function toNum(d: { toString(): string } | null): number | null {
 export async function reserveBatchVolume(
   input: ReserveBatchVolumeInput,
 ): Promise<ReserveResult> {
-  const customerName = requireCustomerName(input.customerName);
+  let customerName = requireCustomerName(input.customerName);
+  let customerContact = input.customerContact?.trim() || null;
   const qtySlabs = input.qtySlabs ?? null;
-  const qtyAreaM2 = input.qtyAreaM2 ?? null;
+  let qtyAreaM2 = input.qtyAreaM2 ?? null;
+  const batchPatternId = input.batchPatternId?.trim() || null;
+  const clientId = input.clientId?.trim() || null;
   try {
     return await db.$transaction(
       async (tx) => {
@@ -427,15 +441,48 @@ export async function reserveBatchVolume(
           throw new ReservationError("VOLUME_EXCEEDED", decision.reason);
         }
 
+        // ТЗ №19 B2 — смешанная партия бронируется ТОЛЬКО узором; «Сколько
+        // плит» обязательно, площадь — по формату узора (как в продаже).
+        const patterns = await tx.batchPattern.count({ where: { batchId: batch.id } });
+        if (patterns > 0 && !batchPatternId) {
+          throw new ReservationError(
+            "VALIDATION",
+            "В партии несколько узоров — выберите узор",
+          );
+        }
+        if (batchPatternId) {
+          const ps = (await loadPatternStock(tx, [batch.id], now)).get(batchPatternId);
+          if (!ps) throw new ReservationError("NOT_FOUND", "Узор не найден");
+          if (qtySlabs === null && batch.slabsTotal !== null) {
+            throw new ReservationError("VALIDATION", "Укажите, сколько плит бронируете");
+          }
+          if (qtySlabs !== null && qtyAreaM2 === null) {
+            qtyAreaM2 = areaForSlabs(ps, qtySlabs, ps.areaFreeM2);
+          }
+          const err = checkPatternAvailable(ps, qtySlabs, qtyAreaM2);
+          if (err) throw new ReservationError("VOLUME_EXCEEDED", err);
+        }
+        if (clientId) {
+          const client = await tx.client.findUnique({
+            where: { id: clientId },
+            select: { name: true, phone: true },
+          });
+          if (!client) throw new ReservationError("NOT_FOUND", "Клиент не найден");
+          customerName = client.name;
+          customerContact = client.phone;
+        }
+
         const reservation = await tx.reservation.create({
           data: {
             targetType: "BATCH_VOLUME",
             batchId: batch.id,
+            batchPatternId,
+            clientId,
             qtySlabs,
-            qtyAreaM2: qtyAreaM2 === null ? null : String(qtyAreaM2),
+            qtyAreaM2: qtyAreaM2 === null ? null : qtyAreaM2.toFixed(3),
             managerId: input.managerId,
             customerName,
-            customerContact: input.customerContact?.trim() || null,
+            customerContact,
             expiresAt,
             status: "ACTIVE",
           },
@@ -451,10 +498,12 @@ export async function reserveBatchVolume(
             payload: {
               reservationId: reservation.id,
               targetType: "BATCH_VOLUME",
+              batchPatternId,
+              clientId,
               qtySlabs,
               qtyAreaM2,
               customerName,
-              customerContact: input.customerContact?.trim() || null,
+              customerContact,
               days,
               expiresAt: expiresAt.toISOString(),
             },

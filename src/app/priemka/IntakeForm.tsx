@@ -15,6 +15,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { submitIntake, type IntakeFormState } from "./actions";
 import {
+  soleLocationPatternSlabs,
   validateIntake,
   type IntakeErrors,
   type IntakeInput,
@@ -71,7 +72,11 @@ const emptyLoc = (): LocValues => ({
   pattern: "",
 });
 
-/** ТЗ №3 — значения одной узор-подгруппы (контролируемые поля строки). */
+/**
+ * ТЗ №3 — значения одной узор-подгруппы (контролируемые поля строки).
+ * ТЗ №19 A5 — lengthMm/widthMm/thicknessMm хранят САНТИМЕТРЫ (суффикс `Mm`
+ * исторический; ключи оставлены ради совместимости офлайн-черновиков).
+ */
 interface PatValues {
   description: string;
   thicknessMm: string;
@@ -387,6 +392,73 @@ export default function IntakeForm({
     { slabs: 0, area: 0 },
   );
 
+  // ТЗ №19 A1 — с узорами «Плит» и «Площадь» партии = ИТОГО по узорам
+  // (только чтение). Без узоров — ручной ввод, как раньше. Сервер считает
+  // итог сам (validateIntake), эти строки — показ и hidden-значения формы.
+  const patTotalArea = Math.round(patTotals.area * 1000) / 1000;
+  const effSlabsTotal = patternsEnabled
+    ? patTotals.slabs > 0
+      ? String(patTotals.slabs)
+      : ""
+    : values.slabsTotal;
+  const effAreaTotal = patternsEnabled
+    ? patTotalArea > 0
+      ? String(patTotalArea).replace(".", ",")
+      : ""
+    : values.areaTotalM2;
+
+  // ТЗ №19 A2 — «Плит здесь» из узора: узор выбран ровно в одной строке →
+  // весь узор лежит здесь. Ключ строки — id строки узора (patRowIds).
+  const locPatternKeys = rowIds.map((rid) =>
+    patternsEnabled ? (locs[rid]?.pattern ?? "") : "",
+  );
+  const patSlabsOf = (key: string): number | null => {
+    const raw = pats[Number(key)]?.slabs ?? "";
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const autoSlabsAt = (idx: number): number | null =>
+    soleLocationPatternSlabs(locPatternKeys, idx, patSlabsOf);
+  /** Плит в строке с учётом подстановок (как считает сервер). */
+  const effectiveLocSlabs = (loc: LocValues, idx: number): number => {
+    const n = Number.parseInt(loc.slabsHere, 10);
+    if (Number.isFinite(n)) return n;
+    const auto = autoSlabsAt(idx);
+    if (auto !== null) return auto;
+    // ТЗ №18 (ориентир) §5 — единственная строка «весь приход» = вся партия.
+    if (rowIds.length === 1 && (!patternsEnabled || loc.pattern === "")) {
+      const t = Number.parseInt(effSlabsTotal, 10);
+      return Number.isFinite(t) ? t : 0;
+    }
+    return 0;
+  };
+
+  /**
+   * ТЗ №19 A2 — выбор узора в строке локации. Пустое «Плит здесь» (или
+   * значение, подставленное прошлым узором) заполняется числом плит узора,
+   * если узор лежит только в этой строке. Ручной ввод не трогаем.
+   */
+  const choosePattern = (id: number, idx: number) => (value: string) =>
+    setLocs((m) => {
+      const row = m[id] ?? emptyLoc();
+      const keys = rowIds.map((rid) =>
+        rid === id ? value : (m[rid]?.pattern ?? ""),
+      );
+      const cur = row.slabsHere.trim();
+      const prevAuto = row.pattern !== "" ? patSlabsOf(row.pattern) : null;
+      const wasAuto =
+        cur === "" || (prevAuto !== null && cur === String(prevAuto));
+      const auto = soleLocationPatternSlabs(keys, idx, patSlabsOf);
+      return {
+        ...m,
+        [id]: {
+          ...row,
+          pattern: value,
+          slabsHere: wasAuto ? (auto !== null ? String(auto) : "") : row.slabsHere,
+        },
+      };
+    });
+
   // Собираем вход валидатора из контролируемого state (порядок локаций = rowIds).
   const buildInput = (): IntakeInput => ({
     stoneTypeId: values.stoneTypeId,
@@ -397,8 +469,9 @@ export default function IntakeForm({
     newDescription: values.newDescription,
     // Без canSeePrices поле в UI нет — шлём пусто (сервер всё равно гейтит).
     newBasePrice: canSeePrices ? values.newBasePrice : "",
-    slabsTotal: values.slabsTotal,
-    areaTotalM2: values.areaTotalM2,
+    // ТЗ №19 A1 — с узорами валидатор всё равно берёт ИТОГО по узорам.
+    slabsTotal: effSlabsTotal,
+    areaTotalM2: effAreaTotal,
     lengthMm: values.lengthMm,
     widthMm: values.widthMm,
     thicknessMm: values.thicknessMm,
@@ -656,29 +729,62 @@ export default function IntakeForm({
       {/* ── Количество ── */}
       <Card>
         <h2 className="mb-1 text-lg font-semibold text-ink">Количество</h2>
-        <p className="mb-4 text-sm text-ink/60">Плиты и/или площадь — минимум одно.</p>
-        <div className="grid grid-cols-2 gap-3">
-          <Field
-            id="slabsTotal"
-            name="slabsTotal"
-            inputMode="numeric"
-            label="Плит"
-            placeholder="40"
-            value={values.slabsTotal}
-            onChange={setField("slabsTotal")}
-            error={e.slabsTotal}
-          />
-          <Field
-            id="areaTotalM2"
-            name="areaTotalM2"
-            inputMode="decimal"
-            label="Площадь, м²"
-            placeholder="220 или 12,5"
-            value={values.areaTotalM2}
-            onChange={setField("areaTotalM2")}
-            error={e.areaTotalM2}
-          />
-        </div>
+        <p className="mb-4 text-sm text-ink/60">
+          {patternsEnabled
+            ? "Считается из узоров ниже — вводить не нужно."
+            : "Плиты и/или площадь — минимум одно."}
+        </p>
+        {patternsEnabled ? (
+          // ТЗ №19 A1 — только чтение: = ИТОГО по узорам (складчик не
+          // вводит одно и то же дважды и не ловит «не сходится»).
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="slabsTotal" label="Плит (из узоров)">
+              <input
+                id="slabsTotal"
+                name="slabsTotal"
+                value={effSlabsTotal}
+                placeholder="—"
+                readOnly
+                tabIndex={-1}
+                className={inputClass + " tnum bg-ink/[0.04] text-ink/60"}
+              />
+            </Field>
+            <Field id="areaTotalM2" label="Площадь, м² (из узоров)">
+              <input
+                id="areaTotalM2"
+                name="areaTotalM2"
+                value={effAreaTotal}
+                placeholder="—"
+                readOnly
+                tabIndex={-1}
+                className={inputClass + " tnum bg-ink/[0.04] text-ink/60"}
+              />
+            </Field>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              id="slabsTotal"
+              name="slabsTotal"
+              inputMode="numeric"
+              label="Плит"
+              placeholder="40"
+              value={values.slabsTotal}
+              onChange={setField("slabsTotal")}
+              error={e.slabsTotal}
+            />
+            <Field
+              id="areaTotalM2"
+              name="areaTotalM2"
+              inputMode="decimal"
+              label="Площадь, м²"
+              placeholder="220 или 12,5"
+              value={values.areaTotalM2}
+              onChange={setField("areaTotalM2")}
+              error={e.areaTotalM2}
+            />
+          </div>
+        )}
         <div className="mt-1.5">
           <CrossError msg={e.quantity} />
         </div>
@@ -691,8 +797,8 @@ export default function IntakeForm({
             Размер плиты <span className="text-danger">*</span>
           </h2>
           <p className="mb-4 text-sm text-ink/60">
-            Длина и ширина обязательны (см). Без них партию не принять — по
-            габариту ищут целые плиты.
+            Длина, ширина и толщина обязательны (см). Без них партию не
+            принять — по габариту и толщине ищут и продают плиты.
           </p>
           <div className="grid grid-cols-3 gap-3">
             <Field
@@ -719,7 +825,7 @@ export default function IntakeForm({
               id="thicknessMm"
               name="thicknessMm"
               inputMode="decimal"
-              label="Толщина, см"
+              label={<>Толщина, см <Req /></>}
               placeholder="2 или 1,8"
               value={values.thicknessMm}
               onChange={setField("thicknessMm")}
@@ -835,7 +941,7 @@ export default function IntakeForm({
                       id={`patThickness-${idx}`}
                       name="patThickness"
                       inputMode="decimal"
-                      label="Толщина, см"
+                      label={<>Толщина, см <Req /></>}
                       placeholder="2 или 1,8"
                       value={p.thicknessMm}
                       onChange={setPat(id, "thicknessMm")}
@@ -894,58 +1000,15 @@ export default function IntakeForm({
               + Добавить узор
             </Button>
 
-            {/* BUG-03 (ТЗ №4): живой ИТОГО + цель партии + подсветка расхождения
-                ПРЯМО в форме (до сохранения), а не только на «Принять партию». */}
-            {(() => {
-              const tgtSlabs = Number.parseInt(values.slabsTotal, 10);
-              const tgtArea = Number.parseFloat(
-                values.areaTotalM2.replace(",", "."),
-              );
-              const hasSlabsTgt = Number.isFinite(tgtSlabs);
-              const hasAreaTgt = Number.isFinite(tgtArea);
-              const slabsOk = !hasSlabsTgt || patTotals.slabs === tgtSlabs;
-              const areaOk =
-                !hasAreaTgt || Math.abs(patTotals.area - tgtArea) < 0.001;
-              const converged = slabsOk && areaOk && (hasSlabsTgt || hasAreaTgt);
-              return (
-                <div
-                  className={`rounded-card px-3 py-2 text-sm ${
-                    converged
-                      ? "bg-success/10"
-                      : hasSlabsTgt || hasAreaTgt
-                        ? "bg-warning/12"
-                        : "bg-ink/[0.03]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-ink">ИТОГО по узорам</span>
-                    <span className="tnum text-ink/70">
-                      {patTotals.slabs} плит · {patTotals.area.toFixed(1)} м²
-                    </span>
-                  </div>
-                  {(hasSlabsTgt || hasAreaTgt) && (
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-ink/50">Партия (цель)</span>
-                      <span className="tnum text-ink/50">
-                        {hasSlabsTgt ? tgtSlabs : "—"} плит ·{" "}
-                        {hasAreaTgt ? tgtArea.toFixed(1) : "—"} м²
-                      </span>
-                    </div>
-                  )}
-                  {(hasSlabsTgt || hasAreaTgt) && (
-                    <p
-                      className={`mt-1 font-medium ${
-                        converged ? "text-success" : "text-warning"
-                      }`}
-                    >
-                      {converged
-                        ? "✓ сходится с партией"
-                        : "не сходится — сумма узоров должна равняться партии"}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
+            {/* BUG-03 (ТЗ №4) → ТЗ №19 A1: живой ИТОГО по узорам. Он же —
+                количество партии (поля «Количество» выше только для чтения),
+                поэтому сверки «не сходится с партией» больше нет. */}
+            <div className="flex items-center justify-between rounded-card bg-ink/[0.03] px-3 py-2 text-sm">
+              <span className="font-semibold text-ink">ИТОГО по узорам = партия</span>
+              <span className="tnum text-ink/70">
+                {patTotals.slabs} плит · {patTotalArea.toFixed(2).replace(".", ",")} м²
+              </span>
+            </div>
             <CrossError msg={e.patternsSum} />
           </div>
         )}
@@ -1005,7 +1068,7 @@ export default function IntakeForm({
                           id={`locPattern-${idx}`}
                           value={loc.pattern}
                           onChange={(ev) =>
-                            setLocValue(id, "pattern")(ev.target.value)
+                            choosePattern(id, idx)(ev.target.value)
                           }
                           className={inputClass}
                           aria-invalid={
@@ -1035,21 +1098,27 @@ export default function IntakeForm({
                     const whole =
                       rowIds.length === 1 &&
                       (!patternsEnabled || loc.pattern === "");
+                    // ТЗ №19 A2 — узор только в этой строке: пусто = весь узор.
+                    const auto = autoSlabsAt(idx);
+                    const optional = whole || auto !== null;
+                    const hint = e[`loc-${idx}-slabsHere`]
+                      ? undefined
+                      : whole
+                        ? "Пусто — здесь лежит весь приход."
+                        : auto !== null
+                          ? `Из узора: ${auto} пл. Узор в двух местах — поправьте.`
+                          : undefined;
                     return (
                       <Field
                         id={`locSlabsHere-${idx}`}
                         name="locSlabsHere"
                         inputMode="numeric"
-                        label={whole ? "Плит здесь" : <>Плит здесь <Req /></>}
-                        placeholder="25"
+                        label={optional ? "Плит здесь" : <>Плит здесь <Req /></>}
+                        placeholder={auto !== null ? String(auto) : "25"}
                         value={loc.slabsHere}
                         onChange={setLoc(id, "slabsHere")}
                         error={e[`loc-${idx}-slabsHere`]}
-                        hint={
-                          whole && !e[`loc-${idx}-slabsHere`]
-                            ? "Пусто — здесь лежит весь приход."
-                            : undefined
-                        }
+                        hint={hint}
                       />
                     );
                   })()}
@@ -1065,7 +1134,7 @@ export default function IntakeForm({
                         patRow.areaM2.replace(",", "."),
                       );
                       const ps = Number.parseInt(patRow.slabs, 10);
-                      const n = Number.parseInt(loc.slabsHere, 10);
+                      const n = effectiveLocSlabs(loc, idx);
                       const computed =
                         pa > 0 && ps > 0 && n > 0
                           ? Math.round(((pa * n) / ps) * 1000) / 1000
@@ -1137,13 +1206,13 @@ export default function IntakeForm({
             ПОКА складчик стоит у камня, а не через месяц в «Отгрузках». */}
         {(() => {
           const rows = rowIds.map((id) => locs[id] ?? emptyLoc());
-          const tgtSlabs = Number.parseInt(values.slabsTotal, 10);
-          const tgtArea = Number.parseFloat(values.areaTotalM2.replace(",", "."));
+          const tgtSlabs = Number.parseInt(effSlabsTotal, 10);
+          const tgtArea = Number.parseFloat(effAreaTotal.replace(",", "."));
           const hasSlabsTgt = Number.isFinite(tgtSlabs) && tgtSlabs > 0;
           const hasAreaTgt = Number.isFinite(tgtArea) && tgtArea > 0;
           if (!hasSlabsTgt && !hasAreaTgt) return null;
 
-          const rowArea = (loc: LocValues): number => {
+          const rowArea = (loc: LocValues, idx: number): number => {
             const patRow =
               patternsEnabled && loc.pattern !== ""
                 ? pats[Number(loc.pattern)]
@@ -1151,17 +1220,19 @@ export default function IntakeForm({
             if (patRow) {
               const pa = Number.parseFloat(patRow.areaM2.replace(",", "."));
               const ps = Number.parseInt(patRow.slabs, 10);
-              const n = Number.parseInt(loc.slabsHere, 10);
+              const n = effectiveLocSlabs(loc, idx);
               return pa > 0 && ps > 0 && n > 0 ? (pa * n) / ps : 0;
             }
             const a = Number.parseFloat(loc.areaHereM2.replace(",", "."));
-            return Number.isFinite(a) ? a : 0;
+            if (Number.isFinite(a)) return a;
+            // Единственная строка «весь приход» — сервер подставит всю площадь.
+            return rows.length === 1 && hasAreaTgt ? tgtArea : 0;
           };
-          const placedSlabs = rows.reduce((s, l) => {
-            const n = Number.parseInt(l.slabsHere, 10);
-            return s + (Number.isFinite(n) ? n : 0);
-          }, 0);
-          const placedArea = rows.reduce((s, l) => s + rowArea(l), 0);
+          const placedSlabs = rows.reduce(
+            (s, l, i) => s + effectiveLocSlabs(l, i),
+            0,
+          );
+          const placedArea = rows.reduce((s, l, i) => s + rowArea(l, i), 0);
           const slabsOk = !hasSlabsTgt || placedSlabs === tgtSlabs;
           const areaOk = !hasAreaTgt || Math.abs(placedArea - tgtArea) <= 0.01;
           const converged = slabsOk && areaOk;
@@ -1176,12 +1247,11 @@ export default function IntakeForm({
                   const p = pats[pid] ?? emptyPat();
                   const total = Number.parseInt(p.slabs, 10);
                   if (!Number.isFinite(total) || total <= 0) return null;
-                  const placed = rows
-                    .filter((l) => l.pattern === String(pid))
-                    .reduce((s, l) => {
-                      const n = Number.parseInt(l.slabsHere, 10);
-                      return s + (Number.isFinite(n) ? n : 0);
-                    }, 0);
+                  const placed = rows.reduce(
+                    (s, l, i) =>
+                      l.pattern === String(pid) ? s + effectiveLocSlabs(l, i) : s,
+                    0,
+                  );
                   if (placed === total) return null;
                   const desc = p.description.trim();
                   return `Узор ${pidx + 1}${desc ? ` «${desc}»` : ""}: размещено ${placed} из ${total} плит`;

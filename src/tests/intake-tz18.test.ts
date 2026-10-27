@@ -160,6 +160,7 @@ describe("ТЗ №18 — «Что здесь» (узор в строке лок�
         patterns: [],
         lengthMm: "125",
         widthMm: "100",
+        thicknessMm: "2", // ТЗ №19 A3 — обязательна
         locations: [
           { block: "A", landmark: "3", slabsHere: "16", areaHereM2: "2" },
         ],

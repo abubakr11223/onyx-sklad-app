@@ -306,6 +306,12 @@ model BatchPattern {
   sales         SaleRecord[]
   /// ТЗ №18 — строки локаций, привязанные к этому узору («Что здесь»).
   locations     BatchLocation[]
+  /// ТЗ №19 — движения, списанные из этого узора (единица учёта — узор).
+  slabs         Slab[]
+  pieces        Piece[]
+  reservations  Reservation[]
+  samples       Sample[]
+  shipmentLines ShipmentLine[]
 
   @@index([batchId])
 }
@@ -330,6 +336,8 @@ model BatchLocation {
   batch         Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
   batchPattern  BatchPattern?  @relation(fields: [batchPatternId], references: [id], onDelete: SetNull)
   photoRequests PhotoRequest[]
+  /// ТЗ №19 C1 — строки отгрузки, взятые из этого места (возврат — сюда же).
+  shipmentLines ShipmentLine[]
 
   @@index([batchId])
   @@index([block, landmark])
@@ -354,11 +362,14 @@ model Slab {
   landmark        String
   needsCheck      Boolean    @default(false)
   photoRequestId  String? // qaysi fotozapros natijasida ajratilgan
+  /// ТЗ №19 — из какого узора выделена плита (NULL = однородная партия / legacy).
+  batchPatternId  String?
   separatedById   String
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   batch           Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern       BatchPattern?       @relation(fields: [batchPatternId], references: [id], onDelete: Restrict)
   stoneType       StoneType      @relation(fields: [stoneTypeId], references: [id], onDelete: Restrict)
   photoRequest    PhotoRequest?  @relation("SlabSeparatedByRequest", fields: [photoRequestId], references: [id])
   separatedBy     User           @relation("SlabSeparatedBy", fields: [separatedById], references: [id], onDelete: Restrict)
@@ -373,6 +384,7 @@ model Slab {
 
   @@unique([batchId, label])
   @@index([batchId])
+  @@index([batchPatternId])
   @@index([block, landmark])
   // /poisk + poisk-query groupBy: `stoneTypeId IN (…) AND status='AVAILABLE'
   // AND needsCheck = false` (TZ §7.4). Btree left-prefix: (a,b,c) (a,b) ni
@@ -388,6 +400,8 @@ model Piece {
   stoneTypeId      String
   batchId          String? // «uyesiz» boy uchun null
   originSlabId     String? // konkret plitadan chiqqan bo'lsa (hisob: §3 — formulada QATNASHMAYDI)
+  /// ТЗ №19 B3 — бой прямо из узора партии (NULL = однородная партия / legacy).
+  batchPatternId   String?
   kind             PieceKind
   status           UnitStatus @default(AVAILABLE)
   sidesMm          Json // ТЗ №12: стороны в см (legacy Mm): [118, 64, 95]
@@ -411,6 +425,7 @@ model Piece {
 
   stoneType    StoneType     @relation(fields: [stoneTypeId], references: [id], onDelete: Restrict)
   batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern       BatchPattern?       @relation(fields: [batchPatternId], references: [id], onDelete: Restrict)
   originSlab   Slab?         @relation(fields: [originSlabId], references: [id], onDelete: Restrict)
   createdBy    User          @relation("PieceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   photos       Photo[]
@@ -441,6 +456,7 @@ model Piece {
   // Xuddi shu shaklni ishlatadigan joylar: reservations.ts:339, breaking.ts:610,
   // breaking.ts:758, slab-separation.ts:73, sales.ts:682.
   @@index([batchId, originSlabId])
+  @@index([batchPatternId])
 }
 
 /// §1.6 — Бронь (ADR-003, ADR-006).
@@ -452,8 +468,12 @@ model Reservation {
   slabId          String?
   pieceId         String?
   batchId         String? // BATCH_VOLUME uchun
+  /// ТЗ №19 B2 — бронь из узора (BATCH_VOLUME). NULL = однородная партия / legacy.
+  batchPatternId  String?
   qtySlabs        Int? // faqat BATCH_VOLUME
   qtyAreaM2       Decimal?          @db.Decimal(12, 3) // faqat BATCH_VOLUME
+  /// ТЗ №19 B2 — клиент из справочника (ТЗ №11). NULL = legacy-текст.
+  clientId        String?
   managerId       String
   customerName    String // majburiy — «на всякий случай» brondan himoya
   customerContact String?
@@ -466,6 +486,8 @@ model Reservation {
   slab    Slab?  @relation(fields: [slabId], references: [id], onDelete: Restrict)
   piece   Piece? @relation(fields: [pieceId], references: [id], onDelete: Restrict)
   batch   Batch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern BatchPattern? @relation(fields: [batchPatternId], references: [id], onDelete: SetNull)
+  client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   manager User   @relation("ReservationManager", fields: [managerId], references: [id], onDelete: Restrict)
 
   @@index([status, expiresAt]) // cron: muddati o'tgan bronlar
@@ -475,6 +497,8 @@ model Reservation {
   // Mavjud indekslarning HECH BIRIDA batchId yoki targetType yo'q. Ustunlar
   // tartibi: tenglik (status, targetType) → IN (batchId) → oraliq (expiresAt).
   @@index([status, targetType, batchId, expiresAt])
+  @@index([batchPatternId])
+  @@index([clientId])
 }
 
 /// §1.7 — foydalanuvchi, 4 rol. Auth mexanikasi keyingi sprint; model ikkala kirishga tayyor.
@@ -661,6 +685,8 @@ model Sample {
   slabId             String?
   pieceId            String?
   batchId            String?
+  /// ТЗ №19 — образец из узора (BATCH_VOLUME). NULL = однородная партия / legacy.
+  batchPatternId    String?
   qtySlabs           Int?
   qtyAreaM2          Decimal?     @db.Decimal(12, 3)
   clientId           String
@@ -684,6 +710,7 @@ model Sample {
   slab       Slab?       @relation(fields: [slabId], references: [id], onDelete: Restrict)
   piece      Piece?      @relation(fields: [pieceId], references: [id], onDelete: Restrict)
   batch      Batch?      @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern BatchPattern? @relation(fields: [batchPatternId], references: [id], onDelete: SetNull)
   saleRecord SaleRecord? @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
   /// TZ №15 Slice 2 — at most one shipment task per sample (1:1 sibling).
   shipment   Shipment?
@@ -694,6 +721,7 @@ model Sample {
   @@index([slabId, status])
   @@index([pieceId, status])
   @@index([batchId, status])
+  @@index([batchPatternId])
 }
 
 model Client {
@@ -714,6 +742,7 @@ model Client {
   debts      Debt[]
   samples    Sample[]
   shipments  Shipment[]
+  reservations Reservation[]
 
   @@index([managerId, createdAt])
   @@index([phone])
@@ -883,6 +912,9 @@ model ShipmentLine {
   slabId             String?
   pieceId            String?
   batchId            String?
+  /// ТЗ №19 C1 — из какого узора и какого места брать (возврат — туда же).
+  batchPatternId   String?
+  batchLocationId  String?
   qtyOrderedSlabs    Int?
   qtyOrderedAreaM2   Decimal?   @db.Decimal(12, 3)
   qtyShippedSlabs    Int        @default(0)
@@ -896,6 +928,8 @@ model ShipmentLine {
   slab     Slab?    @relation(fields: [slabId], references: [id], onDelete: Restrict)
   piece    Piece?   @relation(fields: [pieceId], references: [id], onDelete: Restrict)
   batch    Batch?   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchPattern  BatchPattern?  @relation(fields: [batchPatternId], references: [id], onDelete: SetNull)
+  batchLocation BatchLocation? @relation(fields: [batchLocationId], references: [id], onDelete: SetNull)
 
   @@index([shipmentId])
   @@index([slabId])

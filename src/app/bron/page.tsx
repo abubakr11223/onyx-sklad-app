@@ -54,6 +54,12 @@ import Link from "next/link";
 import { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { formatLocation } from "@/lib/locations";
+import {
+  formatLocationsShort,
+  formatSourceLine,
+  loadPatternStock,
+  patternsOfBatch,
+} from "@/lib/pattern-stock";
 
 export const metadata: Metadata = {
   title: "Брони — Onyx",
@@ -100,6 +106,7 @@ type ReservationRow = {
   slab: { label: string; stoneType: { name: string } } | null;
   piece: { kind: string; stoneType: { name: string } } | null;
   batch: { arrivedAt: Date; stoneType: { name: string } } | null;
+  batchPattern: { description: string } | null;
 };
 
 /** «Травертин Classic — Плита №2» / «… — бой» / «… — партия от 10.06, 10 плит». */
@@ -112,7 +119,9 @@ function stoneLabel(r: ReservationRow): string {
     if (r.qtySlabs !== null) qty.push(`${r.qtySlabs} плит`);
     const area = toNum(r.qtyAreaM2);
     if (area !== null) qty.push(`${m2Fmt.format(area)} м²`);
-    return `${r.batch.stoneType.name} — партия от ${formatTashkentDate(r.batch.arrivedAt)}, объём: ${qty.join(" + ")}`;
+    // ТЗ №19 B2 — бронь из узора: узор виден в списке.
+    const pat = r.batchPattern ? ` · узор «${r.batchPattern.description}»` : "";
+    return `${r.batch.stoneType.name} — партия от ${formatTashkentDate(r.batch.arrivedAt)}${pat}, объём: ${qty.join(" + ")}`;
   }
   return "—";
 }
@@ -154,6 +163,7 @@ export default async function BronPage({
     slab: { select: { label: true, stoneType: { select: { name: true } } } },
     piece: { select: { kind: true, stoneType: { select: { name: true } } } },
     batch: { select: { arrivedAt: true, stoneType: { select: { name: true } } } },
+    batchPattern: { select: { description: true } },
   } as const;
 
   // Active list: compound keyset (expiresAt ASC, id ASC) — never unbounded.
@@ -239,13 +249,16 @@ export default async function BronPage({
               landmark: true,
             },
           },
+          // ТЗ №19 E4 — партия «проверить» (например, после возврата объёмной
+          // продажи) раньше молча пропадала из списка («Оникс Париж» при 19
+          // свободных). Теперь грузим и её — показываем недоступной с причиной.
           batches: {
-            where: { needsCheck: false },
             orderBy: [{ arrivedAt: "asc" }, { id: "asc" }],
             take: takeForCap(CATALOG_BATCHES_CAP),
             select: {
               id: true,
               arrivedAt: true,
+              needsCheck: true,
               slabsTotal: true,
               areaTotalM2: true,
               slabsAdjusted: true,
@@ -309,14 +322,15 @@ export default async function BronPage({
   const defaultDays = cfg
     ? parseReservationDaysConfig(cfg.value)
     : DEFAULT_RESERVATION_DAYS;
-  // §3 formula: partiya qoldiqlari SQL agregatlaridan (butun ombor tortilmaydi).
-  const remainders = await getBatchRemainders(
-    db,
-    stoneTypes.flatMap((st) => st.batches.map((b) => b.id)),
-  );
-
   // W2-T7: единый «сейчас» для отсечения истёкших броней в подсказке.
   const now = new Date();
+  // §3 formula: partiya qoldiqlari SQL agregatlaridan (butun ombor tortilmaydi).
+  const allBatchIds = stoneTypes.flatMap((st) => st.batches.map((b) => b.id));
+  const [remainders, patternStock] = await Promise.all([
+    getBatchRemainders(db, allBatchIds),
+    // ТЗ №19 B2 — «свободно» узора из единого расчёта.
+    loadPatternStock(db, allBatchIds, now),
+  ]);
   const stones: StoneGroup[] = stoneTypes
     .map((st) => {
       const slabs: UnitOption[] = st.slabs.map((s) => ({
@@ -332,7 +346,27 @@ export default async function BronPage({
         label: `${PIECE_KIND_RU[p.kind] ?? p.kind} · ${p.boundingLengthMm}×${p.boundingWidthMm} см · ${formatLocation(p.block, p.landmark)}`,
       }));
       const batches: BatchVolumeOption[] = st.batches
-        .map((b) => {
+        .flatMap((b): BatchVolumeOption[] => {
+          const dateTxt = `Партия от ${formatTashkentDate(b.arrivedAt)}`;
+          // ТЗ №19 B2 — смешанная партия бронируется узором (одна строка на узор).
+          const pats = patternsOfBatch(patternStock, b.id);
+          if (pats.length > 0) {
+            return pats.map((ps) => ({
+              value: `PATTERN:${ps.id}`,
+              label: `${dateTxt} · ${formatSourceLine({
+                description: ps.description,
+                lengthMm: ps.lengthMm,
+                widthMm: ps.widthMm,
+                thicknessMm: ps.thicknessMm,
+                slabsFree: ps.availableSlabs,
+                areaFreeM2: ps.availableAreaM2,
+                locationText: formatLocationsShort(ps.locations),
+              })}${b.needsCheck ? " · партия «проверить»" : ""}`,
+              freeSlabs: ps.availableSlabs,
+              freeAreaM2: ps.availableAreaM2,
+              disabled: b.needsCheck,
+            }));
+          }
           const free = freeRemainderFromAggregate(
             {
               slabsTotal: b.slabsTotal,
@@ -365,12 +399,17 @@ export default async function BronPage({
           if (freeSlabs !== null) freeParts.push(`~${freeSlabs} плит`);
           if (freeAreaM2 !== null)
             freeParts.push(`≈${m2Fmt.format(freeAreaM2)} м²`);
-          return {
-            value: `BATCH:${b.id}`,
-            label: `Партия от ${formatTashkentDate(b.arrivedAt)} · свободно: ${freeParts.join(" · ")}`,
-            freeSlabs,
-            freeAreaM2,
-          };
+          return [
+            {
+              value: `BATCH:${b.id}`,
+              label: `${dateTxt} · свободно: ${freeParts.join(" · ")}${
+                b.needsCheck ? " · партия «проверить» — бронь закрыта" : ""
+              }`,
+              freeSlabs,
+              freeAreaM2,
+              disabled: b.needsCheck,
+            },
+          ];
         })
         // hajm broni uchun hech bo'lmasa bitta o'lchovda joy bo'lsin
         .filter(

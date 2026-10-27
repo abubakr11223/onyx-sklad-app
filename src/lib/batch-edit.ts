@@ -271,6 +271,27 @@ function decStr(n: number | null): string | null {
   return n.toFixed(3);
 }
 
+/**
+ * ТЗ №19 §D — итог партии с узорами = Σ узоров (плиты и м²). `proposed` —
+ * узоры из формы (перекрывают текущие по id); узор, не пришедший в форме,
+ * считается по текущему значению. Партия без узоров → null (итог вводится).
+ */
+export function patternDerivedTotals(
+  current: readonly { id: string; slabsCount: number; areaM2: number }[],
+  proposed: readonly { id: string; slabsCount: number; areaM2: number }[],
+): { slabsTotal: number; areaTotalM2: number } | null {
+  if (current.length === 0) return null;
+  const byId = new Map(proposed.map((p) => [p.id, p]));
+  let slabs = 0;
+  let area = 0;
+  for (const c of current) {
+    const p = byId.get(c.id) ?? c;
+    slabs += p.slabsCount;
+    area += p.areaM2;
+  }
+  return { slabsTotal: slabs, areaTotalM2: Math.round(area * 1000) / 1000 };
+}
+
 function sameNum(a: number | null, b: number | null): boolean {
   if (a === null && b === null) return true;
   if (a === null || b === null) return false;
@@ -374,9 +395,29 @@ export async function applyBatchEdit(
     const agg = remMap.get(batch.id) ?? EMPTY_AGGREGATE;
     const hold = holdMap.get(batch.id) ?? EMPTY_HOLD;
 
+    // ТЗ №19 §D — у партии с узорами «Плиты / Площадь» ВЫЧИСЛЯЕМЫЕ: = Σ узоров
+    // (новые значения узоров поверх текущих). Введённое в форме игнорируется.
+    // Кто не может менять количество — оставляем текущий итог партии: узоры он
+    // тоже не меняет (проверка ниже), а legacy-расхождение не должно блокировать
+    // ему правку размеров/локаций.
+    const derived = patternDerivedTotals(
+      batch.patterns.map((p) => ({
+        id: p.id,
+        slabsCount: p.slabsCount,
+        areaM2: Number(p.areaM2),
+      })),
+      input.patterns,
+    );
+    const qty: { slabsTotal: number | null; areaTotalM2: number | null } =
+      derived === null
+        ? { slabsTotal: input.slabsTotal, areaTotalM2: input.areaTotalM2 }
+        : input.canEditQuantity
+          ? derived
+          : { slabsTotal: batch.slabsTotal, areaTotalM2: curArea };
+
     const qtyChanging =
-      batch.slabsTotal !== input.slabsTotal ||
-      !sameNum(curArea, input.areaTotalM2);
+      batch.slabsTotal !== qty.slabsTotal ||
+      !sameNum(curArea, qty.areaTotalM2);
 
     if (qtyChanging && !input.canEditQuantity) {
       throw new BatchEditError(
@@ -469,33 +510,33 @@ export async function applyBatchEdit(
       }
       // §4.3 — суммы сходятся с итогами партии (плиты и м²).
       if (
-        input.slabsTotal !== null &&
+        qty.slabsTotal !== null &&
         input.locations.every((l) => l.slabsHere !== null)
       ) {
         const sumSlabs = input.locations.reduce(
           (s, l) => s + (l.slabsHere ?? 0),
           0,
         );
-        if (sumSlabs !== input.slabsTotal) {
+        if (sumSlabs !== qty.slabsTotal) {
           throw new BatchEditError(
             "INVALID_INPUT",
-            `Разложено ${sumSlabs} из ${input.slabsTotal} плит — суммы по локациям должны сойтись`,
+            `Разложено ${sumSlabs} из ${qty.slabsTotal} плит — суммы по локациям должны сойтись`,
             "locations",
           );
         }
       }
       if (
-        input.areaTotalM2 !== null &&
+        qty.areaTotalM2 !== null &&
         input.locations.every((l) => l.areaHereM2 !== null)
       ) {
         const sumArea = input.locations.reduce(
           (s, l) => s + (l.areaHereM2 ?? 0),
           0,
         );
-        if (Math.abs(sumArea - input.areaTotalM2) > 0.01) {
+        if (Math.abs(sumArea - qty.areaTotalM2) > 0.01) {
           throw new BatchEditError(
             "INVALID_INPUT",
-            `По локациям ${sumArea.toFixed(2)} м², а в партии ${input.areaTotalM2} м² — суммы должны сойтись`,
+            `По локациям ${sumArea.toFixed(2)} м², а в партии ${qty.areaTotalM2} м² — суммы должны сойтись`,
             "locations",
           );
         }
@@ -503,8 +544,8 @@ export async function applyBatchEdit(
     }
 
     const proposed: BatchTotalsInput = {
-      slabsTotal: input.slabsTotal,
-      areaTotalM2: input.areaTotalM2,
+      slabsTotal: qty.slabsTotal,
+      areaTotalM2: qty.areaTotalM2,
       slabsAdjusted: batch.slabsAdjusted,
       areaAdjustedM2: Number(batch.areaAdjustedM2),
       slabsSoldDirect: batch.slabsSoldDirect,
@@ -548,8 +589,8 @@ export async function applyBatchEdit(
       changes.push({ field, old: oldV, new: newV });
     };
 
-    push("slabsTotal", batch.slabsTotal, input.slabsTotal);
-    push("areaTotalM2", curArea, input.areaTotalM2);
+    push("slabsTotal", batch.slabsTotal, qty.slabsTotal);
+    push("areaTotalM2", curArea, qty.areaTotalM2);
     push("lengthMm", batch.lengthMm, input.lengthMm);
     push("widthMm", batch.widthMm, input.widthMm);
     push("thicknessMm", thicknessToNumber(batch.thicknessMm), input.thicknessMm);
@@ -643,9 +684,9 @@ export async function applyBatchEdit(
           : { areaTotalM2: input.expected.areaTotalM2.toFixed(3) }),
       },
       data: {
-        slabsTotal: input.slabsTotal,
+        slabsTotal: qty.slabsTotal,
         areaTotalM2:
-          input.areaTotalM2 === null ? null : input.areaTotalM2.toFixed(3),
+          qty.areaTotalM2 === null ? null : qty.areaTotalM2.toFixed(3),
         lengthMm: input.lengthMm,
         widthMm: input.widthMm,
         thicknessMm: input.thicknessMm,

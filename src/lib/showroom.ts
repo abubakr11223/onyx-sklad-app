@@ -243,6 +243,8 @@ export const MAX_SHOWROOM_FROM_BATCH = 10;
  */
 export async function sendBatchSlabToShowroom(args: {
   batchId: string;
+  /** ТЗ №19 B4 — плита выделяется из узора (обязателен у смешанной партии). */
+  batchPatternId?: string | null;
   /** Сколько плит взять. По умолчанию 1. */
   qty?: number;
   actorId: string;
@@ -306,10 +308,13 @@ export async function sendBatchSlabToShowroom(args: {
           batchId: batch.id,
           stoneTypeId: batch.stoneTypeId,
           photoRequestId: null, // ТЗ №16 A1 — витрина, не фотозапрос
-          block: loc?.block ?? "?",
-          landmark: loc?.landmark ?? "?",
+          // ТЗ №19 — «?» = место возьмётся из узора (откуда списали плиту).
+          block: args.batchPatternId ? "?" : (loc?.block ?? "?"),
+          landmark: args.batchPatternId ? "?" : (loc?.landmark ?? "?"),
           needsCheck: batch.needsCheck,
           separatedById: actor.id,
+          batchPatternId: args.batchPatternId ?? null,
+          requirePattern: true,
         });
 
         const res = await sendUnitToShowroomInTx(tx, {

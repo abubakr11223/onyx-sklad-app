@@ -94,6 +94,47 @@ export function findClientByNormalizedPhone<
   );
 }
 
+/**
+ * Ключ сравнения имён (ТЗ №19 E1): без регистра, ё=е, пробелы схлопнуты.
+ * «  тимур  » и «Тимур» — одно имя; «Тимур Алиев» и «Тимур» — разные.
+ */
+export function normalizeClientName(raw: string): string {
+  return raw.trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+}
+
+export type NewClientDuplicate<T> =
+  | { kind: "phone"; existing: T }
+  | { kind: "name"; similar: T[] }
+  | { kind: "none" };
+
+/**
+ * ТЗ №11 §9.1 + ТЗ №19 E1 — проверка перед созданием клиента. Pure, без БД.
+ *
+ * - Телефон уже есть (нормализованно) → `phone`: создавать НЕЛЬЗЯ, предлагаем
+ *   существующего (телефон — единственный надёжный ключ человека).
+ * - Телефона нет, но имя совпало → `name`: предупреждаем «есть клиент с таким
+ *   именем» (два «Тимура» — норма), создать можно после подтверждения.
+ * - Иначе `none`.
+ *
+ * Телефон приоритетнее имени: совпадение по обоим — это `phone`.
+ */
+export function classifyNewClientDuplicate<
+  T extends { name: string; phone: string },
+>(
+  candidates: readonly T[],
+  input: { name: string; phone: string },
+  limit = 5,
+): NewClientDuplicate<T> {
+  const byPhone = findClientByNormalizedPhone(candidates, input.phone);
+  if (byPhone) return { kind: "phone", existing: byPhone };
+  const key = normalizeClientName(input.name);
+  if (!key) return { kind: "none" };
+  const similar = candidates
+    .filter((c) => normalizeClientName(c.name) === key)
+    .slice(0, limit);
+  return similar.length > 0 ? { kind: "name", similar } : { kind: "none" };
+}
+
 export type CurrencyMoney = {
   currency: MoneyCurrency;
   /** Decimal string, 2 places (cent-safe). */

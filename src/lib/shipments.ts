@@ -23,7 +23,30 @@ export type ShipmentLineInput = {
   qtyOrderedSlabs?: number | null;
   qtyOrderedAreaM2?: number | null;
   locationSnapshot?: string | null;
+  /** ТЗ №19 C1 — узор и место, откуда брать (возврат — туда же). */
+  batchPatternId?: string | null;
+  batchLocationId?: string | null;
 };
+
+function lineCreateData(line: ShipmentLineInput) {
+  return {
+    targetType: line.targetType,
+    slabId: line.slabId ?? null,
+    pieceId: line.pieceId ?? null,
+    batchId: line.batchId ?? null,
+    batchPatternId: line.batchPatternId ?? null,
+    batchLocationId: line.batchLocationId ?? null,
+    qtyOrderedSlabs:
+      line.targetType === "BATCH_VOLUME" ? (line.qtyOrderedSlabs ?? null) : 1,
+    qtyOrderedAreaM2:
+      line.targetType === "BATCH_VOLUME" && line.qtyOrderedAreaM2 != null
+        ? line.qtyOrderedAreaM2.toFixed(3)
+        : null,
+    qtyShippedSlabs: 0,
+    qtyShippedAreaM2: 0,
+    locationSnapshot: line.locationSnapshot ?? null,
+  };
+}
 
 const AREA_EPS = 1e-6;
 
@@ -120,10 +143,13 @@ export async function createSaleShipment(
     clientId?: string | null;
     siteId?: string | null;
     note?: string | null;
-    line: ShipmentLineInput;
-  },
+  } & (
+    | { line: ShipmentLineInput; lines?: never }
+    /** ТЗ №19 C1 — продажа затронула два узора/места → две строки в одной задаче. */
+    | { lines: ShipmentLineInput[]; line?: never }
+  ),
 ): Promise<{ shipmentId: string }> {
-  const line = args.line;
+  const lines = args.lines ?? [args.line];
   const shipment = await tx.shipment.create({
     data: {
       kind: "SALE",
@@ -132,25 +158,10 @@ export async function createSaleShipment(
       clientId: args.clientId?.trim() || null,
       siteId: args.siteId?.trim() || null,
       note: args.note?.trim() || null,
-      lines: {
-        create: {
-          targetType: line.targetType,
-          slabId: line.slabId ?? null,
-          pieceId: line.pieceId ?? null,
-          batchId: line.batchId ?? null,
-          qtyOrderedSlabs:
-            line.targetType === "BATCH_VOLUME"
-              ? (line.qtyOrderedSlabs ?? null)
-              : 1,
-          qtyOrderedAreaM2:
-            line.targetType === "BATCH_VOLUME" && line.qtyOrderedAreaM2 != null
-              ? line.qtyOrderedAreaM2.toFixed(3)
-              : null,
-          qtyShippedSlabs: 0,
-          qtyShippedAreaM2: 0,
-          locationSnapshot: line.locationSnapshot ?? null,
-        },
-      },
+      lines:
+        lines.length === 1
+          ? { create: lineCreateData(lines[0]) }
+          : { create: lines.map(lineCreateData) },
     },
     select: { id: true },
   });
@@ -217,25 +228,7 @@ export async function createSampleShipment(
       managerId: args.managerId,
       clientId: args.clientId?.trim() || null,
       note: args.note?.trim() || null,
-      lines: {
-        create: {
-          targetType: line.targetType,
-          slabId: line.slabId ?? null,
-          pieceId: line.pieceId ?? null,
-          batchId: line.batchId ?? null,
-          qtyOrderedSlabs:
-            line.targetType === "BATCH_VOLUME"
-              ? (line.qtyOrderedSlabs ?? null)
-              : 1,
-          qtyOrderedAreaM2:
-            line.targetType === "BATCH_VOLUME" && line.qtyOrderedAreaM2 != null
-              ? line.qtyOrderedAreaM2.toFixed(3)
-              : null,
-          qtyShippedSlabs: 0,
-          qtyShippedAreaM2: 0,
-          locationSnapshot: line.locationSnapshot ?? null,
-        },
-      },
+      lines: { create: lineCreateData(line) },
     },
     select: { id: true },
   });
@@ -322,6 +315,11 @@ export async function confirmShipment(args: {
   /** Volume: optional partial; omit = ship all remaining. */
   qtySlabs?: number | null;
   qtyAreaM2?: number | null;
+  /**
+   * ТЗ №19 C1 — продажа из двух узоров/мест: складчик отмечает каждую строку.
+   * Не задано → первая не отгруженная строка (одна строка — как раньше).
+   */
+  lineId?: string | null;
 }): Promise<{ status: DerivedShipmentStatus }> {
   try {
     return await db.$transaction(async (tx) => {
@@ -373,8 +371,20 @@ export async function confirmShipment(args: {
       }
 
       const now = new Date();
-      // One line per commercial event (sale or sample).
-      const line = ship.lines[0]!;
+      // ТЗ №19 C1 — строк может быть несколько (узор × место). Выбранная или
+      // первая ещё не отгруженная.
+      const asLine = (l: (typeof ship.lines)[number]) => ({
+        targetType: l.targetType,
+        qtyOrderedSlabs: l.qtyOrderedSlabs,
+        qtyOrderedAreaM2:
+          l.qtyOrderedAreaM2 == null ? null : Number(l.qtyOrderedAreaM2.toString()),
+        qtyShippedSlabs: l.qtyShippedSlabs,
+        qtyShippedAreaM2: Number(l.qtyShippedAreaM2.toString()),
+      });
+      const line = args.lineId
+        ? ship.lines.find((l) => l.id === args.lineId)
+        : (ship.lines.find((l) => !lineIsFullyShipped(asLine(l))) ?? ship.lines[0]);
+      if (!line) throw new ShipmentError("NOT_FOUND", "Строка отгрузки не найдена");
       const orderedSlabs = line.qtyOrderedSlabs ?? 0;
       const orderedArea =
         line.qtyOrderedAreaM2 == null
@@ -457,7 +467,8 @@ export async function confirmShipment(args: {
         qtyShippedSlabs: newShippedSlabs,
         qtyShippedAreaM2: newShippedArea,
       };
-      const fully = lineIsFullyShipped(afterLine);
+      const allLines = ship.lines.map((l) => (l.id === line.id ? afterLine : asLine(l)));
+      const fully = allLines.every(lineIsFullyShipped);
       if (fully) {
         await tx.shipment.update({
           where: { id: ship.id },
@@ -489,7 +500,7 @@ export async function confirmShipment(args: {
         status: deriveShipmentStatus({
           cancelledAt: null,
           completedAt: fully ? now : null,
-          lines: [afterLine],
+          lines: allLines,
         }),
       };
     });
@@ -535,6 +546,24 @@ export type ShipmentListItem = {
   qtyShippedAreaM2: number;
   lineId: string;
   targetType: string;
+  /**
+   * ТЗ №19 C1 — все строки задачи (узор · размер · место). Одна строка —
+   * поля выше её же; две и больше — складчик отмечает каждую.
+   */
+  lines: ShipmentListLine[];
+};
+
+/** ТЗ №19 C1 — строка задачи складчику. */
+export type ShipmentListLine = {
+  id: string;
+  /** «ТЕСТ светлый 2см · 280×160×2 см» или null (однородная партия / единица). */
+  patternLabel: string | null;
+  locationSnapshot: string | null;
+  qtyOrderedSlabs: number | null;
+  qtyOrderedAreaM2: number | null;
+  qtyShippedSlabs: number;
+  qtyShippedAreaM2: number;
+  fullyShipped: boolean;
 };
 
 /** ТЗ №15 §3.2 — тип задачи в фильтре. Пусто → все. */
@@ -735,6 +764,11 @@ const shipmentListSelect = {
       qtyShippedSlabs: true,
       qtyShippedAreaM2: true,
       locationSnapshot: true,
+      // ТЗ №19 C1 — узор строки: описание + формат плиты.
+      batchPattern: {
+        select: { description: true, lengthMm: true, widthMm: true, thicknessMm: true },
+      },
+      batch: { select: { lengthMm: true, widthMm: true, thicknessMm: true } },
       slab: {
         select: {
           label: true,
@@ -756,7 +790,8 @@ const shipmentListSelect = {
         },
       },
     },
-    take: 5,
+    orderBy: { createdAt: "asc" },
+    take: 10,
   },
 } satisfies Prisma.ShipmentSelect;
 
@@ -790,7 +825,14 @@ function mapShipmentListRow(r: ShipmentListRow): ShipmentListItem {
     const k = sale.piece.kind === "BROKEN" ? "бой" : "остаток";
     stoneLabel = `${sale.piece.stoneType.name} — ${k}`;
   } else if (sale?.batch) {
-    stoneLabel = `${sale.batch.stoneType.name} — объём`;
+    // ТЗ №19 C1 — «Травертин Классик · ТЕСТ светлый 2см», а не «— объём».
+    const pats = [
+      ...new Set(r.lines.map((l) => l.batchPattern?.description).filter(Boolean)),
+    ];
+    stoneLabel =
+      pats.length === 1
+        ? `${sale.batch.stoneType.name} · ${pats[0]}`
+        : `${sale.batch.stoneType.name} — объём`;
   } else if (sample?.slab) {
     stoneLabel = `${sample.slab.stoneType.name} — ${sample.slab.label}`;
   } else if (sample?.piece) {
@@ -819,7 +861,9 @@ function mapShipmentListRow(r: ShipmentListRow): ShipmentListItem {
           line0.piece.boundingWidthMm,
           thicknessToNumber(line0.piece.thicknessMm),
         )
-      : null;
+      : line0
+        ? volumeLineGabarit(line0)
+        : null;
   return {
     id: r.id,
     status,
@@ -861,7 +905,39 @@ function mapShipmentListRow(r: ShipmentListRow): ShipmentListItem {
       : 0,
     lineId: line0?.id ?? "",
     targetType: line0?.targetType ?? "SLAB",
+    lines: r.lines.map((l, i) => {
+      const g = volumeLineGabarit(l);
+      return {
+        id: l.id,
+        patternLabel:
+          [l.batchPattern?.description, g && g !== "—" ? g : null]
+            .filter(Boolean)
+            .join(" · ") || null,
+        locationSnapshot: l.locationSnapshot,
+        qtyOrderedSlabs: l.qtyOrderedSlabs,
+        qtyOrderedAreaM2: lines[i].qtyOrderedAreaM2,
+        qtyShippedSlabs: l.qtyShippedSlabs,
+        qtyShippedAreaM2: lines[i].qtyShippedAreaM2,
+        fullyShipped: lineIsFullyShipped(lines[i]),
+      };
+    }),
   };
+}
+
+type GabaritSrc = {
+  lengthMm: number | null;
+  widthMm: number | null;
+  thicknessMm: { toString(): string } | null;
+} | null;
+
+/** ТЗ №19 C1 — формат объёмной строки: узора, иначе однородной партии. */
+function volumeLineGabarit(l: { batchPattern: GabaritSrc; batch: GabaritSrc }): string | null {
+  const src = l.batchPattern?.lengthMm != null ? l.batchPattern : l.batch;
+  if (!src || src.lengthMm == null || src.widthMm == null) return null;
+  const thick =
+    thicknessToNumber(l.batchPattern?.thicknessMm ?? null) ??
+    thicknessToNumber(l.batch?.thicknessMm ?? null);
+  return formatGabarit(src.lengthMm, src.widthMm, thick);
 }
 
 /**
@@ -1162,7 +1238,18 @@ export async function loadShipmentDocument(
               stoneType: { select: { name: true } },
             },
           },
-          batch: { select: { stoneType: { select: { name: true } } } },
+          batch: {
+            select: {
+              lengthMm: true,
+              widthMm: true,
+              thicknessMm: true,
+              stoneType: { select: { name: true } },
+            },
+          },
+          // ТЗ №19 C1 — узор строки в накладной.
+          batchPattern: {
+            select: { description: true, lengthMm: true, widthMm: true, thicknessMm: true },
+          },
         },
       },
     },
@@ -1218,7 +1305,8 @@ export async function loadShipmentDocument(
       );
     } else if (l.batch) {
       stoneName = l.batch.stoneType.name;
-      what = "объём из партии";
+      what = l.batchPattern ? `узор «${l.batchPattern.description}»` : "объём из партии";
+      gabarit = volumeLineGabarit({ batchPattern: l.batchPattern, batch: l.batch });
     }
     return {
       stoneName,

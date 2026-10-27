@@ -154,6 +154,7 @@ export async function submitIntake(
     stoneName: string;
     batchId: string;
     patternIds: string[];
+    patternLocationIds: (string | null)[];
     replay: boolean;
   };
   try {
@@ -279,6 +280,9 @@ export async function submitIntake(
               managerId: actorId,
               batchId: summary.batchId,
               batchPatternId: summary.patternIds[i],
+              // ТЗ №19 A4 — фотозапрос наследует локацию узора (блок ·
+              // ориентир), а не «локация не указана».
+              batchLocationId: summary.patternLocationIds[i] ?? null,
               comment: `Узор: ${data.patterns[i].description}`,
             },
             { db, sendMessage },

@@ -88,6 +88,9 @@ export default function ShowroomSellDialog({
   const [newClientBusy, setNewClientBusy] = useState(false);
   const [newClientError, setNewClientError] = useState<string | null>(null);
   const [dupHint, setDupHint] = useState<ClientHit | null>(null);
+  // ТЗ №19 E1 — «есть клиент с таким именем» (телефон другой): создать можно,
+  // но сначала показываем тёзок с телефонами.
+  const [nameHint, setNameHint] = useState<ClientHit[] | null>(null);
 
   // ── Оплата (TZ №9) ──
   /** Display only — с группировкой пробелами («200 000»). */
@@ -135,6 +138,7 @@ export default function ShowroomSellDialog({
     setSelectedClient(c);
     setShowNewClient(false);
     setDupHint(null);
+    setNameHint(null);
     setClientHits([]);
     setClientQuery("");
     setClientSearchError(null);
@@ -151,6 +155,7 @@ export default function ShowroomSellDialog({
     setClientSearchBusy(true);
     setClientSearchError(null);
     setDupHint(null);
+    setNameHint(null);
     try {
       const res = await searchClientsForSale(q);
       if (!res.ok) {
@@ -185,16 +190,18 @@ export default function ShowroomSellDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on query
   }, [clientQuery, selectedClient, open]);
 
-  const submitNewClient = async () => {
+  const submitNewClient = async (allowSameName = false) => {
     setNewClientBusy(true);
     setNewClientError(null);
     setDupHint(null);
+    setNameHint(null);
     try {
       // Та же нормализация телефона и защита от дублей, что в основной продаже.
       const res = await createClientForSale({
         name: newClientName,
         type: newClientType,
         phone: newClientPhone,
+        allowSameName,
       });
       if (res.ok) {
         selectClient(res.client);
@@ -206,6 +213,10 @@ export default function ShowroomSellDialog({
       if (res.reason === "duplicate") {
         setDupHint(res.existing);
         setNewClientError(res.error);
+        return;
+      }
+      if (res.reason === "same_name") {
+        setNameHint(res.similar);
         return;
       }
       setNewClientError(res.error);
@@ -278,6 +289,7 @@ export default function ShowroomSellDialog({
                     onClick={() => {
                       setSelectedClient(null);
                       setDupHint(null);
+                      setNameHint(null);
                     }}
                   >
                     Сменить
@@ -338,6 +350,7 @@ export default function ShowroomSellDialog({
                   onClick={() => {
                     setShowNewClient((v) => !v);
                     setDupHint(null);
+                    setNameHint(null);
                     setNewClientError(null);
                   }}
                 >
@@ -358,7 +371,10 @@ export default function ShowroomSellDialog({
                   label="Имя / название"
                   placeholder="Иван Петров / ООО «Стройка»"
                   value={newClientName}
-                  onChange={(ev) => setNewClientName(ev.target.value)}
+                  onChange={(ev) => {
+                    setNewClientName(ev.target.value);
+                    setNameHint(null);
+                  }}
                   error={e.newClientName}
                 />
                 <div>
@@ -410,14 +426,43 @@ export default function ShowroomSellDialog({
                     </Button>
                   </Alert>
                 )}
+                {nameHint && nameHint.length > 0 && (
+                  <Alert variant="warning" title="Есть клиент с таким именем" className="mt-1">
+                    <p className="text-sm">
+                      Проверьте телефон: если это он — выберите. Если другой человек —
+                      «Всё равно создать».
+                    </p>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {nameHint.map((c) => (
+                        <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm">
+                            <span className="font-semibold text-ink">{c.name}</span> · {c.phone}
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => selectClient(c)}
+                          >
+                            Выбрать
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </Alert>
+                )}
                 <FieldError msg={newClientError ?? undefined} />
                 <Button
                   type="button"
                   disabled={newClientBusy}
-                  onClick={() => void submitNewClient()}
+                  onClick={() => void submitNewClient(nameHint !== null)}
                   className="mt-1"
                 >
-                  {newClientBusy ? "Сохранение…" : "Сохранить клиента"}
+                  {newClientBusy
+                    ? "Сохранение…"
+                    : nameHint
+                      ? "Всё равно создать"
+                      : "Сохранить клиента"}
                 </Button>
               </div>
             </div>

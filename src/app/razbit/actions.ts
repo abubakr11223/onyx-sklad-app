@@ -170,6 +170,8 @@ export async function submitBreak(
     if (mode === "direct") {
       const batchId = str("batchId");
       if (!batchId) errors.batchId = "Выберите партию";
+      // ТЗ №19 B3 — узор (обязательность проверяет breaking.ts по партии).
+      const batchPatternId = str("batchPatternId") || null;
       if (Object.keys(errors).length > 0 || !causeParsed.ok) {
         return { errors: ensureFormError(errors) };
       }
@@ -179,6 +181,7 @@ export async function submitBreak(
       const result = await registerDirectPiecesMany({
         rows: pieces,
         batchId,
+        batchPatternId,
         byUserId,
         cause: causeParsed.cause,
       });

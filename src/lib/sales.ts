@@ -28,6 +28,20 @@ import {
 import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 import { formatLocation } from "@/lib/locations";
 import {
+  allocateFromLocations,
+  allocationLocationText,
+  areaForSlabs,
+  checkPatternAvailable,
+  formatLocationsShort,
+  loadPatternStock,
+  patternsOfBatch,
+  returnToLocationsInTx,
+  takeFromLocationsInTx,
+  type LocationAllocation,
+  type PatternStock,
+  type StockLocation,
+} from "./pattern-stock";
+import {
   computeBatchVolumeHolds,
   formatHoldQty,
   type BatchVolumeHolds,
@@ -878,6 +892,8 @@ export interface SellBatchVolumeInput extends SalePaymentFields, SaleClientField
   managerId: string;
   /** W1-T1: явное согласие закрыть СВОЮ бронь этой продажей (id брони). */
   consumeReservationId?: string | null;
+  /** ТЗ №19 — из какого места брать (если партия лежит в нескольких). */
+  batchLocationId?: string | null;
 }
 
 export interface SellVolumeOk {
@@ -901,6 +917,9 @@ interface BatchForVolume {
   areaAdjustedM2: { toString(): string };
   slabsSoldDirect: number;
   areaSoldDirectM2: { toString(): string };
+  /** ТЗ №19 — формат плиты однородной партии (см). Мок-тесты могут не задавать. */
+  lengthMm?: number | null;
+  widthMm?: number | null;
   slabs: { areaM2: { toString(): string } | null }[];
   pieces: { areaM2: { toString(): string } | null }[];
   reservations: {
@@ -912,6 +931,8 @@ interface BatchForVolume {
     qtyAreaM2: { toString(): string } | null;
     expiresAt: Date;
     createdAt: Date;
+    /** ТЗ №19 — бронь из узора (для «своя бронь освобождает узор»). */
+    batchPatternId?: string | null;
   }[];
   /** W1-T1: активные BATCH_VOLUME-образцы — держат объём как брони. */
   samples: {
@@ -935,6 +956,9 @@ async function loadBatchForVolume(
       areaAdjustedM2: true,
       slabsSoldDirect: true,
       areaSoldDirectM2: true,
+      // ТЗ №19 — формат плиты однородной партии (площадь списания по месту).
+      lengthMm: true,
+      widthMm: true,
       // §3: выделенные плиты — в ЛЮБОМ статусе; куски — только прямые (originSlabId null).
       slabs: { select: { areaM2: true } },
       pieces: { where: { originSlabId: null }, select: { areaM2: true } },
@@ -952,6 +976,7 @@ async function loadBatchForVolume(
           qtyAreaM2: true,
           expiresAt: true,
           createdAt: true,
+          batchPatternId: true,
         },
       },
       // W1-T1: активные образцы из объёма партии — тоже hold (как в issueSample).
@@ -1033,6 +1058,15 @@ export async function executeVolumeSale(
     now: Date;
     // ТЗ №3 — продажа ИЗ УЗОРА (иначе null → обычная batch-volume продажа).
     pattern?: PatternForSale | null;
+    /**
+     * ТЗ №19 — списание по нескольким узорам одной продажей («Выкупить
+     * целиком» смешанной партии). Не задано → один узор `pattern` на весь объём.
+     */
+    patternParts?: { pattern: PatternForSale; qtySlabs: number | null; qtyAreaM2: number | null }[];
+    /** ТЗ №19 C1 — строки задачи на отгрузку (узор · место). Не задано → одна строка. */
+    shipmentLines?: VolumeShipmentLine[];
+    /** ТЗ №19 §D — уменьшение slabsHere мест, откуда берут плиты. */
+    locationTakes?: { allocations: LocationAllocation[]; unitAreaM2: number }[];
     /** TZ №9 — already validated payment (null method = legacy). */
     payment?: ValidatedSalePayment;
     /** TZ №10+11 — directory links (optional / legacy null). */
@@ -1113,17 +1147,22 @@ export async function executeVolumeSale(
 
   // ТЗ №3 — синхронно инкрементим счётчики УЗОРА (условно, как batch выше).
   // Batch-остаток уже уменьшен; узор-остаток тоже, чтобы карточка сходилась.
-  if (params.pattern) {
+  // ТЗ №19 — «Выкупить целиком» смешанной партии списывает несколько узоров.
+  const parts =
+    params.patternParts ??
+    (params.pattern ? [{ pattern: params.pattern, qtySlabs, qtyAreaM2 }] : []);
+  for (const part of parts) {
+    if (part.qtySlabs === null && part.qtyAreaM2 === null) continue;
     const patUpdated = await tx.batchPattern.updateMany({
       where: {
-        id: params.pattern.id,
-        slabsSold: params.pattern.slabsSold,
-        areaSoldM2: params.pattern.areaSoldM2.toFixed(3),
+        id: part.pattern.id,
+        slabsSold: part.pattern.slabsSold,
+        areaSoldM2: part.pattern.areaSoldM2.toFixed(3),
       },
       data: {
-        ...(qtySlabs !== null ? { slabsSold: { increment: qtySlabs } } : {}),
-        ...(qtyAreaM2 !== null
-          ? { areaSoldM2: { increment: qtyAreaM2.toFixed(3) } }
+        ...(part.qtySlabs !== null ? { slabsSold: { increment: part.qtySlabs } } : {}),
+        ...(part.qtyAreaM2 !== null
+          ? { areaSoldM2: { increment: part.qtyAreaM2.toFixed(3) } }
           : {}),
       },
     });
@@ -1133,6 +1172,11 @@ export async function executeVolumeSale(
         message: "Узор только что изменили параллельно — обновите страницу и повторите",
       });
     }
+  }
+
+  // ТЗ №19 §D — карта: место, откуда берут плиты, уменьшается сразу.
+  for (const take of params.locationTakes ?? []) {
+    await takeFromLocationsInTx(tx, take.allocations, take.unitAreaM2);
   }
 
   // W1-T1: гасим РОВНО ту бронь, которую клиент явно согласился закрыть
@@ -1201,6 +1245,14 @@ export async function executeVolumeSale(
         qtyAreaM2,
         wholeBatch: params.wholeBatch,
         batchPatternId: params.pattern?.id ?? null,
+        // ТЗ №19 E2 — история: что, сколько, из какого узора и места.
+        lines: (params.shipmentLines ?? []).map((l) => ({
+          batchPatternId: l.batchPatternId ?? null,
+          patternLabel: l.patternLabel ?? null,
+          qtySlabs: l.qtyOrderedSlabs ?? null,
+          qtyAreaM2: l.qtyOrderedAreaM2 ?? null,
+          location: l.locationSnapshot ?? null,
+        })),
         freeBefore: { slabsFree: free.slabsFree, areaFreeM2: free.areaFreeM2 },
         completedReservationIds,
       },
@@ -1213,12 +1265,26 @@ export async function executeVolumeSale(
     managerId: actor.id,
     clientId,
     siteId,
-    line: {
-      targetType: "BATCH_VOLUME",
-      batchId: batch.id,
-      qtyOrderedSlabs: qtySlabs,
-      qtyOrderedAreaM2: qtyAreaM2,
-    },
+    lines:
+      params.shipmentLines && params.shipmentLines.length > 0
+        ? params.shipmentLines.map((l) => ({
+            targetType: "BATCH_VOLUME" as const,
+            batchId: batch.id,
+            batchPatternId: l.batchPatternId ?? null,
+            batchLocationId: l.batchLocationId ?? null,
+            qtyOrderedSlabs: l.qtyOrderedSlabs,
+            qtyOrderedAreaM2: l.qtyOrderedAreaM2,
+            locationSnapshot: l.locationSnapshot ?? null,
+          }))
+        : [
+            {
+              targetType: "BATCH_VOLUME" as const,
+              batchId: batch.id,
+              batchPatternId: params.pattern?.id ?? null,
+              qtyOrderedSlabs: qtySlabs,
+              qtyOrderedAreaM2: qtyAreaM2,
+            },
+          ],
   });
 
   return {
@@ -1229,6 +1295,139 @@ export async function executeVolumeSale(
     qtyAreaM2,
     completedReservationIds,
     shipmentId,
+  };
+}
+
+// ─────────────── ТЗ №19 — строки отгрузки и раскладка по местам ───────────────
+
+/** ТЗ №19 C1 — строка задачи на отгрузку объёмной продажи (узор · место). */
+export interface VolumeShipmentLine {
+  batchPatternId?: string | null;
+  batchLocationId?: string | null;
+  /** Описание узора — для истории (E2). */
+  patternLabel?: string | null;
+  qtyOrderedSlabs: number | null;
+  qtyOrderedAreaM2: number | null;
+  locationSnapshot?: string | null;
+}
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/**
+ * Чистая: объём продажи → места, откуда брать, и строки отгрузки. Площадь по
+ * строкам — по формату плиты (N × S), последняя строка добирает остаток, чтобы
+ * сумма строк была ровно объёмом продажи.
+ */
+export function planVolumeLines(args: {
+  batchPatternId: string | null;
+  patternLabel: string | null;
+  locations: readonly StockLocation[];
+  qtySlabs: number | null;
+  qtyAreaM2: number | null;
+  unitAreaM2: number;
+  preferredLocationId?: string | null;
+}): { lines: VolumeShipmentLine[]; allocations: LocationAllocation[] } {
+  const { qtySlabs, qtyAreaM2, unitAreaM2 } = args;
+  const slabsToPlace =
+    qtySlabs ??
+    (unitAreaM2 > 0 && qtyAreaM2 !== null
+      ? Math.floor(qtyAreaM2 / unitAreaM2 + 1e-6)
+      : 0);
+  const allocations = allocateFromLocations(
+    args.locations,
+    slabsToPlace,
+    args.preferredLocationId ?? null,
+  );
+  const base = {
+    batchPatternId: args.batchPatternId,
+    patternLabel: args.patternLabel,
+  };
+  if (allocations.length === 0) {
+    return {
+      allocations,
+      lines: [
+        {
+          ...base,
+          batchLocationId: null,
+          qtyOrderedSlabs: qtySlabs,
+          qtyOrderedAreaM2: qtyAreaM2,
+          locationSnapshot:
+            args.locations.length > 0 ? formatLocationsShort(args.locations) : null,
+        },
+      ],
+    };
+  }
+  let areaLeft = qtyAreaM2 ?? 0;
+  const lines = allocations.map((a, i) => {
+    let area: number | null = null;
+    if (qtyAreaM2 !== null) {
+      if (i === allocations.length - 1) {
+        area = round3(areaLeft);
+      } else {
+        const share =
+          unitAreaM2 > 0
+            ? a.slabs * unitAreaM2
+            : (qtyAreaM2 * a.slabs) / Math.max(1, slabsToPlace);
+        area = round3(Math.min(areaLeft, share));
+        areaLeft -= area;
+      }
+    }
+    return {
+      ...base,
+      batchLocationId: a.locationId,
+      qtyOrderedSlabs: qtySlabs === null ? null : a.slabs,
+      qtyOrderedAreaM2: area,
+      locationSnapshot: allocationLocationText(a),
+    };
+  });
+  return { allocations, lines };
+}
+
+/** Площадь одной плиты однородной партии: габарит, иначе средняя по приёмке. */
+function homogeneousUnitAreaM2(batch: BatchForVolume): number {
+  if (batch.lengthMm && batch.widthMm) return (batch.lengthMm * batch.widthMm) / 10_000;
+  const area = toNum(batch.areaTotalM2);
+  return batch.slabsTotal && area ? area / batch.slabsTotal : 0;
+}
+
+async function loadBatchStockLocations(
+  tx: Prisma.TransactionClient,
+  batchId: string,
+): Promise<(StockLocation & { batchPatternId: string | null })[]> {
+  const rows = await tx.batchLocation.findMany({
+    where: { batchId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      block: true,
+      landmark: true,
+      slabsHere: true,
+      areaHereM2: true,
+      batchPatternId: true,
+    },
+  });
+  return rows.map((r) => ({ ...r, areaHereM2: toNum(r.areaHereM2) }));
+}
+
+/** Своя погашаемая бронь этого узора возвращает в доступное то, что держала. */
+function releasedForPattern(
+  batch: BatchForVolume,
+  consumeReservationId: string | null | undefined,
+  patternId: string,
+): { slabs: number; areaM2: number } {
+  const id = consumeReservationId?.trim();
+  const r = id ? batch.reservations.find((x) => x.id === id) : undefined;
+  if (!r || r.batchPatternId !== patternId) return { slabs: 0, areaM2: 0 };
+  return { slabs: r.qtySlabs ?? 0, areaM2: toNum(r.qtyAreaM2) ?? 0 };
+}
+
+function patternCounters(ps: PatternStock): PatternForSale {
+  return {
+    id: ps.id,
+    slabsCount: ps.slabsCount,
+    slabsSold: ps.slabsSold,
+    areaM2: ps.areaM2,
+    areaSoldM2: ps.areaSoldM2,
   };
 }
 
@@ -1255,12 +1454,34 @@ export async function sellBatchVolume(
       const payment = validateSalePayment(input, price, customerContact);
       const batch = await loadBatchForVolume(tx, input.batchId);
       const free = batchFreeRemainder(batch);
+      // ТЗ №19 B1 — у смешанной партии путь «объём из партии» закрыт: продажа
+      // не может обойти узор (иначе остатки узоров снова разойдутся с партией).
+      const locations = await loadBatchStockLocations(tx, batch.id);
+      if ((await tx.batchPattern.count({ where: { batchId: batch.id } })) > 0) {
+        throw new SaleLogicError({
+          code: "INVALID_INPUT",
+          message:
+            "В партии несколько узоров — выберите узор (или «Выкупить целиком»)",
+        });
+      }
+      const qtySlabs = input.qtySlabs ?? null;
+      const qtyAreaM2 = input.qtyAreaM2 ?? null;
+      const unitAreaM2 = homogeneousUnitAreaM2(batch);
+      const plan = planVolumeLines({
+        batchPatternId: null,
+        patternLabel: null,
+        locations,
+        qtySlabs,
+        qtyAreaM2,
+        unitAreaM2,
+        preferredLocationId: input.batchLocationId ?? null,
+      });
       return executeVolumeSale(tx, {
         actor,
         batch,
         free,
-        qtySlabs: input.qtySlabs ?? null,
-        qtyAreaM2: input.qtyAreaM2 ?? null,
+        qtySlabs,
+        qtyAreaM2,
         customerName,
         customerContact,
         price,
@@ -1270,6 +1491,8 @@ export async function sellBatchVolume(
         clientId: input.clientId,
         siteId: input.siteId,
         consumeReservationId: input.consumeReservationId ?? null,
+        shipmentLines: plan.lines,
+        locationTakes: [{ allocations: plan.allocations, unitAreaM2 }],
       });
     });
   } catch (e) {
@@ -1288,6 +1511,8 @@ export interface SellPatternVolumeInput extends SalePaymentFields, SaleClientFie
   managerId: string;
   /** W1-T1: явное согласие закрыть СВОЮ бронь этой продажей (id брони). */
   consumeReservationId?: string | null;
+  /** ТЗ №19 B1 — из какого места узора брать (если узор лежит в нескольких). */
+  batchLocationId?: string | null;
 }
 
 /**
@@ -1328,12 +1553,46 @@ export async function sellPatternVolume(
       const payment = validateSalePayment(input, price, customerContact);
       const batch = await loadBatchForVolume(tx, pat.batchId);
       const free = batchFreeRemainder(batch);
+      // ТЗ №19 §D — единый остаток узора (продажи + выделенные плиты + бой +
+      // брони/образцы узора) — то же число, что видят карточка, бронь, разбить.
+      const ps = (await loadPatternStock(tx, [pat.batchId], now)).get(pat.id);
+      if (!ps) {
+        throw new SaleLogicError({
+          code: "NOT_FOUND",
+          message: "Узор не найден — обновите страницу и повторите",
+        });
+      }
+      const qtySlabs = input.qtySlabs ?? null;
+      // §2 п.4 — площадь списывается вместе с плитами: 2 пл. × 4,48 = 8,96 м².
+      const qtyAreaM2 =
+        input.qtyAreaM2 ??
+        (qtySlabs !== null && qtySlabs > 0
+          ? areaForSlabs(ps, qtySlabs, ps.areaFreeM2)
+          : null);
+      const patternErr = checkPatternAvailable(
+        ps,
+        qtySlabs !== null && qtySlabs > 0 ? qtySlabs : null,
+        qtyAreaM2 !== null && qtyAreaM2 > 0 ? qtyAreaM2 : null,
+        releasedForPattern(batch, input.consumeReservationId, ps.id),
+      );
+      if (patternErr) {
+        throw new SaleLogicError({ code: "INSUFFICIENT_REMAINDER", message: patternErr });
+      }
+      const plan = planVolumeLines({
+        batchPatternId: ps.id,
+        patternLabel: ps.description,
+        locations: ps.locations,
+        qtySlabs,
+        qtyAreaM2,
+        unitAreaM2: ps.unitAreaM2,
+        preferredLocationId: input.batchLocationId ?? null,
+      });
       return executeVolumeSale(tx, {
         actor,
         batch,
         free,
-        qtySlabs: input.qtySlabs ?? null,
-        qtyAreaM2: input.qtyAreaM2 ?? null,
+        qtySlabs,
+        qtyAreaM2,
         customerName,
         customerContact,
         price,
@@ -1343,13 +1602,9 @@ export async function sellPatternVolume(
         clientId: input.clientId,
         siteId: input.siteId,
         consumeReservationId: input.consumeReservationId ?? null,
-        pattern: {
-          id: pat.id,
-          slabsCount: pat.slabsCount,
-          slabsSold: pat.slabsSold,
-          areaM2: toNum(pat.areaM2) ?? 0,
-          areaSoldM2: toNum(pat.areaSoldM2) ?? 0,
-        },
+        pattern: patternCounters(ps),
+        shipmentLines: plan.lines,
+        locationTakes: [{ allocations: plan.allocations, unitAreaM2: ps.unitAreaM2 }],
       });
     });
   } catch (e) {
@@ -1410,6 +1665,7 @@ export async function sellWholeBatch(
             : free.areaFreeM2 - holds.totalAreaM2,
       });
       if (!whole.ok) throw new SaleLogicError(whole.error);
+      const split = await planWholeBatchSplit(tx, batch, whole, input.consumeReservationId, now);
       return executeVolumeSale(tx, {
         actor,
         batch,
@@ -1425,12 +1681,94 @@ export async function sellWholeBatch(
         clientId: input.clientId,
         siteId: input.siteId,
         consumeReservationId: input.consumeReservationId ?? null,
+        ...split,
       });
     });
   } catch (e) {
     if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };
     throw e;
   }
+}
+
+/**
+ * ТЗ №19 B1 — «Выкупить целиком»: смешанная партия списывает КАЖДЫЙ узор его
+ * доступным остатком (и каждое его место); однородная — все места партии.
+ * Объём сверх суммы узоров (legacy-движения до ТЗ №19) — строкой «не разнесено».
+ */
+async function planWholeBatchSplit(
+  tx: Prisma.TransactionClient,
+  batch: BatchForVolume,
+  whole: { qtySlabs: number | null; qtyAreaM2: number | null },
+  consumeReservationId: string | null | undefined,
+  now: Date,
+): Promise<{
+  patternParts?: { pattern: PatternForSale; qtySlabs: number | null; qtyAreaM2: number | null }[];
+  shipmentLines: VolumeShipmentLine[];
+  locationTakes: { allocations: LocationAllocation[]; unitAreaM2: number }[];
+}> {
+  const stock = patternsOfBatch(await loadPatternStock(tx, [batch.id], now), batch.id);
+  if (stock.length === 0) {
+    const unitAreaM2 = homogeneousUnitAreaM2(batch);
+    const plan = planVolumeLines({
+      batchPatternId: null,
+      patternLabel: null,
+      locations: await loadBatchStockLocations(tx, batch.id),
+      qtySlabs: whole.qtySlabs,
+      qtyAreaM2: whole.qtyAreaM2,
+      unitAreaM2,
+    });
+    return {
+      shipmentLines: plan.lines,
+      locationTakes: [{ allocations: plan.allocations, unitAreaM2 }],
+    };
+  }
+
+  const patternParts: { pattern: PatternForSale; qtySlabs: number | null; qtyAreaM2: number | null }[] = [];
+  const shipmentLines: VolumeShipmentLine[] = [];
+  const locationTakes: { allocations: LocationAllocation[]; unitAreaM2: number }[] = [];
+  let sumSlabs = 0;
+  let sumArea = 0;
+  for (const ps of stock) {
+    const rel = releasedForPattern(batch, consumeReservationId, ps.id);
+    const s = Math.max(0, ps.slabsFree - (ps.hold.slabs - rel.slabs));
+    const a =
+      Math.floor(Math.max(0, ps.areaFreeM2 - (ps.hold.areaM2 - rel.areaM2)) * 1000) / 1000;
+    const qtySlabs = whole.qtySlabs !== null && s > 0 ? s : null;
+    const qtyAreaM2 = whole.qtyAreaM2 !== null && a > 0 ? a : null;
+    if (qtySlabs === null && qtyAreaM2 === null) continue;
+    patternParts.push({ pattern: patternCounters(ps), qtySlabs, qtyAreaM2 });
+    const plan = planVolumeLines({
+      batchPatternId: ps.id,
+      patternLabel: ps.description,
+      locations: ps.locations,
+      qtySlabs,
+      qtyAreaM2,
+      unitAreaM2: ps.unitAreaM2,
+    });
+    shipmentLines.push(...plan.lines);
+    locationTakes.push({ allocations: plan.allocations, unitAreaM2: ps.unitAreaM2 });
+    sumSlabs += qtySlabs ?? 0;
+    sumArea += qtyAreaM2 ?? 0;
+  }
+  const extraSlabs = whole.qtySlabs === null ? 0 : whole.qtySlabs - sumSlabs;
+  const extraArea = whole.qtyAreaM2 === null ? 0 : round3(whole.qtyAreaM2 - sumArea);
+  if (extraSlabs < 0 || extraArea < -0.001) {
+    throw new SaleLogicError({
+      code: "CONFLICT",
+      message:
+        "Остатки узоров не сходятся с остатком партии — проверьте партию в карточке камня",
+    });
+  }
+  if (extraSlabs > 0 || extraArea > 0.0005) {
+    shipmentLines.push({
+      batchPatternId: null,
+      patternLabel: null,
+      qtyOrderedSlabs: extraSlabs > 0 ? extraSlabs : null,
+      qtyOrderedAreaM2: extraArea > 0.0005 ? extraArea : null,
+      locationSnapshot: "не разнесено по узорам",
+    });
+  }
+  return { patternParts, shipmentLines, locationTakes };
 }
 
 // ─────────────────── ВОЗВРАТ от клиента (TZ §4.3) — транзакции ───────────────────
@@ -1558,9 +1896,35 @@ export async function returnSale(
             needsCheck: true,
           },
         });
+        // ТЗ №19 — возврат в ТОТ ЖЕ узор и ТО ЖЕ место (строки отгрузки помнят,
+        // откуда брали). Старые продажи без строк — по sale.batchPatternId.
+        const lines = await tx.shipmentLine.findMany({
+          where: { shipment: { saleRecordId: sale.id } },
+          select: {
+            batchPatternId: true,
+            batchLocationId: true,
+            qtyOrderedSlabs: true,
+            qtyOrderedAreaM2: true,
+          },
+        });
+        const patternLines = lines.filter((l) => l.batchPatternId);
+        for (const l of patternLines) {
+          await tx.batchPattern.update({
+            where: { id: l.batchPatternId! },
+            data: {
+              ...(l.qtyOrderedSlabs !== null
+                ? { slabsSold: { decrement: l.qtyOrderedSlabs } }
+                : {}),
+              ...(l.qtyOrderedAreaM2 !== null
+                ? { areaSoldM2: { decrement: l.qtyOrderedAreaM2 } }
+                : {}),
+            },
+          });
+        }
+        await returnSaleToLocations(tx, sale.batchId, lines);
         // ТЗ №3 — если продажа была ИЗ УЗОРА, синхронно реверсим и его счётчики
         // (иначе остаток узора «застрянет» проданным при возврате партии).
-        if (sale.batchPatternId) {
+        if (patternLines.length === 0 && sale.batchPatternId) {
           await tx.batchPattern.update({
             where: { id: sale.batchPatternId },
             data: {
@@ -1619,6 +1983,41 @@ export async function returnSale(
   } catch (e) {
     if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };
     throw e;
+  }
+}
+
+/** ТЗ №19 §D — возврат продажи: плиты обратно в места, откуда их взяли. */
+async function returnSaleToLocations(
+  tx: Prisma.TransactionClient,
+  batchId: string,
+  lines: readonly {
+    batchPatternId: string | null;
+    batchLocationId: string | null;
+    qtyOrderedSlabs: number | null;
+    qtyOrderedAreaM2: { toString(): string } | null;
+  }[],
+): Promise<void> {
+  const located = lines.filter((l) => l.batchLocationId);
+  if (located.length === 0) return;
+  const now = new Date();
+  const stock = await loadPatternStock(tx, [batchId], now);
+  const batch = await tx.batch.findUnique({
+    where: { id: batchId },
+    select: { lengthMm: true, widthMm: true, slabsTotal: true, areaTotalM2: true },
+  });
+  const batchUnit =
+    batch?.lengthMm && batch.widthMm
+      ? (batch.lengthMm * batch.widthMm) / 10_000
+      : batch?.slabsTotal && batch.areaTotalM2
+        ? Number(batch.areaTotalM2.toString()) / batch.slabsTotal
+        : 0;
+  for (const l of located) {
+    const unit = (l.batchPatternId && stock.get(l.batchPatternId)?.unitAreaM2) || batchUnit;
+    const area = toNum(l.qtyOrderedAreaM2);
+    const slabs =
+      l.qtyOrderedSlabs ??
+      (unit > 0 && area !== null ? Math.floor(area / unit + 1e-6) : 0);
+    await returnToLocationsInTx(tx, [{ locationId: l.batchLocationId, slabs }], unit);
   }
 }
 

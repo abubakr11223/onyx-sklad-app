@@ -38,11 +38,19 @@ import {
   batchesPlateWhere,
   showroomPiecesWhere,
   showroomSlabsWhere,
+  sizeSearchHits,
+  formatSizeHitLine,
+  formatHitQty,
+  type SizeSearchFree,
 } from "@/lib/poisk-search";
 import {
   fetchPoiskTypesPage,
   rankAndCapFittingPieces,
+  loadBatchAvailability,
+  typeFormatSummary,
+  formatTypeFormatsLine,
 } from "@/lib/poisk-query";
+import { loadPatternStock } from "@/lib/pattern-stock";
 import Card from "@/components/ui/Card";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -305,12 +313,23 @@ export default async function PoiskPage({
     arrivedAt: Date;
     slabsTotal: number | null;
     areaTotalM2: { toString(): string } | null;
+    slabsAdjusted: number;
+    areaAdjustedM2: { toString(): string };
+    slabsSoldDirect: number;
+    areaSoldDirectM2: { toString(): string };
     stoneType: { id: string; name: string };
     patterns: Array<{
+      id: string;
       lengthMm: number | null;
       widthMm: number | null;
       thicknessMm: { toString(): string } | number | null;
       description: string;
+    }>;
+    locations: Array<{
+      block: string;
+      landmark: string;
+      slabsHere: number | null;
+      batchPatternId: string | null;
     }>;
   };
 
@@ -373,13 +392,30 @@ export default async function PoiskPage({
               arrivedAt: true,
               slabsTotal: true,
               areaTotalM2: true,
+              // ТЗ №19 C2: свободно однородной партии — та же формула §3.
+              slabsAdjusted: true,
+              areaAdjustedM2: true,
+              slabsSoldDirect: true,
+              areaSoldDirectM2: true,
               stoneType: { select: { id: true, name: true } },
               patterns: {
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
                 select: {
+                  id: true,
                   lengthMm: true,
                   widthMm: true,
                   thicknessMm: true,
                   description: true,
+                },
+              },
+              // E3: «Блок A1» / «локация не указана» в строке выдачи.
+              locations: {
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                select: {
+                  block: true,
+                  landmark: true,
+                  slabsHere: true,
+                  batchPatternId: true,
                 },
               },
             },
@@ -456,16 +492,60 @@ export default async function PoiskPage({
     ? fittingBatchesMatched.slice(0, MAX_POISK_PIECES)
     : fittingBatchesMatched;
 
-  // Камни, у которых есть целая плита/партия под размер (для фильтра списка видов).
+  // ── ТЗ №19 C2/C3 — остаток УЗОРА (pattern-stock.ts — единственный расчёт).
+  // Один loadPatternStock на всю страницу: партии с узорами из видимых карточек
+  // (строки по форматам) + подошедшие по размеру. Однородные подошедшие —
+  // loadBatchAvailability (формула партии §3 − брони). Только canSeeExact:
+  // PARTNER чисел не видит, подбор узора по размеру идёт по габариту из select'а.
+  const formattedPatternBatch = (b: FittingBatchRow) =>
+    b.patterns.some((p) => p.lengthMm !== null && p.widthMm !== null);
+  const patternBatchIds = canSeeExact
+    ? [
+        ...new Set([
+          ...visibleTypes.flatMap((t) =>
+            t.st.batches.filter((b) => b._count.patterns > 0).map((b) => b.id),
+          ),
+          ...fittingBatches.filter((b) => b.patterns.length > 0).map((b) => b.id),
+        ]),
+      ]
+    : [];
+  const [patternStock, homogeneousFree] = await Promise.all([
+    loadPatternStock(db, patternBatchIds),
+    canSeeExact
+      ? loadBatchAvailability(
+          db,
+          fittingBatches.filter((b) => !formattedPatternBatch(b)),
+        )
+      : Promise.resolve(null),
+  ]);
+  const patternFree = canSeeExact
+    ? new Map<string, SizeSearchFree>(
+        [...patternStock.values()].map((p) => [
+          p.id,
+          { slabs: p.availableSlabs, areaM2: p.availableAreaM2 },
+        ]),
+      )
+    : null;
+
+  // C2: строка на узор под размер (узоры не под размер не показываем),
+  // однородная партия — строка на партию, как раньше.
+  const batchHits =
+    hasDims && lenMm !== null && widMm !== null
+      ? sizeSearchHits(fittingBatches, lenMm, widMm, patternFree, homogeneousFree)
+      : [];
+
+  // Камни, у которых есть целая плита/узор/партия под размер (фильтр списка видов).
   const plateFitStoneIds = new Set<string>();
   for (const s of fittingSlabs) plateFitStoneIds.add(s.stoneType.id);
-  for (const b of fittingBatches) plateFitStoneIds.add(b.stoneType.id);
+  for (const h of batchHits) plateFitStoneIds.add(h.stoneTypeId);
 
   // stoneTypeId → unikal lokatsiyalar (partiyalar bo'ylab yig'ilgan).
   const locsByStoneId = new Map<
     string,
     Array<{ block: string; landmark: string }>
   >();
+  // E3: партии, у которых есть хоть одна локация.
+  const locatedBatchIds = new Set(batchLocs.map((l) => l.batchId));
   for (const loc of batchLocs) {
     const stoneId = batchToStoneId.get(loc.batchId);
     if (!stoneId) continue;
@@ -801,46 +881,48 @@ export default async function PoiskPage({
         </section>
       )}
 
-      {/* ТЗ №12: партии с известным форматом плиты */}
-      {hasDims && fittingBatches.length > 0 && (
+      {/* ТЗ №12 / №19 C2: партии и узоры с форматом плиты под размер.
+          Строка на УЗОР (не на партию): «… · 280×160×2 см · 3 плиты · Блок A1». */}
+      {hasDims && batchHits.length > 0 && (
         <section className="mt-6 rounded-card border border-line bg-paper-2 p-4">
           <h2 className="text-lg font-bold text-ink">Партии — формат плиты под размер</h2>
           <p className="text-sm text-ink/70">
-            Партии, где длина×ширина плиты подходит под запрос (см)
+            Узоры и партии, где длина×ширина плиты подходит под запрос (см)
             {canSeeExact && (
-              <> · показано {fittingBatches.length}{batchesCapped ? "+" : ""}</>
+              <> · показано {batchHits.length}{batchesCapped ? "+" : ""}</>
             )}
           </p>
           <ul className="mt-3 space-y-2">
-            {fittingBatches.map((b) => {
-              const fmt =
-                b.lengthMm != null && b.widthMm != null
-                  ? `${b.lengthMm}×${b.widthMm}${b.thicknessMm != null ? `×${formatThicknessCm(b.thicknessMm)}` : ""} см`
-                  : b.patterns
-                      .filter((p) => p.lengthMm != null && p.widthMm != null)
-                      .map(
-                        (p) =>
-                          `${p.description}: ${p.lengthMm}×${p.widthMm}${p.thicknessMm != null ? `×${formatThicknessCm(p.thicknessMm)}` : ""} см`,
-                      )
-                      .join("; ") || "—";
+            {batchHits.map((h) => {
+              const qty = canSeeExact ? formatHitQty(h.free) : null;
               return (
                 <li
-                  key={b.id}
+                  key={h.key}
                   className="rounded-card border border-ink/10 bg-paper p-3"
                 >
                   <Link
-                    href={"/kamen/" + b.stoneType.id}
+                    href={"/kamen/" + h.stoneTypeId}
                     className="font-medium text-gold-deep hover:underline"
                   >
-                    {b.stoneType.name}
+                    {h.stoneName}
                   </Link>
-                  <div className="text-sm text-ink/70">
-                    Плита: {fmt}
-                    {canSeeExact && b.slabsTotal != null && (
-                      <> · {b.slabsTotal} плит</>
-                    )}
-                    {canSeeExact && b.areaTotalM2 != null && (
-                      <> · ≈{m2Fmt.format(Number(b.areaTotalM2))} м²</>
+                  <div className="tnum text-sm text-ink/70">
+                    {formatSizeHitLine(h, { includeStone: false, exact: false })}
+                    {qty && <> · {qty}</>}
+                    {/* E3 — нет локации подсвечиваем, а не молчим. */}
+                    {canSeeExact && (
+                      <>
+                        {" · "}
+                        <span
+                          className={
+                            h.locationMissing
+                              ? "font-medium text-warning"
+                              : "text-ink"
+                          }
+                        >
+                          {h.locationText}
+                        </span>
+                      </>
                     )}
                   </div>
                 </li>
@@ -923,6 +1005,23 @@ export default async function PoiskPage({
                   ? formatTypeLocations(locsByStoneId.get(t.st.id) ?? [])
                   : null;
 
+              // ТЗ №19 C3: «220×160×2 — 50 пл. · 280×160×2 — 3 пл.» — формат
+              // виден без открытия карточки (узор — по pattern-stock).
+              const formatsLine = canSeeExact
+                ? formatTypeFormatsLine(
+                    typeFormatSummary(t.st.batches, t.batchStock, patternStock),
+                  )
+                : null;
+
+              // E3: партии с остатком, но без единой локации.
+              const unlocatedBatches = canSeeExact
+                ? t.batchStock.filter(
+                    (s) =>
+                      !locatedBatchIds.has(s.batchId) &&
+                      ((s.slabs ?? 0) > 0 || (s.areaM2 ?? 0) > 0),
+                  ).length
+                : 0;
+
               // Монограмма по породе (мрамор→М, гранит→Г…) — визуальный якорь
               // без выдуманного цвета (в БД нет hex). Fallback — первая буква вида.
               const monogram = (t.st.rockType || t.st.name)
@@ -975,8 +1074,22 @@ export default async function PoiskPage({
                       </p>
                       {/* W5-A / §5.2 — menejer joyini shu yerda ko'radi (kamen'ga
                           o'tmasdan). PARTNER ga chiqmaydi. */}
-                      {locLine && (
-                        <p className="mt-1 text-sm text-ink/60">{locLine}</p>
+                      {formatsLine && (
+                        <p className="tnum mt-1 text-sm text-ink/70">
+                          {formatsLine}
+                        </p>
+                      )}
+                      {(locLine || unlocatedBatches > 0) && (
+                        <p className="mt-1 text-sm text-ink/60">
+                          {locLine}
+                          {unlocatedBatches > 0 && (
+                            <span className="font-medium text-warning">
+                              {locLine && " · "}
+                              локация не указана
+                              {unlocatedBatches > 1 && ` (партий: ${unlocatedBatches})`}
+                            </span>
+                          )}
+                        </p>
                       )}
                     </div>
 

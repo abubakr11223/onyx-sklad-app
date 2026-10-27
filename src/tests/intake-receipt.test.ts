@@ -4,8 +4,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createIntakeWithReceipt,
+  intakeLocationBlocks,
   IntakeConcurrentClaimError,
   parseMutationId,
+  patternLocationIndexes,
   type IntakeReceiptTx,
 } from "@/lib/intake-receipt";
 import type { ValidIntake } from "@/lib/validators/intake";
@@ -196,5 +198,98 @@ describe("createIntakeWithReceipt — idempotency", () => {
     expect(b.batchId).toBe("batch-2");
     expect(a.batchId).not.toBe(b.batchId);
     expect(batchCreate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ТЗ №19 A4 — фотозапрос узора наследует его локацию", () => {
+  it("patternLocationIndexes: своя строка узора → она; иначе единственный «весь приход»; иначе null", () => {
+    // Узор 0 → строка 0, узор 1 → строка 1.
+    expect(
+      patternLocationIndexes([{ patternIdx: 0 }, { patternIdx: 1 }], 2),
+    ).toEqual([0, 1]);
+    // Узор в двух строках → первая.
+    expect(
+      patternLocationIndexes(
+        [{ patternIdx: 0 }, { patternIdx: 0 }, { patternIdx: 1 }],
+        2,
+      ),
+    ).toEqual([0, 2]);
+    // Узор 1 без своей строки, «весь приход» один → там.
+    expect(
+      patternLocationIndexes([{ patternIdx: 0 }, { patternIdx: null }], 2),
+    ).toEqual([0, 1]);
+    // Одна локация на всю партию → все узоры там.
+    expect(patternLocationIndexes([{ patternIdx: null }], 2)).toEqual([0, 0]);
+    // Два «весь приход» и нет своей строки → неизвестно.
+    expect(
+      patternLocationIndexes([{ patternIdx: null }, { patternIdx: null }], 1),
+    ).toEqual([null]);
+  });
+
+  it("intakeLocationBlocks: уникальные блоки в порядке строк", () => {
+    expect(
+      intakeLocationBlocks([{ block: "A1" }, { block: "A2" }, { block: "A1" }]),
+    ).toEqual(["A1", "A2"]);
+  });
+
+  it("createIntakeWithReceipt отдаёт patternLocationIds и пишет E2-ключи в AuditLog", async () => {
+    const { tx } = makeTx();
+    const bag = tx as unknown as {
+      batchPattern: { create: ReturnType<typeof vi.fn> };
+      batchLocation: { create: ReturnType<typeof vi.fn> };
+      auditLog: { create: ReturnType<typeof vi.fn> };
+    };
+    let patSeq = 0;
+    bag.batchPattern.create.mockImplementation(async () => ({
+      id: `pat-${++patSeq}`,
+    }));
+    let locSeq = 0;
+    bag.batchLocation.create.mockImplementation(async () => ({
+      id: `loc-${++locSeq}`,
+    }));
+
+    const r = await createIntakeWithReceipt(tx, {
+      ...baseArgs,
+      mutationId: MUT_A,
+      data: validData({
+        slabsTotal: 6,
+        areaTotalM2: 24.69,
+        lengthMm: null,
+        widthMm: null,
+        thicknessMm: null,
+        patterns: [
+          { description: "светлый", thicknessMm: 2, lengthMm: 280, widthMm: 160, slabs: 3, areaM2: 13.44 },
+          { description: "тёмный", thicknessMm: 3, lengthMm: 250, widthMm: 150, slabs: 3, areaM2: 11.25 },
+        ],
+        locations: [
+          { block: "A1", landmark: "", slabsHere: 3, areaHereM2: 13.44, patternIdx: 0 },
+          { block: "A2", landmark: "5", slabsHere: 3, areaHereM2: 11.25, patternIdx: 1 },
+        ],
+      }),
+    });
+
+    expect(r.patternIds).toEqual(["pat-1", "pat-2"]);
+    expect(r.patternLocationIds).toEqual(["loc-1", "loc-2"]);
+    // «Что здесь» уходит в строку локации.
+    expect(bag.batchLocation.create.mock.calls[1][0].data.batchPatternId).toBe(
+      "pat-2",
+    );
+
+    const payload = bag.auditLog.create.mock.calls[0][0].data.payload;
+    expect(payload).toMatchObject({
+      stoneName: "Травертин Classic",
+      slabsTotal: 6,
+      areaTotalM2: 24.69,
+      patternCount: 2,
+      locationBlocks: ["A1", "A2"],
+    });
+    expect(payload.locations.map((l: { id: string }) => l.id)).toEqual([
+      "loc-1",
+      "loc-2",
+    ]);
+    expect(payload.patterns.map((p: { id: string }) => p.id)).toEqual([
+      "pat-1",
+      "pat-2",
+    ]);
   });
 });

@@ -15,6 +15,7 @@ import {
   parseQuantityField,
   parsePositiveInt,
   parsePositiveDecimal,
+  THICKNESS_REQUIRED_MSG,
 } from "@/lib/validators/intake";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { parseThicknessCm } from "@/lib/dimensions";
@@ -98,9 +99,15 @@ export async function submitBatchEdit(
   const widthMm = parseOptionalCm(str("widthMm"));
   if (widthMm === undefined) errors.widthMm = "Ширина, см — целое > 0 или пусто";
   // ТЗ №12 + решение владельца 2026-08-10: толщина ДРОБНАЯ (18 мм = 1,8 см).
+  // ТЗ №19 A3 — толщина обязательна при сохранении: однородная партия — на
+  // уровне партии; партия с узорами — в каждом узоре (ниже), партия может
+  // остаться пустой (как в приёмке).
+  const hasPatterns = all("patId").some((id) => id.trim() !== "");
   const thicknessMm = parseThicknessCm(str("thicknessMm"));
   if (thicknessMm === undefined) {
-    errors.thicknessMm = "Толщина, см — число > 0 (например 2 или 1,8) или пусто";
+    errors.thicknessMm = "Толщина, см — число > 0, например 2 или 1,8";
+  } else if (thicknessMm === null && !hasPatterns) {
+    errors.thicknessMm = THICKNESS_REQUIRED_MSG;
   }
 
   const arrivedAt = parseDateOnly(str("arrivedAt"));
@@ -160,8 +167,13 @@ export async function submitBatchEdit(
       errors[`pat-${i}-desc`] = "Описание узора обязательно";
     }
     // Толщина узор-подгруппы — тоже дробная (ТЗ №12).
+    // ТЗ №19 A3 — толщина узора обязательна.
     const th = parseThicknessCm(pTh[i] ?? "");
-    if (th === undefined) errors[`pat-${i}-th`] = "Толщина узора — см или пусто";
+    if (th === undefined) {
+      errors[`pat-${i}-th`] = "Толщина узора, см — число > 0, например 2 или 1,8";
+    } else if (th === null) {
+      errors[`pat-${i}-th`] = THICKNESS_REQUIRED_MSG;
+    }
     const len = parseOptionalCm(pLen[i] ?? "");
     if (len === undefined) errors[`pat-${i}-len`] = "Длина узора — см или пусто";
     const wid = parseOptionalCm(pWid[i] ?? "");

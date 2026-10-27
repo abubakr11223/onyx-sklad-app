@@ -44,7 +44,20 @@ export interface BatchOption {
   id: string;
   stoneName: string;
   arrived: string; // уже отформатированная дата
-  qty: string; // «40 плит / 220 м²»
+  qty: string; // «свободно 4 плит / 16,4 м²» — свободный, не принятый (ТЗ №19 B3)
+  /** Толщина однородной партии, см — подставляется в кусок. */
+  thicknessMm?: number | null;
+  /** ТЗ №19 B3 — узоры партии; есть → узор обязателен. */
+  patterns?: BatchPatternOption[];
+}
+
+/** ТЗ №19 B3 — узор как источник боя. */
+export interface BatchPatternOption {
+  id: string;
+  /** «ТЕСТ светлый 2см · 280×160×2 см · свободно 3 пл. / 13,4 м² · Блок A1» */
+  label: string;
+  thicknessMm: number | null;
+  hasFree: boolean;
 }
 
 /** ТЗ №7 §2 — блок из сетки склада для datalist-подсказки. */
@@ -122,11 +135,23 @@ export default function BreakForm({
   // CRIT-02 (ТЗ №4): все поля CONTROLLED (значения в state) — при ошибке
   // валидации данные НЕ слетают (как в IntakeForm, паттерн ТЗ №2 BUG-01).
   const [batchId, setBatchId] = useState("");
+  const [batchPatternId, setBatchPatternId] = useState("");
   const [slabId, setSlabId] = useState("");
   const [breakCause, setBreakCause] = useState("");
   const [rows, setRows] = useState<Record<number, PieceVals>>({
     0: emptyPiece(),
   });
+  // ТЗ №19 B3 — выбор узора/партии подставляет толщину во все куски
+  // (поле остаётся редактируемым: кусок может быть другой толщины).
+  const fillThickness = (t: number | null) => {
+    if (t == null) return;
+    const txt = String(t).replace(".", ",");
+    setRows((m) =>
+      Object.fromEntries(
+        Object.entries(m).map(([k, v]) => [k, { ...v, thickness: txt }]),
+      ),
+    );
+  };
   const setPiece =
     (id: number, key: keyof PieceVals) =>
     (ev: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -191,6 +216,7 @@ export default function BreakForm({
 
   const slabGroups = groupBy(slabs, (s) => s.stoneName);
   const batchGroups = groupBy(batches, (b) => b.stoneName);
+  const selectedBatch = batches.find((b) => b.id === batchId) ?? null;
 
   // soldPart edge + unknown keys: anything not on a mounted Field → banner.
   const leftovers = breakLeftoverItems(
@@ -331,7 +357,13 @@ export default function BreakForm({
                 name="batchId"
                 className={inputClass}
                 value={batchId}
-                onChange={(ev) => setBatchId(ev.target.value)}
+                onChange={(ev) => {
+                  setBatchId(ev.target.value);
+                  setBatchPatternId("");
+                  // ТЗ №19 B3 — толщина куска из партии (редактируемая).
+                  const b = batches.find((x) => x.id === ev.target.value);
+                  if (b && !b.patterns?.length) fillThickness(b.thicknessMm ?? null);
+                }}
                 aria-invalid={e.batchId ? true : undefined}
                 aria-describedby={e.batchId ? "batchId-error" : undefined}
               >
@@ -342,13 +374,38 @@ export default function BreakForm({
                   <optgroup key={stone} label={stone}>
                     {group.map((b) => (
                       <option key={b.id} value={b.id}>
-                        от {b.arrived} — {b.qty}
+                        {b.stoneName} · от {b.arrived} — {b.qty}
                       </option>
                     ))}
                   </optgroup>
                 ))}
               </select>
             </Field>
+            {/* ТЗ №19 B3 — смешанная партия: бой списывается из узора. */}
+            {(selectedBatch?.patterns?.length ?? 0) > 0 && (
+              <Field id="batchPatternId" label={<>Узор <Req /></>} error={e.batchPatternId}>
+                <select
+                  id="batchPatternId"
+                  name="batchPatternId"
+                  className={inputClass}
+                  value={batchPatternId}
+                  onChange={(ev) => {
+                    setBatchPatternId(ev.target.value);
+                    const pat = selectedBatch?.patterns?.find((p) => p.id === ev.target.value);
+                    fillThickness(pat?.thicknessMm ?? null);
+                  }}
+                >
+                  <option value="" disabled>
+                    — из какого узора бой —
+                  </option>
+                  {selectedBatch!.patterns!.map((p) => (
+                    <option key={p.id} value={p.id} disabled={!p.hasFree}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             {/* fixes0809 BUG-A: §3 always −1 free slab per direct piece — no
                 optional checkbox (was a lie). Honest copy only. */}
             <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">

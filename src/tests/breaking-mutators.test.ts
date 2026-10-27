@@ -23,6 +23,8 @@ const M = vi.hoisted(() => {
 const tx = {
   slab: { findUnique: M.slabFindUnique, updateMany: M.slabUpdateMany },
   batch: { findUnique: M.batchFindUnique },
+  // ТЗ №19 — однородная партия: узоров нет.
+  batchPattern: { findMany: async () => [] },
   piece: { create: M.pieceCreate },
   reservation: {
     findFirst: M.reservationFindFirst,

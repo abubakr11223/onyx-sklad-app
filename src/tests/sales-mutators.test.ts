@@ -31,6 +31,13 @@ const M = vi.hoisted(() => {
     // db.batchPattern (для полноты — sellPatternVolume не тестируем здесь)
     patternFindUnique: fn(),
     patternUpdate: fn(),
+    // ТЗ №19 — узоры/места (однородная партия: узоров нет, мест нет)
+    patternCount: fn(),
+    patternFindMany: fn(),
+    locationFindMany: fn(),
+    locationFindUnique: fn(),
+    locationUpdate: fn(),
+    shipmentLineFindMany: fn(),
     // TZ №9 — Debt (returnSale cancel; credit create)
     debtFindUnique: fn(),
     debtCreate: fn(),
@@ -63,7 +70,18 @@ const tx = {
     create: M.saleCreate,
     updateMany: M.saleUpdateMany,
   },
-  batchPattern: { findUnique: M.patternFindUnique, update: M.patternUpdate },
+  batchPattern: {
+    findUnique: M.patternFindUnique,
+    update: M.patternUpdate,
+    count: M.patternCount,
+    findMany: M.patternFindMany,
+  },
+  batchLocation: {
+    findMany: M.locationFindMany,
+    findUnique: M.locationFindUnique,
+    update: M.locationUpdate,
+  },
+  shipmentLine: { findMany: M.shipmentLineFindMany },
   debt: {
     findUnique: M.debtFindUnique,
     create: M.debtCreate,
@@ -97,6 +115,10 @@ beforeEach(() => {
   Object.values(M).forEach((f) => f.mockReset());
   // Разумные дефолты — actor OWNER, все updateMany возвращают {count:1}.
   M.userFindUnique.mockResolvedValue({ id: "mgr1", role: "MANAGER", isActive: true });
+  M.patternCount.mockResolvedValue(0);
+  M.patternFindMany.mockResolvedValue([]);
+  M.locationFindMany.mockResolvedValue([]);
+  M.shipmentLineFindMany.mockResolvedValue([]);
   M.slabUpdateMany.mockResolvedValue({ count: 1 });
   M.pieceUpdateMany.mockResolvedValue({ count: 1 });
   M.batchUpdateMany.mockResolvedValue({ count: 1 });

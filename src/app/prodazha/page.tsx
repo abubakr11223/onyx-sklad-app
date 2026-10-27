@@ -58,6 +58,12 @@ import {
   takeForCap,
 } from "@/lib/catalog-bounds";
 import { formatLocation } from "@/lib/locations";
+import {
+  formatLocationsShort,
+  formatSourceLine,
+  loadPatternStock,
+  patternsOfBatch,
+} from "@/lib/pattern-stock";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -75,7 +81,7 @@ export const dynamic = "force-dynamic";
  * счётчики партии, но в остатке узора она уже учтена (см. sales.ts).
  */
 export const PATTERNS_VOLUME_NOTE =
-  " · узоры показаны без учёта объёмных продаж и броней";
+  " · часть объёма продана до учёта по узорам — сверьте узоры в карточке камня";
 
 /**
  * Export — для unit-теста (page.tsx Next module; тест берёт чистую функцию).
@@ -334,7 +340,8 @@ export default async function ProdazhaPage({
   const now = new Date();
 
   // History + remainder aggregates are independent after stoneTypesRaw — one RTT.
-  const [salesPage, remainders, volReservations, volSamples] = await Promise.all([
+  const [salesPage, remainders, volReservations, volSamples, patternStock, batchLocs] =
+    await Promise.all([
     histFilters !== null
       ? fetchSaleHistoryPage(db, {
           filters: histFilters,
@@ -378,7 +385,27 @@ export default async function ProdazhaPage({
           select: { batchId: true, qtySlabs: true, qtyAreaM2: true },
         })
       : Promise.resolve([]),
+    // ТЗ №19 §D — остаток узора из единого расчёта (pattern-stock).
+    loadPatternStock(db, batchIdsForRemainders, now),
+    // ТЗ №19 B1 — места однородных партий («откуда брать»).
+    batchIdsForRemainders.length > 0
+      ? db.batchLocation.findMany({
+          where: { batchId: { in: batchIdsForRemainders } },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true, batchId: true, block: true, landmark: true, slabsHere: true },
+        })
+      : Promise.resolve([]),
   ]);
+  const locsByBatch = new Map<string, typeof batchLocs>();
+  for (const l of batchLocs) {
+    const list = locsByBatch.get(l.batchId) ?? [];
+    list.push(l);
+    locsByBatch.set(l.batchId, list);
+  }
+  const locationOption = (l: { id: string; block: string; landmark: string; slabsHere: number | null }) => ({
+    id: l.id,
+    label: `${formatLocation(l.block, l.landmark)}${l.slabsHere !== null ? ` · ${l.slabsHere} пл.` : ""}`,
+  });
 
   // batchId → строки (Decimal → number сразу, как в batch-remainders).
   const volResByBatch = new Map<
@@ -586,21 +613,25 @@ export default async function ProdazhaPage({
           (netSlabs !== null && netSlabs > 0) ||
           (netAreaM2 !== null && netAreaM2 > 0) ||
           myReservations.length > 0;
-        // ТЗ №3 — узоры партии с остатком (count − sold).
-        const patterns = b.patterns.map((pat) => {
-          const remSlabs = pat.slabsCount - pat.slabsSold;
-          const remArea = Number(pat.areaM2) - Number(pat.areaSoldM2);
-          return {
-            id: pat.id,
-            description: pat.description,
-            remainText: `осталось: ${remSlabs} плит · ${m2Fmt.format(remArea)} м²`,
-            hasFree: remSlabs > 0 || remArea > 0.0005,
-          };
-        });
-        // Продажа ИЗ узора инкрементит и счётчики партии (slabsSoldDirect /
-        // areaSoldDirectM2), и счётчики узора (см. src/lib/sales.ts). Такой
-        // объём в остатках узоров УЖЕ учтён — приписка про него была бы ложной.
-        // Поэтому берём только НЕузорную часть объёмных продаж партии.
+        // ТЗ №19 — узоры партии: «свободно» из единого расчёта (продажи,
+        // выделенные плиты, бой, брони и образцы узора), строка источника §B.
+        const patterns = patternsOfBatch(patternStock, b.id).map((ps) => ({
+          id: ps.id,
+          description: ps.description,
+          remainText: formatSourceLine({
+            lengthMm: ps.lengthMm,
+            widthMm: ps.widthMm,
+            thicknessMm: ps.thicknessMm,
+            slabsFree: ps.availableSlabs,
+            areaFreeM2: ps.availableAreaM2,
+            locationText: formatLocationsShort(ps.locations),
+          }),
+          hasFree: ps.availableSlabs > 0 || ps.availableAreaM2 > 0.0005,
+          locations: ps.locations
+            .filter((l) => l.slabsHere === null || l.slabsHere > 0)
+            .map(locationOption),
+        }));
+        // Объём, ушедший МИМО узоров (legacy до ТЗ №19), — честная приписка.
         const patternsSoldSlabs = b.patterns.reduce((s, p) => s + p.slabsSold, 0);
         const patternsSoldAreaM2 = b.patterns.reduce(
           (s, p) => s + Number(p.areaSoldM2),
@@ -613,8 +644,8 @@ export default async function ProdazhaPage({
             0,
             Number(b.areaSoldDirectM2) - patternsSoldAreaM2,
           ),
-          holdSlabs: holds.totalSlabs,
-          holdAreaM2: holds.totalAreaM2,
+          holdSlabs: 0,
+          holdAreaM2: 0,
         });
         return {
           id: b.id,
@@ -623,6 +654,9 @@ export default async function ProdazhaPage({
           needsCheck: b.needsCheck,
           hasFree,
           patterns,
+          locations: (locsByBatch.get(b.id) ?? [])
+            .filter((l) => l.slabsHere === null || l.slabsHere > 0)
+            .map(locationOption),
           myReservations,
         };
       });

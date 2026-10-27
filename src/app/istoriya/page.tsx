@@ -9,6 +9,11 @@
 // W8-B: архив продаж (фильтр + пагинация) живёт на /prodazha#sales — менеджер
 // видит свои, владелец — все. Здесь только явная ссылка (AuditLog ≠ SaleRecord).
 //
+// ТЗ №19 E2: строка показывает содержание — объект, количество, узор, локацию,
+// для правок «было → стало» (describeHistoryEntry). Имена камня/клиента/узора,
+// которых нет в payload, догружаются ПАКЕТНО: по одному findMany на тип
+// сущности для всей страницы (не N+1).
+//
 // Server component; force-dynamic — всегда актуальное состояние журнала.
 
 import type { Metadata } from "next";
@@ -20,7 +25,10 @@ import { roleLabel } from "@/lib/role-labels";
 import {
   actionLabelRu,
   actionVariant,
-  entityLabelRu,
+  collectHistoryRefs,
+  describeHistoryEntry,
+  type HistoryLookups,
+  type HistoryRow,
 } from "@/lib/history-labels";
 import type { Role } from "@/lib/permissions";
 import NoAccess from "@/components/NoAccess";
@@ -37,35 +45,152 @@ export const metadata: Metadata = {
 /** Сколько последних записей показываем (v1 — без пагинации, TZ §9). */
 const HISTORY_LIMIT = 100;
 
-/** Первое непустое строковое значение из payload по списку ключей. */
-function payloadString(payload: unknown, keys: string[]): string | null {
-  if (payload === null || typeof payload !== "object") return null;
-  const rec = payload as Record<string, unknown>;
-  for (const k of keys) {
-    const v = rec[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  return null;
-}
+const ids = (set: Set<string>) => [...set];
+const dec = (v: { toString(): string } | null | undefined): number | null =>
+  v == null ? null : Number(v.toString());
 
 /**
- * «Над чем» — читаемое описание объекта действия из payload (стабильных полей,
- * которые пишут действия) с откатом на тип+короткий id сущности. Пример:
- * «Травертин Classic», «Плита №2», «клиент Иван», «Партия #a1b2c3d4».
+ * Справочники для describeHistoryEntry: один запрос на тип сущности, все
+ * параллельно. Пустой набор id → запрос не делается.
  */
-function targetLabel(row: {
-  entityType: string;
-  entityId: string;
-  payload: unknown;
-}): string {
-  const stone = payloadString(row.payload, ["stoneName"]);
-  if (stone) return stone;
-  const slab = payloadString(row.payload, ["slabLabel"]);
-  if (slab) return slab;
-  const customer = payloadString(row.payload, ["customerName"]);
-  if (customer) return `клиент ${customer}`;
-  const entity = entityLabelRu(row.entityType);
-  return `${entity} #${row.entityId.slice(0, 8)}`;
+async function loadHistoryLookups(
+  rows: readonly HistoryRow[],
+): Promise<HistoryLookups> {
+  const r = collectHistoryRefs(rows);
+  const stone = { select: { stoneType: { select: { name: true } } } };
+  const [batches, slabs, pieces, patterns, clients, sales, locations, shipments, samples] =
+    await Promise.all([
+      r.batchIds.size
+        ? db.batch.findMany({
+            where: { id: { in: ids(r.batchIds) } },
+            select: { id: true, stoneType: { select: { name: true } } },
+          })
+        : [],
+      r.slabIds.size
+        ? db.slab.findMany({
+            where: { id: { in: ids(r.slabIds) } },
+            select: { id: true, label: true, stoneType: { select: { name: true } } },
+          })
+        : [],
+      r.pieceIds.size
+        ? db.piece.findMany({
+            where: { id: { in: ids(r.pieceIds) } },
+            select: { id: true, stoneType: { select: { name: true } } },
+          })
+        : [],
+      r.patternIds.size
+        ? db.batchPattern.findMany({
+            where: { id: { in: ids(r.patternIds) } },
+            select: { id: true, description: true },
+          })
+        : [],
+      r.clientIds.size
+        ? db.client.findMany({
+            where: { id: { in: ids(r.clientIds) } },
+            select: { id: true, name: true },
+          })
+        : [],
+      r.saleIds.size
+        ? db.saleRecord.findMany({
+            where: { id: { in: ids(r.saleIds) } },
+            select: { id: true, customerName: true },
+          })
+        : [],
+      r.locationIds.size
+        ? db.batchLocation.findMany({
+            where: { id: { in: ids(r.locationIds) } },
+            select: { id: true, block: true, landmark: true, batch: stone },
+          })
+        : [],
+      r.shipmentIds.size
+        ? db.shipment.findMany({
+            where: { id: { in: ids(r.shipmentIds) } },
+            select: {
+              id: true,
+              client: { select: { name: true } },
+              saleRecord: { select: { customerName: true } },
+              lines: {
+                select: {
+                  id: true,
+                  locationSnapshot: true,
+                  batchPattern: { select: { description: true } },
+                  batch: stone,
+                  slab: { select: { label: true, stoneType: { select: { name: true } } } },
+                  piece: { select: { stoneType: { select: { name: true } } } },
+                },
+              },
+            },
+          })
+        : [],
+      r.sampleIds.size
+        ? db.sample.findMany({
+            where: { id: { in: ids(r.sampleIds) } },
+            select: {
+              id: true,
+              qtySlabs: true,
+              qtyAreaM2: true,
+              client: { select: { name: true } },
+              batchPattern: { select: { description: true } },
+              batch: stone,
+              slab: { select: { label: true, stoneType: { select: { name: true } } } },
+              piece: { select: { stoneType: { select: { name: true } } } },
+            },
+          })
+        : [],
+    ]);
+
+  return {
+    batches: new Map(batches.map((b) => [b.id, { stoneName: b.stoneType.name }])),
+    slabs: new Map(
+      slabs.map((s) => [s.id, { stoneName: s.stoneType.name, label: s.label }]),
+    ),
+    pieces: new Map(pieces.map((p) => [p.id, { stoneName: p.stoneType.name }])),
+    patterns: new Map(patterns.map((p) => [p.id, p.description])),
+    clients: new Map(clients.map((c) => [c.id, c.name])),
+    sales: new Map(sales.map((s) => [s.id, { customerName: s.customerName }])),
+    locations: new Map(
+      locations.map((l) => [
+        l.id,
+        { stoneName: l.batch.stoneType.name, block: l.block, landmark: l.landmark },
+      ]),
+    ),
+    shipments: new Map(
+      shipments.map((s) => [
+        s.id,
+        {
+          clientName: s.client?.name ?? s.saleRecord?.customerName ?? null,
+          lines: s.lines.map((l) => ({
+            id: l.id,
+            stoneName:
+              l.batch?.stoneType.name ??
+              l.slab?.stoneType.name ??
+              l.piece?.stoneType.name ??
+              null,
+            patternLabel: l.batchPattern?.description ?? null,
+            location: l.locationSnapshot,
+            unitLabel: l.slab?.label ?? (l.piece ? "Бой/остаток" : null),
+          })),
+        },
+      ]),
+    ),
+    samples: new Map(
+      samples.map((s) => [
+        s.id,
+        {
+          stoneName:
+            s.batch?.stoneType.name ??
+            s.slab?.stoneType.name ??
+            s.piece?.stoneType.name ??
+            null,
+          clientName: s.client.name,
+          unitLabel: s.slab?.label ?? (s.piece ? "Бой/остаток" : null),
+          patternLabel: s.batchPattern?.description ?? null,
+          qtySlabs: s.qtySlabs,
+          qtyAreaM2: dec(s.qtyAreaM2),
+        },
+      ]),
+    ),
+  };
 }
 
 export default async function IstoriyaPage() {
@@ -94,6 +219,7 @@ export default async function IstoriyaPage() {
       user: { select: { name: true, role: true } },
     },
   });
+  const lookups = await loadHistoryLookups(entries);
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -124,6 +250,7 @@ export default async function IstoriyaPage() {
       ) : (
         <ul className="space-y-2">
           {entries.map((e) => {
+            const d = describeHistoryEntry(e, lookups);
             const actor = e.user
               ? `${e.user.name} · ${roleLabel(e.user.role as Role)}`
               : "Система";
@@ -136,10 +263,17 @@ export default async function IstoriyaPage() {
                   <Badge variant={actionVariant(e.action)}>
                     {actionLabelRu(e.action)}
                   </Badge>
-                  <span className="font-medium text-ink">
-                    {targetLabel(e)}
-                  </span>
+                  <span className="font-medium text-ink">{d.summary}</span>
                 </div>
+                {d.changes.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-ink/75">
+                    {d.changes.map((c, i) => (
+                      <li key={i} className="tabular-nums">
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <div className="mt-1 text-ink/60">
                   {actor} · {formatTashkentDateTime(e.createdAt)}
                 </div>
