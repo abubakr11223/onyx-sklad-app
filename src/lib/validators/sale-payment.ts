@@ -3,9 +3,18 @@
 // (PaymentMethod / Currency) — binding из CONTRACT.md.
 
 import { MAX_DECIMAL_14_2, parseBoundedDecimal } from "@/lib/decimal";
+import {
+  checkSalePayments,
+  isPayMethod,
+  summaryMethod,
+  type PaymentRowInput,
+} from "@/lib/payment-rows";
 
-/** CONTRACT: enum PaymentMethod { CASH CARD CREDIT } */
-export type PaymentMethod = "CASH" | "CARD" | "CREDIT";
+/**
+ * CONTRACT: enum PaymentMethod { CASH CARD CREDIT TRANSFER }. ТЗ №20 A:
+ * CREDIT — только сводный «всё в долг» (платежей нет); TRANSFER — перечисление.
+ */
+export type PaymentMethod = "CASH" | "CARD" | "CREDIT" | "TRANSFER";
 
 /** CONTRACT: enum Currency { UZS USD } */
 export type SaleCurrency = "UZS" | "USD";
@@ -14,6 +23,7 @@ export const PAYMENT_METHODS: readonly PaymentMethod[] = [
   "CASH",
   "CARD",
   "CREDIT",
+  "TRANSFER",
 ] as const;
 
 export const SALE_CURRENCIES: readonly SaleCurrency[] = ["UZS", "USD"] as const;
@@ -23,6 +33,7 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   CASH: "Наличные",
   CARD: "Карта",
   CREDIT: "В долг",
+  TRANSFER: "Перечисление",
 };
 
 export const CURRENCY_LABEL: Record<SaleCurrency, string> = {
@@ -43,6 +54,11 @@ export interface SalePaymentInput {
   debtDueDate: string;
   /** произвольный текст, только смысл при CREDIT */
   debtComment: string;
+  /**
+   * ТЗ №20 A — JSON строк «Оплата сейчас»: [{"amount":5000000,"method":"CASH"}].
+   * Задано → способ и долг считаются по ним (долг = цена − Σ).
+   */
+  payments?: string;
 }
 
 export interface ValidSalePayment {
@@ -55,6 +71,8 @@ export interface ValidSalePayment {
   /** null если не CREDIT или дата не указана. */
   debtDueDate: Date | null;
   debtComment: string | null;
+  /** ТЗ №20 A — строки оплаты (null = старый путь «один способ»). */
+  payments: PaymentRowInput[] | null;
 }
 
 export type SalePaymentErrors = Record<string, string>;
@@ -87,9 +105,32 @@ function isCurrency(s: string): s is SaleCurrency {
 export function validateSalePayment(input: SalePaymentInput): SalePaymentResult {
   const errors: SalePaymentErrors = {};
 
+  // ТЗ №20 A — строки оплаты.
+  const paymentsRaw = (input.payments ?? "").trim();
+  let payments: PaymentRowInput[] | null = null;
+  if (paymentsRaw) {
+    try {
+      const arr = JSON.parse(paymentsRaw) as unknown;
+      if (!Array.isArray(arr)) throw new Error("not array");
+      payments = arr.map((r) => {
+        const o = r as { amount?: unknown; method?: unknown };
+        const amount = Number(o.amount);
+        const method = String(o.method ?? "");
+        if (!Number.isFinite(amount) || amount < 0 || !isPayMethod(method)) {
+          throw new Error("bad row");
+        }
+        return { amount, method };
+      });
+    } catch {
+      errors.payments = "Проверьте строки оплаты: сумма и способ";
+    }
+  }
+
   const methodRaw = (input.paymentMethod ?? "").trim();
   let paymentMethod: PaymentMethod | null = null;
-  if (!methodRaw) {
+  if (paymentsRaw) {
+    // способ — сводный, считается ниже по строкам
+  } else if (!methodRaw) {
     errors.paymentMethod = "Выберите способ оплаты";
   } else if (!isPaymentMethod(methodRaw)) {
     errors.paymentMethod = "Неизвестный способ оплаты — обновите страницу";
@@ -135,7 +176,21 @@ export function validateSalePayment(input: SalePaymentInput): SalePaymentResult 
   let debtDueDate: Date | null = null;
   let debtComment: string | null = null;
 
-  if (paymentMethod === "CREDIT") {
+  // ТЗ №20 A — «оплачено больше цены — не даём сохранить»; долг = остаток.
+  let debtCents = 0;
+  if (payments !== null && price !== null) {
+    const check = checkSalePayments(price, payments);
+    if (!check.ok) {
+      errors.payments = check.message;
+    } else {
+      payments = check.rows;
+      debtCents = check.debtCents;
+      paymentMethod = summaryMethod(check.rows);
+    }
+  }
+  const hasDebt = paymentMethod === "CREDIT" || debtCents > 0;
+
+  if (hasDebt) {
     if (!contact) {
       errors.customerContact =
         "Для продажи в долг укажите телефон клиента";
@@ -171,6 +226,7 @@ export function validateSalePayment(input: SalePaymentInput): SalePaymentResult 
       customerContact,
       debtDueDate,
       debtComment,
+      payments,
     },
   };
 }

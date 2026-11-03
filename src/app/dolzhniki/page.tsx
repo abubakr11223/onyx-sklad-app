@@ -5,7 +5,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
-import { formatTashkentDate } from "@/lib/datetime";
+import { formatTashkentDate, todayTashkentISO } from "@/lib/datetime";
+import { PAY_METHODS, PAY_METHOD_LABEL, type PayMethod } from "@/lib/payment-rows";
 import {
   debtSummary,
   listDebts,
@@ -27,7 +28,7 @@ import Badge from "@/components/ui/Badge";
 import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import Field, { inputClass } from "@/components/ui/Field";
-import { repayDebtAction } from "./actions";
+import { addDebtPaymentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -48,43 +49,47 @@ const ERR_RU: Record<string, string> = {
   inactive: "Долг не активен.",
   date: "Укажите корректную дату погашения.",
   fail: "Не удалось погасить долг.",
+  amount: "Сумма платежа — положительное число, не больше остатка долга.",
 };
 
 const OK_RU: Record<string, string> = {
   repaid: "Долг погашен.",
+  paid: "Платёж внесён.",
+  clientpaid: "Платёж клиента разложен по долгам.",
 };
 
 async function loadRevenueByMethod(): Promise<RevenueByMethodRow[]> {
-  // §9.2 — выручка по способам оплаты (owner analytics). Bounded groupBy.
-  const groups = await db.saleRecord.groupBy({
-    by: ["paymentMethod", "currency"],
-    where: {
-      returnedAt: null,
-      paymentMethod: { not: null },
-      currency: { not: null },
-      price: { not: null },
-    },
-    _sum: { price: true },
+  // ТЗ №20 A §2.5 — выручка по способам считается по ПЛАТЕЖАМ (50/50 — две
+  // строки по 5 млн), возвраты денег клиенту вычитаются. Bounded groupBy.
+  const groups = await db.payment.groupBy({
+    by: ["method", "currency", "kind"],
+    _sum: { amount: true },
     _count: { _all: true },
   });
 
-  const out: RevenueByMethodRow[] = [];
+  const acc = new Map<string, { method: PaymentMethodKey; currency: "UZS" | "USD"; cents: number; count: number }>();
   for (const g of groups) {
-    if (!g.paymentMethod || !g.currency) continue;
-    const method = g.paymentMethod as PaymentMethodKey;
-    if (method !== "CASH" && method !== "CARD" && method !== "CREDIT") continue;
+    const method = g.method as PaymentMethodKey;
+    if (method !== "CASH" && method !== "CARD" && method !== "TRANSFER") continue;
     const cur = g.currency as "UZS" | "USD";
-    if (cur !== "UZS" && cur !== "USD") continue;
-    const sum = g._sum.price;
-    if (!sum || g._count._all <= 0) continue;
-    out.push({
-      method,
-      currency: cur,
-      amount: sum.toString(),
-      count: g._count._all,
-    });
+    const key = `${method}:${cur}`;
+    const row = acc.get(key) ?? { method, currency: cur, cents: 0, count: 0 };
+    const cents = Math.round(Number(g._sum.amount ?? 0) * 100);
+    if (g.kind === "REFUND") row.cents -= cents;
+    else {
+      row.cents += cents;
+      row.count += g._count._all;
+    }
+    acc.set(key, row);
   }
-  return out;
+  return [...acc.values()]
+    .filter((r) => r.count > 0 && r.cents > 0)
+    .map((r) => ({
+      method: r.method,
+      currency: r.currency,
+      amount: (r.cents / 100).toFixed(2),
+      count: r.count,
+    }));
 }
 
 function DebtCard({
@@ -129,22 +134,68 @@ function DebtCard({
       {d.comment && (
         <p className="mt-1 text-xs text-ink/50">Комментарий: {d.comment}</p>
       )}
+      {/* ТЗ №20 A §2.3 — история платежей по долгу и остаток. */}
+      {d.payments.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-xs text-ink/60">
+          {d.payments.map((p, i) => (
+            <li key={i} className="tnum">
+              {formatTashkentDate(p.paidAt)} — {formatDebtMoney(p.amount, d.currency)}{" "}
+              {PAY_METHOD_LABEL[p.method as PayMethod]?.toLowerCase() ?? p.method} ({p.receivedByName})
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.status === "ACTIVE" && d.payments.length > 0 && (
+        <p className="tnum mt-1 font-semibold text-ink">
+          Остаток: {formatDebtMoney(d.remaining, d.currency)}
+        </p>
+      )}
       {tab === "active" && d.status === "ACTIVE" && (
-        <form action={repayDebtAction} className="mt-3 flex flex-wrap items-end gap-2">
+        <form action={addDebtPaymentAction} className="mt-3 flex flex-wrap items-end gap-2">
           <input type="hidden" name="debtId" value={d.id} />
           <input type="hidden" name="returnTo" value={returnTo} />
           <label className="flex flex-col gap-0.5 text-xs text-ink/60">
-            Дата погашения
+            Сумма
+            {/* по умолчанию весь остаток — полное погашение в один клик */}
+            <input
+              name="amount"
+              inputMode="decimal"
+              defaultValue={Number(d.remaining).toString()}
+              className={inputClass + " tnum min-h-10 w-36 text-sm"}
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-0.5 text-xs text-ink/60">
+            Способ
+            <select name="method" className={inputClass + " min-h-10 text-sm"} defaultValue="CASH">
+              {PAY_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {PAY_METHOD_LABEL[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-0.5 text-xs text-ink/60">
+            Дата
             <input
               type="date"
-              name="repaidAt"
+              name="paidAt"
+              defaultValue={todayTashkentISO()}
               className={inputClass + " min-h-10 w-40 text-sm"}
               required
             />
           </label>
           <Button type="submit" size="sm" variant="primary">
-            Погасить долг
+            Внести
           </Button>
+          {d.clientId && (
+            <Link
+              href={`/dolzhniki/klient/${d.clientId}?currency=${d.currency}`}
+              className="text-xs text-gold-deep underline"
+            >
+              Внести платёж клиента
+            </Link>
+          )}
         </form>
       )}
       {tab === "repaid" && d.repaidAt && (

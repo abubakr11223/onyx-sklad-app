@@ -167,6 +167,16 @@ export interface DebtListItem {
   comment: string | null;
   repaidAt: Date | null;
   repaidAmount: string | null;
+  /** ТЗ №20 A — остаток долга: amount − внесено (decimal string). */
+  remaining: string;
+  /** ТЗ №20 A — платежи по долгу (история «25.10 — $100 наличные (Owner)»). */
+  payments: {
+    amount: string;
+    method: string;
+    paidAt: Date;
+    receivedByName: string;
+  }[];
+  clientId: string | null;
   createdAt: Date;
   overdue: boolean;
   sale: {
@@ -598,6 +608,17 @@ export async function listDebts(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: pageSize + 1,
     include: {
+      payments: {
+        where: { kind: "PAYMENT" },
+        orderBy: { paidAt: "asc" },
+        take: 50,
+        select: {
+          amount: true,
+          method: true,
+          paidAt: true,
+          receivedBy: { select: { name: true } },
+        },
+      },
       saleRecord: {
         select: {
           customerName: true,
@@ -631,6 +652,15 @@ export async function listDebts(
     comment: d.comment,
     repaidAt: d.repaidAt,
     repaidAmount: decimalString(d.repaidAmount),
+    remaining: d.amount.minus(d.repaidAmount ?? 0).toFixed(2),
+    // payments может отсутствовать у старых тест-моков select'а
+    payments: (d.payments ?? []).map((p) => ({
+      amount: p.amount.toString(),
+      method: p.method,
+      paidAt: p.paidAt,
+      receivedByName: p.receivedBy.name,
+    })),
+    clientId: d.clientId,
     createdAt: d.createdAt,
     overdue: isDebtOverdue(d, now),
     sale: {
@@ -664,6 +694,7 @@ export async function debtSummary(
     where: { status: "ACTIVE" },
     select: {
       amount: true,
+      repaidAmount: true,
       currency: true,
       dueDate: true,
       saleRecord: { select: { customerName: true, customerContact: true } },
@@ -682,7 +713,9 @@ export async function debtSummary(
       amount: new PrismaNS.Decimal(0),
       count: 0,
     };
-    prev.amount = prev.amount.plus(d.amount);
+    // ТЗ №20 A — долг гасится по частям: в итогах — остаток, не исходная сумма.
+    const left = d.amount.minus(d.repaidAmount ?? 0);
+    prev.amount = prev.amount.plus(left);
     prev.count += 1;
     activeMap.set(cur, prev);
 
@@ -694,7 +727,7 @@ export async function debtSummary(
         amount: new PrismaNS.Decimal(0),
         count: 0,
       };
-      o.amount = o.amount.plus(d.amount);
+      o.amount = o.amount.plus(left);
       o.count += 1;
       overdueMap.set(cur, o);
     }

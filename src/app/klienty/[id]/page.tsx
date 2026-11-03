@@ -226,6 +226,19 @@ export default async function ClientCardPage({
         <h2 className="mb-2 text-lg font-semibold text-ink">
           Активные долги ({card.debts.filter((d) => d.status === "ACTIVE").length})
         </h2>
+        {/* ТЗ №20 A §2.4 — одна сумма клиента на несколько долгов. */}
+        {(caps.canSeeDebts || caps.canSell) &&
+          (["UZS", "USD"] as const)
+            .filter((c) => card.debts.some((d) => d.status === "ACTIVE" && d.currency === c))
+            .map((c) => (
+              <Link
+                key={c}
+                href={`/dolzhniki/klient/${card.id}?currency=${c}`}
+                className="mb-2 mr-3 inline-block text-sm font-semibold text-gold-deep underline"
+              >
+                Внести платёж клиента ({c === "UZS" ? "сум" : "$"})
+              </Link>
+            ))}
         {card.debts.filter((d) => d.status === "ACTIVE").length === 0 ? (
           <p className="text-sm text-ink/55">Активных долгов нет.</p>
         ) : (

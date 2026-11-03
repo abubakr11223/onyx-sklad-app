@@ -13,10 +13,11 @@ import { formatTashkentDateTime } from "@/lib/datetime";
 import { listShowroom, MAX_SHOWROOM_PAGE } from "@/lib/showroom";
 import { computeFreeRemainder } from "@/lib/inventory";
 import { formatGabarit } from "@/lib/dimensions";
+import { qrPrintHref } from "@/lib/qr";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import Field, { inputClass } from "@/components/ui/Field";
 import {
@@ -54,6 +55,26 @@ export default async function ShourumPage({
   const actorId = await currentActorId();
 
   const items = await listShowroom(db, { take: MAX_SHOWROOM_PAGE });
+
+  // ТЗ №20 G — коды ONX-… единиц на витрине (для показа и печати QR).
+  // Отдельным запросом по id, чтобы не трогать общий listShowroom.
+  const slabIds = items.filter((it) => it.targetType === "SLAB").map((it) => it.unitId);
+  const pieceIds = items.filter((it) => it.targetType === "PIECE").map((it) => it.unitId);
+  const [slabCodes, pieceCodes] = await Promise.all([
+    slabIds.length > 0
+      ? db.slab.findMany({ where: { id: { in: slabIds } }, select: { id: true, code: true } })
+      : Promise.resolve([]),
+    pieceIds.length > 0
+      ? db.piece.findMany({ where: { id: { in: pieceIds } }, select: { id: true, code: true } })
+      : Promise.resolve([]),
+  ]);
+  const unitCode = new Map<string, string>([
+    ...slabCodes.map((r) => [`SLAB:${r.id}`, r.code] as [string, string]),
+    ...pieceCodes.map((r) => [`PIECE:${r.id}`, r.code] as [string, string]),
+  ]);
+  const codeOf = (it: { targetType: string; unitId: string }) =>
+    unitCode.get(`${it.targetType}:${it.unitId}`) ?? null;
+  const allShowroomCodes = items.map(codeOf).filter((c): c is string => c !== null);
 
   // Bounded picker: AVAILABLE units for «Отправить в шоу-рум».
   // ТЗ №16 §4 — плюс партии: основной источник, поимённых плит на складе почти
@@ -359,15 +380,27 @@ export default async function ShourumPage({
         </Card>
       )}
 
-      <h2 className="mb-2 text-base font-semibold text-ink">
-        Сейчас в шоу-руме
-        {items.length > 0 && (
-          <span className="ml-2 text-sm font-normal text-ink/55">
-            {items.length}
-            {items.length >= MAX_SHOWROOM_PAGE ? "+" : ""}
-          </span>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold text-ink">
+          Сейчас в шоу-руме
+          {items.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-ink/55">
+              {items.length}
+              {items.length >= MAX_SHOWROOM_PAGE ? "+" : ""}
+            </span>
+          )}
+        </h2>
+        {/* ТЗ №20 G (§8.3) — пакетная печать этикеток для витрины. */}
+        {caps.canPrintQr && allShowroomCodes.length > 0 && (
+          <Link
+            href={qrPrintHref(allShowroomCodes, "a4")}
+            target="_blank"
+            className={buttonClass("secondary", "sm")}
+          >
+            QR для всех на витрине
+          </Link>
         )}
-      </h2>
+      </div>
 
       {items.length === 0 ? (
         <Card>
@@ -381,6 +414,11 @@ export default async function ShourumPage({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-ink">{it.stoneLabel}</p>
+                    {codeOf(it) && (
+                      <p className="tnum text-xs font-semibold tracking-wide text-ink/60">
+                        {codeOf(it)}
+                      </p>
+                    )}
                     <Badge variant="warning">в шоу-руме</Badge>
                     {it.standNote && (
                       <p className="mt-1 text-sm text-ink">
@@ -392,6 +430,15 @@ export default async function ShourumPage({
                       {it.sentByName} · {formatTashkentDateTime(it.sentAt)}
                     </p>
                   </div>
+                  {caps.canPrintQr && codeOf(it) && (
+                    <Link
+                      href={qrPrintHref([codeOf(it)!])}
+                      target="_blank"
+                      className={buttonClass("secondary", "sm")}
+                    >
+                      QR
+                    </Link>
+                  )}
                 </div>
 
                 <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">

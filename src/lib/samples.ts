@@ -2,6 +2,7 @@
 // Double-issue: UnitStatus SAMPLE + partial unique on Sample (DB).
 // Free stock: SAMPLE units not AVAILABLE → excluded from search like RESERVED.
 
+import { PaymentError, settleSaleInTx } from "./payments";
 import { checkPatternAvailable, loadPatternStock, patternsOfBatch } from "./pattern-stock";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -9,7 +10,6 @@ import { lockBatchForUpdate } from "@/lib/batch-lock";
 import { computeFreeRemainder } from "@/lib/inventory";
 import { checkVolumeSaleGuard } from "@/lib/sales";
 import {
-  createDebtForSale,
   DebtLogicError,
 } from "@/lib/debts";
 import { MAX_DECIMAL_14_2 } from "@/lib/decimal";
@@ -750,7 +750,7 @@ export interface SellSampleInput {
   sampleId: string;
   managerId: string;
   price: number;
-  paymentMethod: "CASH" | "CARD" | "CREDIT";
+  paymentMethod: "CASH" | "CARD" | "TRANSFER" | "CREDIT";
   currency: MoneyCurrency;
   debtDueDate?: Date | null;
   debtComment?: string | null;
@@ -904,25 +904,30 @@ export async function sellSample(
         select: { id: true },
       });
 
-      if (input.paymentMethod === "CREDIT") {
-        try {
-          await createDebtForSale(tx, {
-            saleRecordId: sale.id,
-            amount: priceStr,
-            currency: input.currency,
-            dueDate: input.debtDueDate ?? null,
-            comment: input.debtComment ?? null,
-            clientId: sample.clientId,
+      // ТЗ №20 A — платёж на всю цену (или долг целиком при «в долг»).
+      try {
+        await settleSaleInTx(tx, {
+          saleId: sale.id,
+          price: Number(priceStr),
+          currency: input.currency,
+          rows:
+            input.paymentMethod === "CREDIT"
+              ? []
+              : [{ amount: Number(priceStr), method: input.paymentMethod }],
+          receivedById: actor.id,
+          paidAt: now,
+          debtDueDate: input.debtDueDate ?? null,
+          debtComment: input.debtComment ?? null,
+          clientId: sample.clientId,
+        });
+      } catch (e) {
+        if (e instanceof DebtLogicError || e instanceof PaymentError) {
+          throw new SampleLogicError({
+            code: "INVALID_INPUT",
+            message: e instanceof PaymentError ? e.message : e.debtError.message,
           });
-        } catch (e) {
-          if (e instanceof DebtLogicError) {
-            throw new SampleLogicError({
-              code: "INVALID_INPUT",
-              message: e.debtError.message,
-            });
-          }
-          throw e;
         }
+        throw e;
       }
 
       const sUpd = await tx.sample.updateMany({

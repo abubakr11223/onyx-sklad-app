@@ -45,6 +45,7 @@ import { formatSaleListPrice } from "./format-sale-price";
 import {
   deriveShipmentStatus,
   shipmentStatusLabelRu,
+  formatShipmentPlan,
 } from "@/lib/shipments";
 import {
   CATALOG_BATCHES_CAP,
@@ -928,6 +929,20 @@ export default async function ProdazhaPage({
                     {s.manager.name} · {formatTashkentDateTime(s.soldAt)}
                     {priceStr !== null && <> · {priceStr}</>}
                   </div>
+                  {/* ТЗ №20 B — «план 05.11, 10:00 · выдано 05.11, 10:40». */}
+                  {s.shipment && (s.shipment.plannedAt || s.shipment.deliveryMode) && (
+                    <div className="text-ink/60">
+                      план{" "}
+                      {formatShipmentPlan({
+                        plannedAt: s.shipment.plannedAt ?? null,
+                        plannedHasTime: s.shipment.plannedHasTime === true,
+                        deliveryMode: s.shipment.deliveryMode ?? null,
+                      })}
+                      {s.shipment.completedAt && (
+                        <> · выдано {formatTashkentDateTime(s.shipment.completedAt)}</>
+                      )}
+                    </div>
+                  )}
                   {returned && s.returnedAt && (
                     <div className="mt-1 text-danger/80">
                       Возврат оформлен:{" "}

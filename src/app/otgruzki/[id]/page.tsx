@@ -116,7 +116,14 @@ export default async function ShipmentDocPage({
           <tbody>
             {doc.lines.map((l, i) => (
               <tr key={i} className="border-b border-line/60 align-top">
-                <td className="py-2 pr-2 font-medium">{l.stoneName}</td>
+                <td className="py-2 pr-2 font-medium">
+                  {l.stoneName}
+                  {l.code && (
+                    <span className="tnum block text-xs font-normal text-ink/55">
+                      {l.code}
+                    </span>
+                  )}
+                </td>
                 <td className="py-2 pr-2">
                   {l.what}
                   {l.locationSnapshot && (

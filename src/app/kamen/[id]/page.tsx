@@ -51,13 +51,14 @@ import {
   PATTERN_STATUS_RU,
 } from "@/lib/pattern-status";
 import { sortNeedsCheckLast } from "@/lib/checks";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
 import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
 import { formatLocation } from "@/lib/locations";
+import { qrPrintHref } from "@/lib/qr";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,28 @@ const PIECE_KIND_RU: Record<string, string> = {
 const inlineInput =
   "min-h-11 rounded-field border border-ink/20 bg-paper px-2 text-sm text-ink " +
   "placeholder:text-ink/40 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/40";
+
+// ТЗ №20 G (§8.1) — постоянный код ONX-… рядом с названием записи.
+function CodeTag({ code }: { code: string }) {
+  return (
+    <span className="tnum ml-1.5 inline-block rounded-field border border-line px-1.5 align-middle text-xs font-semibold tracking-wide text-ink/70">
+      {code}
+    </span>
+  );
+}
+
+// ТЗ №20 G (§8.3) — кнопка «QR»: открывает печать этикетки в новой вкладке.
+function QrLink({ codes, label = "QR" }: { codes: string[]; label?: string }) {
+  return (
+    <Link
+      href={qrPrintHref(codes)}
+      target="_blank"
+      className="ml-2 inline-flex min-h-11 items-center align-middle text-sm font-medium text-gold-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+    >
+      {label}
+    </Link>
+  );
+}
 
 type ParamValue = string | string[] | undefined;
 
@@ -333,6 +356,8 @@ export default async function KamenPage({
         color: true,
         // §6.7 — публичная QR-ссылка шоу-рума (/q/[slug]).
         qrSlug: true,
+        // ТЗ №20 G — постоянный код ONX-… (вид, партии, узоры, плиты, бой).
+        code: true,
         basePrice: true,
         // §5.8: закупочная цена — видна только canSeePurchasePrice (OWNER;
         // менеджер — по явному разрешению). Тянем всегда, показываем по caps ниже.
@@ -345,6 +370,7 @@ export default async function KamenPage({
           orderBy: { arrivedAt: "asc" },
           select: {
             id: true,
+            code: true,
             arrivedAt: true,
             needsCheck: true,
             slabsTotal: true,
@@ -371,6 +397,7 @@ export default async function KamenPage({
               orderBy: { createdAt: "asc" },
               select: {
                 id: true,
+                code: true,
                 description: true,
                 thicknessMm: true,
                 lengthMm: true,
@@ -391,6 +418,7 @@ export default async function KamenPage({
               where: { status: "AVAILABLE" },
               select: {
                 id: true,
+                code: true,
                 label: true,
                 lengthMm: true,
                 widthMm: true,
@@ -415,6 +443,7 @@ export default async function KamenPage({
           where: { status: "AVAILABLE" },
           select: {
             id: true,
+            code: true,
             kind: true,
             boundingLengthMm: true,
             boundingWidthMm: true,
@@ -648,6 +677,8 @@ export default async function KamenPage({
             <p className="mt-1 text-sm text-ink/60">
               {st.rockType}
               {st.color && <> · {st.color}</>}
+              <CodeTag code={st.code} />
+              {caps.canPrintQr && <QrLink codes={[st.code]} />}
             </p>
           </div>
         </div>
@@ -965,6 +996,7 @@ export default async function KamenPage({
                 availableSlabs.map((s) => (
                   <li key={s.id}>
                     <span className="font-semibold text-ink">{s.label}</span>
+                    <CodeTag code={s.code} />
                     {s.lengthMm !== null && s.widthMm !== null && (
                       <> · {s.lengthMm}×{s.widthMm} см</>
                     )}
@@ -977,6 +1009,7 @@ export default async function KamenPage({
                     )}{" "}
                     · {formatLocation(s.block, s.landmark)}
                     {s.needsCheck && <NeedsCheckBadge />}
+                    {caps.canPrintQr && <QrLink codes={[s.code]} />}
                     {/* §6.1 шаг 8: клиент выбрал плиту №N → продажа с preselect.
                         ?slab=<id> — /prodazha server-side tekshiradi (SOLD/чужая
                         бронь/yo'q). Faqat canSell + !needsCheck (AVAILABLE filter). */}
@@ -1060,7 +1093,8 @@ export default async function KamenPage({
                 <li key={p.id}>
                   <span className="font-semibold text-ink">
                     {PIECE_KIND_RU[p.kind] ?? p.kind}
-                  </span>{" "}
+                  </span>
+                  <CodeTag code={p.code} />{" "}
                   · Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
                   {p.thicknessMm !== null && (
                     <> · толщина {formatThickness(thicknessToNumber(p.thicknessMm))} см</>
@@ -1070,6 +1104,7 @@ export default async function KamenPage({
                   )}{" "}
                   · {formatLocation(p.block, p.landmark)}
                   {p.needsCheck && <NeedsCheckBadge />}
+                  {caps.canPrintQr && <QrLink codes={[p.code]} />}
                   {/* SK-2: пометку «проверить» переключает только склад. */}
                   {caps.canManageWarehouse && (
                     <NeedsCheckToggle
@@ -1172,7 +1207,9 @@ export default async function KamenPage({
               >
                 <div className="font-semibold text-ink">
                   Партия от {formatTashkentDate(b.arrivedAt)}
+                  <CodeTag code={b.code} />
                   {b.needsCheck && <NeedsCheckBadge />}
+                  {caps.canPrintQr && <QrLink codes={[b.code]} />}
                   {/* SK-2: пометку «проверить» переключает только склад. */}
                   {caps.canManageWarehouse && (
                     <NeedsCheckToggle
@@ -1332,9 +1369,21 @@ export default async function KamenPage({
                     batchFree.slabsFree === null ? 0 : batchFree.slabsFree - sumFree;
                   return (
                   <div className="mt-3 border-t border-line pt-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
-                      Узоры в партии
-                    </p>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
+                        Узоры в партии
+                      </p>
+                      {/* ТЗ №20 G — пакетная печать: этикетка на каждый узор. */}
+                      {caps.canPrintQr && (
+                        <Link
+                          href={qrPrintHref(b.patterns.map((x) => x.code), "a4")}
+                          target="_blank"
+                          className={buttonClass("secondary", "sm")}
+                        >
+                          QR для всех узоров
+                        </Link>
+                      )}
+                    </div>
                     {unassigned !== 0 && (
                       <p className="mb-2 text-sm text-warning">
                         Остаток партии и сумма узоров расходятся на {Math.abs(unassigned)} пл.
@@ -1386,6 +1435,8 @@ export default async function KamenPage({
                             <p className="font-semibold text-ink">
                               {pat.description}
                             </p>
+                            <CodeTag code={pat.code} />
+                            {caps.canPrintQr && <QrLink codes={[pat.code]} />}
                             {pat.lengthMm != null && pat.widthMm != null && (
                               <span className="text-xs text-ink/55">
                                 {pat.lengthMm}×{pat.widthMm}

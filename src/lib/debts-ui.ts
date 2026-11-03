@@ -177,7 +177,7 @@ export function applyKeysetPage<T>(
   };
 }
 
-export type PaymentMethodKey = "CASH" | "CARD" | "CREDIT";
+export type PaymentMethodKey = "CASH" | "CARD" | "TRANSFER" | "CREDIT";
 
 export type RevenueByMethodRow = {
   method: PaymentMethodKey;
@@ -196,6 +196,7 @@ export function formatRevenueByMethod(
   const METHOD_RU: Record<PaymentMethodKey, string> = {
     CASH: "Наличные",
     CARD: "Карта",
+    TRANSFER: "Перечисление",
     CREDIT: "В долг",
   };
   const byMethod = new Map<PaymentMethodKey, RevenueByMethodRow[]>();
@@ -206,7 +207,7 @@ export function formatRevenueByMethod(
     byMethod.set(r.method, list);
   }
   const out: Array<{ methodRu: string; line: string }> = [];
-  for (const m of ["CASH", "CARD", "CREDIT"] as PaymentMethodKey[]) {
+  for (const m of ["CASH", "CARD", "TRANSFER", "CREDIT"] as PaymentMethodKey[]) {
     const list = byMethod.get(m);
     if (!list || list.length === 0) continue;
     const line = list

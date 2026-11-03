@@ -10,10 +10,22 @@ import {
   parseTashkentDayEnd,
   parseTashkentDayStart,
 } from "@/lib/sale-history";
+import {
+  formatTashkentDate,
+  formatTashkentDateTime,
+  todayTashkentISO,
+} from "@/lib/datetime";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
 export type DerivedShipmentStatus = "OPEN" | "PARTIAL" | "DONE" | "CANCELLED";
+
+/** ТЗ №20 B — плановая отгрузка. */
+export type ShipmentPlanInput = {
+  plannedAt: Date | null;
+  plannedHasTime: boolean;
+  deliveryMode: "PICKUP" | "DELIVERY" | null;
+};
 
 export type ShipmentLineInput = {
   targetType: "SLAB" | "PIECE" | "BATCH_VOLUME";
@@ -143,6 +155,8 @@ export async function createSaleShipment(
     clientId?: string | null;
     siteId?: string | null;
     note?: string | null;
+    /** ТЗ №20 B — когда клиент заберёт и как (необязательно). */
+    plan?: ShipmentPlanInput | null;
   } & (
     | { line: ShipmentLineInput; lines?: never }
     /** ТЗ №19 C1 — продажа затронула два узора/места → две строки в одной задаче. */
@@ -158,6 +172,9 @@ export async function createSaleShipment(
       clientId: args.clientId?.trim() || null,
       siteId: args.siteId?.trim() || null,
       note: args.note?.trim() || null,
+      plannedAt: args.plan?.plannedAt ?? null,
+      plannedHasTime: args.plan?.plannedHasTime ?? false,
+      deliveryMode: args.plan?.deliveryMode ?? null,
       lines:
         lines.length === 1
           ? { create: lineCreateData(lines[0]) }
@@ -539,6 +556,12 @@ export type ShipmentListItem = {
   note: string | null;
   /** ТЗ №15 §8.5 — клиент ждёт: складчик берёт такую задачу первой. */
   isUrgent: boolean;
+  /** ТЗ №20 B — когда клиент заберёт (null = как можно скорее). */
+  plannedAt: Date | null;
+  plannedHasTime: boolean;
+  deliveryMode: "PICKUP" | "DELIVERY" | null;
+  /** ТЗ №20 B — плановая дата наступила, а отгрузки нет. */
+  planOverdue: boolean;
   locationSnapshot: string | null;
   qtyOrderedSlabs: number | null;
   qtyOrderedAreaM2: number | null;
@@ -580,6 +603,8 @@ export type ShipmentFilters = {
   to?: Date | null;
   /** Только владелец/склад: сузить до одного менеджера. */
   managerId?: string;
+  /** ТЗ №20 B — «На сегодня»: плановая дата отгрузки — сегодня (Ташкент). */
+  today?: boolean;
 };
 
 /**
@@ -616,6 +641,14 @@ export function shipmentsListWhere(args: {
   // Тип задачи — сужает список kind'ов, не расширяет.
   if (f.kind === "SALE" || f.kind === "SAMPLE" || f.kind === "SHOWROOM") {
     where.kind = f.kind;
+  }
+
+  // ТЗ №20 B — «На сегодня»: задачи с плановой датой сегодня.
+  if (f.today) {
+    const day = parseTashkentDayStart(todayTashkentISO());
+    if (day) {
+      where.plannedAt = { gte: day, lt: new Date(day.getTime() + 24 * 60 * 60 * 1000) };
+    }
   }
 
   // Менеджер — только для тех, кто и так видит все (иначе обход области).
@@ -668,6 +701,7 @@ export function shipmentFiltersFromSearchParams(sp: {
   from?: string;
   to?: string;
   manager?: string;
+  today?: string;
 }): ShipmentFilters {
   const kindRaw = (sp.kind ?? "").trim().toUpperCase();
   const kind: ShipmentKindFilter =
@@ -680,13 +714,14 @@ export function shipmentFiltersFromSearchParams(sp: {
     from: parseTashkentDayStart(sp.from ?? ""),
     to: parseTashkentDayEnd(sp.to ?? ""),
     managerId: (sp.manager ?? "").trim(),
+    today: (sp.today ?? "") === "1",
   };
 }
 
 /** True когда хоть один фильтр реально сужает список (для подписи «сброс»). */
 export function shipmentFiltersActive(f: ShipmentFilters): boolean {
   return Boolean(
-    f.client?.trim() || f.kind || f.from || f.to || f.managerId?.trim(),
+    f.client?.trim() || f.kind || f.from || f.to || f.managerId?.trim() || f.today,
   );
 }
 
@@ -755,6 +790,9 @@ const shipmentListSelect = {
   // отгрузки, но в очередь не выбирался, поэтому складчик его не видел.
   note: true,
   isUrgent: true,
+  plannedAt: true,
+  plannedHasTime: true,
+  deliveryMode: true,
   lines: {
     select: {
       id: true,
@@ -893,6 +931,15 @@ function mapShipmentListRow(r: ShipmentListRow): ShipmentListItem {
     gabarit: gabarit && gabarit !== "—" ? gabarit : null,
     note: r.note ?? null,
     isUrgent: r.isUrgent === true,
+    plannedAt: r.plannedAt ?? null,
+    plannedHasTime: r.plannedHasTime === true,
+    deliveryMode: r.deliveryMode ?? null,
+    planOverdue: isPlanOverdue({
+      plannedAt: r.plannedAt ?? null,
+      plannedHasTime: r.plannedHasTime === true,
+      completedAt: r.completedAt,
+      cancelledAt: r.cancelledAt,
+    }),
     locationSnapshot: line0?.locationSnapshot ?? null,
     qtyOrderedSlabs: line0?.qtyOrderedSlabs ?? null,
     qtyOrderedAreaM2:
@@ -949,6 +996,56 @@ const SHIPMENTS_ORDER_BY: Prisma.ShipmentOrderByWithRelationInput[] = [
   { createdAt: "desc" },
   { id: "desc" },
 ];
+
+/**
+ * ТЗ №20 B — очередь «К отгрузке»: срочные, затем по плановой дате (ближайшие
+ * сверху), затем задачи без даты. Очередь открытых задач небольшая — она
+ * отдаётся одной страницей (MAX_SHIPMENTS_PAGE) без курсора; архив листается
+ * прежним keyset'ом.
+ */
+const OPEN_QUEUE_ORDER_BY: Prisma.ShipmentOrderByWithRelationInput[] = [
+  { isUrgent: "desc" },
+  { plannedAt: { sort: "asc", nulls: "last" } },
+  { createdAt: "desc" },
+  { id: "desc" },
+];
+
+/** ТЗ №20 B — плановое время прошло, а задача не выдана и не отменена. */
+export function isPlanOverdue(
+  s: {
+    plannedAt: Date | null;
+    plannedHasTime: boolean;
+    completedAt: Date | null;
+    cancelledAt: Date | null;
+  },
+  now: Date = new Date(),
+): boolean {
+  if (!s.plannedAt || s.completedAt || s.cancelledAt) return false;
+  // Только дата — просрочка с началом следующего дня (по Ташкенту дата уже в plannedAt).
+  const deadline = s.plannedHasTime
+    ? s.plannedAt.getTime()
+    : s.plannedAt.getTime() + 24 * 60 * 60 * 1000;
+  return now.getTime() > deadline;
+}
+
+/** «Заберут: 05.11, 10:00 · самовывоз» (null — даты нет). */
+export function formatShipmentPlan(s: {
+  plannedAt: Date | null;
+  plannedHasTime: boolean;
+  deliveryMode: "PICKUP" | "DELIVERY" | null;
+}): string | null {
+  if (!s.plannedAt && !s.deliveryMode) return null;
+  const parts: string[] = [];
+  if (s.plannedAt) {
+    parts.push(
+      s.plannedHasTime
+        ? formatTashkentDateTime(s.plannedAt)
+        : formatTashkentDate(s.plannedAt),
+    );
+  }
+  if (s.deliveryMode) parts.push(s.deliveryMode === "PICKUP" ? "самовывоз" : "доставка на объект");
+  return parts.join(" · ");
+}
 
 /** Bounded list. SALE + SAMPLE + SHOWROOM. tab=open → not cancelled & not completed; archive → completed/cancelled. */
 export async function listShipments(
@@ -1104,6 +1201,22 @@ export async function listShipmentsPage(
     cursor,
   });
 
+  if (args.tab === "open") {
+    // ТЗ №20 B — очередь целиком (без курсора), по плановой дате.
+    const rows = await database.shipment.findMany({
+      where: shipmentsListWhere({
+        canSeeAll: args.canSeeAll,
+        actorId: args.actorId,
+        tab: "open",
+        filters: args.filters,
+      }),
+      orderBy: OPEN_QUEUE_ORDER_BY,
+      take: MAX_SHIPMENTS_PAGE,
+      select: shipmentListSelect,
+    });
+    return { items: rows.map(mapShipmentListRow), nextCursor: null };
+  }
+
   const rows = await database.shipment.findMany({
     where,
     orderBy: SHIPMENTS_ORDER_BY,
@@ -1134,6 +1247,8 @@ export type ShipmentDocLine = {
   qtyOrdered: string | null;
   qtyShipped: string | null;
   locationSnapshot: string | null;
+  /** ТЗ №20 G — постоянный код (плита / бой / узор, иначе партия). */
+  code: string | null;
 };
 
 export type ShipmentDocument = {
@@ -1226,6 +1341,7 @@ export async function loadShipmentDocument(
               lengthMm: true,
               widthMm: true,
               thicknessMm: true,
+              code: true,
               stoneType: { select: { name: true } },
             },
           },
@@ -1235,6 +1351,7 @@ export async function loadShipmentDocument(
               boundingLengthMm: true,
               boundingWidthMm: true,
               thicknessMm: true,
+              code: true,
               stoneType: { select: { name: true } },
             },
           },
@@ -1243,12 +1360,13 @@ export async function loadShipmentDocument(
               lengthMm: true,
               widthMm: true,
               thicknessMm: true,
+              code: true,
               stoneType: { select: { name: true } },
             },
           },
           // ТЗ №19 C1 — узор строки в накладной.
           batchPattern: {
-            select: { description: true, lengthMm: true, widthMm: true, thicknessMm: true },
+            select: { description: true, lengthMm: true, widthMm: true, thicknessMm: true, code: true },
           },
         },
       },
@@ -1287,7 +1405,9 @@ export async function loadShipmentDocument(
     let stoneName = "—";
     let what = "";
     let gabarit: string | null = null;
+    let code: string | null = null;
     if (l.slab) {
+      code = l.slab.code ?? null;
       stoneName = l.slab.stoneType.name;
       what = l.slab.label;
       gabarit = formatGabarit(
@@ -1298,6 +1418,7 @@ export async function loadShipmentDocument(
     } else if (l.piece) {
       stoneName = l.piece.stoneType.name;
       what = l.piece.kind === "BROKEN" ? "бой" : "остаток";
+      code = l.piece.code ?? null;
       gabarit = formatGabarit(
         l.piece.boundingLengthMm,
         l.piece.boundingWidthMm,
@@ -1307,6 +1428,7 @@ export async function loadShipmentDocument(
       stoneName = l.batch.stoneType.name;
       what = l.batchPattern ? `узор «${l.batchPattern.description}»` : "объём из партии";
       gabarit = volumeLineGabarit({ batchPattern: l.batchPattern, batch: l.batch });
+      code = l.batchPattern?.code ?? l.batch.code ?? null;
     }
     return {
       stoneName,
@@ -1321,6 +1443,7 @@ export async function loadShipmentDocument(
         Number(l.qtyShippedAreaM2.toString()),
       ),
       locationSnapshot: l.locationSnapshot,
+      code,
     };
   });
 

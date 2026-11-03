@@ -143,7 +143,28 @@ enum ShipmentKind {
 enum PaymentMethod {
   CASH // наличные
   CARD // карта
-  CREDIT // в долг → создаётся Debt
+  /// Legacy (до ТЗ №20): «в долг». Новые продажи: долг = цена − Σ платежей,
+  /// у Payment.method этого значения не бывает.
+  CREDIT
+  TRANSFER // ТЗ №20 A — перечисление (банковский перевод компании)
+}
+
+/// ТЗ №20 A — приход денег от клиента или возврат денег клиенту.
+enum PaymentKind {
+  PAYMENT
+  REFUND
+}
+
+/// ТЗ №20 B — как клиент заберёт камень.
+enum ShipmentDeliveryMode {
+  PICKUP // самовывоз
+  DELIVERY // доставка на объект
+}
+
+/// ТЗ №20 C — единица порога минимального остатка.
+enum StockUnit {
+  SLABS
+  AREA_M2
 }
 
 /// TZ №9 — валюта продажи / долга. UZS и USD НИКОГДА не суммируются.
@@ -212,7 +233,15 @@ model StoneType {
   purchasePrice  Decimal? @db.Decimal(12, 2) // FAQAT Owner + ruxsatli Manager
   textureFileUrl String?
   qrSlug         String   @unique
+  /// ТЗ №20 G — постоянный код «ONX-XXXXX» (QR-этикетка). Генерирует БД
+  /// (onx_new_code(), уникален по всем пяти таблицам), никогда не меняется.
+  code           String   @unique @default(dbgenerated("onx_new_code()"))
   isArchived     Boolean  @default(false)
+  /// ТЗ №20 C — порог «Заканчивается» по виду в целом (null = не следим).
+  minStockQty    Decimal? @db.Decimal(12, 3)
+  minStockUnit   StockUnit?
+  /// ТЗ №20 C — сейчас ниже порога и сигнал уже отправлен (сброс — выше порога).
+  lowStockAlertedAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -256,6 +285,8 @@ model Batch {
   /// Decimal(5,1): на складе есть 18 мм = 1,8 см (решение владельца 2026-08-10).
   thicknessMm      Decimal? @db.Decimal(5, 1)
   needsCheck       Boolean  @default(false)
+  /// ТЗ №20 G — постоянный код партии (не меняется при правке/выделении плит).
+  code             String   @unique @default(dbgenerated("onx_new_code()"))
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -297,6 +328,8 @@ model BatchPattern {
   // синхронно инкрементит И эти счётчики, И batch.slabsSoldDirect (единый остаток).
   slabsSold   Int      @default(0)
   areaSoldM2  Decimal  @default(0) @db.Decimal(12, 3)
+  /// ТЗ №20 G — постоянный код узора.
+  code        String   @unique @default(dbgenerated("onx_new_code()"))
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -362,6 +395,8 @@ model Slab {
   landmark        String
   needsCheck      Boolean    @default(false)
   photoRequestId  String? // qaysi fotozapros natijasida ajratilgan
+  /// ТЗ №20 G — постоянный код плиты (свой, не код партии).
+  code            String     @unique @default(dbgenerated("onx_new_code()"))
   /// ТЗ №19 — из какого узора выделена плита (NULL = однородная партия / legacy).
   batchPatternId  String?
   separatedById   String
@@ -419,6 +454,8 @@ model Piece {
   block            String
   landmark         String
   needsCheck       Boolean    @default(false)
+  /// ТЗ №20 G — постоянный код боя/остатка.
+  code             String     @unique @default(dbgenerated("onx_new_code()"))
   createdById      String
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
@@ -527,6 +564,7 @@ model User {
   photosTaken           Photo[]
   auditLogs             AuditLog[]
   sales                 SaleRecord[]
+  paymentsReceived      Payment[]
   leadsCreated          Lead[]         @relation("LeadCreatedBy")
   leadsAssigned         Lead[]         @relation("LeadAssignedManager")
   clientsCreated        Client[]       @relation("ClientManager")
@@ -821,6 +859,8 @@ model SaleRecord {
   client       Client?       @relation(fields: [clientId], references: [id], onDelete: Restrict)
   site         Site?         @relation(fields: [siteId], references: [id], onDelete: Restrict)
   debt         Debt?
+  /// ТЗ №20 A — платежи по продаже (оплата при продаже + погашения долга + возвраты денег).
+  payments     Payment[]
   sampleFrom   Sample?
   /// TZ №15 — at most one shipment task per sale (1:1).
   shipment     Shipment?
@@ -854,6 +894,11 @@ model Shipment {
   /// эту задачу первой. Обычный флаг, а не отдельный статус: срочность не
   /// меняет жизненный цикл отгрузки, только порядок в очереди.
   isUrgent     Boolean      @default(false)
+  /// ТЗ №20 B — когда клиент заберёт (null = как можно скорее).
+  plannedAt    DateTime?
+  /// ТЗ №20 B — в plannedAt задано и время (иначе только дата).
+  plannedHasTime Boolean    @default(false)
+  deliveryMode ShipmentDeliveryMode?
   createdAt    DateTime     @default(now())
   /// Set when every line is fully shipped (derived DONE).
   completedAt  DateTime?
@@ -873,6 +918,7 @@ model Shipment {
   @@index([cancelledAt, completedAt, createdAt])
   @@index([managerId, createdAt])
   @@index([kind, createdAt])
+  @@index([plannedAt])
 }
 
 /// TZ №15 Slice 3 — metadata for a unit currently (or historically) on a display stand.
@@ -953,6 +999,10 @@ model Debt {
   repaidAt      DateTime?
   /// Reserved for future partial repayment (§6). Full repay sets = amount.
   repaidAmount  Decimal?   @db.Decimal(14, 2)
+  /// ТЗ №20 D — напоминание «завтра срок» уже отправлено.
+  remindedDueAt DateTime?
+  /// ТЗ №20 D — последний отправленный порог просрочки (дни: 1 / 7 / 30), 0 = не было.
+  overdueRemindDay Int     @default(0)
   /// TZ №10+11 — denormalized link for client card debts. null = legacy / no Client.
   /// Source of truth for customer text remains SaleRecord; this speeds client-card queries.
   clientId      String?
@@ -961,6 +1011,7 @@ model Debt {
 
   saleRecord SaleRecord @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
   client     Client?    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  payments   Payment[]
 
   @@index([status, dueDate])
   @@index([status, createdAt])
@@ -1127,4 +1178,33 @@ model WarehouseLandmark {
 
   @@unique([blockId, number])
   @@index([blockId])
+}
+
+/// ТЗ №20 A — платёж по продаже. Долг по продаже = цена − Σ PAYMENT + Σ REFUND
+/// не выше цены (валюта платежа = валюта продажи, смешанных валют нет).
+model Payment {
+  id           String        @id @default(cuid())
+  saleRecordId String
+  /// Платёж в погашение долга (после продажи); null = оплата при оформлении.
+  debtId       String?
+  kind         PaymentKind   @default(PAYMENT)
+  amount       Decimal       @db.Decimal(14, 2)
+  currency     Currency
+  /// CASH | CARD | TRANSFER (CREDIT не бывает).
+  method       PaymentMethod
+  paidAt       DateTime
+  receivedById String
+  comment      String?
+  /// ТЗ №20 2.4 — одна сумма клиента, разложенная по нескольким долгам.
+  clientPaymentGroup String?
+  createdAt    DateTime      @default(now())
+
+  saleRecord SaleRecord @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
+  debt       Debt?      @relation(fields: [debtId], references: [id], onDelete: SetNull)
+  receivedBy User       @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+
+  @@index([saleRecordId])
+  @@index([debtId])
+  @@index([paidAt, currency])
+  @@index([receivedById, paidAt])
 }

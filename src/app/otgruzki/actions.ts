@@ -140,3 +140,60 @@ export async function toggleShipmentUrgentAction(
   revalidatePath("/otgruzki");
   redirect("/otgruzki?ok=urgent");
 }
+
+/**
+ * ТЗ №20 B — менеджер меняет плановую дату / способ отгрузки после продажи
+ * (свои продажи; владелец — любые). Изменение пишется в «Историю».
+ */
+export async function updateShipmentPlanAction(formData: FormData): Promise<void> {
+  const caps = await getCapabilities();
+  const actorId = await currentActorId();
+  if (!caps.canSell || !actorId) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Дату отгрузки меняет менеджер"));
+  }
+  const shipmentId = String(formData.get("shipmentId") ?? "").trim();
+  const date = String(formData.get("plannedDate") ?? "").trim();
+  const time = String(formData.get("plannedTime") ?? "").trim();
+  const modeRaw = String(formData.get("deliveryMode") ?? "");
+  let plannedAt: Date | null = null;
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || (time && !/^\d{2}:\d{2}$/.test(time))) {
+      redirect("/otgruzki?err=" + encodeURIComponent("Неверная дата или время"));
+    }
+    plannedAt = new Date(`${date}T${time || "00:00"}:00+05:00`);
+  }
+  const deliveryMode = modeRaw === "PICKUP" || modeRaw === "DELIVERY" ? modeRaw : null;
+  const where = caps.canSeeAllClients
+    ? { id: shipmentId }
+    : { id: shipmentId, managerId: actorId! };
+  const before = await db.shipment.findFirst({
+    where,
+    select: { id: true, plannedAt: true, plannedHasTime: true, deliveryMode: true },
+  });
+  if (!before) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Отгрузка не найдена"));
+  }
+  await db.$transaction([
+    db.shipment.update({
+      where: { id: before!.id },
+      data: { plannedAt, plannedHasTime: Boolean(plannedAt && time), deliveryMode },
+    }),
+    db.auditLog.create({
+      data: {
+        userId: actorId!,
+        action: "ADJUSTMENT",
+        entityType: "Shipment",
+        entityId: before!.id,
+        payload: {
+          kind: "shipment.plan",
+          changes: [
+            { field: "plannedAt", old: before!.plannedAt?.toISOString() ?? null, new: plannedAt?.toISOString() ?? null },
+            { field: "deliveryMode", old: before!.deliveryMode, new: deliveryMode },
+          ],
+        },
+      },
+    }),
+  ]);
+  revalidatePath("/otgruzki");
+  redirect("/otgruzki?ok=plan");
+}

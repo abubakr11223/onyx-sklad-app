@@ -26,6 +26,9 @@ function item(over: Partial<DebtListItem> & { id: string }): DebtListItem {
     comment: over.comment ?? null,
     repaidAt: over.repaidAt ?? null,
     repaidAmount: over.repaidAmount ?? null,
+    remaining: over.remaining ?? over.amount ?? "1000.00",
+    payments: over.payments ?? [],
+    clientId: over.clientId ?? null,
     createdAt: over.createdAt ?? NOW,
     overdue: over.overdue ?? false,
     sale: over.sale ?? {

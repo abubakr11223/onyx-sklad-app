@@ -32,6 +32,7 @@ const tx = {
   reservation: { updateMany: M.reservationUpdateMany },
   saleRecord: { create: M.saleCreate },
   debt: { create: M.debtCreate },
+  payment: { create: async () => ({}) }, // ТЗ №20 A
   shipment: { create: M.shipmentCreate, updateMany: M.shipmentUpdateMany },
   showroomPlacement: {
     findFirst: M.placementFindFirst,

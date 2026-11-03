@@ -15,6 +15,7 @@ import type {
 import { encodeShapeDraft } from "@/lib/singan";
 import { capabilitiesFor, type Role } from "@/lib/permissions";
 import type { SeparateSlabInput } from "@/lib/slab-separation";
+import { normalizeStoneCode, type StoneCodeCard } from "@/lib/stone-code";
 
 // ───────────────────────── Document image format control ─────────────────────────
 //
@@ -326,6 +327,14 @@ export interface WebhookDeps {
    * Default: releaseTelegramUpdateId. Never throws.
    */
   releaseTelegramUpdate(updateId: number): Promise<boolean>;
+  /**
+   * ТЗ №20 G (§8.4) — сотрудник прислал код «ONX-7K3QD» → сводка камня.
+   * Inject: route → stone-code.loadStoneCodeCard; тесты — mock. Необязателен:
+   * без него код обрабатывается как обычный текст (подсказка).
+   */
+  lookupStoneCode?(code: string): Promise<StoneCodeCard | null>;
+  /** База ссылки на карточку (PUBLIC_BASE_URL, lib/qr.publicBaseUrl). */
+  stoneCodeBaseUrl?: string;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -418,7 +427,26 @@ const MSG_EDITED_MEDIA_IGNORED =
   "Изменение сообщения не обрабатывается — отправьте новое фото отдельным сообщением.";
 const MSG_UNKNOWN_HELP =
   "Onyx bot: отправьте фото по заданию (лучше ответом/reply на сообщение бота). " +
-  "/start — привязка номера. /login — вход на сайт. /singan — битый камень.";
+  "/start — привязка номера. /login — вход на сайт. /singan — битый камень. " +
+  "Код с этикетки (ONX-…) — карточка камня.";
+
+// ТЗ №20 G (§8.4) — ответы на код камня.
+const MSG_CODE_NOT_STAFF =
+  "Поиск по коду доступен сотрудникам. Отправьте /start, чтобы привязать номер.";
+const MSG_CODE_NOT_FOUND = (code: string) =>
+  `Код ${code} не найден. Проверьте символы на этикетке.`;
+
+/** Ответ бота по коду: название, наличие, локация, ссылка. Export — unit-test. */
+export function stoneCodeReply(card: StoneCodeCard, baseUrl: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return [
+    `${card.title}`,
+    `${card.kindLabel} · ${card.code}`,
+    `Наличие: ${card.availability}`,
+    `Локация: ${card.location}`,
+    `${base}/k/${card.code}`,
+  ].join("\n");
+}
 
 /** Bare-foto 2+ PENDING ro'yxati (batch/tosh nomi + lokatsiya). Export — unit-test. */
 export function buildPhotoAmbiguousMessage(
@@ -653,6 +681,16 @@ export async function handleUpdate(
       return;
     }
 
+    // 3b) ТЗ №20 G (§8.4) — код камня «ONX-7K3QD» (или ссылка /k/ONX-…).
+    //     Только с префиксом ONX: обычное слово из 5 букв кодом не считается.
+    if (typeof message.text === "string" && deps.lookupStoneCode) {
+      const code = normalizeStoneCode(message.text, { requirePrefix: true });
+      if (code) {
+        await handleStoneCode(chatId, code, deps);
+        return;
+      }
+    }
+
     // 4) /start buyrug'i → kontakt so'rash klaviaturasi.
     if (typeof message.text === "string" && isStartCommand(message.text)) {
       await deps.sendMessage(chatId, MSG_ASK_CONTACT, {
@@ -679,6 +717,37 @@ export async function handleUpdate(
     // Webhook doim 200 qaytishi uchun xatoni yutamiz.
     console.error("[telegram-webhook] handleUpdate xatosi:", err);
   }
+}
+
+/**
+ * ТЗ №20 G (§8.4) — сводка камня по коду. Только привязанный активный
+ * сотрудник (печать QR / наличие и локации — не для партнёра, §15).
+ */
+async function handleStoneCode(
+  chatId: number,
+  code: string,
+  deps: WebhookDeps,
+): Promise<void> {
+  const user = await deps.db.user.findFirst({
+    where: { telegramId: String(chatId), isActive: true },
+    select: { id: true, role: true },
+  });
+  if (
+    !user ||
+    !capabilitiesFor(user.role as Role, { canSeePurchasePrice: false }).canPrintQr
+  ) {
+    await deps.sendMessage(chatId, MSG_CODE_NOT_STAFF);
+    return;
+  }
+  const card = await deps.lookupStoneCode!(code);
+  if (!card) {
+    await deps.sendMessage(chatId, MSG_CODE_NOT_FOUND(code));
+    return;
+  }
+  await deps.sendMessage(
+    chatId,
+    stoneCodeReply(card, deps.stoneCodeBaseUrl || deps.appBaseUrl),
+  );
 }
 
 /**

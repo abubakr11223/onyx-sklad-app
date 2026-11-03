@@ -32,6 +32,7 @@ describe("validateSalePayment — happy paths", () => {
       customerContact: null,
       debtDueDate: null,
       debtComment: null,
+      payments: null, // ТЗ №20 A — без строк оплаты: старый путь «один способ»
     });
   });
 
@@ -257,5 +258,55 @@ describe("validateSalePayment — несколько ошибок сразу", (
     if (r.ok) return;
     expect(r.errors.paymentMethod).toBeTruthy();
     expect(r.errors.price).toBeTruthy();
+  });
+});
+
+describe("ТЗ №20 A — строки оплаты в форме продажи", () => {
+  const base = {
+    paymentMethod: "",
+    currency: "UZS",
+    price: "10000000",
+    customerContact: "+998901112233",
+    debtDueDate: "",
+    debtComment: "",
+  };
+  it("5 млн наличные + 5 млн карта → без долга, способ — сводный", () => {
+    const r = validateSalePayment({
+      ...base,
+      payments: JSON.stringify([
+        { amount: 5000000, method: "CASH" },
+        { amount: 5000000, method: "CARD" },
+      ]),
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.payments).toHaveLength(2);
+    expect(r.data.debtDueDate).toBeNull();
+  });
+  it("оплачено меньше цены → срок долга сохраняется, телефон обязателен", () => {
+    const r = validateSalePayment({
+      ...base,
+      customerContact: "",
+      debtDueDate: "2026-12-01",
+      payments: JSON.stringify([{ amount: 100, method: "CASH" }]),
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.customerContact).toBeTruthy();
+  });
+  it("оплачено больше цены → не сохраняем", () => {
+    const r = validateSalePayment({
+      ...base,
+      payments: JSON.stringify([{ amount: 10000001, method: "TRANSFER" }]),
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.payments).toMatch(/больше цены/);
+  });
+  it("оплачено 0 → вся продажа в долг (CREDIT)", () => {
+    const r = validateSalePayment({ ...base, payments: "[]" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.paymentMethod).toBe("CREDIT");
   });
 });

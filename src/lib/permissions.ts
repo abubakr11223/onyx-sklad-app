@@ -135,6 +135,11 @@ export interface Capabilities {
    * зав. складом: иначе справочник снова начнёт расти из приёмки.
    */
   canEditWarehouseMap: boolean;
+  /**
+   * ТЗ №20 G (§8.3, §15) — печать QR-этикеток. Весь персонал склада и продаж:
+   * OWNER / MANAGER / WAREHOUSE / WAREHOUSE_LEAD. PARTNER — нет.
+   */
+  canPrintQr: boolean;
 }
 
 /**
@@ -164,6 +169,7 @@ export interface Capabilities {
  * | canSeeAllClients         | true  | false            | false     | false   |
  * | canEditBatchQuantity     | true  | false            | LEAD only | false   |
  * | canEditWarehouseMap      | true  | false            | LEAD only | false   |
+ * | canPrintQr               | true  | true             | true      | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -198,6 +204,7 @@ export const DENY_ALL: Capabilities = {
   canSendToShowroom: false,
   canEditBatchQuantity: false,
   canEditWarehouseMap: false,
+  canPrintQr: false,
 };
 
 export function capabilitiesFor(
@@ -229,6 +236,7 @@ export function capabilitiesFor(
         canSendToShowroom: true,
         canEditBatchQuantity: true, // владелец — всегда
         canEditWarehouseMap: true, // ТЗ №17 §6
+        canPrintQr: true, // ТЗ №20 G
       };
     case "MANAGER":
       return {
@@ -256,6 +264,7 @@ export function capabilitiesFor(
         canSendToShowroom: true,
         canEditBatchQuantity: false, // менеджер не трогает складской учёт
         canEditWarehouseMap: false,
+        canPrintQr: true, // ТЗ №20 G — этикетки печатает и продажа
       };
     case "WAREHOUSE":
     case "WAREHOUSE_LEAD":
@@ -288,6 +297,7 @@ export function capabilitiesFor(
         canEditBatchQuantity: role === "WAREHOUSE_LEAD",
         // ТЗ №17 §6 — карту размечает зав. складом, обычный складчик — нет.
         canEditWarehouseMap: role === "WAREHOUSE_LEAD",
+        canPrintQr: true, // ТЗ №20 G — складчик клеит этикетки
       };
     case "PARTNER":
       return {
@@ -313,6 +323,7 @@ export function capabilitiesFor(
         canSendToShowroom: false,
         canEditBatchQuantity: false,
         canEditWarehouseMap: false,
+        canPrintQr: false, // ТЗ №20 §15 — партнёр QR не печатает
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

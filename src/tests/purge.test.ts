@@ -235,6 +235,13 @@ function makeFakePurgeDb(seed: {
         return { count: countOf("saleRecord", 0) };
       },
     },
+    payment: {
+      count: async () => countOf("payment", 0),
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "payment", op: "deleteMany", where });
+        return { count: countOf("payment", 0) };
+      },
+    },
     debt: {
       count: async () => countOf("debt", 0),
       deleteMany: async ({ where } = {}) => {

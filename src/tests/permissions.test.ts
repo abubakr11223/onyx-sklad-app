@@ -29,6 +29,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSendToShowroom: true,
     canEditBatchQuantity: true,
     canEditWarehouseMap: true,
+    canPrintQr: true, // ТЗ №20 G
   },
   MANAGER: {
     canSeePrices: true,
@@ -53,6 +54,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSendToShowroom: true,
     canEditBatchQuantity: false,
     canEditWarehouseMap: false,
+    canPrintQr: true, // ТЗ №20 G
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -77,6 +79,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSendToShowroom: true,
     canEditBatchQuantity: false,
     canEditWarehouseMap: false,
+    canPrintQr: true, // ТЗ №20 G
   },
   // Согласовано 2026-08-12: зав. складом = складчик + количество.
   // Если хоть одно поле здесь разойдётся со складчиком — он молча
@@ -104,6 +107,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSendToShowroom: true,
     canEditBatchQuantity: true,
     canEditWarehouseMap: true,
+    canPrintQr: true, // ТЗ №20 G
   },
   PARTNER: {
     canSeePrices: false,
@@ -128,6 +132,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canSendToShowroom: false,
     canEditBatchQuantity: false,
     canEditWarehouseMap: false,
+    canPrintQr: false, // ТЗ №20 G
   },
 };
 

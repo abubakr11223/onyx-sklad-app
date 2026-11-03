@@ -51,6 +51,7 @@ export const SNAPSHOT_TABLES = [
   "shipment",
   "shipmentLine",
   "debt",
+  "payment", // ТЗ №20 A
   "lead",
   "photoRequest",
   "photoDispatch",

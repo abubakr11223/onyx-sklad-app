@@ -7,6 +7,8 @@ import { db } from "@/lib/db";
 import { downloadFile, getFile, sendMessage } from "@/lib/telegram";
 import type { TgUpdate } from "@/lib/telegram";
 import { handleUpdate } from "@/lib/telegram-webhook";
+import { loadStoneCodeCard } from "@/lib/stone-code";
+import { publicBaseUrl } from "@/lib/qr";
 import { analyzeBrokenStoneShape } from "@/lib/ai-shape";
 import { separateSlabWithPhoto } from "@/lib/slab-separation";
 import {
@@ -89,6 +91,9 @@ export async function POST(req: Request) {
     claimTelegramUpdate: (updateId) => claimTelegramUpdateId(updateId),
     // W10-B — domain fail → release claim (retry ishlasin).
     releaseTelegramUpdate: (updateId) => releaseTelegramUpdateId(updateId),
+    // ТЗ №20 G (§8.4) — код камня → сводка (наличие из общих помощников).
+    lookupStoneCode: (code) => loadStoneCodeCard(db, code),
+    stoneCodeBaseUrl: publicBaseUrl(),
   });
   return Response.json({ ok: true });
 }

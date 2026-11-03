@@ -13,6 +13,7 @@ import type { Prisma } from "@prisma/client";
 import { formatGabarit, thicknessToNumber } from "./dimensions";
 import { pieceFitsRequest } from "./inventory";
 import { formatLocationsShort, locationsForPattern } from "./pattern-stock";
+import { normalizeStoneCode } from "./stone-code";
 
 /**
  * Material (вид/тип/цвет) OR-filtri — `q` bo'yicha name/rockType/color
@@ -27,8 +28,25 @@ export function materialWhere(q: string): Prisma.StoneTypeWhereInput | null {
       { name: { contains: q, mode: "insensitive" } },
       { rockType: { contains: q, mode: "insensitive" } },
       { color: { contains: q, mode: "insensitive" } },
+      ...codeWhere(q),
     ],
   };
+}
+
+/**
+ * ТЗ №20 G (§8.1) — поиск по коду ONX-…: «ONX-7K3QD», «onx 7k3qd», «7K3QD».
+ * Вид находится по своему коду и по коду любой своей партии / узора / плиты /
+ * боя — точное совпадение по unique-индексу, не ILIKE. Не похоже на код → [].
+ */
+export function codeWhere(q: string): Prisma.StoneTypeWhereInput[] {
+  const code = normalizeStoneCode(q);
+  if (!code) return [];
+  return [
+    { code },
+    { batches: { some: { OR: [{ code }, { patterns: { some: { code } } }] } } },
+    { slabs: { some: { code } } },
+    { pieces: { some: { code } } },
+  ];
 }
 
 /**

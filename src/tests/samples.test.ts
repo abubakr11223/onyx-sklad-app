@@ -41,6 +41,7 @@ const tx = {
   },
   saleRecord: { create: M.saleCreate },
   debt: { create: M.debtCreate },
+  payment: { create: async () => ({}) }, // ТЗ №20 A
   auditLog: { create: M.auditCreate },
   batch: { findUnique: M.batchFindUnique, updateMany: M.batchUpdateMany },
   reservation: { findMany: M.reservationFindMany },

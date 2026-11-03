@@ -139,6 +139,7 @@ function makeSemanticDb(fx: Fixture) {
     reservation: zeroModel,
     saleRecord: zeroModel,
     debt: zeroModel,
+    payment: zeroModel, // ТЗ №20 A
     photoRequest: {
       count: async () => 0,
       updateMany: async () => ({ count: 0 }),

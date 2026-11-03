@@ -7,6 +7,7 @@
 // BATCH-C: разметка переведена на бренд-дизайн-систему (Button/Field/Card/
 // Alert/Badge). Поведение, имена полей и контракт валидации НЕ менялись.
 
+import { PAY_METHODS, PAY_METHOD_LABEL, type PayMethod } from "@/lib/payment-rows";
 import {
   useActionState,
   useEffect,
@@ -37,7 +38,6 @@ import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import {
   CURRENCY_LABEL,
-  PAYMENT_METHOD_LABEL,
   type PaymentMethod,
   type SaleCurrency,
 } from "@/lib/validators/sale-payment";
@@ -142,6 +142,21 @@ interface Target {
   myReservations?: MyVolumeReservation[];
   /** ТЗ №19 — места источника (узора / однородной партии). */
   locations?: SourceLocationOption[];
+}
+
+/** ТЗ №20 A — строка «Оплата сейчас» (auto — сумма = цена, пока не правили). */
+interface PayRowState {
+  id: number;
+  amount: string;
+  method: PayMethod;
+  auto: boolean;
+}
+
+/** Способ большей суммы — сводное поле продажи (отчёты считают по платежам). */
+function summaryPayMethod(rows: { amount: number; method: PayMethod }[]): PayMethod {
+  const by = new Map<PayMethod, number>();
+  for (const r of rows) if (r.amount > 0) by.set(r.method, (by.get(r.method) ?? 0) + r.amount);
+  return [...by.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "CASH";
 }
 
 const initialState: SaleFormState = { errors: {}, conflict: null };
@@ -256,8 +271,12 @@ export default function SaleForm({
   const [priceSubmit, setPriceSubmit] = useState("");
   const priceInputRef = useRef<HTMLInputElement>(null);
   const priceCaretRef = useRef<number | null>(null);
-  // TZ9-A: способ оплаты + валюта (CONTRACT: CASH|CARD|CREDIT, UZS|USD).
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
+  // ТЗ №20 A — «Оплата сейчас»: список платежей. По умолчанию одна строка,
+  // сумма которой следует за ценой (auto), — обычная продажа без лишних действий.
+  const [payRows, setPayRows] = useState<PayRowState[]>([
+    { id: 0, amount: "", method: "CASH", auto: true },
+  ]);
+  const payRowSeq = useRef(1);
   const [issueAsSample, setIssueAsSample] = useState(false);
   const [returnDueDateSample, setReturnDueDateSample] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
@@ -268,6 +287,10 @@ export default function SaleForm({
   );
   const [currency, setCurrency] = useState<SaleCurrency>("UZS");
   const [debtDueDate, setDebtDueDate] = useState("");
+  // ТЗ №20 B — когда клиент заберёт (необязательно) и как.
+  const [plannedDate, setPlannedDate] = useState("");
+  const [plannedTime, setPlannedTime] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState<"" | "PICKUP" | "DELIVERY">("");
   const [debtComment, setDebtComment] = useState("");
   const [qtySlabs, setQtySlabs] = useState("");
   const [qtyAreaM2, setQtyAreaM2] = useState("");
@@ -275,7 +298,21 @@ export default function SaleForm({
   // По умолчанию пусто (галочка снята) — бронь остаётся в силе.
   const [consumeReservationId, setConsumeReservationId] = useState("");
   const e = state.errors;
-  const isCredit = paymentMethod === "CREDIT";
+  const priceNum = Number(priceSubmit || normalizeMoneyForSubmit(priceDisplay)) || 0;
+  const payRowsResolved = payRows.map((r) => ({
+    method: r.method,
+    amount: r.auto ? priceNum : Number(normalizeMoneyForSubmit(r.amount)) || 0,
+  }));
+  const paidTotal = payRowsResolved.reduce((s, r) => s + r.amount, 0);
+  const debtLeft = Math.round((priceNum - paidTotal) * 100) / 100;
+  const overpaid = debtLeft < 0;
+  // Остаток в долг → срок/комментарий долга и обязательный телефон клиента.
+  const isCredit = priceNum > 0 && debtLeft > 0;
+  const paymentMethod: PaymentMethod | "" =
+    priceNum <= 0 ? "" : paidTotal <= 0 ? "CREDIT" : summaryPayMethod(payRowsResolved);
+  const paymentsJson = JSON.stringify(
+    payRowsResolved.filter((r) => r.amount > 0),
+  );
   const customerName = selectedClient?.name ?? "";
   const customerContact = selectedClient?.phone ?? "";
   const hasSubmitError =
@@ -733,6 +770,7 @@ export default function SaleForm({
     const canProceed =
       Boolean(selectedClient) &&
       paymentMethod !== "" &&
+      !overpaid &&
       priceSubmit.trim() &&
       (!isCredit || (selectedClient?.phone ?? "").trim()) &&
       !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim()) &&
@@ -1162,50 +1200,58 @@ export default function SaleForm({
           )}
         </div>
 
+        {/* ТЗ №20 B — плановая отгрузка: складчик готовит камень заранее.
+            Пусто = «как можно скорее», как раньше. */}
+        {!issueAsSample && (
+          <fieldset className="mt-4 rounded-card border border-line bg-paper p-3">
+            <legend className="px-1 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+              Отгрузка
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              <Field
+                id="f-plannedDate"
+                type="date"
+                label="Когда заберут"
+                value={plannedDate}
+                onChange={(ev) => setPlannedDate(ev.target.value)}
+                error={e.plannedDate}
+                hint="Необязательно"
+              />
+              <Field
+                id="f-plannedTime"
+                type="time"
+                label="Время"
+                value={plannedTime}
+                onChange={(ev) => setPlannedTime(ev.target.value)}
+                disabled={!plannedDate}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm">
+              {(
+                [
+                  ["PICKUP", "Самовывоз"],
+                  ["DELIVERY", "Доставка на объект"],
+                ] as const
+              ).map(([v, label]) => (
+                <label key={v} className="flex min-h-11 cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="deliveryModeUi"
+                    checked={deliveryMode === v}
+                    onChange={() => setDeliveryMode(v)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
         {/* TZ9-A — блок «Оплата»: способ + цена + валюта; долг → срок/коммент. */}
         <fieldset className="mt-4 rounded-card border border-line bg-paper p-3">
           <legend className="px-1 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
             Оплата
           </legend>
-
-          <div className="mt-1">
-            <p className="mb-2 text-sm font-semibold text-ink">
-              Способ оплаты <span className="text-danger">*</span>
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  ["CASH", PAYMENT_METHOD_LABEL.CASH],
-                  ["CARD", PAYMENT_METHOD_LABEL.CARD],
-                  ["CREDIT", PAYMENT_METHOD_LABEL.CREDIT],
-                ] as const
-              ).map(([value, label]) => {
-                const selected = paymentMethod === value;
-                return (
-                  <label
-                    key={value}
-                    className={
-                      "flex min-h-11 cursor-pointer items-center justify-center rounded-field border px-1 text-center text-sm font-semibold transition " +
-                      (selected
-                        ? "border-gold bg-gold/15 text-ink shadow-card"
-                        : "border-line bg-paper-2 text-ink/80 active:bg-gold/10")
-                    }
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethodUi"
-                      value={value}
-                      checked={selected}
-                      onChange={() => setPaymentMethod(value)}
-                      className="sr-only"
-                    />
-                    {label}
-                  </label>
-                );
-              })}
-            </div>
-            <FieldError msg={e.paymentMethod} />
-          </div>
 
           <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
             <Field
@@ -1267,6 +1313,88 @@ export default function SaleForm({
               </div>
               <FieldError msg={e.currency} />
             </div>
+          </div>
+
+          {/* ТЗ №20 A — «Оплата сейчас»: несколько способов (50/50, 70/30),
+              меньше цены → остаток уходит в долг, 0 → вся продажа в долг. */}
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.06em] text-gold-deep">
+              Оплата сейчас
+            </p>
+            <div className="flex flex-col gap-2">
+              {payRows.map((r, i) => (
+                <div key={r.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                  <input
+                    aria-label={`Сумма оплаты ${i + 1}`}
+                    inputMode="decimal"
+                    className={`${inputClass} tnum`}
+                    placeholder="0"
+                    value={r.auto ? (priceDisplay ? formatMoneyGrouped(priceDisplay) : "") : r.amount}
+                    onChange={(ev) =>
+                      setPayRows((rows) =>
+                        rows.map((x) =>
+                          x.id === r.id
+                            ? { ...x, auto: false, amount: formatMoneyGrouped(ev.target.value) }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+                  <select
+                    aria-label={`Способ оплаты ${i + 1}`}
+                    className={inputClass}
+                    value={r.method}
+                    onChange={(ev) =>
+                      setPayRows((rows) =>
+                        rows.map((x) =>
+                          x.id === r.id ? { ...x, method: ev.target.value as PayMethod } : x,
+                        ),
+                      )
+                    }
+                  >
+                    {PAY_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {PAY_METHOD_LABEL[m]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label="Убрать строку оплаты"
+                    className="min-h-11 min-w-11 rounded-field text-ink/50 hover:text-danger"
+                    onClick={() =>
+                      setPayRows((rows) =>
+                        rows.length === 1
+                          ? [{ ...rows[0], auto: false, amount: "" }]
+                          : rows.filter((x) => x.id !== r.id),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="mt-2 text-sm font-semibold text-gold-deep underline"
+              onClick={() =>
+                setPayRows((rows) => [
+                  // первая строка перестаёт «следовать за ценой» — дальше суммы ручные
+                  ...rows.map((x) => (x.auto ? { ...x, auto: false, amount: formatMoneyGrouped(String(priceNum)) } : x)),
+                  { id: payRowSeq.current++, amount: "", method: "CARD", auto: false },
+                ])
+              }
+            >
+              + Добавить способ оплаты
+            </button>
+            <p className={`tnum mt-2 text-sm ${overpaid ? "text-danger" : "text-ink/80"}`}>
+              Оплачено: {formatMoneyGrouped(String(paidTotal))} {CURRENCY_LABEL[currency]} ·{" "}
+              {overpaid
+                ? "оплачено больше цены — исправьте суммы"
+                : `Остаток в долг: ${formatMoneyGrouped(String(Math.max(0, debtLeft)))}`}
+            </p>
+            <FieldError msg={e.payments ?? e.paymentMethod} />
           </div>
 
           {isCredit && (
@@ -1478,9 +1606,13 @@ export default function SaleForm({
         <div className="flex justify-between gap-3 py-1">
           <dt className="text-ink/60">Оплата</dt>
           <dd className="text-right font-semibold text-ink">
-            {paymentMethod
-              ? PAYMENT_METHOD_LABEL[paymentMethod]
-              : "—"}
+            {payRowsResolved.filter((r) => r.amount > 0).length === 0
+              ? "всё в долг"
+              : payRowsResolved
+                  .filter((r) => r.amount > 0)
+                  .map((r) => `${formatMoneyGrouped(String(r.amount))} ${PAY_METHOD_LABEL[r.method]}`)
+                  .join(" + ")}
+            {isCredit && ` · в долг ${formatMoneyGrouped(String(debtLeft))}`}
           </dd>
         </div>
         <div className="flex justify-between gap-3 py-1">
@@ -1492,6 +1624,20 @@ export default function SaleForm({
             {CURRENCY_LABEL[currency]}
           </dd>
         </div>
+        {(plannedDate || deliveryMode) && (
+          <div className="flex justify-between gap-3 py-1">
+            <dt className="text-ink/60">Заберут</dt>
+            <dd className="text-right text-ink">
+              {[
+                plannedDate && `${plannedDate}${plannedTime ? `, ${plannedTime}` : ""}`,
+                deliveryMode === "PICKUP" && "самовывоз",
+                deliveryMode === "DELIVERY" && "доставка на объект",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </dd>
+          </div>
+        )}
         {isCredit && debtDueDate.trim() && (
           <div className="flex justify-between gap-3 py-1">
             <dt className="text-ink/60">Срок долга</dt>
@@ -1564,6 +1710,10 @@ export default function SaleForm({
               value={priceSubmit || normalizeMoneyForSubmit(priceDisplay)}
             />
             <input type="hidden" name="paymentMethod" value={paymentMethod} />
+            <input type="hidden" name="payments" value={paymentsJson} />
+            <input type="hidden" name="plannedDate" value={plannedDate} />
+            <input type="hidden" name="plannedTime" value={plannedDate ? plannedTime : ""} />
+            <input type="hidden" name="deliveryMode" value={deliveryMode} />
             <input type="hidden" name="currency" value={currency} />
             <input type="hidden" name="debtDueDate" value={debtDueDate} />
             <input type="hidden" name="debtComment" value={debtComment} />

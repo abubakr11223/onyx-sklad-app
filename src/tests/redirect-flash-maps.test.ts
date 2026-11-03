@@ -79,6 +79,7 @@ describe("dolzhniki err codes", () => {
     inactive: "x",
     date: "x",
     fail: "x",
+    amount: "x", // ТЗ №20 A — платёж по долгу
   };
 
   it("action codes are all in ERR_RU", () => {

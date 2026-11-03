@@ -137,6 +137,8 @@ export async function submitSale(
     customerContact: str("customerContact"),
     debtDueDate: str("debtDueDate"),
     debtComment: str("debtComment"),
+    // ТЗ №20 A — строки «Оплата сейчас» (50/50, предоплата).
+    payments: str("payments"),
   });
   if (!payment.ok) {
     Object.assign(errors, payment.errors);
@@ -219,12 +221,39 @@ export async function submitSale(
   const customerContact =
     pay.customerContact?.trim() || client.phone.trim() || null;
 
-  // Re-check CREDIT phone after resolving client card.
-  if (pay.paymentMethod === "CREDIT" && !customerContact) {
+  // Re-check CREDIT phone after resolving client card (ТЗ №20: любой остаток в долг).
+  const leavesDebt =
+    pay.paymentMethod === "CREDIT" ||
+    (pay.payments !== null &&
+      pay.payments.reduce((s, r) => s + Math.round(r.amount * 100), 0) <
+        Math.round(pay.price * 100));
+  if (leavesDebt && !customerContact) {
     return fieldFail({
       customerContact: "Для продажи в долг укажите телефон клиента",
     });
   }
+
+  // ТЗ №20 B — плановая отгрузка (Ташкент, UTC+5; время необязательно).
+  const plannedDate = str("plannedDate");
+  const plannedTime = str("plannedTime");
+  const modeRaw = str("deliveryMode");
+  let plannedAt: Date | null = null;
+  if (plannedDate) {
+    const okDate = /^\d{4}-\d{2}-\d{2}$/.test(plannedDate);
+    const okTime = !plannedTime || /^\d{2}:\d{2}$/.test(plannedTime);
+    plannedAt = okDate && okTime
+      ? new Date(`${plannedDate}T${plannedTime || "00:00"}:00+05:00`)
+      : null;
+    if (!plannedAt || Number.isNaN(plannedAt.getTime())) {
+      return fieldFail({ plannedDate: "Неверная дата или время отгрузки" });
+    }
+  }
+  const shipmentPlan = {
+    plannedAt,
+    plannedHasTime: Boolean(plannedAt && plannedTime),
+    deliveryMode:
+      modeRaw === "PICKUP" || modeRaw === "DELIVERY" ? (modeRaw as "PICKUP" | "DELIVERY") : null,
+  };
 
   const common = {
     customerName,
@@ -232,11 +261,13 @@ export async function submitSale(
     price: pay.price,
     managerId,
     paymentMethod: pay.paymentMethod,
+    payments: pay.payments,
     currency: pay.currency,
     debtDueDate: pay.debtDueDate,
     debtComment: pay.debtComment,
     clientId: client.id,
     siteId,
+    shipmentPlan,
   };
   const result =
     mode === "SLAB" || mode === "PIECE"

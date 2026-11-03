@@ -38,6 +38,7 @@ const M = vi.hoisted(() => {
     locationFindUnique: fn(),
     locationUpdate: fn(),
     shipmentLineFindMany: fn(),
+    paymentCreate: fn(), // ТЗ №20 A
     // TZ №9 — Debt (returnSale cancel; credit create)
     debtFindUnique: fn(),
     debtCreate: fn(),
@@ -82,6 +83,7 @@ const tx = {
     update: M.locationUpdate,
   },
   shipmentLine: { findMany: M.shipmentLineFindMany },
+  payment: { create: M.paymentCreate, groupBy: async () => [] },
   debt: {
     findUnique: M.debtFindUnique,
     create: M.debtCreate,

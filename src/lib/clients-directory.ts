@@ -200,7 +200,8 @@ const clientListSelect = {
   },
   debts: {
     where: { status: "ACTIVE" },
-    select: { amount: true, currency: true, status: true },
+    // ТЗ №20 A — долг гасится по частям: в итогах остаток (amount − repaidAmount).
+    select: { amount: true, repaidAmount: true, currency: true, status: true },
   },
 } satisfies Prisma.ClientSelect;
 
@@ -218,7 +219,7 @@ function mapClientListRow(r: ClientListRow): ClientListItem {
   }));
   const debts: DebtTotRow[] = r.debts.map((d) => ({
     status: d.status as DebtTotRow["status"],
-    amount: d.amount.toString(),
+    amount: d.amount.minus(d.repaidAmount ?? 0).toFixed(2),
     currency: d.currency as MoneyCurrency,
   }));
   const vol = volumeTotalsFromSales(sales);
@@ -487,6 +488,7 @@ export async function getClientDirectoryCard(
         select: {
           id: true,
           amount: true,
+          repaidAmount: true,
           currency: true,
           status: true,
           dueDate: true,
@@ -516,7 +518,7 @@ export async function getClientDirectoryCard(
 
   const debtRows: DebtTotRow[] = row.debts.map((d) => ({
     status: d.status as DebtTotRow["status"],
-    amount: d.amount.toString(),
+    amount: d.amount.minus(d.repaidAmount ?? 0).toFixed(2),
     currency: d.currency as MoneyCurrency,
   }));
 
@@ -590,7 +592,7 @@ export async function getClientDirectoryCard(
     })),
     debts: row.debts.map((d) => ({
       id: d.id,
-      amount: d.amount.toString(),
+      amount: d.amount.minus(d.repaidAmount ?? 0).toFixed(2),
       currency: d.currency as MoneyCurrency,
       status: d.status,
       dueDate: d.dueDate,

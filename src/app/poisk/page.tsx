@@ -59,6 +59,13 @@ import { inputClass } from "@/components/ui/Field";
 import { SearchIcon } from "@/components/ui/Icons";
 import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
 import { formatLocation } from "@/lib/locations";
+import {
+  STONE_CODE_KIND_RU,
+  findByCode,
+  normalizeStoneCode,
+  staffCardHref,
+} from "@/lib/stone-code";
+import { qrPrintHref } from "@/lib/qr";
 
 export const metadata: Metadata = {
   title: "Поиск камня — Onyx",
@@ -243,12 +250,27 @@ export default async function PoiskPage({
   // aynan `nextCursor`ga qarab chiziladi (pastda), demak havola hech qachon
   // «o'lik» bo'lmaydi. `q` yoki gabarit berilganda filtr QO'LLANMAYDI — xatti-
   // harakat bugungidek qoladi.
-  const typesPage = await fetchPoiskTypesPage(db, {
-    q,
-    hasDims,
-    after,
-    pageSize: PAGE_SIZE,
-  });
+  // ТЗ №20 G (§8.1) — запрос похож на код ONX-… → точное совпадение по коду
+  // (вид / партия / узор / плита / бой). Вид с этим кодом попадёт и в список
+  // ниже (materialWhere → codeWhere); здесь — прямая карточка находки.
+  const queryCode = !after ? normalizeStoneCode(q) : null;
+  const [typesPage, codeHit] = await Promise.all([
+    fetchPoiskTypesPage(db, {
+      q,
+      hasDims,
+      after,
+      pageSize: PAGE_SIZE,
+    }),
+    queryCode ? findByCode(db, queryCode) : Promise.resolve(null),
+  ]);
+  const codeHitName = codeHit
+    ? ((
+        await db.stoneType.findUnique({
+          where: { id: codeHit.stoneTypeId },
+          select: { name: true },
+        })
+      )?.name ?? null)
+    : null;
   const visibleTypes = typesPage.types;
   const nextCursor = typesPage.nextCursor;
   // Skan chegarasi sahifa to'lmasdan tugadi VA kursordan keyin hali xom qatorlar
@@ -593,7 +615,7 @@ export default async function PoiskPage({
         <form method="get" className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="q" className="text-sm font-semibold text-ink">
-              Название / порода / цвет
+              Название / порода / цвет / код ONX
             </label>
             <input
               id="q"
@@ -601,7 +623,7 @@ export default async function PoiskPage({
               type="search"
               inputMode="search"
               defaultValue={q}
-              placeholder="травертин, мрамор, бежевый…"
+              placeholder="травертин, мрамор, бежевый, ONX-7K3QD…"
               className={inputClass}
             />
           </div>
@@ -643,6 +665,47 @@ export default async function PoiskPage({
           </Button>
         </form>
       </Card>
+
+      {/* ТЗ №20 G — находка по коду ONX-…. */}
+      {codeHit && (
+        <Card className="mt-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+            Найдено по коду
+          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-bold text-ink">
+                {codeHitName ?? "Камень"}
+                <span className="ml-2 text-sm font-normal text-ink/60">
+                  {STONE_CODE_KIND_RU[codeHit.kind]}
+                </span>
+              </p>
+              <p className="tnum text-sm font-semibold tracking-wide text-ink/70">
+                {codeHit.code}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href={staffCardHref(codeHit)} className={buttonClass("primary", "sm")}>
+                Открыть карточку
+              </Link>
+              {caps.canPrintQr && (
+                <Link
+                  href={qrPrintHref([codeHit.code])}
+                  target="_blank"
+                  className={buttonClass("secondary", "sm")}
+                >
+                  QR
+                </Link>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+      {queryCode && !codeHit && /^\s*onx/i.test(q) && (
+        <Alert variant="warning" className="mt-6">
+          Код {queryCode} не найден. Проверьте символы на этикетке.
+        </Alert>
+      )}
 
       {/* O'lcham kiritilgan-u, ishlatib bo'lmagan bo'lsa — jimgina yutmaymiz.
           hasDims bo'lsa blok ishladi (faqat aniqlashtirish) → info; bo'lmasa
@@ -938,9 +1001,39 @@ export default async function PoiskPage({
       )}
 
       <section className="mt-6">
-        <h2 className="text-lg font-bold text-ink">
-          {hasDims ? "Целые плиты и партии" : "В наличии"}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-ink">
+            {hasDims ? "Целые плиты и партии" : "В наличии"}
+          </h2>
+          {/* ТЗ №20 G (§8.3) — «отметить несколько → Печать QR». Галочки у
+              карточек привязаны к этой форме атрибутом form= (карточка — ссылка,
+              вкладывать форму в неё нельзя). Без JS: GET /qr/print?code=…&code=… */}
+          {caps.canPrintQr && visibleTypesForDims.length > 0 && (
+            <form
+              id="qr-print"
+              action="/qr/print"
+              method="get"
+              target="_blank"
+              className="flex flex-wrap items-center gap-2"
+            >
+              <label htmlFor="qr-format" className="sr-only">
+                Формат этикетки
+              </label>
+              <select
+                id="qr-format"
+                name="format"
+                defaultValue="a4"
+                className="min-h-11 rounded-field border border-line bg-paper px-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+              >
+                <option value="a4">Лист A4 · 12 шт.</option>
+                <option value="label">Этикетка 60×40</option>
+              </select>
+              <Button type="submit" variant="secondary" size="sm">
+                Печать QR отмеченных
+              </Button>
+            </form>
+          )}
+        </div>
         {/* «Ничего не найдено.» va «Показать ещё» BIRGA chiqishi — aynan shu
             xatoning ko'rinadigan alomati edi. Endi bo'sh natijadagi xabar
             `nextCursor`ning YO'Qligiga bog'langan, «Показать ещё» esa (pastda)
@@ -1029,12 +1122,25 @@ export default async function PoiskPage({
                 .charAt(0)
                 .toUpperCase();
               return (
-                <li key={t.st.id}>
+                <li key={t.st.id} className="flex items-stretch gap-2">
+                  {/* ТЗ №20 G — галочка для пакетной печати QR (вне ссылки). */}
+                  {caps.canPrintQr && t.st.code && (
+                    <label className="flex w-11 shrink-0 cursor-pointer items-center justify-center rounded-card border border-line bg-paper-2">
+                      <span className="sr-only">Отметить {t.st.name} для печати QR</span>
+                      <input
+                        type="checkbox"
+                        name="code"
+                        value={t.st.code}
+                        form="qr-print"
+                        className="h-5 w-5 accent-[var(--color-gold)]"
+                      />
+                    </label>
+                  )}
                   {/* Вся карточка — ссылка на /kamen/[id] (крупная зона касания,
                       hover-lift). Внутри нет других интерактивных элементов. */}
                   <Link
                     href={"/kamen/" + t.st.id}
-                    className="group flex items-start gap-3.5 rounded-card border border-line bg-paper-2 p-4 shadow-card transition hover:-translate-y-0.5 hover:border-gold/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper sm:gap-4"
+                    className="group flex min-w-0 flex-1 items-start gap-3.5 rounded-card border border-line bg-paper-2 p-4 shadow-card transition hover:-translate-y-0.5 hover:border-gold/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper sm:gap-4"
                   >
                     <span
                       aria-hidden="true"
@@ -1052,6 +1158,11 @@ export default async function PoiskPage({
                           {t.st.rockType}
                           {t.st.color && <> · {t.st.color}</>}
                         </span>
+                        {t.st.code && (
+                          <span className="tnum text-xs font-semibold tracking-wide text-ink/55">
+                            {t.st.code}
+                          </span>
+                        )}
                       </div>
                       <p className="tnum mt-1.5 text-sm text-ink/70">
                         {stockLine}

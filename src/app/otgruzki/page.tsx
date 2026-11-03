@@ -9,6 +9,7 @@ import {
   SHIPMENTS_PAGE_SIZE,
   shipmentFiltersActive,
   shipmentFiltersFromSearchParams,
+  formatShipmentPlan,
 } from "@/lib/shipments";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
@@ -19,6 +20,7 @@ import Field, { inputClass } from "@/components/ui/Field";
 import {
   confirmShipmentAction,
   toggleShipmentUrgentAction,
+  updateShipmentPlanAction,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +62,7 @@ export default async function OtgruzkiPage({
     from: first(sp.from),
     to: first(sp.to),
     manager: first(sp.manager),
+    today: first(sp.today),
   });
   const filtersOn = shipmentFiltersActive(filters);
   // W3-T5 — keyset-курсор (isUrgent+createdAt+id). Раньше архив обрывался на
@@ -119,6 +122,11 @@ export default async function OtgruzkiPage({
           продана).
         </Alert>
       )}
+      {ok === "plan" && (
+        <Alert variant="success" title="Готово" className="mb-3">
+          Дата отгрузки сохранена.
+        </Alert>
+      )}
       {/* Фото не обязано ронять отгрузку: камень уже выдан физически. Неудача
           с картинкой — предупреждение, а не ошибка (ТЗ №15 §3.3). */}
       {first(sp.warn) && (
@@ -143,6 +151,18 @@ export default async function OtgruzkiPage({
           }
         >
           К отгрузке
+        </Link>
+        {/* ТЗ №20 B — задачи с плановой датой сегодня. */}
+        <Link
+          href="/otgruzki?today=1"
+          className={
+            "rounded-field px-3 py-2 text-sm font-semibold " +
+            (tab === "open" && filters.today
+              ? "bg-gold/20 text-ink"
+              : "bg-paper-2 text-ink/60")
+          }
+        >
+          На сегодня
         </Link>
         <Link
           href="/otgruzki?tab=archive"
@@ -248,7 +268,7 @@ export default async function OtgruzkiPage({
         <ul className="flex flex-col gap-3">
           {items.map((s) => (
             <li key={s.id}>
-              <Card>
+              <Card className={s.planOverdue ? "border-danger/60 bg-danger/5" : undefined}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -266,6 +286,17 @@ export default async function OtgruzkiPage({
                       {s.clientName ?? "—"}
                       {s.siteName ? ` · ${s.siteName}` : ""}
                     </p>
+                    {/* ТЗ №20 B — «Заберут: 05.11, 10:00 · самовывоз»; в архиве
+                        — план рядом с фактом выдачи (видно опоздания). */}
+                    {formatShipmentPlan(s) && (
+                      <p className={`text-sm ${s.planOverdue ? "font-semibold text-danger" : "text-ink/80"}`}>
+                        {tab === "archive" ? "План" : "Заберут"}: {formatShipmentPlan(s)}
+                        {s.planOverdue && " · просрочено"}
+                        {tab === "archive" && s.completedAt && (
+                          <> · выдано {formatTashkentDateTime(s.completedAt)}</>
+                        )}
+                      </p>
+                    )}
                     {s.isSample && s.returnDueDate && (
                       <p className="text-sm text-ink/80">
                         Вернуть до {formatTashkentDate(s.returnDueDate)}
@@ -349,6 +380,27 @@ export default async function OtgruzkiPage({
                   >
                     Накладная →
                   </Link>
+                  {/* ТЗ №20 B — менеджер может перенести дату отгрузки. */}
+                  {caps.canSell && tab === "open" && s.kind === "SALE" && s.status !== "CANCELLED" && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-ink/60 underline">
+                        {s.plannedAt ? "Изменить дату" : "Указать дату"}
+                      </summary>
+                      <form action={updateShipmentPlanAction} className="mt-2 flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="shipmentId" value={s.id} />
+                        <input type="date" name="plannedDate" className={inputClass + " w-40"} />
+                        <input type="time" name="plannedTime" className={inputClass + " w-28"} />
+                        <select name="deliveryMode" className={inputClass + " w-44"} defaultValue={s.deliveryMode ?? ""}>
+                          <option value="">не указано</option>
+                          <option value="PICKUP">самовывоз</option>
+                          <option value="DELIVERY">доставка на объект</option>
+                        </select>
+                        <Button type="submit" size="sm" variant="secondary">
+                          Сохранить
+                        </Button>
+                      </form>
+                    </details>
+                  )}
                   {/* ТЗ №15 §8.5 — срочность ставит тот, кто говорит с клиентом. */}
                   {caps.canSell && tab === "open" && s.status !== "CANCELLED" && (
                     <form action={toggleShipmentUrgentAction}>

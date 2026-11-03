@@ -161,6 +161,10 @@ export type SaleHistoryRow = {
   shipment: {
     cancelledAt: Date | null;
     completedAt: Date | null;
+    /** ТЗ №20 B — план «когда заберут». */
+    plannedAt?: Date | null;
+    plannedHasTime?: boolean;
+    deliveryMode?: "PICKUP" | "DELIVERY" | null;
     lines: Array<{
       targetType: string;
       qtyOrderedSlabs: number | null;
@@ -201,6 +205,9 @@ const SALE_INCLUDE = {
     select: {
       cancelledAt: true,
       completedAt: true,
+      plannedAt: true,
+      plannedHasTime: true,
+      deliveryMode: true,
       lines: {
         select: {
           targetType: true,

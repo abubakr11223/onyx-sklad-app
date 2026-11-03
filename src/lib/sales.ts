@@ -14,12 +14,12 @@ import { MAX_DECIMAL_FIELD, MAX_INT_FIELD } from "./validators/intake";
 import { MAX_DECIMAL_14_2 } from "./decimal";
 import {
   cancelDebtForReturnedSale,
-  createDebtForSale,
   DebtLogicError,
 } from "./debts";
 import {
   cancelOpenShipmentForSale,
   createSaleShipment,
+  type ShipmentPlanInput,
 } from "./shipments";
 import {
   cancelOpenShowroomShipmentForUnit,
@@ -27,6 +27,16 @@ import {
 } from "./showroom";
 import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 import { formatLocation } from "@/lib/locations";
+import {
+  checkSalePayments,
+  netPaidCents,
+  PaymentError,
+  recordRefundInTx,
+  settleSaleInTx,
+  summaryMethod,
+  type PaymentRowInput,
+  type PayMethod,
+} from "./payments";
 import {
   allocateFromLocations,
   allocationLocationText,
@@ -550,6 +560,12 @@ function validatePrice(price: number | null | undefined): number | null {
 /** TZ №9 — payment fields. When paymentMethod is set, currency + price required. */
 export interface SalePaymentFields {
   paymentMethod?: PaymentMethod | null;
+  /**
+   * ТЗ №20 A — платежи при продаже (50/50, предоплата). Задано → способ
+   * считается по ним, долг = цена − Σ. Не задано (старые вызовы) → один
+   * платёж на всю цену способом paymentMethod; CREDIT — без платежей.
+   */
+  payments?: PaymentRowInput[] | null;
   currency?: Currency | null;
   /** Due date for CREDIT debts (optional). */
   debtDueDate?: Date | null;
@@ -560,6 +576,8 @@ export interface SalePaymentFields {
 export interface SaleClientFields {
   clientId?: string | null;
   siteId?: string | null;
+  /** ТЗ №20 B — когда клиент заберёт (в задачу на отгрузку). */
+  shipmentPlan?: ShipmentPlanInput | null;
 }
 
 export interface ValidatedSalePayment {
@@ -567,6 +585,8 @@ export interface ValidatedSalePayment {
   currency: Currency | null;
   debtDueDate: Date | null;
   debtComment: string | null;
+  /** ТЗ №20 A — строки оплаты при продаже (пусто = всё в долг). */
+  rows?: PaymentRowInput[];
 }
 
 /**
@@ -579,8 +599,15 @@ export function validateSalePayment(
   price: number | null,
   customerContact: string | null,
 ): ValidatedSalePayment {
-  const method = fields.paymentMethod ?? null;
-  if (method == null) {
+  // ТЗ №20 A — список платежей задаёт способ сам (долг = остаток).
+  const explicitRows = fields.payments ?? null;
+  const method =
+    explicitRows !== null
+      ? price === null
+        ? null
+        : summaryMethod(explicitRows.filter((r) => r.amount > 0))
+      : (fields.paymentMethod ?? null);
+  if (method == null && explicitRows === null) {
     return {
       paymentMethod: null,
       currency: null,
@@ -588,10 +615,15 @@ export function validateSalePayment(
       debtComment: null,
     };
   }
-  if (method !== "CASH" && method !== "CARD" && method !== "CREDIT") {
+  if (
+    method !== "CASH" &&
+    method !== "CARD" &&
+    method !== "CREDIT" &&
+    method !== "TRANSFER"
+  ) {
     throw new SaleLogicError({
       code: "INVALID_INPUT",
-      message: "Способ оплаты: наличные, карта или в долг",
+      message: "Способ оплаты: наличные, карта, перечисление или в долг",
     });
   }
   if (price === null) {
@@ -607,7 +639,13 @@ export function validateSalePayment(
       message: "Укажите валюту: сум (UZS) или доллар (USD)",
     });
   }
-  if (method === "CREDIT") {
+  const rows: PaymentRowInput[] =
+    explicitRows ?? (method === "CREDIT" ? [] : [{ amount: price, method }]);
+  const check = checkSalePayments(price, rows);
+  if (!check.ok) {
+    throw new SaleLogicError({ code: "INVALID_INPUT", message: check.message });
+  }
+  if (check.debtCents > 0) {
     const phone = customerContact?.trim() ?? "";
     if (!phone) {
       throw new SaleLogicError({
@@ -619,12 +657,16 @@ export function validateSalePayment(
   return {
     paymentMethod: method,
     currency,
-    debtDueDate: fields.debtDueDate ?? null,
-    debtComment: fields.debtComment?.trim() || null,
+    debtDueDate: check.debtCents > 0 ? (fields.debtDueDate ?? null) : null,
+    debtComment: check.debtCents > 0 ? fields.debtComment?.trim() || null : null,
+    rows: check.rows,
   };
 }
 
-/** After saleRecord.create — open Debt when CREDIT (same tx). */
+/**
+ * After saleRecord.create — ТЗ №20 A: платежи продажи + долг на остаток
+ * (same tx). Legacy-вызов без способа оплаты — ничего не пишет.
+ */
 async function maybeCreateDebtForCreditSale(
   tx: Prisma.TransactionClient,
   args: {
@@ -632,25 +674,38 @@ async function maybeCreateDebtForCreditSale(
     payment: ValidatedSalePayment;
     price: number | null;
     clientId?: string | null;
+    receivedById: string;
+    paidAt: Date;
   },
 ): Promise<void> {
-  if (args.payment.paymentMethod !== "CREDIT") return;
+  if (args.payment.paymentMethod == null) return;
   if (args.price === null || args.payment.currency == null) {
     throw new SaleLogicError({
       code: "INVALID_INPUT",
-      message: "Продажа в долг требует цену и валюту",
+      message: "Продажа требует цену и валюту",
     });
   }
+  const rows =
+    args.payment.rows ??
+    (args.payment.paymentMethod === "CREDIT"
+      ? []
+      : [{ amount: args.price, method: args.payment.paymentMethod as PayMethod }]);
   try {
-    await createDebtForSale(tx, {
-      saleRecordId: args.saleId,
-      amount: args.price.toFixed(2),
+    await settleSaleInTx(tx, {
+      saleId: args.saleId,
+      price: args.price,
       currency: args.payment.currency,
-      dueDate: args.payment.debtDueDate,
-      comment: args.payment.debtComment,
+      rows,
+      receivedById: args.receivedById,
+      paidAt: args.paidAt,
+      debtDueDate: args.payment.debtDueDate,
+      debtComment: args.payment.debtComment,
       clientId: args.clientId ?? null,
     });
   } catch (e) {
+    if (e instanceof PaymentError) {
+      throw new SaleLogicError({ code: "INVALID_INPUT", message: e.message });
+    }
     if (e instanceof DebtLogicError) {
       // Map debt codes into SaleError surface (same INVALID_INPUT / NOT_FOUND).
       const code =
@@ -826,6 +881,8 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         payment,
         price,
         clientId,
+        receivedById: actor.id,
+        paidAt: now,
       });
 
       await tx.auditLog.create({
@@ -859,6 +916,7 @@ export async function sellUnit(input: SellUnitInput): Promise<SellUnitOk | SaleF
         managerId: actor.id,
         clientId,
         siteId,
+        plan: input.shipmentPlan ?? null,
         line: {
           targetType: input.targetType,
           slabId: input.targetType === "SLAB" ? unit.id : null,
@@ -1072,6 +1130,8 @@ export async function executeVolumeSale(
     /** TZ №10+11 — directory links (optional / legacy null). */
     clientId?: string | null;
     siteId?: string | null;
+    /** ТЗ №20 B — плановая отгрузка. */
+    shipmentPlan?: ShipmentPlanInput | null;
     /**
      * W1-T1: id СВОЕЙ активной volume-брони, которую клиент явно согласился
      * закрыть этой продажей (чекбокс). null/нет → все брони остаются hold'ами.
@@ -1226,6 +1286,8 @@ export async function executeVolumeSale(
     payment,
     price: params.price,
     clientId,
+    receivedById: actor.id,
+    paidAt: now,
   });
 
   await tx.auditLog.create({
@@ -1265,6 +1327,7 @@ export async function executeVolumeSale(
     managerId: actor.id,
     clientId,
     siteId,
+    plan: params.shipmentPlan ?? null,
     lines:
       params.shipmentLines && params.shipmentLines.length > 0
         ? params.shipmentLines.map((l) => ({
@@ -1490,6 +1553,7 @@ export async function sellBatchVolume(
         payment,
         clientId: input.clientId,
         siteId: input.siteId,
+        shipmentPlan: input.shipmentPlan ?? null,
         consumeReservationId: input.consumeReservationId ?? null,
         shipmentLines: plan.lines,
         locationTakes: [{ allocations: plan.allocations, unitAreaM2 }],
@@ -1601,6 +1665,7 @@ export async function sellPatternVolume(
         payment,
         clientId: input.clientId,
         siteId: input.siteId,
+        shipmentPlan: input.shipmentPlan ?? null,
         consumeReservationId: input.consumeReservationId ?? null,
         pattern: patternCounters(ps),
         shipmentLines: plan.lines,
@@ -1680,6 +1745,7 @@ export async function sellWholeBatch(
         payment,
         clientId: input.clientId,
         siteId: input.siteId,
+        shipmentPlan: input.shipmentPlan ?? null,
         consumeReservationId: input.consumeReservationId ?? null,
         ...split,
       });
@@ -1822,6 +1888,7 @@ export async function returnSale(
           qtyAreaM2: true,
           returnedAt: true,
           paymentMethod: true,
+          currency: true,
         },
       });
       if (!sale) {
@@ -1852,6 +1919,21 @@ export async function returnSale(
         actorId: actor.id,
         now,
       });
+
+      // ТЗ №20 A §2.5 — платежи остаются в истории; возврат денег клиенту —
+      // отдельная запись на всё, что он фактически заплатил.
+      const paidBack = await netPaidCents(tx, sale.id);
+      if (paidBack > 0 && sale.currency) {
+        await recordRefundInTx(tx, {
+          saleId: sale.id,
+          amountCents: paidBack,
+          currency: sale.currency,
+          method: "CASH",
+          paidAt: now,
+          actorId: actor.id,
+          comment: "возврат продажи",
+        });
+      }
 
       // TZ №15 — cancel OPEN shipment task (stock reverse below is independent).
       await cancelOpenShipmentForSale(tx, sale.id, now);

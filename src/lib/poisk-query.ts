@@ -97,6 +97,8 @@ export interface BatchAvailable {
 /** /poisk kartochkasi uchun kerakli vid maydonlari (page.tsx:105-124). */
 export interface PoiskStoneTypeRow {
   id: string;
+  /** ТЗ №20 G — постоянный код вида (optional — старые фикстуры). */
+  code?: string;
   name: string;
   rockType: string;
   color: string | null;
@@ -204,6 +206,7 @@ async function fetchTypeRows(
     take,
     select: {
       id: true,
+      code: true,
       name: true,
       rockType: true,
       color: true,
