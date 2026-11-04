@@ -28,6 +28,7 @@ import {
   IntakeFieldError,
   parseMutationId,
 } from "@/lib/intake-receipt";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 
 export interface IntakeFormState {
   errors: IntakeErrors;
@@ -296,6 +297,9 @@ export async function submitIntake(
       }
     }
   }
+
+  // ТЗ №20 C — приёмка: остаток вырос → снять пометку «мало», если выше порога.
+  await checkMinStockSafe({ batchIds: [summary.batchId] });
 
   const params = new URLSearchParams({ ok: "1", stone: summary.stoneName });
   if (data.slabsTotal !== null) params.set("slabs", String(data.slabsTotal));

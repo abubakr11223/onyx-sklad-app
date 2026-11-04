@@ -51,6 +51,7 @@ import {
   formatTypeFormatsLine,
 } from "@/lib/poisk-query";
 import { loadPatternStock } from "@/lib/pattern-stock";
+import { formatLowStockShort, loadLowStock } from "@/lib/min-stock";
 import Card from "@/components/ui/Card";
 import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
@@ -531,7 +532,7 @@ export default async function PoiskPage({
         ]),
       ]
     : [];
-  const [patternStock, homogeneousFree] = await Promise.all([
+  const [patternStock, homogeneousFree, lowStockItems] = await Promise.all([
     loadPatternStock(db, patternBatchIds),
     canSeeExact
       ? loadBatchAvailability(
@@ -539,7 +540,16 @@ export default async function PoiskPage({
           fittingBatches.filter((b) => !formattedPatternBatch(b)),
         )
       : Promise.resolve(null),
+    // ТЗ №20 C — пометка «мало»: вид ниже «Минимального остатка» (тот же расчёт,
+    // что сигнал владельцу). Партнёру — нет (остатки ему не показываем).
+    canSeeExact
+      ? loadLowStock(
+          db,
+          visibleTypes.map((t) => t.st.id),
+        ).catch(() => [])
+      : Promise.resolve([]),
   ]);
+  const lowStockById = new Map(lowStockItems.map((x) => [x.stoneTypeId, x]));
   const patternFree = canSeeExact
     ? new Map<string, SizeSearchFree>(
         [...patternStock.values()].map((p) => [
@@ -1162,6 +1172,14 @@ export default async function PoiskPage({
                           <span className="tnum text-xs font-semibold tracking-wide text-ink/55">
                             {t.st.code}
                           </span>
+                        )}
+                        {lowStockById.has(t.st.id) && (
+                          <Badge
+                            variant="warning"
+                            title={`Ниже минимального остатка: ${formatLowStockShort(lowStockById.get(t.st.id)!)}`}
+                          >
+                            мало
+                          </Badge>
                         )}
                       </div>
                       <p className="tnum mt-1.5 text-sm text-ink/70">

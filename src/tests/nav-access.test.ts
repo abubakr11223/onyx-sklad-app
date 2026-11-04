@@ -134,12 +134,13 @@ describe("Образцы /obraztsy — canSell (TZ №10)", () => {
   });
 });
 
-describe("Сводка /svodka — только OWNER (TZ №10+11 §9)", () => {
-  it("OWNER → open", () => {
+describe("Сводка /svodka — OWNER + MANAGER (TZ №10+11 §9, ТЗ №20 E)", () => {
+  it("OWNER/MANAGER → open (менеджер видит только рейтинг своих клиентов)", () => {
     expect(canAccessNav("/svodka", caps("OWNER"))).toBe(true);
+    expect(canAccessNav("/svodka", caps("MANAGER"))).toBe(true);
   });
-  it("MANAGER/WAREHOUSE/PARTNER → closed", () => {
-    for (const role of ["MANAGER", "WAREHOUSE", "PARTNER"] as Role[]) {
+  it("WAREHOUSE/PARTNER → closed", () => {
+    for (const role of ["WAREHOUSE", "PARTNER"] as Role[]) {
       expect(canAccessNav("/svodka", caps(role))).toBe(false);
     }
   });

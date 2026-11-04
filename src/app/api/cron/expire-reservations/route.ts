@@ -15,6 +15,7 @@
 // "*/15 * * * *") — kod o'zgarmaydi, faqat vercel.json'dagi `schedule`.
 import { db } from "@/lib/db";
 import { expireOverdueReservations } from "@/lib/reservations";
+import { recheckAlertedMinStockSafe } from "@/lib/min-stock-hook";
 import {
   BACKUP_STALE_HOURS,
   isBackupStale,
@@ -66,6 +67,9 @@ export async function GET(req: Request): Promise<Response> {
 
   const expired = await expireOverdueReservations();
   console.info(`[cron/expire-reservations] ${expired} ta bron EXPIRED qilindi.`);
+  // ТЗ №20 C — истёкшая бронь вернула объём: снять пометку «мало», где
+  // остаток снова не ниже порога (иначе следующее падение не дало бы сигнала).
+  if (expired > 0) await recheckAlertedMinStockSafe();
 
   // Zaxira TIRIKMI — «o'lik odam tugmasi» (audit 2026-09-02).
   // Nega aynan shu yerda: bu BOSHQA cron, boshqa vaqtda ishlaydi. Zaxira

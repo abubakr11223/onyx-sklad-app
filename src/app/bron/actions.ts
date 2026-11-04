@@ -18,6 +18,7 @@ import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake"
 import { strOf } from "@/lib/form";
 import { ensureFormError } from "@/lib/form-errors";
 import { db } from "@/lib/db";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 
 export interface ReserveFormState {
   errors: Record<string, string>;
@@ -180,6 +181,17 @@ export async function createReservation(
     throw e;
   }
 
+  // ТЗ №20 C — бронь уменьшает свободный остаток: проверить порог вида.
+  await checkMinStockSafe(
+    isVolume
+      ? targetKind === "PATTERN"
+        ? { batchPatternIds: [targetId] }
+        : { batchIds: [targetId] }
+      : targetKind === "SLAB"
+        ? { slabIds: [targetId] }
+        : { pieceIds: [targetId] },
+  );
+
   redirect("/bron?ok=1");
 }
 
@@ -206,5 +218,7 @@ export async function cancelReservationAction(formData: FormData): Promise<void>
   }
 
   if (errMsg) redirect(`/bron?err=${encodeURIComponent(errMsg)}`);
+  // ТЗ №20 C — бронь снята, остаток вырос: снять пометку «мало», если выше порога.
+  await checkMinStockSafe({ reservationIds: [id] });
   redirect("/bron?cancelled=1");
 }

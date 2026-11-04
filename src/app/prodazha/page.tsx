@@ -65,6 +65,7 @@ import {
   loadPatternStock,
   patternsOfBatch,
 } from "@/lib/pattern-stock";
+import { formatLowStockShort, loadLowStock } from "@/lib/min-stock";
 
 export const metadata: Metadata = {
   title: "Продажа и списание — Onyx",
@@ -341,7 +342,7 @@ export default async function ProdazhaPage({
   const now = new Date();
 
   // History + remainder aggregates are independent after stoneTypesRaw — one RTT.
-  const [salesPage, remainders, volReservations, volSamples, patternStock, batchLocs] =
+  const [salesPage, remainders, volReservations, volSamples, patternStock, batchLocs, lowStockItems] =
     await Promise.all([
     histFilters !== null
       ? fetchSaleHistoryPage(db, {
@@ -396,7 +397,14 @@ export default async function ProdazhaPage({
           select: { id: true, batchId: true, block: true, landmark: true, slabsHere: true },
         })
       : Promise.resolve([]),
+    // ТЗ №20 C — пометка «мало» (вид ниже «Минимального остатка»).
+    loadLowStock(
+      db,
+      stoneTypesRaw.map((st) => st.id),
+      now,
+    ).catch(() => []),
   ]);
+  const lowStockById = new Map(lowStockItems.map((x) => [x.stoneTypeId, x]));
   const locsByBatch = new Map<string, typeof batchLocs>();
   for (const l of batchLocs) {
     const list = locsByBatch.get(l.batchId) ?? [];
@@ -662,7 +670,16 @@ export default async function ProdazhaPage({
         };
       });
 
-      return { id: st.id, name: st.name, rockType: st.rockType, slabs, pieces, batches };
+      const low = lowStockById.get(st.id);
+      return {
+        id: st.id,
+        name: st.name,
+        rockType: st.rockType,
+        slabs,
+        pieces,
+        batches,
+        lowStock: low ? formatLowStockShort(low) : null,
+      };
     })
     .filter(
       (st) =>

@@ -23,6 +23,10 @@ import {
   requireCapabilityOrRedirect,
 } from "@/lib/session";
 import { validateStoneEdit } from "@/lib/stone-edit";
+import { capabilitiesFor } from "@/lib/permissions";
+import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
+import { formatThreshold } from "@/lib/min-stock";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 import {
   buildMovePayload,
   isNoopMove,
@@ -556,6 +560,87 @@ export async function editStoneType(formData: FormData): Promise<void> {
 
   revalidatePath(next);
   redirect(`${next}?cardOk=1`);
+}
+
+/**
+ * ТЗ №20 C (§4) — «Минимальный остаток» вида: число + единица (плиты / м²).
+ * Пустое число = не отслеживать (порог и пометка снимаются). Задают владелец и
+ * зав. складом (canSetMinStock) — по РЕАЛЬНОЙ сессии, как карта склада.
+ * После сохранения — та же проверка пересечения, что после списаний: новый
+ * порог выше остатка сразу даёт один сигнал.
+ */
+export async function setMinStock(formData: FormData): Promise<void> {
+  const next = safeNext(formData.get("next"));
+  const me = await getRealSessionUser();
+  if (
+    !me ||
+    !capabilitiesFor(me.role, { canSeePurchasePrice: false }).canSetMinStock
+  ) {
+    redirect(`${next}?minErr=denied`);
+  }
+
+  const stoneTypeId = String(formData.get("stoneTypeId") ?? "").trim();
+  if (!stoneTypeId) redirect(`${next}?minErr=notfound`);
+
+  const unitRaw = String(formData.get("minStockUnit") ?? "").trim();
+  const qtyRaw = String(formData.get("minStockQty") ?? "").trim();
+  let qty: number | null = null;
+  let unit: "SLABS" | "AREA_M2" | null = null;
+  if (qtyRaw !== "") {
+    if (unitRaw !== "SLABS" && unitRaw !== "AREA_M2") {
+      redirect(`${next}?minErr=unit`);
+    }
+    unit = unitRaw as "SLABS" | "AREA_M2";
+    // Плиты — целое («10»), м² — десятичное («12,5»): общие парсеры приёмки.
+    const parsed =
+      unit === "SLABS" ? parsePositiveInt(qtyRaw) : parsePositiveDecimal(qtyRaw);
+    if (parsed === undefined || parsed === null) {
+      redirect(`${next}?minErr=${unit === "SLABS" ? "qtySlabs" : "qtyArea"}`);
+    }
+    qty = parsed;
+  }
+
+  const label =
+    qty !== null && unit !== null ? formatThreshold({ qty, unit }) + (unit === "SLABS" ? " пл." : "") : null;
+  const found = await db.stoneType.findUnique({
+    where: { id: stoneTypeId },
+    select: { id: true, name: true },
+  });
+  if (!found) redirect(`${next}?minErr=notfound`);
+
+  await db.$transaction(async (tx) => {
+    await tx.stoneType.update({
+      where: { id: stoneTypeId },
+      data: {
+        minStockQty: qty === null ? null : qty.toFixed(3),
+        minStockUnit: unit,
+        // Порог снят — пометка «сигнал отправлен» больше не нужна.
+        ...(qty === null ? { lowStockAlertedAt: null } : {}),
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        userId: me!.id,
+        action: "STATUS_CHANGE",
+        entityType: "StoneType",
+        entityId: stoneTypeId,
+        payload: {
+          kind: "stonetype.minstock",
+          name: found!.name,
+          minStockQty: qty,
+          minStockUnit: unit,
+          label,
+        },
+      },
+    });
+  });
+
+  // ТЗ №20 C — после коммита; сбой проверки не отменяет сохранение порога.
+  if (qty !== null) await checkMinStockSafe({ stoneTypeIds: [stoneTypeId] });
+
+  revalidatePath(next);
+  revalidatePath("/");
+  redirect(`${next}?minOk=1`);
 }
 
 /**

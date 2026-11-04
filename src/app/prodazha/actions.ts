@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { notifyWarehouseSafe } from "@/lib/shipment-notify-hook";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 import {
   confirmReturnedUnit,
   returnSale,
@@ -299,6 +300,13 @@ export async function submitSale(
   // не откатывает её и не показывается менеджеру как ошибка — очередь
   // /otgruzki остаётся источником правды.
   await notifyWarehouseSafe(result.shipmentId, managerId);
+  // ТЗ №20 C — списание: проверить «Минимальный остаток» вида (после коммита,
+  // сбой не роняет продажу).
+  await checkMinStockSafe({
+    saleRecordIds: [result.saleId],
+    batchIds: [batchId],
+    batchPatternIds: [batchPatternId],
+  });
 
   const params = new URLSearchParams({
     ok: "1",
@@ -338,6 +346,8 @@ export async function returnSaleAction(formData: FormData): Promise<void> {
   if (!result.ok) {
     redirect(`/prodazha?retErr=${encodeURIComponent(result.error.message)}`);
   }
+  // ТЗ №20 C — объём вернулся в остаток: снять пометку «мало», если выше порога.
+  await checkMinStockSafe({ saleRecordIds: [saleRecordId] });
 
   const isUnit = result.targetType === "SLAB" || result.targetType === "PIECE";
   const note = isUnit
@@ -375,6 +385,10 @@ export async function confirmReturnAction(formData: FormData): Promise<void> {
   if (!result.ok) {
     redirect(`/prodazha?retErr=${encodeURIComponent(result.error.message)}`);
   }
+  // ТЗ №20 C — плита снова в наличии: пересчитать порог вида.
+  await checkMinStockSafe(
+    targetType === "SLAB" ? { slabIds: [unitId] } : { pieceIds: [unitId] },
+  );
 
   redirect(`/prodazha?retOk=${encodeURIComponent("Камень возвращён в наличие")}`);
 }

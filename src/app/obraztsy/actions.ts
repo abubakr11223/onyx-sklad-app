@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { notifyWarehouseSafe } from "@/lib/shipment-notify-hook";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 import {
   returnSample,
   extendSampleDueDate,
@@ -47,6 +48,8 @@ export async function returnSampleAction(formData: FormData): Promise<void> {
   const sampleId = String(formData.get("sampleId") ?? "").trim();
   const res = await returnSample({ sampleId, managerId });
   if (!res.ok) redirect("/obraztsy?err=" + encodeURIComponent(res.error.message));
+  // ТЗ №20 C — образец вернулся: пересчитать порог (снять «мало»).
+  await checkMinStockSafe({ sampleIds: [sampleId] });
   revalidateSamples();
   redirect("/obraztsy?ok=returned");
 }
@@ -113,6 +116,8 @@ export async function sellSampleAction(
     }
     return failFields({ form: res.error.message });
   }
+  // ТЗ №20 C — продажа образца: проверить порог вида.
+  await checkMinStockSafe({ sampleIds: [sampleId] });
   revalidateSamples();
   redirect("/obraztsy?ok=sold");
 }
@@ -277,6 +282,8 @@ export async function issueSampleAction(
   // ТЗ №15 §8.2 + §4 — образец идёт той же цепочкой отгрузки, с пометкой
   // «ОБРАЗЕЦ». Зовём складчика ПОСЛЕ коммита; сбой Telegram не отменяет выдачу.
   await notifyWarehouseSafe(res.shipmentId, managerId);
+  // ТЗ №20 C — образец не свободный остаток: проверить порог вида.
+  await checkMinStockSafe({ sampleIds: [res.sampleId] });
 
   revalidateSamples();
   redirect(`/obraztsy?ok=issued&id=${res.sampleId}`);

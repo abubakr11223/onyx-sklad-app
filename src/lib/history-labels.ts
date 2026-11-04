@@ -603,6 +603,17 @@ function describeStatusChange(row: HistoryRow, p: Rec, lk: HistoryLookups): Hist
   if (kind === "stonetype.edit") {
     return { summary: join([str(p.name) ?? stoneName, "карточка вида изменена"]), changes: [] };
   }
+  if (kind === "stonetype.minstock") {
+    // ТЗ №20 C — порог «Минимальный остаток».
+    const label = str(p.label);
+    return {
+      summary: join([
+        str(p.name) ?? stoneName,
+        label ? `минимальный остаток: ${label}` : "минимальный остаток снят",
+      ]),
+      changes: [],
+    };
+  }
   const changes =
     str(p.from) !== null || str(p.to) !== null
       ? [formatFieldChange({ field: "Статус", old: p.from, new: p.to })]

@@ -43,6 +43,7 @@ import {
   completeSinganPiece,
   releaseSinganPiece,
 } from "./singan-receipt";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 
 /** Ключ — имя поля («side_1», «thicknessMm»…), значение — русское сообщение. */
 export type SinganFormErrors = Record<string, string>;
@@ -323,6 +324,9 @@ export async function submitSingan(
   } catch (err) {
     console.error("[singan] квитанцию не удалось закрыть (кусок записан):", err);
   }
+
+  // ТЗ №20 C — бой списал плиту: проверить порог вида.
+  await checkMinStockSafe({ stoneTypeIds: [batch.stoneTypeId] });
 
   redirect(
     successUrl({

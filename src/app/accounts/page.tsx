@@ -610,7 +610,11 @@ export default async function AccountsPage({
                           Telegram не привязан — фотозапросы не придут
                         </span>
                       ) : (
-                        <span className="text-ink/60">Telegram не привязан</span>
+                        <span className="text-ink/60">
+                          Telegram не привязан — уведомления (долги, заявки) не
+                          придут. Как привязать: укажите телефон, затем напишите
+                          боту /start и поделитесь номером.
+                        </span>
                       )}
                     </p>
                   </div>

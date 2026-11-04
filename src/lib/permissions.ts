@@ -140,6 +140,12 @@ export interface Capabilities {
    * OWNER / MANAGER / WAREHOUSE / WAREHOUSE_LEAD. PARTNER — нет.
    */
   canPrintQr: boolean;
+  /**
+   * ТЗ №20 C (§4, §15) — задать «Минимальный остаток» вида камня и видеть блок
+   * «Заканчивается» на главной. Владелец и зав. складом; менеджер порог видит
+   * в карточке, но не меняет; обычный складчик и партнёр — нет.
+   */
+  canSetMinStock: boolean;
 }
 
 /**
@@ -170,6 +176,7 @@ export interface Capabilities {
  * | canEditBatchQuantity     | true  | false            | LEAD only | false   |
  * | canEditWarehouseMap      | true  | false            | LEAD only | false   |
  * | canPrintQr               | true  | true             | true      | false   |
+ * | canSetMinStock           | true  | false            | LEAD only | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -205,6 +212,7 @@ export const DENY_ALL: Capabilities = {
   canEditBatchQuantity: false,
   canEditWarehouseMap: false,
   canPrintQr: false,
+  canSetMinStock: false,
 };
 
 export function capabilitiesFor(
@@ -237,6 +245,7 @@ export function capabilitiesFor(
         canEditBatchQuantity: true, // владелец — всегда
         canEditWarehouseMap: true, // ТЗ №17 §6
         canPrintQr: true, // ТЗ №20 G
+        canSetMinStock: true, // ТЗ №20 C
       };
     case "MANAGER":
       return {
@@ -265,6 +274,7 @@ export function capabilitiesFor(
         canEditBatchQuantity: false, // менеджер не трогает складской учёт
         canEditWarehouseMap: false,
         canPrintQr: true, // ТЗ №20 G — этикетки печатает и продажа
+        canSetMinStock: false, // ТЗ №20 §15 — видит порог, но не меняет
       };
     case "WAREHOUSE":
     case "WAREHOUSE_LEAD":
@@ -298,6 +308,8 @@ export function capabilitiesFor(
         // ТЗ №17 §6 — карту размечает зав. складом, обычный складчик — нет.
         canEditWarehouseMap: role === "WAREHOUSE_LEAD",
         canPrintQr: true, // ТЗ №20 G — складчик клеит этикетки
+        // ТЗ №20 §15 — порог и «Заканчивается» — зав. складом, не складчик.
+        canSetMinStock: role === "WAREHOUSE_LEAD",
       };
     case "PARTNER":
       return {
@@ -324,6 +336,7 @@ export function capabilitiesFor(
         canEditBatchQuantity: false,
         canEditWarehouseMap: false,
         canPrintQr: false, // ТЗ №20 §15 — партнёр QR не печатает
+        canSetMinStock: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

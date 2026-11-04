@@ -1,9 +1,11 @@
 // TZ №10+11 §9 — сводка владельца: топ клиентов/объектов, B2B vs B2C, период.
-// Доступ: только OWNER (canSeeHistory). UZS/USD никогда не смешиваются.
+// ТЗ №20 E — рейтинг клиентов (владелец — все, менеджер — свои) и «Продажи по
+// менеджерам» (только владелец). UZS/USD никогда не смешиваются.
 
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { getCapabilities } from "@/lib/session";
+import { getCapabilities, currentActorId } from "@/lib/session";
 import { loadOwnerSummary } from "@/lib/owner-summary";
 import { formatCurrencySummaryLine, formatDebtMoney } from "@/lib/debts-ui";
 import { formatVolumeLine } from "@/lib/clients-directory";
@@ -14,6 +16,22 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
+import { buttonClass } from "@/components/ui/Button";
+import {
+  RATING_PERIODS,
+  loadClientRating,
+  loadManagerSales,
+  parseRatingCurrency,
+  parseRatingPeriodKey,
+  parseRatingSort,
+  resolveRatingPeriod,
+  type ClientRatingRow,
+  type ManagerSalesRow,
+  type PerCurrency,
+  type RatingPeriod,
+  type RatingSort,
+} from "@/lib/svodka-ratings";
+import type { MoneyCurrency } from "@/lib/clients";
 
 export const dynamic = "force-dynamic";
 
@@ -44,31 +62,348 @@ function MoneyLines({
   );
 }
 
+const RATING_PAGE = 50;
+
+/** Одна валюта — одна ячейка; ноль показываем прочерком. */
+function MoneyCell({ amount, currency }: { amount: string; currency: MoneyCurrency }) {
+  const zero = Number(amount) === 0;
+  return (
+    <td className="tnum whitespace-nowrap py-2 pl-3 text-right">
+      {zero ? <span className="text-ink/35">—</span> : formatDebtMoney(amount, currency)}
+    </td>
+  );
+}
+
+function AreaCell({ areaM2 }: { areaM2: string }) {
+  const n = Number(areaM2);
+  return (
+    <td className="tnum whitespace-nowrap py-2 pl-3 text-right">
+      {n > 0 ? (
+        n.toFixed(3).replace(/\.?0+$/, "").replace(".", ",")
+      ) : (
+        <span className="text-ink/35">—</span>
+      )}
+    </td>
+  );
+}
+
+/** Долг — текущий, по валютам раздельно (строка на валюту). */
+function DebtCell({ debt }: { debt: PerCurrency }) {
+  const parts = (["UZS", "USD"] as const).filter((c) => Number(debt[c]) > 0);
+  return (
+    <td className="tnum whitespace-nowrap py-2 pl-3 text-right">
+      {parts.length === 0 ? (
+        <span className="text-ink/35">—</span>
+      ) : (
+        parts.map((c) => (
+          <span key={c} className="block font-semibold text-danger">
+            {formatDebtMoney(debt[c], c)}
+          </span>
+        ))
+      )}
+    </td>
+  );
+}
+
+function periodCaption(p: RatingPeriod): string {
+  if (!p.fromISO || !p.toISO) return "за всё время";
+  return `${p.fromISO} — ${p.toISO} (Asia/Tashkent)`;
+}
+
+type HrefWith = (over: Record<string, string | null>) => string;
+
+function Chip({ href, active, children }: { href: string; active: boolean; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={buttonClass(active ? "primary" : "secondary", "sm")}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function PeriodSwitch({ period, hrefWith }: { period: RatingPeriod; hrefWith: HrefWith }) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Период">
+      {RATING_PERIODS.map((p) => (
+        <Chip
+          key={p.key}
+          href={hrefWith({ p: p.key === "month" ? null : p.key, all: null })}
+          active={period.key === p.key}
+        >
+          {p.label}
+        </Chip>
+      ))}
+    </div>
+  );
+}
+
+const SORT_LABELS: Record<RatingSort, string> = {
+  amount: "По сумме",
+  area: "По м²",
+  count: "По числу продаж",
+};
+
+function RatingSection({
+  rows,
+  period,
+  sort,
+  currency,
+  showAll,
+  scopeOwn,
+  hrefWith,
+}: {
+  rows: ClientRatingRow[];
+  period: RatingPeriod;
+  sort: RatingSort;
+  currency: MoneyCurrency;
+  showAll: boolean;
+  scopeOwn: boolean;
+  hrefWith: HrefWith;
+}) {
+  const visible = showAll ? rows : rows.slice(0, RATING_PAGE);
+  return (
+    <section id="reyting" className="mb-6 scroll-mt-4">
+      <h2 className="mb-2 text-lg font-semibold text-ink">
+        Рейтинг клиентов{" "}
+        <Link href="/klienty" className="text-sm font-normal text-gold-deep underline">
+          справочник →
+        </Link>
+      </h2>
+      <Card className="mb-3 flex flex-col gap-3">
+        <PeriodSwitch period={period} hrefWith={hrefWith} />
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Сортировка">
+          {(Object.keys(SORT_LABELS) as RatingSort[]).map((k) => (
+            <Chip key={k} href={hrefWith({ sort: k === "amount" ? null : k })} active={sort === k}>
+              {SORT_LABELS[k]}
+            </Chip>
+          ))}
+        </div>
+        {sort === "amount" && (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Валюта">
+            <span className="text-sm text-ink/60">Сортировать по сумме в:</span>
+            <Chip href={hrefWith({ cur: null })} active={currency === "UZS"}>
+              сум
+            </Chip>
+            <Chip href={hrefWith({ cur: "USD" })} active={currency === "USD"}>
+              $
+            </Chip>
+          </div>
+        )}
+        <p className="text-xs text-ink/50">
+          Период: {periodCaption(period)}.{scopeOwn ? " Только ваши клиенты." : ""} Возвраты
+          не входят; сум и $ не складываются. Долг — текущий остаток.
+        </p>
+      </Card>
+      {rows.length === 0 ? (
+        <p className="text-sm text-ink/55">Нет продаж клиентам за период.</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-card border border-line bg-paper">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-ink/60">
+                  <th className="py-2 pl-3 text-right font-medium">#</th>
+                  <th className="py-2 pl-3 font-medium">Клиент</th>
+                  <th className="py-2 pl-3 font-medium">Тип</th>
+                  <th className="py-2 pl-3 text-right font-medium">Сумма, сум</th>
+                  <th className="py-2 pl-3 text-right font-medium">Сумма, $</th>
+                  <th className="py-2 pl-3 text-right font-medium">м²</th>
+                  <th className="py-2 pl-3 text-right font-medium">Продаж</th>
+                  <th className="py-2 px-3 text-right font-medium">Долг</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => (
+                  <tr key={r.clientId} className="border-b border-line/60 align-top last:border-b-0">
+                    <td className="tnum py-2 pl-3 text-right text-ink/45">{r.place}</td>
+                    <td className="py-2 pl-3">
+                      <Link
+                        href={`/klienty/${r.clientId}`}
+                        className="font-semibold text-gold-deep underline"
+                      >
+                        {r.name}
+                      </Link>
+                    </td>
+                    <td className="py-2 pl-3">
+                      {r.type ? (
+                        <Badge variant="neutral">{CLIENT_TYPE_LABELS[r.type]}</Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <MoneyCell amount={r.sold.UZS} currency="UZS" />
+                    <MoneyCell amount={r.sold.USD} currency="USD" />
+                    <AreaCell areaM2={r.areaM2} />
+                    <td className="tnum py-2 pl-3 text-right">{r.saleCount}</td>
+                    <DebtCell debt={r.debt} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-sm text-ink/55">
+            Клиентов: {rows.length}
+            {!showAll && rows.length > RATING_PAGE && (
+              <>
+                {" · "}
+                <Link href={hrefWith({ all: "1" })} className="text-gold-deep underline">
+                  показать всех
+                </Link>
+              </>
+            )}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: RatingPeriod }) {
+  return (
+    <section className="mb-6">
+      <h2 className="mb-1 text-lg font-semibold text-ink">Продажи по менеджерам</h2>
+      <p className="mb-2 text-xs text-ink/50">
+        Период: {periodCaption(period)} (переключатель — в рейтинге выше). «Сумма» — продажи
+        периода без возвратов; «Собрано» — платежи за период минус возвраты денег, по продажам
+        менеджера; продажа в долг попадает в «собрано» по мере оплаты.
+      </p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-ink/55">Нет продаж и платежей за период.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-card border border-line bg-paper">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-ink/60">
+                <th className="py-2 pl-3 font-medium">Менеджер</th>
+                <th className="py-2 pl-3 text-right font-medium">Продаж</th>
+                <th className="py-2 pl-3 text-right font-medium">Сумма, сум</th>
+                <th className="py-2 pl-3 text-right font-medium">Сумма, $</th>
+                <th className="py-2 pl-3 text-right font-medium">Собрано, сум</th>
+                <th className="py-2 pl-3 text-right font-medium">Собрано, $</th>
+                <th className="py-2 pl-3 text-right font-medium">м²</th>
+                <th className="py-2 px-3 text-right font-medium">Долг клиентов</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.managerId} className="border-b border-line/60 align-top last:border-b-0">
+                  <td className="py-2 pl-3 font-semibold text-ink">
+                    {r.name}
+                    {!r.isActive && (
+                      <Badge variant="neutral" className="ml-2">
+                        неактивен
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="tnum py-2 pl-3 text-right">{r.saleCount}</td>
+                  <MoneyCell amount={r.sold.UZS} currency="UZS" />
+                  <MoneyCell amount={r.sold.USD} currency="USD" />
+                  <MoneyCell amount={r.collected.UZS} currency="UZS" />
+                  <MoneyCell amount={r.collected.USD} currency="USD" />
+                  <AreaCell areaM2={r.areaM2} />
+                  <DebtCell debt={r.debt} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default async function SvodkaPage({
   searchParams,
 }: {
   searchParams: Promise<SP>;
 }) {
   const caps = await getCapabilities();
-  // Owner-only (same class as «История» / «Должники»).
-  if (!caps.canSeeHistory) {
+  // ТЗ №20 §15: рейтинг клиентов — владелец (все) и менеджер (свои клиенты);
+  // всё остальное в «Сводке» (выручка, B2B/B2C, объекты, продажи по
+  // менеджерам) — только владелец (canSeeHistory).
+  if (!caps.canSeeClients) {
     return (
       <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
         <NoAccess />
       </main>
     );
   }
+  const isOwner = caps.canSeeHistory;
 
   const sp = await searchParams;
   const fromQ = first(sp.from);
   const toQ = first(sp.to);
 
+  // ТЗ №20 E — общий переключатель периода для рейтинга и блока менеджеров.
+  const ratingPeriod = resolveRatingPeriod(parseRatingPeriodKey(first(sp.p)));
+  const sort = parseRatingSort(first(sp.sort));
+  const currency = parseRatingCurrency(first(sp.cur));
+  const showAll = first(sp.all) === "1";
+  const actorId = await currentActorId();
+
+  const [rating, managerRows] = await Promise.all([
+    loadClientRating(db, {
+      period: ratingPeriod,
+      sort,
+      currency,
+      canSeeAllClients: caps.canSeeAllClients,
+      actorId,
+    }),
+    isOwner
+      ? loadManagerSales(db, { period: ratingPeriod })
+      : Promise.resolve([] as ManagerSalesRow[]),
+  ]);
+
+  // Ссылки переключателей сохраняют все прочие параметры страницы.
+  const hrefWith = (over: Record<string, string | null>) => {
+    const q = new URLSearchParams();
+    const base: Record<string, string> = {
+      from: fromQ,
+      to: toQ,
+      p: ratingPeriod.key === "month" ? "" : ratingPeriod.key,
+      sort: sort === "amount" ? "" : sort,
+      cur: currency === "UZS" ? "" : currency,
+      all: showAll ? "1" : "",
+    };
+    for (const [k, v] of Object.entries({ ...base, ...over })) {
+      if (v) q.set(k, v);
+    }
+    const s = q.toString();
+    return `/svodka${s ? `?${s}` : ""}#reyting`;
+  };
+
+  const ratingProps = {
+    rows: rating,
+    period: ratingPeriod,
+    sort,
+    currency,
+    showAll,
+    scopeOwn: !caps.canSeeAllClients,
+    hrefWith,
+  };
+
+  if (!isOwner) {
+    return (
+      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+        <header className="mb-4">
+          <h1 className="text-2xl font-bold text-ink">Сводка</h1>
+          <p className="mt-1 text-sm text-ink/60">
+            Рейтинг ваших клиентов. Возвраты не входят. UZS и USD — отдельно.
+          </p>
+        </header>
+        <RatingSection {...ratingProps} />
+      </main>
+    );
+  }
+
   const summary = await loadOwnerSummary(db, {
     fromISO: fromQ,
     toISO: toQ,
   });
-  const { period, topClients, topSites, segments, grandTotals, saleCount } =
-    summary;
+  const { period, topSites, segments, grandTotals, saleCount } = summary;
 
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -99,6 +434,12 @@ export default async function SvodkaPage({
               className={inputClass}
             />
           </Field>
+          {/* Переключатели рейтинга не теряются при смене дат. */}
+          {ratingPeriod.key !== "month" && (
+            <input type="hidden" name="p" value={ratingPeriod.key} />
+          )}
+          {sort !== "amount" && <input type="hidden" name="sort" value={sort} />}
+          {currency !== "UZS" && <input type="hidden" name="cur" value={currency} />}
           <Button type="submit">Показать</Button>
         </form>
         <p className="mt-2 text-xs text-ink/50">
@@ -160,59 +501,9 @@ export default async function SvodkaPage({
         )}
       </section>
 
-      <section className="mb-6">
-        <h2 className="mb-2 text-lg font-semibold text-ink">
-          Топ клиентов{" "}
-          <Link href="/klienty" className="text-sm font-normal text-gold-deep underline">
-            все →
-          </Link>
-        </h2>
-        {topClients.length === 0 ? (
-          <p className="text-sm text-ink/55">Нет продаж за период.</p>
-        ) : (
-          <ol className="flex flex-col gap-2">
-            {topClients.map((c, i) => (
-              <li
-                key={c.key}
-                className="rounded-card border border-line bg-paper p-3 text-sm"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span>
-                    <span className="text-ink/45">{i + 1}. </span>
-                    {c.clientId ? (
-                      <Link
-                        href={`/klienty/${c.clientId}`}
-                        className="font-semibold text-gold-deep underline"
-                      >
-                        {c.name}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold text-ink/70">{c.name}</span>
-                    )}
-                    {c.clientType && (
-                      <Badge variant="neutral" className="ml-2">
-                        {CLIENT_TYPE_LABELS[c.clientType]}
-                      </Badge>
-                    )}
-                    {c.unlinked && (
-                      <Badge variant="warning" className="ml-2">
-                        legacy
-                      </Badge>
-                    )}
-                  </span>
-                  <MoneyLines rows={c.totals} />
-                </div>
-                <p className="mt-1 text-ink/55">
-                  {c.saleCount} продаж
-                  {formatVolumeLine(c.volume)
-                    ? ` · ${formatVolumeLine(c.volume)}`
-                    : ""}
-                </p>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+      <RatingSection {...ratingProps} />
+
+      <ManagersSection rows={managerRows} period={ratingPeriod} />
 
       <section className="mb-6">
         <h2 className="mb-2 text-lg font-semibold text-ink">

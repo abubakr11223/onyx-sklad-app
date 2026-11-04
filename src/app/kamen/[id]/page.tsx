@@ -37,6 +37,7 @@ import {
   addLocation,
   editStoneType,
   generateInteriors,
+  setMinStock,
   moveQty,
   setNeedsCheck,
   updateLocation,
@@ -59,6 +60,15 @@ import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
 import { formatLocation } from "@/lib/locations";
 import { qrPrintHref } from "@/lib/qr";
+import { capabilitiesFor } from "@/lib/permissions";
+import {
+  formatStockQty,
+  formatThreshold,
+  freeInUnit,
+  isBelowThreshold,
+  loadStockLevels,
+  thresholdOf,
+} from "@/lib/min-stock";
 
 export const dynamic = "force-dynamic";
 
@@ -335,6 +345,9 @@ export default async function KamenPage({
   // OWN-02: результат правки карточки камня владельцем.
   const cardOk = firstParam(sp.cardOk) === "1";
   const cardErr = firstParam(sp.cardErr);
+  // ТЗ №20 C: результат сохранения минимального остатка.
+  const minOk = firstParam(sp.minOk) === "1";
+  const minErr = firstParam(sp.minErr);
   // §6.7 «B»: результат генерации AI-интерьеров.
   const aiOk = firstParam(sp.aiOk);
   const aiErr = firstParam(sp.aiErr);
@@ -358,6 +371,9 @@ export default async function KamenPage({
         qrSlug: true,
         // ТЗ №20 G — постоянный код ONX-… (вид, партии, узоры, плиты, бой).
         code: true,
+        // ТЗ №20 C — порог «Минимальный остаток».
+        minStockQty: true,
+        minStockUnit: true,
         basePrice: true,
         // §5.8: закупочная цена — видна только canSeePurchasePrice (OWNER;
         // менеджер — по явному разрешению). Тянем всегда, показываем по caps ниже.
@@ -475,6 +491,10 @@ export default async function KamenPage({
     }),
   ]);
   const isOwner = me?.role === "OWNER";
+  // ТЗ №20 C (§15): порог задают владелец и зав. складом (реальная сессия,
+  // как и сервер-гейт setMinStock); менеджер видит, но не меняет.
+  const canSetMin =
+    !!me && capabilitiesFor(me.role, { canSeePurchasePrice: false }).canSetMinStock;
   // §6.7 «B»: интерьеры генерируют OWNER/MANAGER (стоит денег — B2C-маркетинг).
   const canGenAI = me?.role === "OWNER" || me?.role === "MANAGER";
   // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
@@ -627,6 +647,15 @@ export default async function KamenPage({
     areaFreeSum > 0 ||
     batches.some((x) => x.availableSlabs.length > 0) ||
     availablePieces.length > 0;
+
+  // ТЗ №20 C — порог и свободный остаток вида тем же расчётом, что сигнал
+  // (min-stock.ts). Грузим, только если порог задан и остатки видны роли.
+  const minThreshold = thresholdOf(st.minStockQty, st.minStockUnit);
+  const minLevel =
+    minThreshold && caps.canSeeExactRemainder
+      ? ((await loadStockLevels(db, [st.id], now)).get(st.id) ?? { slabs: 0, areaM2: 0 })
+      : null;
+  const minLow = minThreshold && minLevel ? isBelowThreshold(minThreshold, minLevel) : false;
 
   const basePrice = toNum(st.basePrice);
   // §5.8: закупочная цена + маржа — только для canSeePurchasePrice (OWNER;
@@ -1132,6 +1161,93 @@ export default async function KamenPage({
         </>
         )}
       </Card>
+
+      {/* ТЗ №20 C — «Минимальный остаток»: видят все сотрудники с точными
+          остатками; менять — владелец и зав. складом. */}
+      {caps.canSeeExactRemainder && (
+        <Card className="mt-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-lg font-semibold text-ink">Минимальный остаток</h2>
+            {minLow && <Badge variant="warning">заканчивается</Badge>}
+          </div>
+          {minThreshold ? (
+            <p className="mt-1 text-sm text-ink/70">
+              Порог:{" "}
+              <span className="tnum font-semibold text-ink">
+                {formatThreshold(minThreshold)}
+                {minThreshold.unit === "SLABS" ? " пл." : ""}
+              </span>
+              {minLevel && (
+                <>
+                  {" "}
+                  · свободно{" "}
+                  <span className={"tnum font-semibold " + (minLow ? "text-warning" : "text-ink")}>
+                    {formatStockQty(freeInUnit(minLevel, minThreshold.unit), minThreshold.unit)}
+                  </span>
+                </>
+              )}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-ink/55">
+              Не отслеживается. Когда свободный остаток вида упадёт ниже порога,
+              владелец получит сообщение в Telegram.
+            </p>
+          )}
+          {minOk && (
+            <Alert variant="success" className="mt-3">
+              Минимальный остаток сохранён.
+            </Alert>
+          )}
+          {minErr && (
+            <Alert variant="danger" className="mt-3">
+              {minErr === "denied"
+                ? "Недостаточно прав: порог задают владелец и зав. складом."
+                : minErr === "unit"
+                  ? "Выберите единицу: плиты или м²."
+                  : minErr === "qtySlabs"
+                    ? "Количество плит — целое число больше нуля, например 10."
+                    : minErr === "qtyArea"
+                      ? "Площадь — число больше нуля, например 25,5."
+                      : "Не удалось сохранить порог."}
+            </Alert>
+          )}
+          {canSetMin && (
+            <form
+              action={setMinStock}
+              className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end"
+            >
+              <input type="hidden" name="stoneTypeId" value={st.id} />
+              <input type="hidden" name="next" value={`/kamen/${st.id}`} />
+              <label htmlFor="minStockQty" className="flex flex-col gap-1 text-sm sm:w-40">
+                <span className="font-semibold text-ink">Порог</span>
+                <input
+                  id="minStockQty"
+                  name="minStockQty"
+                  inputMode="decimal"
+                  defaultValue={minThreshold ? String(minThreshold.qty) : ""}
+                  placeholder="пусто — не следить"
+                  className={inputClass + " tnum"}
+                />
+              </label>
+              <label htmlFor="minStockUnit" className="flex flex-col gap-1 text-sm sm:w-40">
+                <span className="font-semibold text-ink">Единица</span>
+                <select
+                  id="minStockUnit"
+                  name="minStockUnit"
+                  defaultValue={minThreshold?.unit ?? "SLABS"}
+                  className={inputClass}
+                >
+                  <option value="SLABS">плиты</option>
+                  <option value="AREA_M2">м²</option>
+                </select>
+              </label>
+              <Button type="submit" variant="secondary">
+                Сохранить порог
+              </Button>
+            </form>
+          )}
+        </Card>
+      )}
 
       {/* 3. Цена */}
       {/* R2: продажную цену видят роли с canSeePrices (OWNER/MANAGER), не склад.

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { notifyWarehouseSafe } from "@/lib/shipment-notify-hook";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 import {
   sendBatchSlabToShowroom,
   sendToShowroom,
@@ -59,6 +60,8 @@ export async function sendToShowroomAction(formData: FormData): Promise<void> {
     for (const s of res.slabs) {
       await notifyWarehouseSafe(s.shipmentId, actorId);
     }
+    // ТЗ №20 C — шоу-рум не свободный остаток: проверить порог вида.
+    await checkMinStockSafe({ batchIds: [batchId] });
 
     revalidatePath("/shourum");
     revalidatePath("/otgruzki");
@@ -97,6 +100,8 @@ export async function sendToShowroomAction(formData: FormData): Promise<void> {
   // ТЗ №15 §5.1/§8.2 — «Создаётся задача на отгрузку типа „Шоу-рум" →
   // складчик физически переносит и подтверждает». Зовём его после коммита.
   await notifyWarehouseSafe(res.shipmentId, actorId);
+  // ТЗ №20 C — шоу-рум не свободный остаток: проверить порог вида.
+  await checkMinStockSafe(targetType === "SLAB" ? { slabIds: [unitId] } : { pieceIds: [unitId] });
 
   revalidatePath("/shourum");
   revalidatePath("/otgruzki");
@@ -128,6 +133,8 @@ export async function returnFromShowroomAction(
     actorId,
   });
   if (!res.ok) redir(res.error.message);
+  // ТЗ №20 C — вернулся с витрины: пересчитать порог (снять «мало»).
+  await checkMinStockSafe(targetType === "SLAB" ? { slabIds: [unitId] } : { pieceIds: [unitId] });
   revalidatePath("/shourum");
   revalidatePath("/otgruzki");
   revalidatePath("/poisk");
@@ -265,6 +272,8 @@ export async function sellFromShowroomAction(
   // ТЗ №15 §8.2 — задача на отгрузку создана в той же транзакции; складчика
   // зовём ПОСЛЕ коммита (внешний I/O не откатывает продажу).
   await notifyWarehouseSafe(res.shipmentId, actorId);
+  // ТЗ №20 C — продажа из шоу-рума: проверить порог вида.
+  await checkMinStockSafe(targetType === "SLAB" ? { slabIds: [unitId] } : { pieceIds: [unitId] });
 
   revalidatePath("/shourum");
   revalidatePath("/prodazha");
@@ -304,6 +313,8 @@ export async function sampleFromShowroomAction(
     returnDueDate,
   });
   if (!res.ok) redir(res.error.message);
+  // ТЗ №20 C — образец из шоу-рума: проверить порог вида.
+  await checkMinStockSafe(targetType === "SLAB" ? { slabIds: [unitId] } : { pieceIds: [unitId] });
   revalidatePath("/shourum");
   revalidatePath("/obraztsy");
   revalidatePath("/otgruzki");

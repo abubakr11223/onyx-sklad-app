@@ -102,7 +102,11 @@ function DebtCard({
   returnTo: string;
 }) {
   return (
-    <li className="rounded-card border border-line bg-paper p-3 text-sm text-ink/80">
+    // id — якорь для ссылок из Telegram-напоминаний (ТЗ №20 D, lib/debt-reminders).
+    <li
+      id={`debt-${d.id}`}
+      className="scroll-mt-4 rounded-card border border-line bg-paper p-3 text-sm text-ink/80 target:border-gold"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <span className="font-semibold text-ink">{d.sale.customerName}</span>

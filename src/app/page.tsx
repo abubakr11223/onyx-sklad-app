@@ -12,6 +12,12 @@ import { photoTasksListWhere } from "@/lib/photo-requests";
 import { visibleNavItems, type NavItem } from "@/components/nav-items";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
+import {
+  formatStockQty,
+  formatThreshold,
+  loadLowStock,
+  type LowStockItem,
+} from "@/lib/min-stock";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +107,17 @@ type Tile = {
 export default async function Home() {
   const [caps, user] = await Promise.all([getCapabilities(), getCurrentUser()]);
   const sections = visibleNavItems(caps);
-  const stats = await loadStats(caps, user?.id ?? null);
+  // ТЗ №20 C — блок «Заканчивается»: владелец и зав. складом (canSetMinStock).
+  // Сбой расчёта не роняет главную — блок просто не показывается.
+  const [stats, lowStock] = await Promise.all([
+    loadStats(caps, user?.id ?? null),
+    caps.canSetMinStock
+      ? loadLowStock(db).catch((e): LowStockItem[] => {
+          console.warn("[home] loadLowStock:", e);
+          return [];
+        })
+      : Promise.resolve([] as LowStockItem[]),
+  ]);
 
   const tiles: Tile[] = [];
   if (stats.batches != null)
@@ -199,6 +215,48 @@ export default async function Home() {
             </Link>
           ))}
         </div>
+      )}
+
+      {lowStock.length > 0 && (
+        <Card className="mb-8 border-warning/35">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-serif text-xl font-bold text-ink">Заканчивается</h2>
+            <Badge variant="warning">пора заказывать</Badge>
+          </div>
+          <p className="mt-1 text-sm text-ink/55">
+            Свободный остаток вида ниже минимального (без броней, шоу-рума и образцов).
+          </p>
+          <table className="mt-3 w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink/55">
+                <th className="py-2 pr-2 font-semibold">Вид</th>
+                <th className="py-2 pr-2 text-right font-semibold">Остаток</th>
+                <th className="py-2 text-right font-semibold">Порог</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lowStock.map((item) => (
+                <tr key={item.stoneTypeId} className="border-b border-line last:border-0">
+                  <td className="py-2 pr-2">
+                    <Link
+                      href={`/kamen/${item.stoneTypeId}`}
+                      className="font-medium text-ink hover:text-gold-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+                    >
+                      {item.name}
+                    </Link>
+                  </td>
+                  <td className="tnum py-2 pr-2 text-right font-semibold text-warning">
+                    {formatStockQty(item.free, item.threshold.unit)}
+                  </td>
+                  <td className="tnum py-2 text-right text-ink/70">
+                    {formatThreshold(item.threshold)}
+                    {item.threshold.unit === "SLABS" ? " пл." : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

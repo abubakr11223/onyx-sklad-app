@@ -24,6 +24,7 @@ import { MAX_BATCH_PHOTOS } from "@/lib/photos";
 import { ensureFormError } from "@/lib/form-errors";
 import { findUnknownLocations } from "@/lib/warehouse-grid";
 import { putPhotoBlob } from "@/lib/photo-blob";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 
 export type BatchEditFormState = {
   errors: Record<string, string>;
@@ -329,6 +330,9 @@ export async function submitBatchEdit(
         }
       }
     }
+
+    // ТЗ №20 C — правка количества меняет остаток: пересчитать порог вида.
+    await checkMinStockSafe({ batchIds: [batchId] });
 
     redirect(
       `/priemka?edited=1&batch=${encodeURIComponent(result.batchId)}&n=${result.changes.length}`,

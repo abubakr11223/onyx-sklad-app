@@ -26,14 +26,15 @@ const worker = () => capabilitiesFor("WAREHOUSE", OPTS);
 
 describe("Зав. складом = складчик во всём, кроме количества", () => {
   // ТЗ №17 §6 добавил второе отличие: карту склада размечает зав. складом.
-  it("матрицы совпадают по КАЖДОМУ праву, кроме количества и карты склада", () => {
+  // ТЗ №20 C (§15) — третье: «Минимальный остаток» и блок «Заканчивается».
+  it("матрицы совпадают по КАЖДОМУ праву, кроме количества, карты склада и мин. остатка", () => {
     const a = worker();
     const b = lead();
     const differing = (Object.keys(a) as Array<keyof Capabilities>).filter(
       (k) => a[k] !== b[k],
     );
     expect(differing.sort()).toEqual(
-      ["canEditBatchQuantity", "canEditWarehouseMap"].sort(),
+      ["canEditBatchQuantity", "canEditWarehouseMap", "canSetMinStock"].sort(),
     );
   });
 

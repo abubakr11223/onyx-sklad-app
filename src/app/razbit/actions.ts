@@ -20,6 +20,7 @@ import { parsePositiveDecimal } from "@/lib/validators/intake";
 import { strOf, allOf } from "@/lib/form";
 import { findUnknownLocations } from "@/lib/warehouse-grid";
 import { ensureFormError } from "@/lib/form-errors";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 
 export type BreakFormErrors = Record<string, string>;
 
@@ -139,6 +140,8 @@ export async function submitBreak(
           byUserId,
           cause: causeParsed.cause,
         });
+        // ТЗ №20 C — плита ушла в бой/распил: проверить порог вида.
+        await checkMinStockSafe({ slabIds: [slabId] });
         redirect(
           successUrl(
             "split",
@@ -155,6 +158,8 @@ export async function submitBreak(
           byUserId,
           cause: causeParsed.cause,
         });
+        // ТЗ №20 C — плита ушла в бой/распил: проверить порог вида.
+        await checkMinStockSafe({ slabIds: [slabId] });
         redirect(
           successUrl(
             "break",
@@ -185,6 +190,8 @@ export async function submitBreak(
         byUserId,
         cause: causeParsed.cause,
       });
+      // ТЗ №20 C — бой из партии списывает плиту: проверить порог вида.
+      await checkMinStockSafe({ batchIds: [batchId] });
       redirect(
         successUrl(
           "direct",

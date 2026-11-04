@@ -30,6 +30,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditBatchQuantity: true,
     canEditWarehouseMap: true,
     canPrintQr: true, // ТЗ №20 G
+    canSetMinStock: true, // ТЗ №20 C
   },
   MANAGER: {
     canSeePrices: true,
@@ -55,6 +56,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditBatchQuantity: false,
     canEditWarehouseMap: false,
     canPrintQr: true, // ТЗ №20 G
+    canSetMinStock: false, // ТЗ №20 C
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -80,6 +82,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditBatchQuantity: false,
     canEditWarehouseMap: false,
     canPrintQr: true, // ТЗ №20 G
+    canSetMinStock: false, // ТЗ №20 C
   },
   // Согласовано 2026-08-12: зав. складом = складчик + количество.
   // Если хоть одно поле здесь разойдётся со складчиком — он молча
@@ -108,6 +111,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditBatchQuantity: true,
     canEditWarehouseMap: true,
     canPrintQr: true, // ТЗ №20 G
+    canSetMinStock: true, // ТЗ №20 C
   },
   PARTNER: {
     canSeePrices: false,
@@ -133,6 +137,7 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditBatchQuantity: false,
     canEditWarehouseMap: false,
     canPrintQr: false, // ТЗ №20 G
+    canSetMinStock: false, // ТЗ №20 C
   },
 };
 

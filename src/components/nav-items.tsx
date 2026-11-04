@@ -338,7 +338,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/svodka",
     label: "Сводка",
     short: "Сводка",
-    description: "Топ клиентов и объектов, B2B vs B2C",
+    description: "Рейтинг клиентов, продажи по менеджерам",
     Icon: SummaryIcon,
   },
 ];

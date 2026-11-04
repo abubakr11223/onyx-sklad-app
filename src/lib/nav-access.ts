@@ -34,8 +34,8 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/klienty": "canSeeClients",
   "/obekty": "canSeeClients",
   "/obraztsy": "canSell",
-  // «Сводка» владельца (TZ №10+11 §9): только OWNER.
-  "/svodka": "canSeeHistory",
+  // «Сводка» (TZ №10+11 §9 + ТЗ №20 E): OWNER — всё; MANAGER — только рейтинг своих клиентов.
+  "/svodka": "canSeeClients",
   // «Отгрузки» (TZ №15): склад / владелец / менеджер (canSeeShipments).
   "/otgruzki": "canSeeShipments",
   // «Шоу-рум» (TZ №15 Slice 3): canSeeShowroom (OWNER/MANAGER/WAREHOUSE).

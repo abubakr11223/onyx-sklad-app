@@ -131,6 +131,8 @@ export interface StoneTypeGroup {
   slabs: SlabOption[];
   pieces: PieceOption[];
   batches: BatchOption[];
+  /** ТЗ №20 C — ниже «Минимального остатка»: «4 плиты / 10» (null — не мало). */
+  lowStock?: string | null;
 }
 
 interface Target {
@@ -549,6 +551,17 @@ export default function SaleForm({
                         <span className="block text-base font-semibold text-ink">
                           {st.name}{" "}
                           <span className="font-normal text-ink/60">({st.rockType})</span>
+                          {st.lowStock && (
+                            <>
+                              {" "}
+                              <Badge
+                                variant="warning"
+                                title={`Ниже минимального остатка: ${st.lowStock}`}
+                              >
+                                мало
+                              </Badge>
+                            </>
+                          )}
                         </span>
                         <span className="block text-sm text-ink/70">{parts}</span>
                       </span>
@@ -568,7 +581,17 @@ export default function SaleForm({
     return (
       <Card>
         <BackButton onClick={() => setStone(null)} label="Вид камня" />
-        <h2 className="mb-3 text-lg font-semibold text-ink">2. Что продаём — {stone.name}</h2>
+        <h2 className="mb-3 text-lg font-semibold text-ink">
+          2. Что продаём — {stone.name}
+          {stone.lowStock && (
+            <>
+              {" "}
+              <Badge variant="warning" className="align-middle">
+                мало: {stone.lowStock}
+              </Badge>
+            </>
+          )}
+        </h2>
 
         {stone.slabs.length > 0 && (
           <>
