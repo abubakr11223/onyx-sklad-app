@@ -461,6 +461,8 @@ export async function confirmShipment(args: {
         where: {
           id: line.id,
           qtyShippedSlabs: shippedSlabs, // optimistic
+          // ТЗ №20 F — частичный возврат уменьшает заказ: не отгрузить «старый» остаток.
+          qtyOrderedSlabs: line.qtyOrderedSlabs,
         },
         data: {
           qtyShippedSlabs: newShippedSlabs,

@@ -29,6 +29,7 @@ import type { Currency, PaymentMethod, Prisma } from "@prisma/client";
 import { formatLocation } from "@/lib/locations";
 import {
   checkSalePayments,
+  debtRemainingCents,
   netPaidCents,
   PaymentError,
   recordRefundInTx,
@@ -45,7 +46,6 @@ import {
   formatLocationsShort,
   loadPatternStock,
   patternsOfBatch,
-  returnToLocationsInTx,
   takeFromLocationsInTx,
   type LocationAllocation,
   type PatternStock,
@@ -56,6 +56,12 @@ import {
   formatHoldQty,
   type BatchVolumeHolds,
 } from "@/lib/volume-holds";
+import {
+  decideReturnAccess,
+  ReturnLogicError,
+  returnVolumeInTx,
+  type ReturnDestination,
+} from "./sale-returns";
 
 // ───────────────────────── Типизированные ошибки ─────────────────────────
 
@@ -1842,6 +1848,11 @@ async function planWholeBatchSplit(
 export interface ReturnSaleInput {
   saleRecordId: string;
   managerId: string;
+  /** ТЗ №20 F — способ возврата денег клиенту (по умолчанию наличные). */
+  method?: PayMethod;
+  /** ТЗ №20 F — куда камень (объёмная продажа). */
+  destination?: ReturnDestination;
+  reason?: string | null;
 }
 
 export interface ReturnSaleOk {
@@ -1852,6 +1863,11 @@ export interface ReturnSaleOk {
   slabId: string | null;
   pieceId: string | null;
   batchId: string | null;
+  /** ТЗ №20 F — объёмная продажа: сколько вернулось сразу / ждёт приёма складом. */
+  immediateSlabs?: number;
+  immediateAreaM2?: number;
+  pendingSlabs?: number;
+  pendingAreaM2?: number;
 }
 
 /**
@@ -1860,9 +1876,11 @@ export interface ReturnSaleOk {
  *    требует проверки перед возвратом в наличие; §3-остаток пересчитается сам
  *    по статусу). 0 строк ⇒ единица уже не «продан» (разбита/возвращена) —
  *    CANNOT_RETURN.
- *  • BATCH_VOLUME: замок партии, ДЕКРЕМЕНТ slabsSoldDirect/areaSoldDirectM2 на
- *    записанные в продаже количества (реверс инкремента продажи — доступный
- *    остаток возвращается) + needsCheck=true на партии.
+ *  • BATCH_VOLUME (ТЗ №20 F, sale-returns.ts): весь ОСТАТОК продажи (за вычетом
+ *    частичных возвратов). Неотгруженное — сразу в остаток (узор и место),
+ *    отгруженное — ждёт приёма складом в «Отгрузках» (раздел 1 ТЗ №20:
+ *    «продано 2, отгружено 1, полный возврат»).
+ * Менеджер — только по своим продажам (ТЗ №20 §15).
  * Идемпотентность: returnedAt на SaleRecord ставится условно (WHERE returnedAt
  * IS NULL); 0 строк ⇒ параллельный/повторный возврат — ALREADY_RETURNED.
  * Пишет AuditLog(RETURN) той же транзакцией (§1.10).
@@ -1879,6 +1897,8 @@ export async function returnSale(
         where: { id: input.saleRecordId },
         select: {
           id: true,
+          managerId: true,
+          price: true,
           targetType: true,
           slabId: true,
           pieceId: true,
@@ -1900,11 +1920,50 @@ export async function returnSale(
         alreadyReturned: sale.returnedAt !== null,
       });
       if (!decision.ok) throw new SaleLogicError(decision.error);
+      const access = decideReturnAccess({
+        actingRole: actor.role,
+        actingUserId: actor.id,
+        saleManagerId: sale.managerId,
+      });
+      if (!access.ok) throw new SaleLogicError(access.error);
+
+      if (sale.targetType === "BATCH_VOLUME") {
+        // ТЗ №20 F — та же логика, что у частичного возврата: «вернуть всё».
+        const r = await returnVolumeInTx(tx, {
+          saleId: sale.id,
+          actor: { id: actor.id, role: actor.role },
+          opts: {
+            qtySlabs: null,
+            qtyAreaM2: null,
+            refundCents: null,
+            method: input.method ?? "CASH",
+            destination: input.destination ?? "SAME_PATTERN",
+            reason: input.reason ?? null,
+            full: true,
+          },
+          now,
+        });
+        return {
+          ok: true as const,
+          saleId: sale.id,
+          targetType: sale.targetType,
+          slabId: null,
+          pieceId: null,
+          batchId: r.batchId,
+          immediateSlabs: r.immediateSlabs,
+          immediateAreaM2: r.immediateAreaM2,
+          pendingSlabs: r.pendingSlabs,
+          pendingAreaM2: r.pendingAreaM2,
+        };
+      }
 
       // Идемпотентность: условная пометка returnedAt (гонка/повтор → 0 строк).
       const marked = await tx.saleRecord.updateMany({
         where: { id: sale.id, returnedAt: null },
-        data: { returnedAt: now },
+        data: {
+          returnedAt: now,
+          ...(sale.price !== null ? { returnedAmount: sale.price } : {}),
+        },
       });
       if (marked.count === 0) {
         throw new SaleLogicError({
@@ -1913,6 +1972,13 @@ export async function returnSale(
         });
       }
 
+      // ТЗ №20 F — остаток долга до отмены (для записи возврата).
+      const debtBefore = await tx.debt.findUnique({
+        where: { saleRecordId: sale.id },
+        select: { status: true, amount: true, repaidAmount: true },
+      });
+      const debtLeftCents =
+        debtBefore?.status === "ACTIVE" ? debtRemainingCents(debtBefore) : 0;
       // TZ №9 — credit sale: close ACTIVE debt (REPAID left as REPAID).
       const debtCancel = await cancelDebtForReturnedSale(tx, {
         saleRecordId: sale.id,
@@ -1928,12 +1994,27 @@ export async function returnSale(
           saleId: sale.id,
           amountCents: paidBack,
           currency: sale.currency,
-          method: "CASH",
+          method: input.method ?? "CASH",
           paidAt: now,
           actorId: actor.id,
           comment: "возврат продажи",
         });
       }
+      // ТЗ №20 F — запись возврата (деньги; камень — через «проверено → в наличии»).
+      const cashBack = paidBack > 0 && sale.currency ? paidBack : 0;
+      await tx.saleReturn.create({
+        data: {
+          saleRecordId: sale.id,
+          refundAmount: ((debtLeftCents + cashBack) / 100).toFixed(2),
+          debtReduction: (debtLeftCents / 100).toFixed(2),
+          cashRefund: (cashBack / 100).toFixed(2),
+          method: cashBack > 0 ? (input.method ?? "CASH") : null,
+          reason: input.reason?.trim().slice(0, 500) || null,
+          isFull: true,
+          parts: [],
+          createdById: actor.id,
+        },
+      });
 
       // TZ №15 — cancel OPEN shipment task (stock reverse below is independent).
       await cancelOpenShipmentForSale(tx, sale.id, now);
@@ -1957,66 +2038,6 @@ export async function returnSale(
             code: "CANNOT_RETURN",
             message:
               "Камень не в статусе «продан» (возможно, разбит или уже возвращён) — возврат невозможен",
-          });
-        }
-      } else {
-        // BATCH_VOLUME: замок партии ДО декремента — сериализует с параллельной
-        // объёмной продажей/боем (иначе их guard прочитает устаревший остаток).
-        if (!sale.batchId) {
-          throw new SaleLogicError({ code: "NOT_FOUND", message: "Партия продажи не найдена" });
-        }
-        await lockBatchForUpdate(tx, sale.batchId);
-        await tx.batch.update({
-          where: { id: sale.batchId },
-          data: {
-            ...(sale.qtySlabs !== null
-              ? { slabsSoldDirect: { decrement: sale.qtySlabs } }
-              : {}),
-            ...(sale.qtyAreaM2 !== null
-              ? { areaSoldDirectM2: { decrement: sale.qtyAreaM2 } }
-              : {}),
-            needsCheck: true,
-          },
-        });
-        // ТЗ №19 — возврат в ТОТ ЖЕ узор и ТО ЖЕ место (строки отгрузки помнят,
-        // откуда брали). Старые продажи без строк — по sale.batchPatternId.
-        const lines = await tx.shipmentLine.findMany({
-          where: { shipment: { saleRecordId: sale.id } },
-          select: {
-            batchPatternId: true,
-            batchLocationId: true,
-            qtyOrderedSlabs: true,
-            qtyOrderedAreaM2: true,
-          },
-        });
-        const patternLines = lines.filter((l) => l.batchPatternId);
-        for (const l of patternLines) {
-          await tx.batchPattern.update({
-            where: { id: l.batchPatternId! },
-            data: {
-              ...(l.qtyOrderedSlabs !== null
-                ? { slabsSold: { decrement: l.qtyOrderedSlabs } }
-                : {}),
-              ...(l.qtyOrderedAreaM2 !== null
-                ? { areaSoldM2: { decrement: l.qtyOrderedAreaM2 } }
-                : {}),
-            },
-          });
-        }
-        await returnSaleToLocations(tx, sale.batchId, lines);
-        // ТЗ №3 — если продажа была ИЗ УЗОРА, синхронно реверсим и его счётчики
-        // (иначе остаток узора «застрянет» проданным при возврате партии).
-        if (patternLines.length === 0 && sale.batchPatternId) {
-          await tx.batchPattern.update({
-            where: { id: sale.batchPatternId },
-            data: {
-              ...(sale.qtySlabs !== null
-                ? { slabsSold: { decrement: sale.qtySlabs } }
-                : {}),
-              ...(sale.qtyAreaM2 !== null
-                ? { areaSoldM2: { decrement: sale.qtyAreaM2 } }
-                : {}),
-            },
           });
         }
       }
@@ -2064,42 +2085,8 @@ export async function returnSale(
     });
   } catch (e) {
     if (e instanceof SaleLogicError) return { ok: false, error: e.saleError };
+    if (e instanceof ReturnLogicError) return { ok: false, error: e.saleError };
     throw e;
-  }
-}
-
-/** ТЗ №19 §D — возврат продажи: плиты обратно в места, откуда их взяли. */
-async function returnSaleToLocations(
-  tx: Prisma.TransactionClient,
-  batchId: string,
-  lines: readonly {
-    batchPatternId: string | null;
-    batchLocationId: string | null;
-    qtyOrderedSlabs: number | null;
-    qtyOrderedAreaM2: { toString(): string } | null;
-  }[],
-): Promise<void> {
-  const located = lines.filter((l) => l.batchLocationId);
-  if (located.length === 0) return;
-  const now = new Date();
-  const stock = await loadPatternStock(tx, [batchId], now);
-  const batch = await tx.batch.findUnique({
-    where: { id: batchId },
-    select: { lengthMm: true, widthMm: true, slabsTotal: true, areaTotalM2: true },
-  });
-  const batchUnit =
-    batch?.lengthMm && batch.widthMm
-      ? (batch.lengthMm * batch.widthMm) / 10_000
-      : batch?.slabsTotal && batch.areaTotalM2
-        ? Number(batch.areaTotalM2.toString()) / batch.slabsTotal
-        : 0;
-  for (const l of located) {
-    const unit = (l.batchPatternId && stock.get(l.batchPatternId)?.unitAreaM2) || batchUnit;
-    const area = toNum(l.qtyOrderedAreaM2);
-    const slabs =
-      l.qtyOrderedSlabs ??
-      (unit > 0 && area !== null ? Math.floor(area / unit + 1e-6) : 0);
-    await returnToLocationsInTx(tx, [{ locationId: l.batchLocationId, slabs }], unit);
   }
 }
 

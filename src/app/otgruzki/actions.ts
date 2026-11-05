@@ -8,6 +8,8 @@ import { confirmShipment, ShipmentError } from "@/lib/shipments";
 import { attachShipmentFactPhoto } from "@/lib/shipment-photo";
 import { putPhotoBlob } from "@/lib/photo-blob";
 import { strOf } from "@/lib/form";
+import { acceptSaleReturn } from "@/lib/sale-returns";
+import { checkMinStockSafe } from "@/lib/min-stock-hook";
 
 /** ТЗ №15 §3.3/§8.1 — фото факта отгрузки. Тот же предел, что у фото узора. */
 const MAX_FACT_PHOTO_BYTES = 15 * 1024 * 1024;
@@ -196,4 +198,33 @@ export async function updateShipmentPlanAction(formData: FormData): Promise<void
   ]);
   revalidatePath("/otgruzki");
   redirect("/otgruzki?ok=plan");
+}
+
+/**
+ * ТЗ №20 F — «Принять возврат»: отгруженный камень по возврату продажи
+ * физически вернулся на склад. Владелец, зав. склада, складчик (§15) — то же
+ * право, что у подтверждения отгрузки. Остаток растёт только здесь.
+ */
+export async function acceptSaleReturnAction(formData: FormData): Promise<void> {
+  const caps = await getCapabilities();
+  if (!caps.canConfirmShipment) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Нет доступа: возврат принимает склад"));
+  }
+  const actorId = await currentActorId();
+  if (!actorId) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Нет пользователя"));
+  }
+  const saleReturnId = String(formData.get("saleReturnId") ?? "").trim();
+  if (!saleReturnId) {
+    redirect("/otgruzki?err=" + encodeURIComponent("Не указан возврат"));
+  }
+  const res = await acceptSaleReturn({ saleReturnId, actorId: actorId! });
+  if (!res.ok) {
+    redirect("/otgruzki?err=" + encodeURIComponent(res.error.message));
+  }
+  // ТЗ №20 C — камень снова в наличии: пересчитать порог вида.
+  await checkMinStockSafe({ saleRecordIds: [res.ok ? res.saleId : null] });
+  revalidatePath("/otgruzki");
+  revalidatePath("/prodazha");
+  redirect("/otgruzki?ok=return");
 }

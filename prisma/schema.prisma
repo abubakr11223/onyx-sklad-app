@@ -117,6 +117,8 @@ enum AuditAction {
   /// TZ №15 Slice 3 — unit sent to / returned from showroom.
   SHOWROOM_SEND
   SHOWROOM_RETURN
+  /// ТЗ №20 F — склад принял назад отгруженный камень по возврату продажи.
+  RETURN_ACCEPT
   /// Audit 2026-09-02 — zaxira olindi (tizim amali, userId = null).
   /// Egaga «zaxira kelmayapti» degan savolga javob shu yozuvlardan chiqadi.
   BACKUP
@@ -153,6 +155,12 @@ enum PaymentMethod {
 enum PaymentKind {
   PAYMENT
   REFUND
+}
+
+/// ТЗ №20 F — куда идёт возвращённый камень.
+enum ReturnDestination {
+  SAME_PATTERN // в тот же узор / то же место
+  REMAINDER // в бой/остаток: куски (Piece) того же узора, «проверить»
 }
 
 /// ТЗ №20 B — как клиент заберёт камень.
@@ -572,6 +580,9 @@ model User {
   samplesIssued         Sample[]       @relation("SampleManager")
   shipmentsCreated      Shipment[]     @relation("ShipmentManager")
   showroomSends         ShowroomPlacement[] @relation("ShowroomSentBy")
+  /// ТЗ №20 F — оформленные возвраты и принятые складом.
+  saleReturnsCreated    SaleReturn[]   @relation("SaleReturnCreatedBy")
+  saleReturnsAccepted   SaleReturn[]   @relation("SaleReturnAcceptedBy")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -843,6 +854,11 @@ model SaleRecord {
   /// TZ §4.3 — «Возврат от клиента». null = продажа активна; заполнено =
   /// продажа отменена возвратом (идемпотентность: повторный возврат запрещён).
   returnedAt      DateTime?
+  /// ТЗ №20 F — накопительно по частичным возвратам (полный возврат ставит returnedAt).
+  /// Итоги продаж считаются как price − returnedAmount, qty − returned*.
+  returnedSlabs   Int            @default(0)
+  returnedAreaM2  Decimal        @default(0) @db.Decimal(12, 3)
+  returnedAmount  Decimal        @default(0) @db.Decimal(14, 2)
   /// TZ №10+11 — справочник клиентов. null = legacy row (текстовый customerName).
   /// Новые продажи: validator сделает clientId обязательным (этап 2).
   clientId        String?
@@ -864,6 +880,8 @@ model SaleRecord {
   sampleFrom   Sample?
   /// TZ №15 — at most one shipment task per sale (1:1).
   shipment     Shipment?
+  /// ТЗ №20 F — возвраты по продаже (частичные и полный).
+  returns      SaleReturn[]
 
   @@index([managerId, soldAt])
   @@index([soldAt])
@@ -1017,6 +1035,43 @@ model Debt {
   @@index([status, createdAt])
   @@index([currency, status])
   @@index([clientId, status])
+}
+
+/// ТЗ №20 F — один возврат по продаже (частичный или последний/полный).
+/// Деньги: refundAmount = debtReduction (уменьшение долга) + cashRefund (Payment REFUND).
+/// Камень: неотгруженная часть вернулась сразу (immediate*), отгруженная ждёт
+/// приёма складом в «Отгрузках» (pending*, acceptedAt). parts — раскладка по
+/// строкам отгрузки: [{ lineId, batchPatternId, batchLocationId, slabs, areaM2, shipped }].
+model SaleReturn {
+  id              String             @id @default(cuid())
+  saleRecordId    String
+  qtySlabs        Int?
+  qtyAreaM2       Decimal?           @db.Decimal(12, 3)
+  refundAmount    Decimal            @db.Decimal(14, 2)
+  debtReduction   Decimal            @default(0) @db.Decimal(14, 2)
+  cashRefund      Decimal            @default(0) @db.Decimal(14, 2)
+  /// Способ возврата денег (для cashRefund > 0).
+  method          PaymentMethod?
+  destination     ReturnDestination  @default(SAME_PATTERN)
+  reason          String?
+  /// Этот возврат закрыл продажу целиком (SaleRecord.returnedAt).
+  isFull          Boolean            @default(false)
+  immediateSlabs  Int                @default(0)
+  immediateAreaM2 Decimal            @default(0) @db.Decimal(12, 3)
+  pendingSlabs    Int                @default(0)
+  pendingAreaM2   Decimal            @default(0) @db.Decimal(12, 3)
+  parts           Json
+  acceptedAt      DateTime?
+  acceptedById    String?
+  createdById     String
+  createdAt       DateTime           @default(now())
+
+  saleRecord SaleRecord @relation(fields: [saleRecordId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation("SaleReturnCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  acceptedBy User?      @relation("SaleReturnAcceptedBy", fields: [acceptedById], references: [id], onDelete: Restrict)
+
+  @@index([saleRecordId])
+  @@index([acceptedAt, createdAt])
 }
 
 /// A1 (TZ §6.8) — Лид: входящий интерес дизайнера/партнёра. Партнёр смотрит

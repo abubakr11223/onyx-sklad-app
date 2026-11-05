@@ -18,10 +18,17 @@ import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import Field, { inputClass } from "@/components/ui/Field";
 import {
+  acceptSaleReturnAction,
   confirmShipmentAction,
   toggleShipmentUrgentAction,
   updateShipmentPlanAction,
 } from "./actions";
+import {
+  formatReturnQty,
+  listPendingSaleReturns,
+  parseReturnParts,
+} from "@/lib/sale-returns";
+import { formatLocation } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Отгрузки — Onyx" };
@@ -96,6 +103,21 @@ export default async function OtgruzkiPage({
     return "/otgruzki" + (s ? `?${s}` : "");
   };
 
+  // ТЗ №20 F — возвраты, ждущие приёма складом (отгруженный камень едет назад).
+  const pendingReturns =
+    tab === "open"
+      ? await listPendingSaleReturns(db, { managerId: canSeeAll ? null : actorId })
+      : { rows: [], locationIds: [] };
+  const returnLocs = new Map(
+    (pendingReturns.locationIds.length
+      ? await db.batchLocation.findMany({
+          where: { id: { in: pendingReturns.locationIds } },
+          select: { id: true, block: true, landmark: true },
+        })
+      : []
+    ).map((l) => [l.id, formatLocation(l.block, l.landmark)]),
+  );
+
   // Список менеджеров для фильтра — только тем, кто видит все отгрузки.
   // Ограничен: сотрудников десятки, не тысячи.
   const managers = canSeeAll
@@ -120,6 +142,11 @@ export default async function OtgruzkiPage({
         <Alert variant="success" title="Готово" className="mb-3">
           Отгрузка подтверждена. Статус единицы на складе не менялся (уже
           продана).
+        </Alert>
+      )}
+      {ok === "return" && (
+        <Alert variant="success" title="Готово" className="mb-3">
+          Возврат принят — камень снова в наличии.
         </Alert>
       )}
       {ok === "plan" && (
@@ -257,6 +284,73 @@ export default async function OtgruzkiPage({
           )}
         </div>
       </form>
+
+      {pendingReturns.rows.length > 0 && (
+        <section className="mb-4">
+          <h2 className="mb-2 text-lg font-bold text-ink">Возвраты к приёму</h2>
+          <ul className="flex flex-col gap-3">
+            {pendingReturns.rows.map((r) => {
+              const sale = r.saleRecord;
+              const where = [
+                ...new Set(
+                  parseReturnParts(r.parts)
+                    .filter((p) => p.shipped && p.batchLocationId)
+                    .map((p) => returnLocs.get(p.batchLocationId!) ?? ""),
+                ),
+              ]
+                .filter(Boolean)
+                .join(", ");
+              return (
+                <li key={r.id}>
+                  <Card className="border-gold/50">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-ink">
+                          {sale.batch?.stoneType.name ?? "Камень"}
+                          {sale.batchPattern ? ` · узор «${sale.batchPattern.description}»` : ""}
+                        </p>
+                        <p className="text-sm text-ink/70">
+                          {sale.customerName}
+                          {sale.site ? ` · ${sale.site.name}` : ""}
+                        </p>
+                        <p className="tnum text-sm text-ink">
+                          Принять назад:{" "}
+                          {formatReturnQty(r.pendingSlabs, Number(r.pendingAreaM2))}
+                          {where ? ` · вернуть в ${where}` : ""}
+                        </p>
+                        <p className="text-sm text-ink/70">
+                          {r.destination === "REMAINDER"
+                            ? "Куда: в бой/остаток (куски, «проверить»)"
+                            : "Куда: в тот же узор / то же место"}
+                        </p>
+                        {r.reason && (
+                          <p className="text-sm text-ink/70">
+                            <span className="text-ink/50">Причина:</span> {r.reason}
+                          </p>
+                        )}
+                        <p className="mt-1 text-xs text-ink/55">
+                          Возврат оформил {r.createdBy.name} ·{" "}
+                          {formatTashkentDateTime(r.createdAt)}
+                          {r.isFull ? " · полный возврат" : " · частичный возврат"}
+                        </p>
+                      </div>
+                      <Badge variant="warning">Ждёт приёма</Badge>
+                    </div>
+                    {caps.canConfirmShipment && (
+                      <form action={acceptSaleReturnAction} className="mt-3 border-t border-line pt-3">
+                        <input type="hidden" name="saleReturnId" value={r.id} />
+                        <Button type="submit" className="min-h-12 w-full sm:w-auto">
+                          Принять возврат
+                        </Button>
+                      </form>
+                    )}
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {items.length === 0 ? (
         <Card>

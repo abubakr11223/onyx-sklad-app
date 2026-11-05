@@ -1,7 +1,9 @@
 // TZ №10+11 Этап 3 — справочники «Клиенты» / «Объекты»: domain + pure totals.
 // Суммы считаются из SaleRecord (returnedAt == null), НЕ хранятся отдельно.
+// ТЗ №20 F — за вычетом частичных возвратов (sale-net.ts).
 // UZS и USD НИКОГДА не складываются (CONTRACT / «Правки модели» §5).
 
+import { netSaleFields, SALE_RETURNED_SELECT } from "./sale-net";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   clientListScope,
@@ -193,6 +195,7 @@ const clientListSelect = {
     select: {
       returnedAt: true,
       price: true,
+      ...SALE_RETURNED_SELECT,
       currency: true,
       qtySlabs: true,
       qtyAreaM2: true,
@@ -212,10 +215,10 @@ type ClientListRow = Prisma.ClientGetPayload<{
 function mapClientListRow(r: ClientListRow): ClientListItem {
   const sales: SaleTotRow[] = r.sales.map((s) => ({
     returnedAt: s.returnedAt,
-    price: s.price?.toString() ?? null,
+    price: netSaleFields(s).price,
     currency: (s.currency as MoneyCurrency | null) ?? null,
-    qtySlabs: s.qtySlabs,
-    qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
+    qtySlabs: netSaleFields(s).qtySlabs,
+    qtyAreaM2: netSaleFields(s).qtyAreaM2,
   }));
   const debts: DebtTotRow[] = r.debts.map((d) => ({
     status: d.status as DebtTotRow["status"],
@@ -457,6 +460,7 @@ export async function getClientDirectoryCard(
             select: {
               returnedAt: true,
               price: true,
+              ...SALE_RETURNED_SELECT,
               currency: true,
               qtySlabs: true,
               qtyAreaM2: true,
@@ -475,6 +479,7 @@ export async function getClientDirectoryCard(
           qtySlabs: true,
           qtyAreaM2: true,
           price: true,
+          ...SALE_RETURNED_SELECT,
           currency: true,
           paymentMethod: true,
           siteId: true,
@@ -510,10 +515,10 @@ export async function getClientDirectoryCard(
 
   const salesTot: SaleTotRow[] = row.sales.map((s) => ({
     returnedAt: s.returnedAt,
-    price: s.price?.toString() ?? null,
+    price: netSaleFields(s).price,
     currency: (s.currency as MoneyCurrency | null) ?? null,
-    qtySlabs: s.qtySlabs,
-    qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
+    qtySlabs: netSaleFields(s).qtySlabs,
+    qtyAreaM2: netSaleFields(s).qtyAreaM2,
   }));
 
   const debtRows: DebtTotRow[] = row.debts.map((d) => ({
@@ -562,10 +567,10 @@ export async function getClientDirectoryCard(
     sites: row.sites.map((s) => {
       const ss: SaleTotRow[] = s.sales.map((x) => ({
         returnedAt: x.returnedAt,
-        price: x.price?.toString() ?? null,
+        price: netSaleFields(x).price,
         currency: (x.currency as MoneyCurrency | null) ?? null,
-        qtySlabs: x.qtySlabs,
-        qtyAreaM2: x.qtyAreaM2?.toString() ?? null,
+        qtySlabs: netSaleFields(x).qtySlabs,
+        qtyAreaM2: netSaleFields(x).qtyAreaM2,
       }));
       return {
         id: s.id,
@@ -581,9 +586,9 @@ export async function getClientDirectoryCard(
       soldAt: s.soldAt,
       returnedAt: s.returnedAt,
       targetType: s.targetType,
-      qtySlabs: s.qtySlabs,
-      qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
-      price: s.price?.toString() ?? null,
+      qtySlabs: netSaleFields(s).qtySlabs,
+      qtyAreaM2: netSaleFields(s).qtyAreaM2,
+      price: netSaleFields(s).price,
       currency: (s.currency as MoneyCurrency | null) ?? null,
       paymentMethod: s.paymentMethod,
       siteId: s.siteId,
@@ -684,6 +689,7 @@ export async function listSitesDirectory(
         select: {
           returnedAt: true,
           price: true,
+          ...SALE_RETURNED_SELECT,
           currency: true,
           qtySlabs: true,
           qtyAreaM2: true,
@@ -695,10 +701,10 @@ export async function listSitesDirectory(
   return rows.map((r) => {
     const sales: SaleTotRow[] = r.sales.map((s) => ({
       returnedAt: s.returnedAt,
-      price: s.price?.toString() ?? null,
+      price: netSaleFields(s).price,
       currency: (s.currency as MoneyCurrency | null) ?? null,
-      qtySlabs: s.qtySlabs,
-      qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
+      qtySlabs: netSaleFields(s).qtySlabs,
+      qtyAreaM2: netSaleFields(s).qtyAreaM2,
     }));
     return {
       id: r.id,
@@ -779,6 +785,7 @@ export async function getSiteDirectoryCard(
           qtySlabs: true,
           qtyAreaM2: true,
           price: true,
+          ...SALE_RETURNED_SELECT,
           currency: true,
           paymentMethod: true,
           manager: { select: { name: true } },
@@ -806,10 +813,10 @@ export async function getSiteDirectoryCard(
 
   const salesTot: SaleTotRow[] = row.sales.map((s) => ({
     returnedAt: s.returnedAt,
-    price: s.price?.toString() ?? null,
+    price: netSaleFields(s).price,
     currency: (s.currency as MoneyCurrency | null) ?? null,
-    qtySlabs: s.qtySlabs,
-    qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
+    qtySlabs: netSaleFields(s).qtySlabs,
+    qtyAreaM2: netSaleFields(s).qtyAreaM2,
   }));
 
   const debtRows: DebtTotRow[] = [];
@@ -840,9 +847,9 @@ export async function getSiteDirectoryCard(
       soldAt: s.soldAt,
       returnedAt: s.returnedAt,
       targetType: s.targetType,
-      qtySlabs: s.qtySlabs,
-      qtyAreaM2: s.qtyAreaM2?.toString() ?? null,
-      price: s.price?.toString() ?? null,
+      qtySlabs: netSaleFields(s).qtySlabs,
+      qtyAreaM2: netSaleFields(s).qtyAreaM2,
+      price: netSaleFields(s).price,
       currency: (s.currency as MoneyCurrency | null) ?? null,
       paymentMethod: s.paymentMethod,
       managerName: s.manager.name,

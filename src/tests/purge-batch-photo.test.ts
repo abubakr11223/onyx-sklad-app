@@ -140,6 +140,7 @@ function makeSemanticDb(fx: Fixture) {
     saleRecord: zeroModel,
     debt: zeroModel,
     payment: zeroModel, // ТЗ №20 A
+    saleReturn: zeroModel, // ТЗ №20 F
     photoRequest: {
       count: async () => 0,
       updateMany: async () => ({ count: 0 }),

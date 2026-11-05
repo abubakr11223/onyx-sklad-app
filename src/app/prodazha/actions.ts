@@ -19,6 +19,9 @@ import {
   sellWholeBatch,
   type SaleError,
 } from "@/lib/sales";
+import { formatReturnQty, returnSalePartial } from "@/lib/sale-returns";
+import { isPayMethod, formatMoneyCents } from "@/lib/payments";
+import { normalizeMoneyForSubmit } from "./money-input";
 import { validateSalePayment } from "@/lib/validators/sale-payment";
 import { validateSaleClientLink } from "@/lib/validators/sale-client";
 import { parseVolumeQtyFields } from "@/lib/validators/volume-qty";
@@ -342,7 +345,13 @@ export async function returnSaleAction(formData: FormData): Promise<void> {
     redirect(`/prodazha?retErr=${encodeURIComponent("В системе нет активного менеджера")}`);
   }
 
-  const result = await returnSale({ saleRecordId, managerId: managerId! });
+  const methodRaw = String(formData.get("method") ?? "").trim();
+  const result = await returnSale({
+    saleRecordId,
+    managerId: managerId!,
+    method: isPayMethod(methodRaw) ? methodRaw : "CASH",
+    reason: String(formData.get("reason") ?? "").trim() || null,
+  });
   if (!result.ok) {
     redirect(`/prodazha?retErr=${encodeURIComponent(result.error.message)}`);
   }
@@ -352,8 +361,92 @@ export async function returnSaleAction(formData: FormData): Promise<void> {
   const isUnit = result.targetType === "SLAB" || result.targetType === "PIECE";
   const note = isUnit
     ? "Возврат оформлен — камень требует проверки перед возвратом в наличие"
-    : "Возврат оформлен — объём возвращён в остаток, партия помечена «проверить»";
+    : volumeReturnNote(result);
   redirect(`/prodazha?retOk=${encodeURIComponent(note)}`);
+}
+
+/** «2 плит — сразу в остаток · 1 плит — ждёт приёма складом в «Отгрузках»». */
+function volumeReturnNote(r: {
+  immediateSlabs?: number;
+  immediateAreaM2?: number;
+  pendingSlabs?: number;
+  pendingAreaM2?: number;
+}): string {
+  const now = formatReturnQty(r.immediateSlabs ?? null, r.immediateAreaM2 ?? null);
+  const later = formatReturnQty(r.pendingSlabs ?? null, r.pendingAreaM2 ?? null);
+  return [
+    "Возврат оформлен",
+    now && `${now} — сразу в остаток (не отгружалось)`,
+    later && `${later} — ждёт приёма складом в «Отгрузках»`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * ТЗ №20 F — «Оформить возврат» объёмной продажи (частичный; пусто = всё).
+ * Право: canSell; менеджер — только свои продажи (проверка в транзакции).
+ */
+export async function returnSalePartialAction(formData: FormData): Promise<void> {
+  const back = (msg: string) =>
+    redirect(`/prodazha?retErr=${encodeURIComponent(msg)}#sales`);
+  if (!(await getCapabilities()).canSell) back("Нет доступа: возврат оформляет менеджер");
+  const managerId = await currentActorId();
+  if (!managerId) back("В системе нет активного менеджера");
+
+  const str = strOf(formData);
+  const saleRecordId = str("saleRecordId");
+  if (!saleRecordId) back("Продажа не указана");
+
+  let qtySlabs: number | null = null;
+  let qtyAreaM2: number | null = null;
+  if (str("qtySlabs") || str("qtyAreaM2")) {
+    const vol = parseVolumeQtyFields(str("qtySlabs"), str("qtyAreaM2"));
+    if (!vol.ok) back(Object.values(vol.errors)[0] ?? "Неверное количество");
+    else {
+      qtySlabs = vol.qtySlabs;
+      qtyAreaM2 = vol.qtyAreaM2;
+    }
+  }
+
+  // Пусто = предложенная сумма (цена × доля).
+  let refundCents: number | null = null;
+  const refundRaw = normalizeMoneyForSubmit(str("refund"));
+  if (refundRaw !== "") {
+    const v = Number(refundRaw);
+    if (!Number.isFinite(v) || v < 0) back("Сумма возврата — число не меньше нуля");
+    refundCents = Math.round(v * 100);
+  }
+  const methodRaw = str("method");
+  const destination = str("destination") === "REMAINDER" ? "REMAINDER" : "SAME_PATTERN";
+
+  const result = await returnSalePartial({
+    saleRecordId,
+    managerId: managerId!,
+    opts: {
+      qtySlabs,
+      qtyAreaM2,
+      refundCents,
+      method: isPayMethod(methodRaw) ? methodRaw : "CASH",
+      destination,
+      reason: str("reason") || null,
+    },
+  });
+  if (!result.ok) back(result.error.message);
+  if (!result.ok) return;
+
+  // ТЗ №20 C — объём вернулся в остаток: пересчитать порог вида.
+  await checkMinStockSafe({ saleRecordIds: [saleRecordId] });
+
+  const cur = str("currency") === "USD" ? "USD" : "UZS";
+  const money = [
+    result.debtReductionCents > 0 && `долг −${formatMoneyCents(result.debtReductionCents, cur)}`,
+    result.cashCents > 0 && `клиенту ${formatMoneyCents(result.cashCents, cur)}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const note = [volumeReturnNote(result), money].filter(Boolean).join(" · ");
+  redirect(`/prodazha?retOk=${encodeURIComponent(note)}#sales`);
 }
 
 /**

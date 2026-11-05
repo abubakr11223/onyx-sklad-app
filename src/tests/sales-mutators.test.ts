@@ -39,6 +39,7 @@ const M = vi.hoisted(() => {
     locationUpdate: fn(),
     shipmentLineFindMany: fn(),
     paymentCreate: fn(), // ТЗ №20 A
+    saleReturnCreate: fn(), // ТЗ №20 F
     // TZ №9 — Debt (returnSale cancel; credit create)
     debtFindUnique: fn(),
     debtCreate: fn(),
@@ -84,6 +85,7 @@ const tx = {
   },
   shipmentLine: { findMany: M.shipmentLineFindMany },
   payment: { create: M.paymentCreate, groupBy: async () => [] },
+  saleReturn: { create: M.saleReturnCreate },
   debt: {
     findUnique: M.debtFindUnique,
     create: M.debtCreate,
@@ -131,6 +133,7 @@ beforeEach(() => {
   M.auditCreate.mockResolvedValue({});
   M.queryRaw.mockResolvedValue([]);
   M.patternUpdate.mockResolvedValue({});
+  M.saleReturnCreate.mockResolvedValue({ id: "ret1" });
   // TZ №9: no debt by default (cash/legacy sales; return with no debt).
   M.debtFindUnique.mockResolvedValue(null);
   M.debtCreate.mockResolvedValue({ id: "debt1" });
@@ -385,6 +388,7 @@ describe("sellUnit — единичная продажа плиты (mock-tx)", 
   it("TZ9: returnSale cancels ACTIVE debt", async () => {
     M.saleFindUnique.mockResolvedValue({
       id: "sale1",
+      managerId: "mgr1", // ТЗ №20 §15 — менеджер возвращает свои продажи
       targetType: "SLAB",
       slabId: "slab1",
       pieceId: null,
@@ -409,6 +413,7 @@ describe("sellUnit — единичная продажа плиты (mock-tx)", 
   it("TZ9: returnSale leaves REPAID debt (scenario A — money collected)", async () => {
     M.saleFindUnique.mockResolvedValue({
       id: "sale1",
+      managerId: "mgr1", // ТЗ №20 §15 — менеджер возвращает свои продажи
       targetType: "SLAB",
       slabId: "slab1",
       pieceId: null,
@@ -725,6 +730,7 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
   it("уже возвращена ранее (returnedAt !== null) → ALREADY_RETURNED, счётчики не двигаются", async () => {
     M.saleFindUnique.mockResolvedValue({
       id: "sale1",
+      managerId: "mgr1", // ТЗ №20 §15 — менеджер возвращает свои продажи
       targetType: "SLAB",
       slabId: "slab1",
       pieceId: null,
@@ -747,6 +753,7 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
   it("SLAB happy: SOLD → RETURNED+needsCheck; SaleRecord.returnedAt проставлен; OPEN shipment cancelled; AuditLog(RETURN)", async () => {
     M.saleFindUnique.mockResolvedValue({
       id: "sale1",
+      managerId: "mgr1", // ТЗ №20 §15 — менеджер возвращает свои продажи
       targetType: "SLAB",
       slabId: "slab1",
       pieceId: null,
@@ -789,9 +796,10 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
     expect(M.auditCreate.mock.calls[0][0].data.action).toBe("RETURN");
   });
 
-  it("BATCH_VOLUME happy: batch.slabsSoldDirect ДЕКРЕМЕНТ на qtySlabs + needsCheck=true; замок партии взят", async () => {
+  it("BATCH_VOLUME legacy (нет задачи отгрузки = отгружено): камень ждёт приёма складом, остаток не растёт сразу; замки взяты", async () => {
     M.saleFindUnique.mockResolvedValue({
       id: "sale1",
+      managerId: "mgr1", // ТЗ №20 §15 — менеджер возвращает свои продажи
       targetType: "BATCH_VOLUME",
       slabId: null,
       pieceId: null,
@@ -805,13 +813,19 @@ describe("returnSale — возврат от клиента (mock-tx)", () => {
     const res = await returnSale(INPUT);
 
     expect(res.ok).toBe(true);
-    // Замок партии ДО декремента.
+    // Замки продажи и партии.
     expect(M.queryRaw).toHaveBeenCalled();
-    expect(M.batchUpdate).toHaveBeenCalledTimes(1);
-    const upd = M.batchUpdate.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: "b1" });
-    expect(upd.data.slabsSoldDirect).toEqual({ decrement: 4 });
-    expect(upd.data.needsCheck).toBe(true);
+    // ТЗ №20 F / раздел 1: отгруженный камень возвращается в остаток только
+    // при приёме складом — сейчас счётчики партии не трогаются.
+    expect(M.batchUpdate).not.toHaveBeenCalled();
+    expect(res.ok && res.pendingSlabs).toBe(4);
+    const ret = M.saleReturnCreate.mock.calls[0][0].data;
+    expect(ret).toMatchObject({ isFull: true, pendingSlabs: 4, immediateSlabs: 0 });
+    // Продажа закрыта целиком.
+    expect(M.saleUpdateMany.mock.calls[0][0]).toMatchObject({
+      where: { id: "sale1", returnedAt: null },
+      data: expect.objectContaining({ returnedAt: expect.any(Date) }),
+    });
   });
 });
 

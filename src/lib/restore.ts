@@ -45,6 +45,7 @@ export const RESTORE_ORDER = [
   "showroomPlacement",
   "debt",
   "payment", // ТЗ №20 A — после Debt и SaleRecord
+  "saleReturn", // ТЗ №20 F — после SaleRecord и User
   "lead",
   "telegramAccessRequest",
   "auditLog",

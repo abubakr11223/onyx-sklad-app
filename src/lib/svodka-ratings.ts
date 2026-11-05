@@ -4,6 +4,7 @@
 // складываются и не пересчитываются друг в друга; долг — текущий остаток
 // ACTIVE-долгов (amount − repaidAmount), без привязки к периоду.
 
+import { netDecStr } from "./sale-net";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { clientListScope, type MoneyCurrency } from "@/lib/clients";
 import { todayTashkentISO } from "@/lib/datetime";
@@ -310,14 +311,15 @@ export async function loadClientRating(
   const grouped = await db.saleRecord.groupBy({
     by: ["clientId", "currency"],
     where,
-    _sum: { price: true, qtyAreaM2: true },
+    _sum: { price: true, qtyAreaM2: true, returnedAmount: true, returnedAreaM2: true },
     _count: { _all: true },
   });
+  // ТЗ №20 F — частичные возвраты вычитаются из суммы и м².
   const sales: SaleGroup[] = grouped.map((g) => ({
     key: g.clientId,
     currency: g.currency,
-    priceSum: g._sum.price,
-    areaSum: g._sum.qtyAreaM2,
+    priceSum: netDecStr(g._sum.price, g._sum.returnedAmount, 2),
+    areaSum: netDecStr(g._sum.qtyAreaM2, g._sum.returnedAreaM2, 3),
     count: g._count._all,
   }));
   const ids = [...new Set(sales.map((s) => s.key).filter((k): k is string => !!k))];
@@ -426,7 +428,7 @@ export async function loadManagerSales(
     db.saleRecord.groupBy({
       by: ["managerId", "currency"],
       where: { returnedAt: null, ...(range ? { soldAt: range } : {}) },
-      _sum: { price: true, qtyAreaM2: true },
+      _sum: { price: true, qtyAreaM2: true, returnedAmount: true, returnedAreaM2: true },
       _count: { _all: true },
     }),
     // Все, кто когда-либо оформлял продажу (в т.ч. уволенные — их долги живы).
@@ -439,8 +441,8 @@ export async function loadManagerSales(
   const sales: SaleGroup[] = grouped.map((g) => ({
     key: g.managerId,
     currency: g.currency,
-    priceSum: g._sum.price,
-    areaSum: g._sum.qtyAreaM2,
+    priceSum: netDecStr(g._sum.price, g._sum.returnedAmount, 2),
+    areaSum: netDecStr(g._sum.qtyAreaM2, g._sum.returnedAreaM2, 3),
     count: g._count._all,
   }));
 

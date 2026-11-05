@@ -1,7 +1,9 @@
 // TZ №10+11 Этап 5 — сводка владельца: топы + B2B/B2C за период.
 // Суммы из SaleRecord (returnedAt == null). UZS и USD никогда не складываются.
+// ТЗ №20 F — частичные возвраты вычитаются (price − returnedAmount и т.д.).
 // Pure helpers unit-tested; DB loader for /svodka.
 
+import { netSaleFields, SALE_RETURNED_SELECT } from "./sale-net";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   sumMoneyByCurrency,
@@ -323,6 +325,9 @@ export async function loadAllPeriodSales(
     currency: string | null;
     qtySlabs: number | null;
     qtyAreaM2: { toString(): string } | null;
+    returnedSlabs: number;
+    returnedAreaM2: { toString(): string };
+    returnedAmount: { toString(): string };
     clientId: string | null;
     siteId: string | null;
     customerName: string;
@@ -354,6 +359,7 @@ export async function loadAllPeriodSales(
         currency: true,
         qtySlabs: true,
         qtyAreaM2: true,
+        ...SALE_RETURNED_SELECT,
         clientId: true,
         siteId: true,
         customerName: true,
@@ -363,14 +369,15 @@ export async function loadAllPeriodSales(
     });
 
     for (const r of rows) {
+      const net = netSaleFields(r);
       out.push({
         id: r.id,
         soldAt: r.soldAt,
         returnedAt: r.returnedAt,
-        price: r.price?.toString() ?? null,
+        price: net.price,
         currency: (r.currency as MoneyCurrency | null) ?? null,
-        qtySlabs: r.qtySlabs,
-        qtyAreaM2: r.qtyAreaM2?.toString() ?? null,
+        qtySlabs: net.qtySlabs,
+        qtyAreaM2: net.qtyAreaM2,
         clientId: r.clientId,
         siteId: r.siteId,
         clientType: (r.client?.type as "B2B" | "B2C" | undefined) ?? null,

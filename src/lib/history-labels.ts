@@ -32,6 +32,8 @@ export const ACTION_RU: Record<string, string> = {
   SHIPMENT_CONFIRM: "Отгрузка",
   SHOWROOM_SEND: "В шоу-рум",
   SHOWROOM_RETURN: "Возврат из шоу-рума",
+  // ТЗ №20 F — склад принял назад отгруженный камень по возврату продажи.
+  RETURN_ACCEPT: "Приём возврата",
   // Аудит 2026-09-02 — системные действия (userId = null). Показываются в
   // Истории наравне с остальными: на вопрос «а копии вообще делаются?»
   // ответ должен быть виден в приложении, а не только в логах хостинга.
@@ -76,6 +78,7 @@ export const ACTION_VARIANT: Record<string, HistoryBadgeVariant> = {
   SHIPMENT_CONFIRM: "success",
   SHOWROOM_SEND: "warning",
   SHOWROOM_RETURN: "success",
+  RETURN_ACCEPT: "success",
   BACKUP: "success",
   // Выгрузка всей базы — редкое и крупное действие: держим на виду,
   // чтобы чужая строчка в журнале сразу бросалась в глаза.
@@ -321,6 +324,11 @@ function clientOf(p: Rec, lk: HistoryLookups): string | null {
 }
 
 /** Сегменты через « · », клиент — хвостом « → Тимур». */
+/** «870 000» — сумма в журнале (ТЗ №20 F). */
+function moneyRu(n: number): string {
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(n);
+}
+
 function join(segments: (string | null)[], client?: string | null): string {
   const body = segments.filter((s): s is string => !!s).join(" · ");
   if (!client) return body;
@@ -673,16 +681,28 @@ export function describeHistoryEntry(
     case "RESERVE":
     case "RESERVE_CANCEL":
     case "RESERVE_EXPIRE":
-    case "RETURN": {
+    case "RETURN":
+    case "RETURN_ACCEPT": {
       const { stoneName, unitLabel } = resolveUnit(row, p, lk);
       const days = num(p.days);
+      // ТЗ №20 F — частичный возврат: «частично», долг/деньги, сколько ждёт склада.
+      const partial = str(p.kind) === "sale.partial_return";
+      const cur = str(p.currency) === "USD" ? "$" : "сум";
+      const debtCut = num(p.debtReduction);
+      const cash = num(p.cashRefund);
+      const pend = formatHistoryQty(num(p.pendingSlabs) || null, num(p.pendingAreaM2) || null);
       d = {
         summary: join(
           [
             stoneName,
             row.entityType === "Batch" ? patternLabelOf(p, lk) : unitLabel,
+            partial ? "частично" : null,
             formatHistoryQty(num(p.qtySlabs), num(p.qtyAreaM2)),
             row.action === "RESERVE" && days ? `на ${days} дн.` : null,
+            debtCut ? `долг −${moneyRu(debtCut)} ${cur}` : null,
+            cash ? `клиенту ${moneyRu(cash)} ${cur}` : null,
+            row.action === "RETURN" && pend ? `ждёт склада ${pend}` : null,
+            row.action === "RETURN_ACCEPT" ? "камень снова в наличии" : null,
           ],
           clientOf(p, lk),
         ),

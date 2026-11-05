@@ -143,6 +143,12 @@ export type SaleHistoryRow = {
   price: { toString(): string } | null;
   soldAt: Date;
   returnedAt: Date | null;
+  /** ТЗ №20 F — накопительно по частичным возвратам. */
+  returnedSlabs?: number;
+  returnedAreaM2?: { toString(): string };
+  returnedAmount?: { toString(): string };
+  /** ТЗ №20 F — возвраты, отгруженная часть которых ещё не принята складом. */
+  returns?: Array<{ pendingSlabs: number; pendingAreaM2: { toString(): string } }>;
   manager: { name: string };
   slab: {
     id: string;
@@ -184,6 +190,11 @@ export type SaleHistoryPage = {
 
 const SALE_INCLUDE = {
   manager: { select: { name: true } },
+  returns: {
+    // Не принятые складом (строки без отгруженной части дают 0 — не мешают).
+    where: { acceptedAt: null },
+    select: { pendingSlabs: true, pendingAreaM2: true },
+  },
   slab: {
     select: {
       id: true,

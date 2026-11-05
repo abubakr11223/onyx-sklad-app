@@ -35,6 +35,8 @@ import SaleForm, {
   type StoneTypeGroup,
 } from "./SaleForm";
 import { confirmReturnAction, returnSaleAction } from "./actions";
+import ReturnSaleForm from "./ReturnSaleForm";
+import { formatReturnQty, partialReturnLabel } from "@/lib/sale-returns";
 import {
   parseSalePreselectQuery,
   resolveSalePreselect,
@@ -872,6 +874,17 @@ export default async function ProdazhaPage({
               const returnable =
                 !returned &&
                 ((!s.slab && !s.piece) || unitStatus === "SOLD");
+              // ТЗ №20 F — объёмная продажа: частичный возврат через форму.
+              const isVolume = !s.slab && !s.piece && s.batch !== null;
+              const partialLabel = returned ? null : partialReturnLabel(s);
+              const pendingQty = (s.returns ?? []).reduce(
+                (a, r) => ({
+                  slabs: a.slabs + r.pendingSlabs,
+                  area: a.area + Number(r.pendingAreaM2.toString()),
+                }),
+                { slabs: 0, area: 0 },
+              );
+              const pendingText = formatReturnQty(pendingQty.slabs, pendingQty.area);
               // TZ9: amount + sale's own currency. Prisma returns SaleRecord
               // scalars (incl. currency) even when SaleHistoryRow type omits it.
               const saleCurrency = (s as { currency?: string | null }).currency;
@@ -967,7 +980,44 @@ export default async function ProdazhaPage({
                     </div>
                   )}
 
-                  {returnable && (
+                  {partialLabel && (
+                    <div className="mt-1 font-medium text-warning">{partialLabel}</div>
+                  )}
+                  {pendingText && (
+                    <div className="text-ink/60">
+                      Ждёт приёма складом: {pendingText}
+                    </div>
+                  )}
+
+                  {returnable && isVolume && (
+                    <ReturnSaleForm
+                      saleId={s.id}
+                      title={s.batch?.stoneType.name ?? "Продажа"}
+                      soldSlabs={s.qtySlabs}
+                      soldAreaM2={s.qtyAreaM2 === null ? null : Number(s.qtyAreaM2.toString())}
+                      remSlabs={s.qtySlabs === null ? null : s.qtySlabs - (s.returnedSlabs ?? 0)}
+                      remAreaM2={
+                        s.qtyAreaM2 === null
+                          ? null
+                          : Math.round(
+                              (Number(s.qtyAreaM2.toString()) -
+                                Number(s.returnedAreaM2?.toString() ?? 0)) *
+                                1000,
+                            ) / 1000
+                      }
+                      priceCents={
+                        canSeeSalePrice && s.price !== null
+                          ? Math.round(Number(s.price.toString()) * 100)
+                          : null
+                      }
+                      returnedCents={Math.round(Number(s.returnedAmount?.toString() ?? 0) * 100)}
+                      currency={
+                        saleCurrency === "USD" || saleCurrency === "UZS" ? saleCurrency : null
+                      }
+                    />
+                  )}
+
+                  {returnable && !isVolume && (
                     <form action={returnSaleAction} className="mt-2">
                       <input type="hidden" name="saleRecordId" value={s.id} />
                       <Button type="submit" variant="ghost" size="sm">

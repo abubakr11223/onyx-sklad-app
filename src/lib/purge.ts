@@ -189,6 +189,7 @@ export type PurgeTableKey =
   | "shipment"
   | "sample"
   | "payment" // ТЗ №20 A: before Debt / SaleRecord (Restrict)
+  | "saleReturn" // ТЗ №20 F: before SaleRecord (Restrict)
   | "debt" // TZ9: before SaleRecord — Debt.saleRecordId ON DELETE RESTRICT
   | "saleRecord"
   | "reservation"
@@ -217,6 +218,7 @@ export const PURGE_DELETE_ORDER: readonly PurgeTableKey[] = [
   "shipment", // → SaleRecord / Sample (Restrict) — строго до них
   "sample", // → SaleRecord / Slab / Piece / Batch / PhotoRequest (Restrict)
   "payment", // ТЗ №20 A → SaleRecord (Restrict)
+  "saleReturn", // ТЗ №20 F → SaleRecord (Restrict)
   "debt",
   "saleRecord",
   "reservation",
@@ -339,6 +341,10 @@ export interface PurgeDb {
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
   payment: {
+    count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  saleReturn: {
     count(args?: { where?: unknown }): Promise<number>;
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
@@ -1021,6 +1027,12 @@ export async function executePurge(
       await tx.payment.deleteMany({ where: all ? {} : { saleRecord: saleWhere } })
     ).count;
     log(`  Payment deleted: ${payments}`);
+
+    // ТЗ №20 F — возвраты BEFORE SaleRecord (Restrict).
+    const saleReturns = (
+      await tx.saleReturn.deleteMany({ where: all ? {} : { saleRecord: saleWhere } })
+    ).count;
+    log(`  SaleReturn deleted: ${saleReturns}`);
 
     // 3 Debt BEFORE SaleRecord (Debt.saleRecordId ON DELETE RESTRICT — TZ9)
     const debts = (await tx.debt.deleteMany({ where: debtWhere })).count;
