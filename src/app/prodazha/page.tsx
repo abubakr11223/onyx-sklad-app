@@ -2,6 +2,7 @@
 // Server component: продаваемые цели + фильтруемая/пагинируемая история
 // продаж (W8-B). Флоу продажи — в клиентском SaleForm.
 
+import { formatPriceHint } from "@/lib/price-hint";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -175,6 +176,9 @@ export default async function ProdazhaPage({
         id: true,
         name: true,
         rockType: true,
+        // ТЗ №20 H — «Ориентир цены»: только подсказка у поля цены.
+        priceHintUzsM2: true,
+        priceHintUsdM2: true,
         batches: {
           orderBy: { arrivedAt: "asc" },
           take: takeForCap(CATALOG_BATCHES_CAP),
@@ -681,6 +685,9 @@ export default async function ProdazhaPage({
         pieces,
         batches,
         lowStock: low ? formatLowStockShort(low) : null,
+        priceHint: caps.canSeePriceHint
+          ? formatPriceHint(st.priceHintUzsM2, st.priceHintUsdM2)
+          : null,
       };
     })
     .filter(

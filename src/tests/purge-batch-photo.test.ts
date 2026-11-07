@@ -148,6 +148,8 @@ function makeSemanticDb(fx: Fixture) {
     },
     photoDispatch: zeroModel,
     lead: zeroModel,
+    stoneCodeScan: zeroModel, // ТЗ №20 H
+    collectionItem: zeroModel, // ТЗ №20 I
     shipmentLine: zeroModel,
     shipment: zeroModel,
     showroomPlacement: zeroModel,

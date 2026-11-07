@@ -194,6 +194,8 @@ export type PurgeTableKey =
   | "saleRecord"
   | "reservation"
   | "lead"
+  | "stoneCodeScan" // ТЗ №20 H: счётчик QR → StoneType (Cascade, но удаляем явно)
+  | "collectionItem" // ТЗ №20 I: камень подборки → StoneType (Cascade, но удаляем явно)
   | "photoRequest"
   | "piece"
   | "slab"
@@ -231,6 +233,8 @@ export const PURGE_DELETE_ORDER: readonly PurgeTableKey[] = [
   "batchLocation", // after PhotoRequest (PR → BatchLocation Restrict)
   "batchPattern",
   "batch",
+  "stoneCodeScan", // ТЗ №20 H → StoneType
+  "collectionItem", // ТЗ №20 I → StoneType (сама подборка — клиентская, остаётся)
   "stoneType",
   "mutationReceipt",
   "auditLog", // scope C only; then we may write one new AuditLog
@@ -366,6 +370,14 @@ export interface PurgeDb {
   };
   lead: {
     count(args?: { where?: unknown }): Promise<number>;
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  // ТЗ №20 H — счётчик сканирований QR (дневной агрегат по коду).
+  stoneCodeScan: {
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  // ТЗ №20 I — камни в подборках (подборка остаётся: она клиента, не склада).
+  collectionItem: {
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
   // ТЗ №15/16 — см. комментарий у PurgeTableKey.
@@ -1106,6 +1118,21 @@ export async function executePurge(
     // 13 Batch
     const batches = (await tx.batch.deleteMany({ where: batchWhere })).count;
     log(`  Batch deleted: ${batches}`);
+
+    // ТЗ №20 H — счётчик сканирований BEFORE StoneType. FK — Cascade, но
+    // удаляем явно: в логе видно, сколько строк ушло, и порядок не зависит
+    // от ON DELETE в схеме.
+    const stoneCodeScans = (
+      await tx.stoneCodeScan.deleteMany({ where: all ? {} : { stoneTypeId: stIn } })
+    ).count;
+    log(`  StoneCodeScan deleted: ${stoneCodeScans}`);
+
+    // ТЗ №20 I — камни подборок BEFORE StoneType (FK Cascade, но явно — как
+    // счётчик выше). Сами подборки (клиент, менеджер, ссылка) не трогаем.
+    const collectionItems = (
+      await tx.collectionItem.deleteMany({ where: all ? {} : { stoneTypeId: stIn } })
+    ).count;
+    log(`  CollectionItem deleted: ${collectionItems}`);
 
     // 14 StoneType
     const stoneTypes = (

@@ -221,6 +221,13 @@ enum LeadStatus {
   CLOSED // обработана / закрыта
 }
 
+/// ТЗ №20 H (§9.2) — откуда пришла заявка. PARTNER — партнёр под своим входом
+/// (A1); QR_CATALOG — клиент без входа с карточки по QR / из каталога.
+enum LeadSource {
+  PARTNER
+  QR_CATALOG
+}
+
 /// TZ §6.8.5 — explicit request vs passive interest (looked, no order).
 enum LeadKind {
   REQUEST // «Запросить объём» form submit
@@ -250,6 +257,14 @@ model StoneType {
   minStockUnit   StockUnit?
   /// ТЗ №20 C — сейчас ниже порога и сигнал уже отправлен (сброс — выше порога).
   lowStockAlertedAt DateTime?
+  /// ТЗ №20 H (§9.1) — «Ориентир цены», сум/м² и $/м². Задаёт владелец, видят
+  /// только сотрудники; в продаже — подсказка, цену по-прежнему вводят руками.
+  priceHintUzsM2 Decimal? @db.Decimal(14, 2)
+  priceHintUsdM2 Decimal? @db.Decimal(14, 2)
+  /// ТЗ №20 I (§10.1) — «Показывать в каталоге». По умолчанию включён,
+  /// выключает владелец. Клиенту/партнёру вид виден в /katalog, только если
+  /// флаг включён И есть хотя бы одно фото; сотрудник видит все виды.
+  showInCatalog  Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -258,6 +273,8 @@ model StoneType {
   pieces  Piece[]
   photos  Photo[]
   leads   Lead[]
+  scans   StoneCodeScan[]
+  collectionItems CollectionItem[]
 
   @@index([rockType])
   @@index([color])
@@ -583,6 +600,8 @@ model User {
   /// ТЗ №20 F — оформленные возвраты и принятые складом.
   saleReturnsCreated    SaleReturn[]   @relation("SaleReturnCreatedBy")
   saleReturnsAccepted   SaleReturn[]   @relation("SaleReturnAcceptedBy")
+  /// ТЗ №20 I — подборки для клиентов, которые собрал сотрудник.
+  collections           Collection[]   @relation("CollectionManager")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -792,6 +811,10 @@ model Client {
   samples    Sample[]
   shipments  Shipment[]
   reservations Reservation[]
+  /// ТЗ №20 H — заявки с карточки по QR, телефон совпал с этим клиентом.
+  leads      Lead[]
+  /// ТЗ №20 I — подборки, собранные для этого клиента.
+  collections Collection[]
 
   @@index([managerId, createdAt])
   @@index([phone])
@@ -1082,7 +1105,10 @@ model SaleReturn {
 /// интерес может быть без точного объёма). assignedManager — кто взял заявку.
 model Lead {
   id                String     @id @default(cuid())
-  createdById       String // партнёр/дизайнер, создавший запрос
+  /// Партнёр/дизайнер, создавший запрос. NULL — клиент без входа (QR_CATALOG).
+  createdById       String?
+  /// ТЗ №20 H — источник заявки (старые строки — PARTNER).
+  source            LeadSource @default(PARTNER)
   stoneTypeId       String? // интересующий вид (может быть null)
   /// W8-A: REQUEST = explicit form; VIEW = passive open of stone card (§6.8.5).
   kind              LeadKind   @default(REQUEST)
@@ -1092,18 +1118,95 @@ model Lead {
   note              String?
   status            LeadStatus @default(NEW)
   assignedManagerId String? // менеджер, взявший заявку в работу
+  /// ТЗ №20 H (§9.2) — заявка клиента с карточки: имя и телефон как ввёл.
+  clientName        String?
+  clientPhone       String?
+  /// Телефон только цифрами (normalizeClientPhone) — сверка с «Клиентами».
+  phoneKey          String?
+  /// Клиент из справочника с тем же телефоном (клиента заявка НЕ создаёт).
+  clientId          String?
+  /// Код ONX-…, с которого пришла заявка (вид / партия / узор / плита / бой).
+  stoneCode         String?
+  /// «телефон|вид|день по Ташкенту» — одна заявка с телефона на камень в сутки.
+  /// UNIQUE: две одновременные отправки не проходят обе.
+  dedupeKey         String?    @unique
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  createdBy       User       @relation("LeadCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy       User?      @relation("LeadCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   stoneType       StoneType? @relation(fields: [stoneTypeId], references: [id], onDelete: Restrict)
   assignedManager User?      @relation("LeadAssignedManager", fields: [assignedManagerId], references: [id], onDelete: Restrict)
+  client          Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt]) // очередь менеджера: новые сверху
   @@index([createdById])
   @@index([assignedManagerId])
   // Passive-view dedupe lookup: partner + stone + kind + open status.
   @@index([createdById, stoneTypeId, kind, status])
+  @@index([clientId])
+}
+
+/// ТЗ №20 H (§9.3) — счётчик сканирований: открытия /k/<код> за день
+/// (Asia/Tashkent). Дневной агрегат, а не строка на каждое открытие — таблица
+/// растёт не быстрее «кодов × дней». Открытия сотрудников не считаются.
+model StoneCodeScan {
+  code        String
+  /// Календарный день по Ташкенту.
+  day         DateTime  @db.Date
+  stoneTypeId String
+  count       Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+
+  stoneType StoneType @relation(fields: [stoneTypeId], references: [id], onDelete: Cascade)
+
+  @@id([code, day])
+  @@index([day])
+  @@index([stoneTypeId])
+}
+
+/// ТЗ №20 I (§10.3) — подборка камней для клиента. Публичная ссылка
+/// /podborka/<code> (права клиента без входа), бессрочная; менеджер может
+/// закрыть — страница покажет «Подборка закрыта». code — случайные 10 символов
+/// из алфавита ONX (без 0/O/1/I), не угадывается перебором.
+model Collection {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  title     String
+  /// Клиент из справочника (необязательно).
+  clientId  String?
+  /// Кто собрал. Скоуп: менеджер — свои, владелец — все.
+  managerId String
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  client  Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  manager User             @relation("CollectionManager", fields: [managerId], references: [id], onDelete: Restrict)
+  items   CollectionItem[]
+
+  @@index([managerId, createdAt])
+  @@index([clientId])
+}
+
+/// ТЗ №20 I — камень в подборке. stoneCode — код ONX-…, с которого добавили
+/// (вид / партия / узор / плита / бой): ссылка ведёт на ту же карточку /k/.
+/// likedAt — «Нравится» клиента (анонимно: одна отметка на камень подборки).
+model CollectionItem {
+  id           String    @id @default(cuid())
+  collectionId String
+  stoneTypeId  String
+  stoneCode    String
+  comment      String?
+  likedAt      DateTime?
+  sort         Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stoneType  StoneType  @relation(fields: [stoneTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, stoneCode])
+  @@index([stoneTypeId])
 }
 
 // §5.9 / onboarding — заявка на доступ через Telegram. Новый человек нажимает

@@ -54,6 +54,9 @@ export const SNAPSHOT_TABLES = [
   "payment", // ТЗ №20 A
   "saleReturn", // ТЗ №20 F
   "lead",
+  "stoneCodeScan", // ТЗ №20 H — счётчик сканирований QR
+  "collection", // ТЗ №20 I — подборки для клиента
+  "collectionItem",
   "photoRequest",
   "photoDispatch",
   "photo",

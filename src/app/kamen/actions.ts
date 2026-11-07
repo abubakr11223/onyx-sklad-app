@@ -26,6 +26,7 @@ import { validateStoneEdit } from "@/lib/stone-edit";
 import { capabilitiesFor } from "@/lib/permissions";
 import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
 import { formatThreshold } from "@/lib/min-stock";
+import { formatPriceHint, parsePriceHint } from "@/lib/price-hint";
 import { checkMinStockSafe } from "@/lib/min-stock-hook";
 import {
   buildMovePayload,
@@ -641,6 +642,110 @@ export async function setMinStock(formData: FormData): Promise<void> {
   revalidatePath(next);
   revalidatePath("/");
   redirect(`${next}?minOk=1`);
+}
+
+/**
+ * ТЗ №20 H (§9.1) — «Ориентир цены» вида: сум/м² и $/м² (оба необязательны,
+ * пусто = снять). Только владелец (canSetPriceHint) — по РЕАЛЬНОЙ сессии.
+ * Изменение — в «Историю» (было → стало).
+ */
+export async function setPriceHint(formData: FormData): Promise<void> {
+  const next = safeNext(formData.get("next"));
+  const me = await getRealSessionUser();
+  if (
+    !me ||
+    !capabilitiesFor(me.role, { canSeePurchasePrice: false }).canSetPriceHint
+  ) {
+    redirect(`${next}?hintErr=denied`);
+  }
+
+  const stoneTypeId = String(formData.get("stoneTypeId") ?? "").trim();
+  if (!stoneTypeId) redirect(`${next}?hintErr=notfound`);
+  const uzs = parsePriceHint(String(formData.get("priceHintUzsM2") ?? ""));
+  const usd = parsePriceHint(String(formData.get("priceHintUsdM2") ?? ""));
+  if (uzs === undefined) redirect(`${next}?hintErr=uzs`);
+  if (usd === undefined) redirect(`${next}?hintErr=usd`);
+
+  const found = await db.stoneType.findUnique({
+    where: { id: stoneTypeId },
+    select: { id: true, name: true, priceHintUzsM2: true, priceHintUsdM2: true },
+  });
+  if (!found) redirect(`${next}?hintErr=notfound`);
+
+  await db.$transaction(async (tx) => {
+    await tx.stoneType.update({
+      where: { id: stoneTypeId },
+      data: {
+        priceHintUzsM2: uzs === null ? null : uzs!.toFixed(2),
+        priceHintUsdM2: usd === null ? null : usd!.toFixed(2),
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        userId: me!.id,
+        action: "STATUS_CHANGE",
+        entityType: "StoneType",
+        entityId: stoneTypeId,
+        payload: {
+          kind: "stonetype.pricehint",
+          name: found!.name,
+          from: formatPriceHint(found!.priceHintUzsM2, found!.priceHintUsdM2),
+          to: formatPriceHint(uzs, usd),
+          priceHintUzsM2: uzs,
+          priceHintUsdM2: usd,
+        },
+      },
+    });
+  });
+
+  revalidatePath(next);
+  redirect(`${next}?hintOk=1`);
+}
+
+/**
+ * ТЗ №20 I (§10.1) — флаг вида «Показывать в каталоге» (show = "1" / "0").
+ * Только владелец (canToggleCatalog) — по РЕАЛЬНОЙ сессии. В «Историю».
+ */
+export async function setShowInCatalog(formData: FormData): Promise<void> {
+  const next = safeNext(formData.get("next"));
+  const me = await getRealSessionUser();
+  if (
+    !me ||
+    !capabilitiesFor(me.role, { canSeePurchasePrice: false }).canToggleCatalog
+  ) {
+    redirect(`${next}?catErr=denied`);
+  }
+  const stoneTypeId = String(formData.get("stoneTypeId") ?? "").trim();
+  const show = String(formData.get("show") ?? "") === "1";
+  const found = stoneTypeId
+    ? await db.stoneType.findUnique({
+        where: { id: stoneTypeId },
+        select: { id: true, name: true, showInCatalog: true },
+      })
+    : null;
+  if (!found) redirect(`${next}?catErr=notfound`);
+  if (found!.showInCatalog !== show) {
+    await db.$transaction(async (tx) => {
+      await tx.stoneType.update({ where: { id: stoneTypeId }, data: { showInCatalog: show } });
+      await tx.auditLog.create({
+        data: {
+          userId: me!.id,
+          action: "STATUS_CHANGE",
+          entityType: "StoneType",
+          entityId: stoneTypeId,
+          payload: {
+            kind: "stonetype.catalog",
+            name: found!.name,
+            from: found!.showInCatalog,
+            to: show,
+          },
+        },
+      });
+    });
+  }
+  revalidatePath(next);
+  revalidatePath("/katalog");
+  redirect(`${next}?catOk=1`);
 }
 
 /**

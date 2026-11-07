@@ -11,6 +11,8 @@ import { formatCurrencySummaryLine, formatDebtMoney } from "@/lib/debts-ui";
 import { formatVolumeLine } from "@/lib/clients-directory";
 import { CLIENT_TYPE_LABELS } from "@/lib/clients";
 import { db } from "@/lib/db";
+import { loadTopScans, type TopScanRow } from "@/lib/stone-scans";
+import { STONE_CODE_KIND_RU } from "@/lib/stone-code";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -315,6 +317,59 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
   );
 }
 
+/** ТЗ №20 H (§9.3) — «Чаще всего сканируют»: топ-10 кодов за период. */
+function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingPeriod }) {
+  return (
+    <section className="mb-6">
+      <h2 className="mb-1 text-lg font-semibold text-ink">Чаще всего сканируют</h2>
+      <p className="mb-2 text-xs text-ink/50">
+        Период: {periodCaption(period)} (переключатель — в рейтинге выше). Открытия
+        карточки по QR клиентами и партнёрами; сотрудники не считаются.
+      </p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-ink/55">За период карточки по QR не открывали.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-card border border-line bg-paper">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-ink/60">
+                <th className="py-2 pl-3 font-medium">#</th>
+                <th className="py-2 pl-3 font-medium">Камень</th>
+                <th className="py-2 pl-3 font-medium">Код</th>
+                <th className="py-2 px-3 text-right font-medium">Открытий</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.code} className="border-b border-line/60 last:border-b-0">
+                  <td className="tnum py-2 pl-3 text-ink/45">{i + 1}</td>
+                  <td className="py-2 pl-3">
+                    <Link
+                      href={`/kamen/${r.stoneTypeId}`}
+                      className="font-semibold text-gold-deep underline"
+                    >
+                      {r.stoneName}
+                    </Link>
+                    {r.kind && r.kind !== "STONE_TYPE" && (
+                      <span className="ml-2 text-ink/55">{STONE_CODE_KIND_RU[r.kind]}</span>
+                    )}
+                  </td>
+                  <td className="tnum py-2 pl-3">
+                    <Link href={`/k/${r.code}`} className="text-gold-deep underline">
+                      {r.code}
+                    </Link>
+                  </td>
+                  <td className="tnum py-2 px-3 text-right font-semibold">{r.scans}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default async function SvodkaPage({
   searchParams,
 }: {
@@ -344,7 +399,7 @@ export default async function SvodkaPage({
   const showAll = first(sp.all) === "1";
   const actorId = await currentActorId();
 
-  const [rating, managerRows] = await Promise.all([
+  const [rating, managerRows, topScans] = await Promise.all([
     loadClientRating(db, {
       period: ratingPeriod,
       sort,
@@ -355,6 +410,8 @@ export default async function SvodkaPage({
     isOwner
       ? loadManagerSales(db, { period: ratingPeriod })
       : Promise.resolve([] as ManagerSalesRow[]),
+    // ТЗ №20 §15 — топ сканирований видит только владелец.
+    isOwner ? loadTopScans(db, ratingPeriod) : Promise.resolve([] as TopScanRow[]),
   ]);
 
   // Ссылки переключателей сохраняют все прочие параметры страницы.
@@ -504,6 +561,8 @@ export default async function SvodkaPage({
       <RatingSection {...ratingProps} />
 
       <ManagersSection rows={managerRows} period={ratingPeriod} />
+
+      <TopScansSection rows={topScans} period={ratingPeriod} />
 
       <section className="mb-6">
         <h2 className="mb-2 text-lg font-semibold text-ink">

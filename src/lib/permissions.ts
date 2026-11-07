@@ -146,6 +146,31 @@ export interface Capabilities {
    * в карточке, но не меняет; обычный складчик и партнёр — нет.
    */
   canSetMinStock: boolean;
+  /**
+   * ТЗ №20 H (§9.1, §15) — задать «Ориентир цены» вида (сум/м², $/м²). Только
+   * владелец.
+   */
+  canSetPriceHint: boolean;
+  /**
+   * ТЗ №20 H (§15) — видеть ориентир цены: весь персонал (и склад тоже —
+   * в отличие от canSeePrices). Партнёр и клиент без входа — нет.
+   */
+  canSeePriceHint: boolean;
+  /**
+   * ТЗ №20 I (§10.1, §15) — флаг вида «Показывать в каталоге». Только
+   * владелец (та же строка таблицы §15, что и ориентир цены).
+   */
+  canToggleCatalog: boolean;
+  /**
+   * ТЗ №20 I (§10.3, §15) — «Подборки для клиента»: собрать, добавить камень
+   * («В подборку»), закрыть. OWNER и MANAGER; склад и партнёр — нет.
+   */
+  canManageCollections: boolean;
+  /**
+   * ТЗ №20 I (§15) — видеть подборки ВСЕХ сотрудников. Владелец — все,
+   * менеджер — только свои (managerId = actor). Аналог canSeeAllClients.
+   */
+  canSeeAllCollections: boolean;
 }
 
 /**
@@ -177,6 +202,11 @@ export interface Capabilities {
  * | canEditWarehouseMap      | true  | false            | LEAD only | false   |
  * | canPrintQr               | true  | true             | true      | false   |
  * | canSetMinStock           | true  | false            | LEAD only | false   |
+ * | canSetPriceHint          | true  | false            | false     | false   |
+ * | canSeePriceHint          | true  | true             | true      | false   |
+ * | canToggleCatalog         | true  | false            | false     | false   |
+ * | canManageCollections     | true  | true             | false     | false   |
+ * | canSeeAllCollections     | true  | false            | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -213,6 +243,11 @@ export const DENY_ALL: Capabilities = {
   canEditWarehouseMap: false,
   canPrintQr: false,
   canSetMinStock: false,
+  canSetPriceHint: false,
+  canSeePriceHint: false,
+  canToggleCatalog: false,
+  canManageCollections: false,
+  canSeeAllCollections: false,
 };
 
 export function capabilitiesFor(
@@ -246,6 +281,11 @@ export function capabilitiesFor(
         canEditWarehouseMap: true, // ТЗ №17 §6
         canPrintQr: true, // ТЗ №20 G
         canSetMinStock: true, // ТЗ №20 C
+        canSetPriceHint: true, // ТЗ №20 H — ориентир задаёт только владелец
+        canSeePriceHint: true,
+        canToggleCatalog: true, // ТЗ №20 I — «Показывать в каталоге»
+        canManageCollections: true, // ТЗ №20 I — подборки
+        canSeeAllCollections: true, // владелец — все подборки
       };
     case "MANAGER":
       return {
@@ -275,6 +315,11 @@ export function capabilitiesFor(
         canEditWarehouseMap: false,
         canPrintQr: true, // ТЗ №20 G — этикетки печатает и продажа
         canSetMinStock: false, // ТЗ №20 §15 — видит порог, но не меняет
+        canSetPriceHint: false,
+        canSeePriceHint: true, // ТЗ №20 H — подсказка в продаже
+        canToggleCatalog: false,
+        canManageCollections: true, // ТЗ №20 I — свои подборки
+        canSeeAllCollections: false,
       };
     case "WAREHOUSE":
     case "WAREHOUSE_LEAD":
@@ -310,6 +355,11 @@ export function capabilitiesFor(
         canPrintQr: true, // ТЗ №20 G — складчик клеит этикетки
         // ТЗ №20 §15 — порог и «Заканчивается» — зав. складом, не складчик.
         canSetMinStock: role === "WAREHOUSE_LEAD",
+        canSetPriceHint: false,
+        canSeePriceHint: true, // ТЗ №20 §15 — ориентир видят все сотрудники
+        canToggleCatalog: false,
+        canManageCollections: false, // ТЗ №20 §15 — подборки делает продажа
+        canSeeAllCollections: false,
       };
     case "PARTNER":
       return {
@@ -337,6 +387,11 @@ export function capabilitiesFor(
         canEditWarehouseMap: false,
         canPrintQr: false, // ТЗ №20 §15 — партнёр QR не печатает
         canSetMinStock: false,
+        canSetPriceHint: false,
+        canSeePriceHint: false, // ТЗ №20 §9.1 — партнёру цены не показываем
+        canToggleCatalog: false,
+        canManageCollections: false,
+        canSeeAllCollections: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

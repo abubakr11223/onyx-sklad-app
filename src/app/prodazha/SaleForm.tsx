@@ -133,6 +133,8 @@ export interface StoneTypeGroup {
   batches: BatchOption[];
   /** ТЗ №20 C — ниже «Минимального остатка»: «4 плиты / 10» (null — не мало). */
   lowStock?: string | null;
+  /** ТЗ №20 H — «Ориентир цены» («450 000 сум/м² · $35/м²»); только подсказка. */
+  priceHint?: string | null;
 }
 
 interface Target {
@@ -1337,6 +1339,13 @@ export default function SaleForm({
               <FieldError msg={e.currency} />
             </div>
           </div>
+          {/* ТЗ №20 H — ориентир владельца. Поле цены НЕ заполняем: цену
+              менеджер вводит сам, ориентир — только подсказка. */}
+          {stone?.priceHint && (
+            <p className="mt-2 text-sm text-ink/55">
+              Ориентир цены: <span className="tnum font-semibold text-ink/80">{stone.priceHint}</span>
+            </p>
+          )}
 
           {/* ТЗ №20 A — «Оплата сейчас»: несколько способов (50/50, 70/30),
               меньше цены → остаток уходит в долг, 0 → вся продажа в долг. */}

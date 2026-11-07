@@ -334,6 +334,21 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Камень на руках у клиента",
     Icon: SamplesIcon,
   },
+  // ТЗ №20 I — в конце списка: нижний таб-бар (первые 3) не меняется.
+  {
+    href: "/katalog",
+    label: "Каталог",
+    short: "Каталог",
+    description: "Витрина для клиентов: фото, наличие, похожие",
+    Icon: SamplesIcon,
+  },
+  {
+    href: "/podborki",
+    label: "Подборки",
+    short: "Подборки",
+    description: "Подборки камней для клиента по ссылке",
+    Icon: BookmarkIcon,
+  },
   {
     href: "/svodka",
     label: "Сводка",

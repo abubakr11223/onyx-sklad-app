@@ -31,6 +31,11 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditWarehouseMap: true,
     canPrintQr: true, // ТЗ №20 G
     canSetMinStock: true, // ТЗ №20 C
+    canSetPriceHint: true, // ТЗ №20 H
+    canSeePriceHint: true, // ТЗ №20 H
+    canToggleCatalog: true, // ТЗ №20 I
+    canManageCollections: true, // ТЗ №20 I
+    canSeeAllCollections: true, // ТЗ №20 I
   },
   MANAGER: {
     canSeePrices: true,
@@ -57,6 +62,11 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditWarehouseMap: false,
     canPrintQr: true, // ТЗ №20 G
     canSetMinStock: false, // ТЗ №20 C
+    canSetPriceHint: false, // ТЗ №20 H
+    canSeePriceHint: true, // ТЗ №20 H
+    canToggleCatalog: false, // ТЗ №20 I
+    canManageCollections: true, // ТЗ №20 I
+    canSeeAllCollections: false, // ТЗ №20 I
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -83,6 +93,11 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditWarehouseMap: false,
     canPrintQr: true, // ТЗ №20 G
     canSetMinStock: false, // ТЗ №20 C
+    canSetPriceHint: false, // ТЗ №20 H
+    canSeePriceHint: true, // ТЗ №20 H
+    canToggleCatalog: false, // ТЗ №20 I
+    canManageCollections: false, // ТЗ №20 I
+    canSeeAllCollections: false, // ТЗ №20 I
   },
   // Согласовано 2026-08-12: зав. складом = складчик + количество.
   // Если хоть одно поле здесь разойдётся со складчиком — он молча
@@ -112,6 +127,11 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditWarehouseMap: true,
     canPrintQr: true, // ТЗ №20 G
     canSetMinStock: true, // ТЗ №20 C
+    canSetPriceHint: false, // ТЗ №20 H
+    canSeePriceHint: true, // ТЗ №20 H
+    canToggleCatalog: false, // ТЗ №20 I
+    canManageCollections: false, // ТЗ №20 I
+    canSeeAllCollections: false, // ТЗ №20 I
   },
   PARTNER: {
     canSeePrices: false,
@@ -138,6 +158,11 @@ const EXPECTED: Record<Role, Capabilities> = {
     canEditWarehouseMap: false,
     canPrintQr: false, // ТЗ №20 G
     canSetMinStock: false, // ТЗ №20 C
+    canSetPriceHint: false, // ТЗ №20 H
+    canSeePriceHint: false, // ТЗ №20 H
+    canToggleCatalog: false, // ТЗ №20 I
+    canManageCollections: false, // ТЗ №20 I
+    canSeeAllCollections: false, // ТЗ №20 I
   },
 };
 

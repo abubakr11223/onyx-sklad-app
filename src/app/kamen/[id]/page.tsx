@@ -30,6 +30,7 @@ import {
 } from "@/lib/photos";
 import { getCapabilities, getRealSessionUser } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
+import { formatPriceHint } from "@/lib/price-hint";
 import { recordPassiveView } from "@/lib/leads";
 import { requestPhoto } from "@/app/poisk/actions";
 import { requestLead } from "./lead-actions";
@@ -38,6 +39,8 @@ import {
   editStoneType,
   generateInteriors,
   setMinStock,
+  setPriceHint,
+  setShowInCatalog,
   moveQty,
   setNeedsCheck,
   updateLocation,
@@ -348,6 +351,12 @@ export default async function KamenPage({
   // ТЗ №20 C: результат сохранения минимального остатка.
   const minOk = firstParam(sp.minOk) === "1";
   const minErr = firstParam(sp.minErr);
+  // ТЗ №20 H: результат сохранения ориентира цены.
+  const hintOk = firstParam(sp.hintOk) === "1";
+  const hintErr = firstParam(sp.hintErr);
+  // ТЗ №20 I: результат переключения «Показывать в каталоге».
+  const catOk = firstParam(sp.catOk) === "1";
+  const catErr = firstParam(sp.catErr);
   // §6.7 «B»: результат генерации AI-интерьеров.
   const aiOk = firstParam(sp.aiOk);
   const aiErr = firstParam(sp.aiErr);
@@ -374,6 +383,11 @@ export default async function KamenPage({
         // ТЗ №20 C — порог «Минимальный остаток».
         minStockQty: true,
         minStockUnit: true,
+        // ТЗ №20 H — «Ориентир цены» (видят сотрудники, задаёт владелец).
+        priceHintUzsM2: true,
+        priceHintUsdM2: true,
+        // ТЗ №20 I — флаг «Показывать в каталоге».
+        showInCatalog: true,
         basePrice: true,
         // §5.8: закупочная цена — видна только canSeePurchasePrice (OWNER;
         // менеджер — по явному разрешению). Тянем всегда, показываем по caps ниже.
@@ -495,6 +509,12 @@ export default async function KamenPage({
   // как и сервер-гейт setMinStock); менеджер видит, но не меняет.
   const canSetMin =
     !!me && capabilitiesFor(me.role, { canSeePurchasePrice: false }).canSetMinStock;
+  // ТЗ №20 H (§15): ориентир задаёт только владелец — по реальной сессии.
+  // ТЗ №20 I (§15): флаг «Показывать в каталоге» — только владелец.
+  const canToggleCat =
+    !!me && capabilitiesFor(me.role, { canSeePurchasePrice: false }).canToggleCatalog;
+  const canSetHint =
+    !!me && capabilitiesFor(me.role, { canSeePurchasePrice: false }).canSetPriceHint;
   // §6.7 «B»: интерьеры генерируют OWNER/MANAGER (стоит денег — B2C-маркетинг).
   const canGenAI = me?.role === "OWNER" || me?.role === "MANAGER";
   // TZ §5.3: фото старше N месяцев → пометка «возможно, переснять» (default 6).
@@ -1243,6 +1263,119 @@ export default async function KamenPage({
               </label>
               <Button type="submit" variant="secondary">
                 Сохранить порог
+              </Button>
+            </form>
+          )}
+        </Card>
+      )}
+
+      {/* ТЗ №20 I (§10.1) — «Показывать в каталоге». Видят сотрудники,
+          переключает только владелец. Без фото вид в публичный каталог не
+          попадёт и с включённым флагом. Партнёру блок не нужен. */}
+      {caps.canSeePriceHint && (
+      <Card className="mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-ink">Онлайн-каталог</h2>
+          <Badge variant={st.showInCatalog ? "success" : "neutral"}>
+            {st.showInCatalog ? "показывается" : "скрыт"}
+          </Badge>
+        </div>
+        <p className="mt-1 text-sm text-ink/55">
+          Клиенты видят вид в{" "}
+          <Link href="/katalog" className="font-semibold text-gold-deep underline">
+            каталоге
+          </Link>
+          , если флаг включён и у камня есть хотя бы одно фото.
+        </p>
+        {catOk && (
+          <Alert variant="success" className="mt-3">
+            Настройка каталога сохранена.
+          </Alert>
+        )}
+        {catErr && (
+          <Alert variant="danger" className="mt-3">
+            {catErr === "denied"
+              ? "Недостаточно прав: показ в каталоге меняет владелец."
+              : "Не удалось сохранить настройку каталога."}
+          </Alert>
+        )}
+        {canToggleCat && (
+          <form action={setShowInCatalog} className="mt-3">
+            <input type="hidden" name="stoneTypeId" value={st.id} />
+            <input type="hidden" name="next" value={`/kamen/${st.id}`} />
+            <input type="hidden" name="show" value={st.showInCatalog ? "0" : "1"} />
+            <Button type="submit" variant="secondary">
+              {st.showInCatalog ? "Скрыть из каталога" : "Показывать в каталоге"}
+            </Button>
+          </form>
+        )}
+      </Card>
+      )}
+
+      {/* ТЗ №20 H — «Ориентир цены»: подсказка для продажи, не цена. Видят все
+          сотрудники (canSeePriceHint), меняет только владелец. */}
+      {caps.canSeePriceHint && (
+        <Card className="mt-4">
+          <h2 className="text-lg font-semibold text-ink">Ориентир цены</h2>
+          <p className="mt-1 text-sm text-ink/70">
+            {formatPriceHint(st.priceHintUzsM2, st.priceHintUsdM2) ? (
+              <span className="tnum font-semibold text-ink">
+                {formatPriceHint(st.priceHintUzsM2, st.priceHintUsdM2)}
+              </span>
+            ) : (
+              <span className="text-ink/55">Не задан.</span>
+            )}
+          </p>
+          <p className="mt-1 text-sm text-ink/55">
+            В продаже — только подсказка: цену менеджер вводит сам.
+          </p>
+          {hintOk && (
+            <Alert variant="success" className="mt-3">
+              Ориентир цены сохранён.
+            </Alert>
+          )}
+          {hintErr && (
+            <Alert variant="danger" className="mt-3">
+              {hintErr === "denied"
+                ? "Недостаточно прав: ориентир задаёт владелец."
+                : hintErr === "uzs"
+                  ? "Сумма в сумах — число больше нуля, например 450 000."
+                  : hintErr === "usd"
+                    ? "Сумма в долларах — число больше нуля, например 35,5."
+                    : "Не удалось сохранить ориентир."}
+            </Alert>
+          )}
+          {canSetHint && (
+            <form
+              action={setPriceHint}
+              className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end"
+            >
+              <input type="hidden" name="stoneTypeId" value={st.id} />
+              <input type="hidden" name="next" value={`/kamen/${st.id}`} />
+              <label htmlFor="priceHintUzsM2" className="flex flex-col gap-1 text-sm sm:w-44">
+                <span className="font-semibold text-ink">сум за м²</span>
+                <input
+                  id="priceHintUzsM2"
+                  name="priceHintUzsM2"
+                  inputMode="decimal"
+                  defaultValue={st.priceHintUzsM2 !== null ? String(st.priceHintUzsM2) : ""}
+                  placeholder="пусто — не задан"
+                  className={inputClass + " tnum"}
+                />
+              </label>
+              <label htmlFor="priceHintUsdM2" className="flex flex-col gap-1 text-sm sm:w-36">
+                <span className="font-semibold text-ink">$ за м²</span>
+                <input
+                  id="priceHintUsdM2"
+                  name="priceHintUsdM2"
+                  inputMode="decimal"
+                  defaultValue={st.priceHintUsdM2 !== null ? String(st.priceHintUsdM2) : ""}
+                  placeholder="пусто — не задан"
+                  className={inputClass + " tnum"}
+                />
+              </label>
+              <Button type="submit" variant="secondary">
+                Сохранить ориентир
               </Button>
             </form>
           )}

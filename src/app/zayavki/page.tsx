@@ -13,6 +13,7 @@ import { getCapabilities } from "@/lib/session";
 import { formatTashkentDateTime } from "@/lib/datetime";
 import {
   LEAD_KIND_RU,
+  LEAD_SOURCE_RU,
   LEAD_STATUS_FLOW,
   LEAD_STATUS_RU,
   LEADS_PAGE_SIZE,
@@ -125,9 +126,10 @@ export default async function ZayavkiPage({
           Заявки
         </h1>
         <p className="mt-1 text-sm text-ink/60">
-          Запросы и просмотры дизайнеров-партнёров. «Заявка» — явный запрос
-          объёма; «Интерес (посмотрел)» — открыл карточку, объём не заказывал.
-          Ни один интерес не теряется.
+          Запросы и просмотры дизайнеров-партнёров и заявки клиентов с
+          карточки по QR («QR / каталог»). «Заявка» — явный запрос; «Интерес
+          (посмотрел)» — партнёр открыл карточку, объём не заказывал. Ни один
+          интерес не теряется.
         </p>
       </header>
 
@@ -193,13 +195,36 @@ export default async function ZayavkiPage({
                         )}
                       </p>
                       <p className="text-sm text-ink/60">
-                        От: {l.createdBy.name}
+                        От:{" "}
+                        {l.source === "QR_CATALOG" ? (
+                          <>
+                            {l.clientName ?? "клиент"}
+                            {l.client && (
+                              <>
+                                {" "}
+                                (
+                                <Link
+                                  href={"/klienty/" + l.client.id}
+                                  className="text-gold-deep hover:underline"
+                                >
+                                  в «Клиентах»: {l.client.name}
+                                </Link>
+                                )
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          (l.createdBy?.name ?? "—")
+                        )}
                         {l.assignedManager && (
                           <> · ведёт: {l.assignedManager.name}</>
                         )}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {l.source === "QR_CATALOG" && (
+                        <Badge variant="neutral">{LEAD_SOURCE_RU.QR_CATALOG}</Badge>
+                      )}
                       <Badge variant={KIND_VARIANT[l.kind]}>
                         {LEAD_KIND_RU[l.kind]}
                       </Badge>
@@ -215,7 +240,9 @@ export default async function ZayavkiPage({
                         Просмотр карточки — объём не запрашивал. Перезвоните:
                         «Вы интересовались таким камнем?»
                       </p>
-                    ) : (
+                    ) : l.source === "QR_CATALOG" &&
+                      l.requestedSlabs === null &&
+                      l.requestedAreaM2 === null ? null : (
                       <p>
                         <span className="text-ink/55">Запрос:</span>{" "}
                         {l.requestedSlabs === null &&
@@ -237,7 +264,18 @@ export default async function ZayavkiPage({
                     )}
                     {l.contact && (
                       <p>
-                        <span className="text-ink/55">Контакт:</span> {l.contact}
+                        <span className="text-ink/55">
+                          {l.source === "QR_CATALOG" ? "Телефон:" : "Контакт:"}
+                        </span>{" "}
+                        {l.contact}
+                      </p>
+                    )}
+                    {l.stoneCode && (
+                      <p>
+                        <span className="text-ink/55">Код с карточки:</span>{" "}
+                        <Link href={"/k/" + l.stoneCode} className="tnum text-gold-deep hover:underline">
+                          {l.stoneCode}
+                        </Link>
                       </p>
                     )}
                     {l.note && (

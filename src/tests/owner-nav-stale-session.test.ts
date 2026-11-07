@@ -144,6 +144,14 @@ describe("forged x-onyx-gated on public paths", () => {
     expect(isProxyPublicPath("/api/telegram/webhook")).toBe(true);
     expect(isProxyPublicPath("/q/showroom-slug")).toBe(true);
     expect(isProxyPublicPath("/tg")).toBe(true);
+    expect(isProxyPublicPath("/k/ONX-7K3QD")).toBe(true); // ТЗ №20 H
+    expect(isProxyPublicPath("/kamen/abc")).toBe(false);
+    // ТЗ №20 I — каталог и подборка по ссылке публичны, список менеджера — нет.
+    expect(isProxyPublicPath("/katalog")).toBe(true);
+    expect(isProxyPublicPath("/podborka/ABCDEFGHJK")).toBe(true);
+    expect(isProxyPublicPath("/podborki")).toBe(false);
+    expect(isProxyPublicPath("/podborki/abc")).toBe(false);
+    expect(isProxyPublicPath("/podborka")).toBe(false);
     expect(isProxyPublicPath("/prodazha")).toBe(false);
     expect(isProxyPublicPath("/poisk")).toBe(false);
   });
@@ -173,8 +181,9 @@ describe("nav with DENY_ALL (complaint signature)", () => {
       canAccessNav(href, caps),
     );
 
-  it("DENY_ALL → only always-open routes («Поиск»/«Карта»)", () => {
-    expect(visible(DENY_ALL)).toEqual(["/poisk", "/karta"]);
+  it("DENY_ALL → only always-open routes («Поиск»/«Карта»/«Каталог»)", () => {
+    // ТЗ №20 I — «Каталог» публичный (клиент без входа), поэтому открыт всем.
+    expect(visible(DENY_ALL)).toEqual(["/poisk", "/karta", "/katalog"]);
   });
 
   it("OWNER → all nav keys", () => {

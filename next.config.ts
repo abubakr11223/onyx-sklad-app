@@ -15,6 +15,29 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "80mb",
     },
   },
+  async headers() {
+    // ТЗ №20 H (§9.3) — публичные карточки по QR закрыты от поисковиков
+    // (дублирует metadata.robots: заголовок видят и не-HTML-клиенты).
+    return [
+      {
+        source: "/k/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      // ТЗ №20 I — каталог и подборки по ссылке (тоже публичные).
+      {
+        source: "/katalog",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/katalog/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/podborka/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+    ];
+  },
   async rewrites() {
     // /karta — статичная «карта готовности проекта» (public/karta.html)
     return [{ source: "/karta", destination: "/karta.html" }];

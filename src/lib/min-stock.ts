@@ -229,20 +229,15 @@ export function stockLevelsFromBatches(
   return out;
 }
 
-/**
- * DB: свободный остаток указанных видов (map stoneTypeId → StockLevel). Вид
- * без партий — { 0, 0 }. Те же агрегаты, что у карточки вида, без N+1.
- */
-export async function loadStockLevels(
+/** Партии + агрегаты §3 → остаток, ключ — вид (byBatch=false) или партия. */
+async function loadLevelsFor(
   db: PrismaClient,
-  stoneTypeIds: readonly string[],
-  now: Date = new Date(),
+  where: { stoneTypeId: { in: string[] } } | { id: { in: string[] } },
+  byBatch: boolean,
+  now: Date,
 ): Promise<Map<string, StockLevel>> {
-  const ids = [...new Set(stoneTypeIds)];
-  const out = new Map<string, StockLevel>();
-  if (ids.length === 0) return out;
-  const batches = await db.batch.findMany({
-    where: { stoneTypeId: { in: ids } },
+  const rows = await db.batch.findMany({
+    where,
     select: {
       id: true,
       stoneTypeId: true,
@@ -254,6 +249,9 @@ export async function loadStockLevels(
       areaSoldDirectM2: true,
     },
   });
+  // ТЗ №20 H — остаток ОДНОЙ партии считается той же функцией: ключ
+  // группировки подменяется на id партии, формула не дублируется.
+  const batches = byBatch ? rows.map((b) => ({ ...b, stoneTypeId: b.id })) : rows;
   const batchIds = batches.map((b) => b.id);
   const [remainders, holds, slabGroups] = await Promise.all([
     getBatchRemainders(db, batchIds),
@@ -275,7 +273,40 @@ export async function loadStockLevels(
       nullAreaCount: g._count._all - g._count.areaM2,
     });
   }
-  const levels = stockLevelsFromBatches(batches, remainders, holds, sep);
+  return stockLevelsFromBatches(batches, remainders, holds, sep);
+}
+
+/**
+ * DB: свободный остаток указанных видов (map stoneTypeId → StockLevel). Вид
+ * без партий — { 0, 0 }. Те же агрегаты, что у карточки вида, без N+1.
+ */
+export async function loadStockLevels(
+  db: PrismaClient,
+  stoneTypeIds: readonly string[],
+  now: Date = new Date(),
+): Promise<Map<string, StockLevel>> {
+  const ids = [...new Set(stoneTypeIds)];
+  const out = new Map<string, StockLevel>();
+  if (ids.length === 0) return out;
+  const levels = await loadLevelsFor(db, { stoneTypeId: { in: ids } }, false, now);
+  for (const id of ids) out.set(id, levels.get(id) ?? { slabs: 0, areaM2: 0 });
+  return out;
+}
+
+/**
+ * ТЗ №20 H — свободный остаток по ПАРТИЯМ (map batchId → StockLevel) для
+ * карточки по QR-коду партии. Ровно та же формула, что loadStockLevels
+ * (сумма по партиям вида = остаток вида).
+ */
+export async function loadStockLevelsByBatch(
+  db: PrismaClient,
+  batchIds: readonly string[],
+  now: Date = new Date(),
+): Promise<Map<string, StockLevel>> {
+  const ids = [...new Set(batchIds)];
+  const out = new Map<string, StockLevel>();
+  if (ids.length === 0) return out;
+  const levels = await loadLevelsFor(db, { id: { in: ids } }, true, now);
   for (const id of ids) out.set(id, levels.get(id) ?? { slabs: 0, areaM2: 0 });
   return out;
 }

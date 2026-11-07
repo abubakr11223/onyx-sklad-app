@@ -42,6 +42,13 @@ describe("RESTORE_ORDER — to'liq va tashqi kalitlarga mos", () => {
     expect(pos("shipment")).toBeLessThan(pos("shipmentLine"));
     expect(pos("shipment")).toBeLessThan(pos("showroomPlacement"));
     expect(pos("saleRecord")).toBeLessThan(pos("debt"));
+    expect(pos("client")).toBeLessThan(pos("lead")); // ТЗ №20 H — Lead.clientId
+    expect(pos("stoneType")).toBeLessThan(pos("stoneCodeScan")); // ТЗ №20 H
+    // ТЗ №20 I — Collection → User/Client, CollectionItem → Collection/StoneType.
+    expect(pos("user")).toBeLessThan(pos("collection"));
+    expect(pos("client")).toBeLessThan(pos("collection"));
+    expect(pos("collection")).toBeLessThan(pos("collectionItem"));
+    expect(pos("stoneType")).toBeLessThan(pos("collectionItem"));
   });
 
   it("halqa faqat Slab.photoRequestId orqali va u keyinga qoldirilgan", () => {

@@ -91,11 +91,23 @@ export interface TgMessage {
   reply_to_message?: TgMessage;
 }
 
+/**
+ * ТЗ №20 H — нажатие inline-кнопки («Менеджер связался»). data — то, что бот
+ * положил в callback_data (≤ 64 байт).
+ */
+export interface TgCallbackQuery {
+  id: string;
+  from: TgUser;
+  message?: TgMessage;
+  data?: string;
+}
+
 export interface TgUpdate {
   /** Unique per delivery; Telegram may retry the same update_id if no timely 200. */
   update_id: number;
   message?: TgMessage;
   edited_message?: TgMessage;
+  callback_query?: TgCallbackQuery;
 }
 
 // reply_markup — bizga faqat request_contact klaviatura kerak.
@@ -116,8 +128,22 @@ export interface TgReplyKeyboardRemove {
   remove_keyboard: true;
 }
 
+/** ТЗ №20 H — inline-кнопка под сообщением (callback_data ≤ 64 байт). */
+export interface TgInlineKeyboardButton {
+  text: string;
+  callback_data?: string;
+  url?: string;
+}
+
+export interface TgInlineKeyboardMarkup {
+  inline_keyboard: TgInlineKeyboardButton[][];
+}
+
 export interface SendMessageOptions {
-  reply_markup?: TgReplyKeyboardMarkup | TgReplyKeyboardRemove;
+  reply_markup?:
+    | TgReplyKeyboardMarkup
+    | TgReplyKeyboardRemove
+    | TgInlineKeyboardMarkup;
   parse_mode?: "HTML" | "MarkdownV2";
   disable_notification?: boolean;
 }
@@ -206,6 +232,42 @@ export async function sendMessage(
   return r.ok
     ? { ok: true, messageId: r.result?.message_id ?? null }
     : { ok: false, error: r.error };
+}
+
+/**
+ * ТЗ №20 H — ответ на нажатие inline-кнопки (обязателен: иначе у кнопки
+ * крутятся «часики»). showAlert — всплывающее окно вместо короткой подсказки.
+ */
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  text: string,
+  showAlert = false,
+): Promise<boolean> {
+  const r = await apiPost("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    text: text.slice(0, 200),
+    ...(showAlert ? { show_alert: true } : {}),
+  });
+  return r.ok;
+}
+
+/**
+ * ТЗ №20 H — заменить текст сообщения бота (и убрать/заменить inline-кнопки).
+ * replyMarkup не передан — кнопки снимаются.
+ */
+export async function editMessageText(
+  chatId: number | string,
+  messageId: number,
+  text: string,
+  replyMarkup?: TgInlineKeyboardMarkup,
+): Promise<boolean> {
+  const r = await apiPost("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    reply_markup: replyMarkup ?? { inline_keyboard: [] },
+  });
+  return r.ok;
 }
 
 // ───────────────────────── Fayl (TG-B uchun tayyor) ─────────────────────────

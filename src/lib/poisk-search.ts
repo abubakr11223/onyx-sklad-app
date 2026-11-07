@@ -337,6 +337,23 @@ export function sizeSearchHits(
   return out;
 }
 
+/**
+ * ТЗ №12 / №19 C2 — какие ВИДЫ проходят подбор по размеру: есть целая плита
+ * под размер (slabsWhere) или узор / однородная партия под размер
+ * (sizeSearchHits по batchesPlateWhere). Ровно этим набором /poisk фильтрует
+ * список «Целые плиты и партии»; ТЗ №20 I — каталог берёт тот же набор
+ * (poisk-size-fit.ts), чтобы «нужный размер» давал тот же результат.
+ */
+export function plateFitStoneTypeIds(
+  fittingSlabs: readonly { stoneType: { id: string } }[],
+  batchHits: readonly Pick<SizeSearchHit, "stoneTypeId">[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const s of fittingSlabs) out.add(s.stoneType.id);
+  for (const h of batchHits) out.add(h.stoneTypeId);
+  return out;
+}
+
 /** 1 плита · 2 плиты · 5 плит · 11 плит · 21 плита. */
 export function slabsWord(n: number): string {
   const a = Math.abs(n) % 100;

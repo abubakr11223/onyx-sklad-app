@@ -58,6 +58,10 @@ export const ENTITY_RU: Record<string, string> = {
   Site: "Объект",
   Debt: "Долг",
   User: "Сотрудник",
+  // ТЗ №20 H — заявки (партнёр / «QR / каталог»).
+  Lead: "Заявка",
+  // ТЗ №20 I — подборки для клиента.
+  Collection: "Подборка",
 };
 
 export type HistoryBadgeVariant = "success" | "warning" | "danger" | "neutral";
@@ -610,6 +614,68 @@ function describeStatusChange(row: HistoryRow, p: Rec, lk: HistoryLookups): Hist
   const kind = str(p.kind);
   if (kind === "stonetype.edit") {
     return { summary: join([str(p.name) ?? stoneName, "карточка вида изменена"]), changes: [] };
+  }
+  if (kind === "stonetype.pricehint") {
+    // ТЗ №20 H — «Ориентир цены» (было → стало).
+    return {
+      summary: join([str(p.name) ?? stoneName, "ориентир цены"]),
+      changes: [
+        formatFieldChange({
+          field: "Ориентир цены",
+          old: str(p.from) ?? "не задан",
+          new: str(p.to) ?? "не задан",
+        }),
+      ],
+    };
+  }
+  if (kind === "stonetype.catalog") {
+    // ТЗ №20 I (§10.1) — флаг «Показывать в каталоге».
+    return {
+      summary: join([
+        str(p.name) ?? stoneName,
+        p.to === true ? "показан в каталоге" : "скрыт из каталога",
+      ]),
+      changes: [],
+    };
+  }
+  if (kind && kind.startsWith("collection.")) {
+    // ТЗ №20 I (§10.3) — подборки: создание, камни, «Нравится», закрытие.
+    const title = str(p.title) ? `«${str(p.title)}»` : null;
+    const stone = join([str(p.stoneName), str(p.stoneCode)]) || null;
+    const what: Record<string, string> = {
+      "collection.create": "Подборка создана",
+      "collection.close": "Подборка закрыта",
+      "collection.reopen": "Подборка открыта снова",
+      "collection.item_add": "Камень добавлен в подборку",
+      "collection.item_remove": "Камень убран из подборки",
+      "collection.like": "Клиент отметил «Нравится»",
+      "collection.unlike": "Клиент снял «Нравится»",
+    };
+    return {
+      summary: join([what[kind] ?? "Подборка изменена", title, stone], str(p.clientName)),
+      changes: [],
+    };
+  }
+  if (kind === "lead.qr_create") {
+    // ТЗ №20 H (§9.2) — заявка клиента с карточки по QR.
+    return {
+      summary: join([
+        "Заявка «QR / каталог»",
+        str(p.stoneName),
+        str(p.code),
+        str(p.clientName),
+        // ТЗ №20 I — заявка со страницы подборки.
+        str(p.collectionTitle) ? `из подборки «${str(p.collectionTitle)}»` : null,
+      ]),
+      changes: [],
+    };
+  }
+  if (kind === "lead.claim") {
+    // ТЗ №20 H — «Менеджер связался» в Telegram: первый нажавший — ответственный.
+    return {
+      summary: join(["Заявка взята в работу (Telegram)", str(p.managerName)]),
+      changes: [],
+    };
   }
   if (kind === "stonetype.minstock") {
     // ТЗ №20 C — порог «Минимальный остаток».

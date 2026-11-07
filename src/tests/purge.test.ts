@@ -249,6 +249,18 @@ function makeFakePurgeDb(seed: {
         return { count: countOf("saleReturn", 0) };
       },
     },
+    stoneCodeScan: {
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "stoneCodeScan", op: "deleteMany", where });
+        return { count: countOf("stoneCodeScan", 0) };
+      },
+    },
+    collectionItem: {
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "collectionItem", op: "deleteMany", where });
+        return { count: countOf("collectionItem", 0) };
+      },
+    },
     debt: {
       count: async () => countOf("debt", 0),
       deleteMany: async ({ where } = {}) => {
@@ -676,6 +688,16 @@ describe("executePurge — order and audit marker (fake client)", () => {
 // удаляться РАНЬШЕ него.
 describe("PURGE_DELETE_ORDER — отгрузки и образцы (ТЗ №15/16)", () => {
   const idx = (k: string) => PURGE_DELETE_ORDER.indexOf(k as never);
+
+  it("ТЗ №20 I — камни подборок удаляются до StoneType", () => {
+    expect(idx("collectionItem")).toBeGreaterThanOrEqual(0);
+    expect(idx("collectionItem")).toBeLessThan(idx("stoneType"));
+  });
+
+  it("ТЗ №20 H — счётчик сканирований удаляется до StoneType", () => {
+    expect(idx("stoneCodeScan")).toBeGreaterThanOrEqual(0);
+    expect(idx("stoneCodeScan")).toBeLessThan(idx("stoneType"));
+  });
 
   it("Shipment удаляется до SaleRecord и до Sample (оба Restrict)", () => {
     expect(idx("shipment")).toBeGreaterThanOrEqual(0);

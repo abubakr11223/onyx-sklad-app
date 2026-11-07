@@ -8,6 +8,7 @@
 import type {
   SendMessageOptions,
   SendResult,
+  TgCallbackQuery,
   TgDocument,
   TgReplyKeyboardMarkup,
   TgUpdate,
@@ -335,6 +336,12 @@ export interface WebhookDeps {
   lookupStoneCode?(code: string): Promise<StoneCodeCard | null>;
   /** База ссылки на карточку (PUBLIC_BASE_URL, lib/qr.publicBaseUrl). */
   stoneCodeBaseUrl?: string;
+  /**
+   * ТЗ №20 H (§9.2) — нажатие inline-кнопки («Менеджер связался» под
+   * уведомлением о заявке). Inject: route → public-lead.handleLeadClaimCallback.
+   * Без него callback_query молча игнорируется (как раньше).
+   */
+  handleCallbackQuery?(cq: TgCallbackQuery): Promise<unknown>;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -605,8 +612,15 @@ export async function handleUpdate(
       if (claim === "claimed") claimedUpdateId = update.update_id;
     }
 
+    // ТЗ №20 H — inline-кнопка. Повтор того же update_id уже отсечён claim'ом
+    // выше; сам захват заявки и так атомарный (первый нажавший — один).
+    if (update.callback_query) {
+      if (deps.handleCallbackQuery) await deps.handleCallbackQuery(update.callback_query);
+      return;
+    }
+
     const message = update.message ?? update.edited_message;
-    if (!message) return; // callback_query va h.k. — chat yo'q / e'tiborsiz.
+    if (!message) return; // boshqa update turlari — chat yo'q / e'tiborsiz.
 
     const chatId = message.chat.id;
 

@@ -144,5 +144,16 @@ describe("Сводка /svodka — OWNER + MANAGER (TZ №10+11 §9, ТЗ №20 
       expect(canAccessNav("/svodka", caps(role))).toBe(false);
     }
   });
+
+  it("ТЗ №20 I — «Каталог» всем, «Подборки» — OWNER/MANAGER", () => {
+    for (const role of ["OWNER", "MANAGER", "WAREHOUSE", "WAREHOUSE_LEAD", "PARTNER"] as Role[]) {
+      expect(canAccessNav("/katalog", caps(role))).toBe(true);
+    }
+    expect(canAccessNav("/podborki", caps("OWNER"))).toBe(true);
+    expect(canAccessNav("/podborki", caps("MANAGER"))).toBe(true);
+    expect(canAccessNav("/podborki", caps("WAREHOUSE"))).toBe(false);
+    expect(canAccessNav("/podborki", caps("WAREHOUSE_LEAD"))).toBe(false);
+    expect(canAccessNav("/podborki", caps("PARTNER"))).toBe(false);
+  });
 });
 

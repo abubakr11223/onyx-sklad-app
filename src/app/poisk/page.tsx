@@ -32,6 +32,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { CUTTING_MARGIN_MM } from "@/lib/inventory";
+import { POISK_SIZE_MAX_ROWS } from "@/lib/poisk-size-fit";
 import {
   piecesWhere,
   slabsWhere,
@@ -39,6 +40,7 @@ import {
   showroomPiecesWhere,
   showroomSlabsWhere,
   sizeSearchHits,
+  plateFitStoneTypeIds,
   formatSizeHitLine,
   formatHitQty,
   type SizeSearchFree,
@@ -78,7 +80,8 @@ export const dynamic = "force-dynamic";
 /** Bitta sahifada ko'rsatiladigan vidlar soni (qolgani «Показать ещё» orqali). */
 const PAGE_SIZE = 30;
 /** §6.5 — max offcuts shown; SQL take = MAX + 1 (probe for cap notice). */
-const MAX_POISK_PIECES = 500;
+// ТЗ №20 I — тот же предел у каталога (poisk-size-fit.ts).
+const MAX_POISK_PIECES = POISK_SIZE_MAX_ROWS;
 /** Boy/qoldiq blokida BIR marta ko'rsatiladigan qator soni («Показать ещё» qadami).
  *  Vidlar (30) dan kichik: qoldiq kartochkasi 3 qatorli va bu blok «предложить
  *  первыми» — menejerga avval eng kichik bir nechtasi kerak, butun dumi emas. */
@@ -567,9 +570,8 @@ export default async function PoiskPage({
       : [];
 
   // Камни, у которых есть целая плита/узор/партия под размер (фильтр списка видов).
-  const plateFitStoneIds = new Set<string>();
-  for (const s of fittingSlabs) plateFitStoneIds.add(s.stoneType.id);
-  for (const h of batchHits) plateFitStoneIds.add(h.stoneTypeId);
+  // ТЗ №20 I: тот же набор берёт каталог (poisk-size-fit.ts) — одна функция.
+  const plateFitStoneIds = plateFitStoneTypeIds(fittingSlabs, batchHits);
 
   // stoneTypeId → unikal lokatsiyalar (partiyalar bo'ylab yig'ilgan).
   const locsByStoneId = new Map<

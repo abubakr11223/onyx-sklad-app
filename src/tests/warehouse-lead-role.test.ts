@@ -38,6 +38,13 @@ describe("Зав. складом = складчик во всём, кроме к
     );
   });
 
+  it("ТЗ №20 H — ориентир цены видят оба, задаёт только владелец", () => {
+    expect(worker().canSeePriceHint).toBe(true);
+    expect(lead().canSeePriceHint).toBe(true);
+    expect(worker().canSetPriceHint).toBe(false);
+    expect(lead().canSetPriceHint).toBe(false);
+  });
+
   it("складчик количество НЕ меняет, зав. складом — меняет", () => {
     expect(worker().canEditBatchQuantity).toBe(false);
     expect(lead().canEditBatchQuantity).toBe(true);

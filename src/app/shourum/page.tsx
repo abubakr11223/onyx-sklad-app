@@ -201,6 +201,22 @@ export default async function ShourumPage({
     })
     .filter((b) => b.slabsFree === null || b.slabsFree > 0);
 
+  // ТЗ №20 H — «В шоу-рум» с карточки по QR: ?batch=<партия>[:<узор>] или
+  // ?unit=SLAB:<id> / PIECE:<id> выбирает камень в форме. Значение берём,
+  // только если оно есть в списке (иначе форма открывается как обычно);
+  // партия с узорами — первый её узор со свободными плитами.
+  const preBatchRaw = first(sp.batch);
+  const preBatch =
+    batches.find((b) => b.id === preBatchRaw)?.id ??
+    batches.find((b) => preBatchRaw !== "" && b.id.startsWith(`${preBatchRaw}:`))?.id ??
+    "";
+  const preUnitRaw = first(sp.unit);
+  const preUnit =
+    availSlabs.some((x) => `SLAB:${x.id}` === preUnitRaw) ||
+    availPieces.some((x) => `PIECE:${x.id}` === preUnitRaw)
+      ? preUnitRaw
+      : "";
+
   return (
     <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
       <header className="mb-4">
@@ -253,7 +269,7 @@ export default async function ShourumPage({
                 name="batchId"
                 required
                 className={inputClass}
-                defaultValue=""
+                defaultValue={preBatch}
               >
                 <option value="" disabled>
                   Выберите партию…
@@ -310,7 +326,7 @@ export default async function ShourumPage({
                 name="unitPick"
                 required
                 className={inputClass}
-                defaultValue=""
+                defaultValue={preUnit}
               >
                 <option value="" disabled>
                   Выберите…

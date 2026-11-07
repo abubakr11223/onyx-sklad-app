@@ -46,7 +46,10 @@ export const RESTORE_ORDER = [
   "debt",
   "payment", // ТЗ №20 A — после Debt и SaleRecord
   "saleReturn", // ТЗ №20 F — после SaleRecord и User
-  "lead",
+  "lead", // ТЗ №20 H — после Client (Lead.clientId)
+  "stoneCodeScan", // ТЗ №20 H — после StoneType
+  "collection", // ТЗ №20 I — после User и Client
+  "collectionItem", // ТЗ №20 I — после Collection и StoneType
   "telegramAccessRequest",
   "auditLog",
 ] as const;

@@ -4,11 +4,18 @@
 // DOIM 200 qaytadi (Telegram qayta urmasligi uchun). Auth xatosi → 401.
 import { signMagicLinkToken } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { downloadFile, getFile, sendMessage } from "@/lib/telegram";
+import {
+  answerCallbackQuery,
+  downloadFile,
+  editMessageText,
+  getFile,
+  sendMessage,
+} from "@/lib/telegram";
 import type { TgUpdate } from "@/lib/telegram";
 import { handleUpdate } from "@/lib/telegram-webhook";
 import { loadStoneCodeCard } from "@/lib/stone-code";
 import { publicBaseUrl } from "@/lib/qr";
+import { handleLeadClaimCallback } from "@/lib/public-lead";
 import { analyzeBrokenStoneShape } from "@/lib/ai-shape";
 import { separateSlabWithPhoto } from "@/lib/slab-separation";
 import {
@@ -94,6 +101,13 @@ export async function POST(req: Request) {
     // ТЗ №20 G (§8.4) — код камня → сводка (наличие из общих помощников).
     lookupStoneCode: (code) => loadStoneCodeCard(db, code),
     stoneCodeBaseUrl: publicBaseUrl(),
+    // ТЗ №20 H (§9.2) — «Менеджер связался»: первый нажавший берёт заявку.
+    handleCallbackQuery: (cq) =>
+      handleLeadClaimCallback(cq, {
+        db,
+        answer: (id, text, alert) => answerCallbackQuery(id, text, alert),
+        edit: (chatId, messageId, text) => editMessageText(chatId, messageId, text),
+      }),
   });
   return Response.json({ ok: true });
 }

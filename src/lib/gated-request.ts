@@ -10,7 +10,8 @@
 //  • Proxy runs on ALL page/API entry paths (except static assets) so it can
 //    DELETE a client-forged header before the request reaches RootLayout.
 //  • Only after signature OK does proxy SET the header to the real path.
-//  • Public paths (/login, /api, /q, /tg) never SET the header — only strip.
+//  • Public paths (/login, /api, /q, /tg, /k, /katalog, /podborka) never SET
+//    the header — only strip.
 
 import { GATED_REQUEST_HEADER } from "@/lib/auth";
 
@@ -27,6 +28,13 @@ export function isProxyPublicPath(pathname: string): boolean {
   // §6.7 QR showroom — client without account
   if (pathname === "/q" || pathname.startsWith("/q/")) return true;
   if (pathname === "/tg" || pathname.startsWith("/tg/")) return true;
+  // ТЗ №20 H (§9) — карточка по QR-коду: клиент без входа. Сотрудник с
+  // сессией тоже проходит (cookie есть) — роль решает сама страница.
+  if (pathname.startsWith("/k/")) return true;
+  // ТЗ №20 I (§10) — онлайн-каталог и подборка по ссылке: клиент без входа.
+  // ВНИМАНИЕ: «/podborki» (список менеджера) — НЕ публичный, только /podborka/.
+  if (pathname === "/katalog" || pathname.startsWith("/katalog/")) return true;
+  if (pathname.startsWith("/podborka/")) return true;
   return false;
 }
 

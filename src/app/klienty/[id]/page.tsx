@@ -17,6 +17,7 @@ import {
   getClientDirectoryCard,
 } from "@/lib/clients-directory";
 import { listSamples } from "@/lib/samples";
+import { collectionPath, listCollections } from "@/lib/collections";
 import { formatCurrencySummaryLine, formatDebtMoney } from "@/lib/debts-ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/validators/sale-payment";
 import NoAccess from "@/components/NoAccess";
@@ -53,12 +54,18 @@ export default async function ClientCardPage({
   });
   if (!card) notFound();
 
-  const samples = await listSamples(db, {
-    canSeeAll: true,
-    actorId,
-    clientId: card.id,
-    status: "ACTIVE",
-  });
+  const [samples, collections] = await Promise.all([
+    listSamples(db, {
+      canSeeAll: true,
+      actorId,
+      clientId: card.id,
+      status: "ACTIVE",
+    }),
+    // ТЗ №20 I (§10.3) — подборки этого клиента (менеджер — свои, владелец — все).
+    caps.canManageCollections
+      ? listCollections(db, { caps, actorId, clientId: card.id, take: 50 })
+      : Promise.resolve([]),
+  ]);
 
   const purchaseLine = formatCurrencySummaryLine(card.purchaseTotals);
   const debtLine = formatCurrencySummaryLine(card.debtTotals);
@@ -325,6 +332,46 @@ export default async function ClientCardPage({
           </a>
         </p>
       </section>
+
+      {caps.canManageCollections && (
+        <section className="mb-4">
+          <h2 className="mb-2 text-lg font-semibold text-ink">
+            Подборки камней ({collections.length})
+          </h2>
+          {collections.length === 0 ? (
+            <p className="text-sm text-ink/55">
+              Подборок для клиента нет. Соберите в{" "}
+              <Link href="/podborki" className="text-gold-deep underline">
+                «Подборках»
+              </Link>{" "}
+              или кнопкой «В подборку» в каталоге.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {collections.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-paper p-3 text-sm"
+                >
+                  <span>
+                    <Link href={`/podborki/${c.id}`} className="font-semibold text-ink underline">
+                      {c.title}
+                    </Link>
+                    {c.closedAt && <span className="ml-2 text-ink/55">закрыта</span>}
+                    <span className="block text-ink/60">
+                      камней: <span className="tnum">{c.items}</span> · нравится:{" "}
+                      <span className="tnum">{c.likes}</span> · {formatTashkentDate(c.createdAt)}
+                    </span>
+                  </span>
+                  <Link href={collectionPath(c.code)} className="text-gold-deep underline">
+                    Ссылка клиента
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </main>
   );
 }

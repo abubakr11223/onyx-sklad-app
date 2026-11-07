@@ -40,6 +40,10 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/otgruzki": "canSeeShipments",
   // «Шоу-рум» (TZ №15 Slice 3): canSeeShowroom (OWNER/MANAGER/WAREHOUSE).
   "/shourum": "canSeeShowroom",
+  // ТЗ №20 I — «Каталог» публичный (клиент без входа тоже), в меню — всем.
+  "/katalog": null,
+  // ТЗ №20 I (§15) — «Подборки для клиента»: OWNER (все) / MANAGER (свои).
+  "/podborki": "canManageCollections",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

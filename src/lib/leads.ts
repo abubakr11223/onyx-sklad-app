@@ -8,9 +8,15 @@
 // инстанцирования Prisma. Типы из @prisma/client — только `import type`
 // (стираются при сборке).
 
-import type { Prisma, PrismaClient, LeadStatus, LeadKind } from "@prisma/client";
+import type {
+  Prisma,
+  PrismaClient,
+  LeadStatus,
+  LeadKind,
+  LeadSource,
+} from "@prisma/client";
 
-export type { LeadStatus, LeadKind };
+export type { LeadStatus, LeadKind, LeadSource };
 
 /** Минимальный контракт клиента БД (реальный PrismaClient или tx). */
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -36,6 +42,12 @@ export const LEAD_KIND_RU: Record<LeadKind, string> = {
 };
 
 export const LEAD_KINDS: readonly LeadKind[] = ["REQUEST", "VIEW"] as const;
+
+/** ТЗ №20 H (§9.2) — источник заявки в «Заявках». */
+export const LEAD_SOURCE_RU: Record<LeadSource, string> = {
+  PARTNER: "Партнёр",
+  QR_CATALOG: "QR / каталог",
+};
 
 export function isLeadKind(v: string): v is LeadKind {
   return (LEAD_KINDS as readonly string[]).includes(v);
@@ -202,9 +214,16 @@ export interface LeadListItem {
   note: string | null;
   createdAt: Date;
   updatedAt: Date;
-  createdBy: { name: string };
+  /** null — заявка клиента без входа (source = QR_CATALOG). */
+  createdBy: { name: string } | null;
   stoneType: { id: string; name: string } | null;
   assignedManager: { name: string } | null;
+  // ТЗ №20 H — заявка с карточки по QR.
+  source: LeadSource;
+  clientName: string | null;
+  clientPhone: string | null;
+  stoneCode: string | null;
+  client: { id: string; name: string } | null;
 }
 
 /** Hard cap for manager queue — avoids unbounded scan. */
@@ -224,6 +243,11 @@ const leadListSelect = {
   createdBy: { select: { name: true } },
   stoneType: { select: { id: true, name: true } },
   assignedManager: { select: { name: true } },
+  source: true,
+  clientName: true,
+  clientPhone: true,
+  stoneCode: true,
+  client: { select: { id: true, name: true } },
 } satisfies Prisma.LeadSelect;
 
 /**
