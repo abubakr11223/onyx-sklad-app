@@ -225,6 +225,10 @@ export default async function ShourumPage({
           Камень на витрине — не обычное наличие. Статус меняется при отправке;
           склад подтверждает физический перенос в «Отгрузках».
         </p>
+        {/* ТЗ №20 J (§11.3) — 3D-режим для планшета в зале (без входа). */}
+        <Link href="/showroom-3d" target="_blank" className={buttonClass("secondary", "sm", "mt-3")}>
+          3D-режим для планшета
+        </Link>
       </header>
 
       {ok === "sent" && (

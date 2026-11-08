@@ -171,6 +171,21 @@ export interface Capabilities {
    * менеджер — только свои (managerId = actor). Аналог canSeeAllClients.
    */
   canSeeAllCollections: boolean;
+  /**
+   * ТЗ №20 J (§11.1, §15) — загрузить/удалить фото «В интерьере». OWNER и
+   * MANAGER; склад и партнёр — нет.
+   */
+  canUploadInterior: boolean;
+  /**
+   * ТЗ №20 J (§11.2, §15) — загрузить «Текстуру для 3D» узора/партии. Весь
+   * персонал (владелец, менеджер, зав. склада, складчик). Партнёр — нет.
+   */
+  canUploadTexture: boolean;
+  /**
+   * ТЗ №20 J (§11.2, §15) — скачать ZIP текстуры. Весь персонал И партнёр;
+   * клиент без входа — нет. Скачивание партнёром пишется в «Заявки».
+   */
+  canDownloadTexture: boolean;
 }
 
 /**
@@ -207,6 +222,9 @@ export interface Capabilities {
  * | canToggleCatalog         | true  | false            | false     | false   |
  * | canManageCollections     | true  | true             | false     | false   |
  * | canSeeAllCollections     | true  | false            | false     | false   |
+ * | canUploadInterior        | true  | true             | false     | false   |
+ * | canUploadTexture         | true  | true             | true      | false   |
+ * | canDownloadTexture       | true  | true             | true      | true    |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -248,6 +266,9 @@ export const DENY_ALL: Capabilities = {
   canToggleCatalog: false,
   canManageCollections: false,
   canSeeAllCollections: false,
+  canUploadInterior: false,
+  canUploadTexture: false,
+  canDownloadTexture: false,
 };
 
 export function capabilitiesFor(
@@ -286,6 +307,9 @@ export function capabilitiesFor(
         canToggleCatalog: true, // ТЗ №20 I — «Показывать в каталоге»
         canManageCollections: true, // ТЗ №20 I — подборки
         canSeeAllCollections: true, // владелец — все подборки
+        canUploadInterior: true, // ТЗ №20 J
+        canUploadTexture: true,
+        canDownloadTexture: true,
       };
     case "MANAGER":
       return {
@@ -320,6 +344,9 @@ export function capabilitiesFor(
         canToggleCatalog: false,
         canManageCollections: true, // ТЗ №20 I — свои подборки
         canSeeAllCollections: false,
+        canUploadInterior: true, // ТЗ №20 J — фото готовых работ
+        canUploadTexture: true,
+        canDownloadTexture: true,
       };
     case "WAREHOUSE":
     case "WAREHOUSE_LEAD":
@@ -360,6 +387,9 @@ export function capabilitiesFor(
         canToggleCatalog: false,
         canManageCollections: false, // ТЗ №20 §15 — подборки делает продажа
         canSeeAllCollections: false,
+        canUploadInterior: false, // ТЗ №20 §15 — интерьеры грузит продажа
+        canUploadTexture: true, // ТЗ №20 J — складчик снимает плиту анфас
+        canDownloadTexture: true,
       };
     case "PARTNER":
       return {
@@ -392,6 +422,9 @@ export function capabilitiesFor(
         canToggleCatalog: false,
         canManageCollections: false,
         canSeeAllCollections: false,
+        canUploadInterior: false,
+        canUploadTexture: false,
+        canDownloadTexture: true, // ТЗ №20 J — дизайнер закладывает камень в 3D-проект
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

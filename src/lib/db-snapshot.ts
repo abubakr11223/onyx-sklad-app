@@ -57,6 +57,7 @@ export const SNAPSHOT_TABLES = [
   "stoneCodeScan", // ТЗ №20 H — счётчик сканирований QR
   "collection", // ТЗ №20 I — подборки для клиента
   "collectionItem",
+  "stoneTexture", // ТЗ №20 J — текстуры для 3D (файлы — в хранилище фото)
   "photoRequest",
   "photoDispatch",
   "photo",

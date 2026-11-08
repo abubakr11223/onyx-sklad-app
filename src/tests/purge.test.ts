@@ -249,6 +249,12 @@ function makeFakePurgeDb(seed: {
         return { count: countOf("saleReturn", 0) };
       },
     },
+    stoneTexture: {
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "stoneTexture", op: "deleteMany", where });
+        return { count: countOf("stoneTexture", 0) };
+      },
+    },
     stoneCodeScan: {
       deleteMany: async ({ where } = {}) => {
         calls.push({ model: "stoneCodeScan", op: "deleteMany", where });
@@ -695,6 +701,8 @@ describe("PURGE_DELETE_ORDER — отгрузки и образцы (ТЗ №15/
   });
 
   it("ТЗ №20 H — счётчик сканирований удаляется до StoneType", () => {
+    expect(idx("stoneTexture")).toBeGreaterThanOrEqual(0); // ТЗ №20 J
+    expect(idx("stoneTexture")).toBeLessThan(idx("batchPattern"));
     expect(idx("stoneCodeScan")).toBeGreaterThanOrEqual(0);
     expect(idx("stoneCodeScan")).toBeLessThan(idx("stoneType"));
   });

@@ -387,6 +387,16 @@ export default async function StoneByCodePage({
         )}
       </header>
 
+      {/* ТЗ №20 J (§11.3) — «Показать в интерьере» (есть текстура для 3D). */}
+      {view.has3d && (
+        <Link
+          href={`/k/${view.code}/3d`}
+          className={buttonClass("primary", "md", "mt-4 w-full sm:w-auto")}
+        >
+          {t.show3d}
+        </Link>
+      )}
+
       <Card className="mt-4">
         <Facts view={view} t={t} />
         {view.description && (
@@ -417,6 +427,41 @@ export default async function StoneByCodePage({
           {view.availability === "IN_SHOWROOM" && (
             <p className="mt-1 text-sm text-ink/60">{t.showroomHint}</p>
           )}
+        </Card>
+      )}
+
+      {/* ТЗ №20 J (§11.1) — «В интерьере» (когда основные фото — фото узора). */}
+      {view.interiorPhotoIds.length > 0 && (
+        <Card className="mt-4">
+          <h2 className="font-serif text-xl font-bold text-ink">{t.interiorTitle}</h2>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {view.interiorPhotoIds.map((id, i) => (
+              <a key={id} href={`/api/photo/${id}`} target="_blank" rel="noreferrer" className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/photo/${id}`}
+                  alt={`${view.name} — ${t.interiorTitle} ${i + 1}`}
+                  loading="lazy"
+                  className="aspect-square w-full rounded-card bg-ink/5 object-cover"
+                />
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ТЗ №20 J (§11.2) — «Скачать текстуру для 3D»: партнёр и сотрудник. */}
+      {view.viewer !== "client" && view.textureDownloads.length > 0 && (
+        <Card className="mt-4">
+          <h2 className="font-serif text-xl font-bold text-ink">{t.downloadTexture}</h2>
+          <p className="mt-1 text-sm text-ink/60">{t.downloadTextureHint}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {view.textureDownloads.map((d) => (
+              <a key={d.code} href={d.href} className={buttonClass("secondary", "sm")}>
+                {view.textureDownloads.length > 1 ? `ZIP · ${d.label}` : "ZIP"}
+              </a>
+            ))}
+          </div>
         </Card>
       )}
 

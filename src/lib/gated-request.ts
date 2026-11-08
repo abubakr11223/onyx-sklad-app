@@ -10,7 +10,7 @@
 //  • Proxy runs on ALL page/API entry paths (except static assets) so it can
 //    DELETE a client-forged header before the request reaches RootLayout.
 //  • Only after signature OK does proxy SET the header to the real path.
-//  • Public paths (/login, /api, /q, /tg, /k, /katalog, /podborka) never SET
+//  • Public paths (/login, /api, /q, /tg, /k, /katalog, /podborka, /showroom-3d) never SET
 //    the header — only strip.
 
 import { GATED_REQUEST_HEADER } from "@/lib/auth";
@@ -35,6 +35,8 @@ export function isProxyPublicPath(pathname: string): boolean {
   // ВНИМАНИЕ: «/podborki» (список менеджера) — НЕ публичный, только /podborka/.
   if (pathname === "/katalog" || pathname.startsWith("/katalog/")) return true;
   if (pathname.startsWith("/podborka/")) return true;
+  // ТЗ №20 J (§11.3) — 3D-режим шоу-рума на планшете, без входа.
+  if (pathname === "/showroom-3d") return true;
   return false;
 }
 

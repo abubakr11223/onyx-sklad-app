@@ -151,6 +151,24 @@ const RU = {
   copyLink: "Скопировать ссылку",
   linkCopied: "Ссылка скопирована",
   share: "Поделиться",
+  // ТЗ №20 J — интерьеры и 3D.
+  interiorTitle: "В интерьере",
+  show3d: "Показать в интерьере",
+  show3dHint: "Камень в 3D: кухня, ванная, холл — в натуральную величину.",
+  downloadTexture: "Скачать текстуру для 3D",
+  downloadTextureHint: "ZIP: оригинал фото плиты, превью 2048 px и info.txt с размером плиты.",
+  scene3dKitchen: "Кухня",
+  scene3dBath: "Ванная",
+  scene3dHall: "Холл",
+  scene3dLoading: "Загружаем 3D…",
+  scene3dNoWebgl: "Этот браузер не умеет показывать 3D. Откройте ссылку в Chrome или Safari.",
+  scene3dHint: "Вращайте пальцем или мышью, щипок или колесо — приблизить.",
+  scene3dStones: "Камни",
+  scene3dEmpty: "Для этих камней ещё нет текстуры для 3D.",
+  scene3dSlab: "Плита",
+  back: "Назад",
+  showroom3dTitle: "Шоу-рум в 3D",
+  fullscreen: "Во весь экран",
 } as const;
 
 export type PublicDict = { [K in keyof typeof RU]: string };
@@ -237,6 +255,23 @@ const UZ: PublicDict = {
   copyLink: "Havolani nusxalash",
   linkCopied: "Havola nusxalandi",
   share: "Ulashish",
+  interiorTitle: "Interyerda",
+  show3d: "Interyerda ko‘rsatish",
+  show3dHint: "Tosh 3D’da: oshxona, vannaxona, xoll — haqiqiy o‘lchamda.",
+  downloadTexture: "3D uchun teksturani yuklab olish",
+  downloadTextureHint: "ZIP: plita suratining asli, 2048 px nusxasi va plita o‘lchami yozilgan info.txt.",
+  scene3dKitchen: "Oshxona",
+  scene3dBath: "Vannaxona",
+  scene3dHall: "Xoll",
+  scene3dLoading: "3D yuklanmoqda…",
+  scene3dNoWebgl: "Bu brauzer 3D ko‘rsata olmaydi. Havolani Chrome yoki Safari’da oching.",
+  scene3dHint: "Barmoq yoki sichqoncha bilan aylantiring, chimdish yoki g‘ildirak — yaqinlashtirish.",
+  scene3dStones: "Toshlar",
+  scene3dEmpty: "Bu toshlar uchun hali 3D tekstura yo‘q.",
+  scene3dSlab: "Plita",
+  back: "Orqaga",
+  showroom3dTitle: "Shou-rum 3D’da",
+  fullscreen: "To‘liq ekran",
 };
 
 const DICTS: Record<PublicLocale, PublicDict> = { ru: RU, uz: UZ };

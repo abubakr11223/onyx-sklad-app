@@ -43,7 +43,8 @@ export async function GET(
     where: {
       id,
       kind: {
-        in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "DRAWING", "BATCH"],
+        // ТЗ №20 J — INTERIOR: фото готовых работ (публичная галерея «В интерьере»).
+        in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "INTERIOR", "DRAWING", "BATCH"],
       },
     },
     select: { storageKey: true },

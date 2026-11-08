@@ -36,6 +36,9 @@ const EXPECTED: Record<Role, Capabilities> = {
     canToggleCatalog: true, // ТЗ №20 I
     canManageCollections: true, // ТЗ №20 I
     canSeeAllCollections: true, // ТЗ №20 I
+    canUploadInterior: true, // ТЗ №20 J
+    canUploadTexture: true, // ТЗ №20 J
+    canDownloadTexture: true, // ТЗ №20 J
   },
   MANAGER: {
     canSeePrices: true,
@@ -67,6 +70,9 @@ const EXPECTED: Record<Role, Capabilities> = {
     canToggleCatalog: false, // ТЗ №20 I
     canManageCollections: true, // ТЗ №20 I
     canSeeAllCollections: false, // ТЗ №20 I
+    canUploadInterior: true, // ТЗ №20 J
+    canUploadTexture: true, // ТЗ №20 J
+    canDownloadTexture: true, // ТЗ №20 J
   },
   WAREHOUSE: {
     canSeePrices: false,
@@ -98,6 +104,9 @@ const EXPECTED: Record<Role, Capabilities> = {
     canToggleCatalog: false, // ТЗ №20 I
     canManageCollections: false, // ТЗ №20 I
     canSeeAllCollections: false, // ТЗ №20 I
+    canUploadInterior: false, // ТЗ №20 J
+    canUploadTexture: true, // ТЗ №20 J
+    canDownloadTexture: true, // ТЗ №20 J
   },
   // Согласовано 2026-08-12: зав. складом = складчик + количество.
   // Если хоть одно поле здесь разойдётся со складчиком — он молча
@@ -132,6 +141,9 @@ const EXPECTED: Record<Role, Capabilities> = {
     canToggleCatalog: false, // ТЗ №20 I
     canManageCollections: false, // ТЗ №20 I
     canSeeAllCollections: false, // ТЗ №20 I
+    canUploadInterior: false, // ТЗ №20 J
+    canUploadTexture: true, // ТЗ №20 J
+    canDownloadTexture: true, // ТЗ №20 J
   },
   PARTNER: {
     canSeePrices: false,
@@ -163,6 +175,9 @@ const EXPECTED: Record<Role, Capabilities> = {
     canToggleCatalog: false, // ТЗ №20 I
     canManageCollections: false, // ТЗ №20 I
     canSeeAllCollections: false, // ТЗ №20 I
+    canUploadInterior: false, // ТЗ №20 J
+    canUploadTexture: false, // ТЗ №20 J
+    canDownloadTexture: true, // ТЗ №20 J
   },
 };
 

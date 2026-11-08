@@ -39,9 +39,10 @@ export const LEAD_STATUS_RU: Record<LeadStatus, string> = {
 export const LEAD_KIND_RU: Record<LeadKind, string> = {
   REQUEST: "Заявка",
   VIEW: "Интерес (посмотрел)",
+  TEXTURE_DOWNLOAD: "Интерес: скачал текстуру",
 };
 
-export const LEAD_KINDS: readonly LeadKind[] = ["REQUEST", "VIEW"] as const;
+export const LEAD_KINDS: readonly LeadKind[] = ["REQUEST", "VIEW", "TEXTURE_DOWNLOAD"] as const;
 
 /** ТЗ №20 H (§9.2) — источник заявки в «Заявках». */
 export const LEAD_SOURCE_RU: Record<LeadSource, string> = {

@@ -29,6 +29,7 @@ import { formatLocation } from "./locations";
 import { formatDim, formatThickness } from "./dimensions";
 import { loadQrLabels } from "./qr";
 import { reservationListScope } from "./reservations";
+import { loadTexturesForHit } from "./texture-store";
 
 export type CardViewer = "client" | "partner" | "staff";
 
@@ -81,6 +82,11 @@ export interface CardFacts {
   size: string | null;
   thickness: string | null;
   photoIds: string[];
+  /** ТЗ №20 J (§11.1) — «В интерьере» (готовые работы + AI). Если фото узора
+   *  нет, эти же фото идут первыми в photoIds — тогда здесь пусто (без дублей). */
+  interiorPhotoIds: string[];
+  /** ТЗ №20 J (§11.2) — текстуры для 3D в области кода (узор/партия). */
+  textures: Array<{ code: string; detail: string | null }>;
   /** Свободно в области кода (плиты и м²). */
   free: StockLevel;
   /** Свободные куски боя/остатка в области (входят в «В наличии»). */
@@ -138,16 +144,27 @@ interface CardBase {
   size: string | null;
   thickness: string | null;
   photoIds: string[];
+  interiorPhotoIds: string[];
   availability: CardAvailability;
+  /** ТЗ №20 J (§11.3) — «Показать в интерьере»: есть текстура для 3D. */
+  has3d: boolean;
 }
 
 export interface ClientCardView extends CardBase {
   viewer: "client";
 }
 
+/** ТЗ №20 J — «Скачать текстуру для 3D» (партнёр и сотрудник). */
+export interface TextureDownload {
+  code: string;
+  label: string;
+  href: string;
+}
+
 export interface PartnerCardView extends CardBase {
   viewer: "partner";
   stoneTypeId: string;
+  textureDownloads: TextureDownload[];
   freeSlabs: number;
   freeAreaM2: number;
 }
@@ -167,6 +184,7 @@ export interface StaffActions {
 export interface StaffCardView extends CardBase {
   viewer: "staff";
   stoneTypeId: string;
+  textureDownloads: TextureDownload[];
   freeSlabs: number;
   freeAreaM2: number;
   freePieces: number;
@@ -240,13 +258,20 @@ export function buildCardView(
     size: f.size,
     thickness: f.thickness,
     photoIds: [...f.photoIds],
+    interiorPhotoIds: [...f.interiorPhotoIds],
     availability: availabilityOf(f),
+    has3d: f.textures.length > 0,
   };
   if (viewer === "client") return { viewer, ...base };
+  const textureDownloads: TextureDownload[] = f.textures.map((t) => ({
+    code: t.code,
+    label: t.detail ? `узор «${t.detail}»` : t.code,
+    href: `/api/texture/${encodeURIComponent(t.code)}`,
+  }));
   const freeSlabs = Math.max(0, Math.floor(f.free.slabs));
   const freeAreaM2 = Math.max(0, f.free.areaM2);
   if (viewer === "partner") {
-    return { viewer, ...base, stoneTypeId: f.stoneTypeId, freeSlabs, freeAreaM2 };
+    return { viewer, ...base, stoneTypeId: f.stoneTypeId, textureDownloads, freeSlabs, freeAreaM2 };
   }
   const s = f.staff;
   const hint =
@@ -259,6 +284,7 @@ export function buildCardView(
     viewer,
     ...base,
     stoneTypeId: f.stoneTypeId,
+    textureDownloads,
     freeSlabs,
     freeAreaM2,
     freePieces: f.freePieces,
@@ -279,7 +305,10 @@ const toNum = (d: DecimalLike | number | null | undefined): number | null =>
 
 /** Фото камня, которые можно показать на карточке (не чертежи боя). */
 /** ТЗ №20 I — тот же список решает «есть фото» в каталоге (catalog.ts). */
-export const CARD_PHOTO_KINDS = ["INTERIOR_AI", "SAMPLE", "SLAB", "PIECE", "BATCH"] as const;
+export const CARD_PHOTO_KINDS = ["INTERIOR_AI", "INTERIOR", "SAMPLE", "SLAB", "PIECE", "BATCH"] as const;
+/** ТЗ №20 J — интерьеры (готовые работы и AI): у вида целиком, на любом уровне кода. */
+export const INTERIOR_PHOTO_KINDS = ["INTERIOR", "INTERIOR_AI"] as const;
+const INTERIOR_LIMIT = 10;
 const CARD_PHOTO_LIMIT = 12;
 const STAFF_RESERVATIONS_LIMIT = 10;
 
@@ -394,7 +423,7 @@ export async function loadCardFacts(
   const { stoneTypeId, batchId, batchPatternId, slabId, pieceId } = hit.ids;
   const scope = scopeWheres(hit);
 
-  const [st, labels, photos] = await Promise.all([
+  const [st, labels, ownPhotos, interiors, textures] = await Promise.all([
     db.stoneType.findUnique({
       where: { id: stoneTypeId },
       select: {
@@ -411,15 +440,35 @@ export async function loadCardFacts(
     db.photo.findMany({
       where: {
         // Фото партии (BATCH, паллета при приёмке) — складское, только сотрудникам.
-        kind: { in: isStaff ? [...CARD_PHOTO_KINDS] : CARD_PHOTO_KINDS.filter((k) => k !== "BATCH") },
-        // Интерьеры (часть J) — у вида целиком, показываем на любом уровне.
-        OR: [...scope.photo, { stoneTypeId, kind: "INTERIOR_AI" }],
+        kind: {
+          in: isStaff
+            ? ["SAMPLE", "SLAB", "PIECE", "BATCH"]
+            : ["SAMPLE", "SLAB", "PIECE"],
+        },
+        OR: scope.photo,
       },
       orderBy: { createdAt: "desc" },
       take: CARD_PHOTO_LIMIT,
       select: { id: true },
     }),
+    // ТЗ №20 J (§11.1) — «В интерьере»: у вида целиком, сначала готовые работы.
+    db.photo.findMany({
+      where: { stoneTypeId, kind: { in: [...INTERIOR_PHOTO_KINDS] } },
+      // В БД INTERIOR — последний член enum (ADD VALUE), desc ставит его первым.
+      orderBy: [{ kind: "desc" }, { createdAt: "asc" }],
+      take: INTERIOR_LIMIT,
+      select: { id: true, kind: true },
+    }),
+    loadTexturesForHit(db, hit),
   ]);
+  // «Первым фото, если фото узора нет» (§11.1): без фото узора интерьеры
+  // становятся основными фото, отдельной галереи тогда нет (без дублей).
+  const interiorIds = [
+    ...interiors.filter((p) => p.kind === "INTERIOR"),
+    ...interiors.filter((p) => p.kind !== "INTERIOR"),
+  ].map((p) => p.id);
+  const photoIds = ownPhotos.length > 0 ? ownPhotos.map((p) => p.id) : interiorIds;
+  const interiorPhotoIds = ownPhotos.length > 0 ? interiorIds : [];
   if (!st) return null;
   const label = labels[0] ?? null;
 
@@ -500,7 +549,9 @@ export async function loadCardFacts(
     detail: label?.detail ?? null,
     size: label?.size ?? null,
     thickness: label?.thickness ?? null,
-    photoIds: photos.map((p) => p.id),
+    photoIds,
+    interiorPhotoIds,
+    textures: textures.map((t) => ({ code: t.code, detail: t.detail })),
     free,
     freePieces,
     inShowroom,

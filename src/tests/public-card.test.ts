@@ -54,6 +54,8 @@ function facts(over: Partial<CardFacts> = {}): CardFacts {
     size: "280 × 160 см",
     thickness: "2 см",
     photoIds: ["ph1"],
+    interiorPhotoIds: ["int1"],
+    textures: [{ code: "ONX-7K3QD", detail: "светлый" }],
     free: { slabs: 7, areaM2: 31.36 },
     freePieces: 2,
     inShowroom: false,
@@ -116,6 +118,8 @@ describe("buildCardView — клиент не видит цифр, локаци�
         "color",
         "description",
         "detail",
+        "has3d", // ТЗ №20 J — «Показать в интерьере»
+        "interiorPhotoIds", // ТЗ №20 J — «В интерьере»
         "kind",
         "name",
         "photoIds",
@@ -126,6 +130,27 @@ describe("buildCardView — клиент не видит цифр, локаци�
       ].sort(),
     );
     expect(view.availability).toBe("IN_STOCK");
+  });
+
+  it("ТЗ №20 J — 3D клиенту можно, скачивание текстуры — нет", () => {
+    expect(view.has3d).toBe(true);
+    expect(view.interiorPhotoIds).toEqual(["int1"]);
+    expect("textureDownloads" in view).toBe(false);
+    expect(JSON.stringify(view)).not.toContain("/api/texture/");
+  });
+
+  it("ТЗ №20 J — партнёр и сотрудник скачивают текстуру", () => {
+    for (const v of ["partner", "staff"] as const) {
+      const pv = buildCardView(facts(), v, DENY_ALL);
+      if (pv.viewer === "client") throw new Error("unexpected");
+      expect(pv.textureDownloads).toEqual([
+        { code: "ONX-7K3QD", label: "узор «светлый»", href: "/api/texture/ONX-7K3QD" },
+      ]);
+    }
+  });
+
+  it("ТЗ №20 J — без текстуры кнопки 3D нет", () => {
+    expect(buildCardView(facts({ textures: [] }), "client", DENY_ALL).has3d).toBe(false);
   });
 
   it("в сериализованном виде нет остатка, места, цены, имён", () => {
@@ -258,6 +283,7 @@ describe("loadCardFacts — служебное для клиента даже н
       },
       piece: { findMany: async () => [] },
       photo: { findMany: async () => [{ id: "ph1" }] },
+      stoneTexture: { findMany: async () => [] },
       reservation: { count: forbidden, findMany: forbidden },
     };
     const f = await loadCardFacts(

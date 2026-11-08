@@ -60,6 +60,11 @@ import { inputClass } from "@/components/ui/Field";
 import { CameraIcon } from "@/components/ui/Icons";
 import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
+import TextureUploader from "./TextureUploader";
+import InteriorUploader from "./InteriorUploader";
+import { deleteInteriorPhoto } from "../texture-actions";
+import { resolveDriver } from "@/lib/storage/photo-storage";
+import { INTERIOR_MAX } from "@/lib/textures";
 import { formatThickness, thicknessToNumber } from "@/lib/dimensions";
 import { formatLocation } from "@/lib/locations";
 import { qrPrintHref } from "@/lib/qr";
@@ -353,6 +358,9 @@ export default async function KamenPage({
   const minErr = firstParam(sp.minErr);
   // ТЗ №20 H: результат сохранения ориентира цены.
   const hintOk = firstParam(sp.hintOk) === "1";
+  // ТЗ №20 J — удаление фото «В интерьере».
+  const intDel = firstParam(sp.intDel) === "1";
+  const intErr = firstParam(sp.intErr);
   const hintErr = firstParam(sp.hintErr);
   // ТЗ №20 I: результат переключения «Показывать в каталоге».
   const catOk = firstParam(sp.catOk) === "1";
@@ -365,7 +373,7 @@ export default async function KamenPage({
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
   // getCapabilities() — в общий Promise.all, чтобы не добавлять лишний
   // последовательный round-trip на самой горячей странице.
-  const [st, photoCfg, caps, me, interiors] = await Promise.all([
+  const [st, photoCfg, caps, me, interiors, ownInteriors, textures] = await Promise.all([
     // BATCH-B (perf): весь склад не тянем. Для формулы §3 — счётчики партий +
     // агрегаты (getBatchRemainders ниже); для показа — только AVAILABLE плиты/куски
     // и последние 12 фото. Наличие и «свежесть» фото (TG-C) считаются так же.
@@ -502,6 +510,24 @@ export default async function KamenPage({
       where: { stoneTypeId: id, kind: "INTERIOR_AI" },
       orderBy: { createdAt: "asc" },
       select: { id: true },
+    }),
+    // ТЗ №20 J (§11.1) — фото «В интерьере» (готовые работы, до 10).
+    db.photo.findMany({
+      where: { stoneTypeId: id, kind: "INTERIOR" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }),
+    // ТЗ №20 J (§11.2) — текстуры для 3D по узорам / однородным партиям.
+    db.stoneTexture.findMany({
+      where: { stoneTypeId: id },
+      select: {
+        batchId: true,
+        batchPatternId: true,
+        widthPx: true,
+        heightPx: true,
+        aspectMismatch: true,
+        updatedAt: true,
+      },
     }),
   ]);
   const isOwner = me?.role === "OWNER";
@@ -990,6 +1016,146 @@ export default async function KamenPage({
           </form>
         )}
       </Card>
+
+      {/* ТЗ №20 J (§11.1) — «В интерьере»: фото/рендеры готовых работ. */}
+      <Card className="mt-6" id="interior">
+        <h2 className="text-lg font-semibold text-ink">В интерьере</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          Фото готовых работ с этим камнем (до {INTERIOR_MAX}). Клиент видит их в
+          карточке по QR и в каталоге — первым фото, если нет фото узора.
+        </p>
+        {intDel && (
+          <Alert variant="success" className="mt-3">
+            Фото удалено.
+          </Alert>
+        )}
+        {intErr && (
+          <Alert variant="danger" className="mt-3">
+            {intErr === "denied"
+              ? "Недостаточно прав (фото готовых работ загружают владелец и менеджер)."
+              : "Не удалось выполнить — попробуйте ещё раз."}
+          </Alert>
+        )}
+        {ownInteriors.length > 0 ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {ownInteriors.map((p) => (
+              <div key={p.id} className="relative">
+                <a href={`/api/photo/${p.id}`} target="_blank" rel="noreferrer" className="block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/photo/${p.id}`}
+                    alt="В интерьере"
+                    loading="lazy"
+                    className="aspect-square w-full rounded-card object-cover"
+                  />
+                </a>
+                {caps.canUploadInterior && (
+                  <form action={deleteInteriorPhoto} className="absolute right-1 top-1">
+                    <input type="hidden" name="stoneTypeId" value={st.id} />
+                    <input type="hidden" name="photoId" value={p.id} />
+                    <Button type="submit" size="sm" variant="danger" aria-label="Удалить фото">
+                      ✕
+                    </Button>
+                  </form>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-ink/40">Фото готовых работ ещё нет.</p>
+        )}
+        {caps.canUploadInterior && (
+          <InteriorUploader stoneTypeId={st.id} remaining={INTERIOR_MAX - ownInteriors.length} />
+        )}
+      </Card>
+
+      {/* ТЗ №20 J (§11.2–11.3) — «Текстура для 3D» по узорам / партиям. */}
+      {(() => {
+        const byPattern = new Map(textures.filter((t) => t.batchPatternId).map((t) => [t.batchPatternId!, t]));
+        const byBatch = new Map(textures.filter((t) => t.batchId).map((t) => [t.batchId!, t]));
+        const rows = st.batches.flatMap((b) =>
+          b.patterns.length > 0
+            ? b.patterns.map((p) => ({
+                key: p.id,
+                code: p.code,
+                label: `Узор «${p.description}»`,
+                sub: `партия от ${formatTashkentDate(b.arrivedAt)}`,
+                lengthCm: p.lengthMm ?? b.lengthMm,
+                widthCm: p.widthMm ?? b.widthMm,
+                tex: byPattern.get(p.id) ?? null,
+              }))
+            : [
+                {
+                  key: b.id,
+                  code: b.code,
+                  label: `Партия от ${formatTashkentDate(b.arrivedAt)}`,
+                  sub: null as string | null,
+                  lengthCm: b.lengthMm,
+                  widthCm: b.widthMm,
+                  tex: byBatch.get(b.id) ?? null,
+                },
+              ],
+        );
+        const any = rows.some((r) => r.tex);
+        const mode = resolveDriver() === "vercel-blob" ? "direct" : "form";
+        return (
+          <Card className="mt-6" id="texture">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-ink">Текстуры для 3D</h2>
+              {any && (
+                <Link href={`/k/${st.code}/3d`} target="_blank" className={buttonClass("secondary", "sm")}>
+                  Показать в интерьере
+                </Link>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-ink/60">
+              Фото плиты анфас: ровно, без бликов, JPG, не меньше 4000 px по длинной
+              стороне. Дизайнеры скачивают его для 3D-проектов, клиент видит камень
+              в 3D-интерьере.
+            </p>
+            {rows.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/40">Партий нет — текстуру загрузить некуда.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-line rounded-card border border-line">
+                {rows.map((r) => (
+                  <li key={r.key} className="flex flex-wrap items-start justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink">{r.label}</p>
+                      <p className="text-xs text-ink/55">
+                        {[r.sub, r.lengthCm && r.widthCm ? `плита ${r.lengthCm} × ${r.widthCm} см` : "размер плиты не указан", r.code]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                      {r.tex ? (
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink/70">
+                          <span className="tnum">
+                            {r.tex.widthPx} × {r.tex.heightPx} px · {formatTashkentDate(r.tex.updatedAt)}
+                          </span>
+                          {r.tex.aspectMismatch && (
+                            <Badge variant="warning">пропорции не совпадают с размером плиты</Badge>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-ink/40">Текстуры нет</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-start gap-2">
+                      {r.tex && caps.canDownloadTexture && (
+                        <a href={`/api/texture/${r.code}`} className={buttonClass("ghost", "sm")}>
+                          Скачать ZIP
+                        </a>
+                      )}
+                      {caps.canUploadTexture && (
+                        <TextureUploader code={r.code} mode={mode} hasTexture={!!r.tex} />
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* 2. Наличие */}
       {/* §6.7: точные остатки/ярлыки плит/локации видят только роли с

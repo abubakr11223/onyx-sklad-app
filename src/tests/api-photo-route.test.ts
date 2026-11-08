@@ -28,14 +28,14 @@ beforeEach(() => {
 });
 
 describe("GET /api/photo/[id] — kind allowlist (ТЗ №7 #26)", () => {
-  it("whitelist ровно [SAMPLE, SLAB, PIECE, INTERIOR_AI, DRAWING, BATCH]", async () => {
+  it("whitelist ровно [SAMPLE, SLAB, PIECE, INTERIOR_AI, INTERIOR, DRAWING, BATCH]", async () => {
     M.photoFindFirst.mockResolvedValue(null);
     await GET(new Request("https://onyx.test/api/photo/x"), { params: params("x") });
     expect(M.photoFindFirst).toHaveBeenCalledTimes(1);
     const where = M.photoFindFirst.mock.calls[0][0].where;
     expect(where.id).toBe("x");
     expect(where.kind).toEqual({
-      in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "DRAWING", "BATCH"],
+      in: ["SAMPLE", "SLAB", "PIECE", "INTERIOR_AI", "INTERIOR", "DRAWING", "BATCH"],
     });
   });
 
@@ -102,7 +102,9 @@ describe("GET /api/photo/[id] — kind allowlist (ТЗ №7 #26)", () => {
     // URL за cuid. На клиентскую QR-карточку BATCH не попадает: там свой,
     // более узкий список QR_PUBLIC_PHOTO_KINDS (см. тест ниже).
     expect(kinds).toContain("BATCH");
-    expect(kinds).toHaveLength(6);
+    // ТЗ №20 J — INTERIOR: фото «В интерьере» (готовые работы).
+    expect(kinds).toContain("INTERIOR");
+    expect(kinds).toHaveLength(7);
   });
 
   it("ТЗ №16 B — фото партии НЕ попадает на клиентскую QR-карточку", async () => {

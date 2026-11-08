@@ -50,6 +50,7 @@ const STATUS_VARIANT: Record<LeadStatus, "warning" | "neutral" | "success"> = {
 const KIND_VARIANT: Record<LeadKind, "neutral" | "warning"> = {
   REQUEST: "warning",
   VIEW: "neutral",
+  TEXTURE_DOWNLOAD: "neutral",
 };
 
 // Подпись кнопки перехода в конкретный статус (действие, не название статуса).
@@ -239,6 +240,11 @@ export default async function ZayavkiPage({
                       <p className="text-ink/60">
                         Просмотр карточки — объём не запрашивал. Перезвоните:
                         «Вы интересовались таким камнем?»
+                      </p>
+                    ) : l.kind === "TEXTURE_DOWNLOAD" ? (
+                      <p className="text-ink/60">
+                        Скачал текстуру для 3D{l.stoneCode ? ` (${l.stoneCode})` : ""} —
+                        закладывает камень в проект. Уточните объём и сроки.
                       </p>
                     ) : l.source === "QR_CATALOG" &&
                       l.requestedSlabs === null &&

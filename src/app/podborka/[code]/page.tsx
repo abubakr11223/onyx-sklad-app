@@ -15,6 +15,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { viewerForRole } from "@/lib/public-card";
 import { collectionPath, loadPublicCollection } from "@/lib/collections";
+import { typesWithTexture } from "@/lib/texture-store";
+
 import {
   PUBLIC_LOCALE_COOKIE,
   htmlLangOf,
@@ -28,6 +30,12 @@ import LocaleSwitch from "@/components/public/LocaleSwitch";
 import ShareButtons from "@/components/public/ShareButtons";
 import StoneTile from "@/components/public/StoneTile";
 import { buttonClass } from "@/components/ui/Button";
+
+async function typeIdsByCodes(codes: string[]): Promise<string[]> {
+  if (codes.length === 0) return [];
+  const rows = await db.stoneType.findMany({ where: { code: { in: codes } }, select: { id: true } });
+  return rows.map((r) => r.id);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +113,9 @@ export default async function PublicCollectionPage({
   }
 
   const path = collectionPath(data.code);
+  // ТЗ №20 J — «Показать в интерьере», если хоть у одного камня есть текстура.
+  const has3d =
+    (await typesWithTexture(db, await typeIdsByCodes(data.items.map((i) => i.stone.code)))).size > 0;
   return (
     <main lang={htmlLangOf(locale)} className="mx-auto max-w-5xl px-4 pb-12 pt-4 sm:p-8">
       {top}
@@ -116,7 +127,12 @@ export default async function PublicCollectionPage({
             Вы видите подборку глазами клиента. Отметки «Нравится» — в «Подборках».
           </p>
         )}
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {has3d && (
+            <Link href={`${path}/3d`} className={buttonClass("primary", "sm")}>
+              {t.show3d}
+            </Link>
+          )}
           <ShareButtons
             path={path}
             title={data.title}

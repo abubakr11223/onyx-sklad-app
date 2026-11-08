@@ -350,15 +350,24 @@ export function typePhotoWhere(
   return {
     kind: {
       in: opts.includeBatch
-        ? ["INTERIOR_AI", "SAMPLE", "SLAB", "PIECE", "BATCH"]
-        : ["INTERIOR_AI", "SAMPLE", "SLAB", "PIECE"],
+        ? ["INTERIOR", "INTERIOR_AI", "SAMPLE", "SLAB", "PIECE", "BATCH"]
+        : ["INTERIOR", "INTERIOR_AI", "SAMPLE", "SLAB", "PIECE"],
     },
     OR: [
-      { stoneTypeId: inIds, kind: { in: ["SAMPLE", "SLAB", "INTERIOR_AI"] } },
+      // ТЗ №20 J — INTERIOR: фото «В интерьере» (готовые работы).
+      { stoneTypeId: inIds, kind: { in: ["SAMPLE", "SLAB", "INTERIOR", "INTERIOR_AI"] } },
       { batchPattern: { batch: { stoneTypeId: inIds } } },
       ...(opts.includeBatch ? [{ batch: { stoneTypeId: inIds }, kind: "BATCH" as const }] : []),
     ],
   };
+}
+
+/** Приоритет обложки каталога (меньше — лучше). */
+export function coverRank(kind: string): number {
+  if (kind === "BATCH") return 3;
+  if (kind === "INTERIOR_AI") return 2;
+  if (kind === "INTERIOR") return 1;
+  return 0;
 }
 
 /** Факты по видам: фото, остаток (общие помощники), форматы. Без N+1. */
@@ -417,15 +426,16 @@ export async function loadCatalogFacts(
       }),
     ]);
 
-  // Фото: первое не-«паллета» (узор, образец, интерьер), иначе фото партии.
-  const photoByType = new Map<string, { id: string; batch: boolean }>();
+  // Обложка: фото узора/образца → «В интерьере» (§11.1: первым, если фото
+  // узора нет; готовые работы раньше AI) → фото партии (только сотрудник).
+  const photoByType = new Map<string, { id: string; rank: number }>();
   for (const p of photos) {
     const typeId =
       p.stoneTypeId ?? p.batchPattern?.batch.stoneTypeId ?? p.batch?.stoneTypeId ?? null;
     if (!typeId) continue;
     const cur = photoByType.get(typeId);
-    const isBatch = p.kind === "BATCH";
-    if (!cur || (cur.batch && !isBatch)) photoByType.set(typeId, { id: p.id, batch: isBatch });
+    const rank = coverRank(p.kind);
+    if (!cur || rank < cur.rank) photoByType.set(typeId, { id: p.id, rank });
   }
 
   // Форматы — сводка «Поиска» (свободно по узорам / однородным партиям).

@@ -36,6 +36,11 @@ const nextConfig: NextConfig = {
         source: "/podborka/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
+      // ТЗ №20 J — 3D-режим шоу-рума (публичный).
+      {
+        source: "/showroom-3d",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
     ];
   },
   async rewrites() {

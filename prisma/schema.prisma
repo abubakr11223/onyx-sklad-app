@@ -86,6 +86,9 @@ enum PhotoKind {
   SAMPLE // vid namunasi
   INTERIOR_AI // QR-kartochka interyerlari (TZ §6.7)
   DRAWING // boy chertyoji
+  /// ТЗ №20 J (§11.1) — «В интерьере»: фото/рендер готовой работы, загружают
+  /// владелец и менеджер (до 10 на вид). Не путать с INTERIOR_AI (генерация).
+  INTERIOR
   /// ТЗ №16 B — общее фото партии при приёмке (как пришла: паллета, контейнер).
   /// Не заменяет фото узора: узор — конкретный рисунок для B2C, партия — вся
   /// поставка. Складское фото, в публичный allowlist /api/photo НЕ входит.
@@ -119,6 +122,8 @@ enum AuditAction {
   SHOWROOM_RETURN
   /// ТЗ №20 F — склад принял назад отгруженный камень по возврату продажи.
   RETURN_ACCEPT
+  /// ТЗ №20 J (§11.2) — загружена/заменена текстура для 3D (узор или партия).
+  TEXTURE_UPLOAD
   /// Audit 2026-09-02 — zaxira olindi (tizim amali, userId = null).
   /// Egaga «zaxira kelmayapti» degan savolga javob shu yozuvlardan chiqadi.
   BACKUP
@@ -232,6 +237,8 @@ enum LeadSource {
 enum LeadKind {
   REQUEST // «Запросить объём» form submit
   VIEW // PARTNER opened stone card (no order)
+  /// ТЗ №20 J (§11.2) — партнёр скачал текстуру для 3D («Интерес: скачал текстуру»).
+  TEXTURE_DOWNLOAD
 }
 
 // ──────────────────────── Modellar ────────────────────────
@@ -275,6 +282,7 @@ model StoneType {
   leads   Lead[]
   scans   StoneCodeScan[]
   collectionItems CollectionItem[]
+  textures StoneTexture[]
 
   @@index([rockType])
   @@index([color])
@@ -326,6 +334,8 @@ model Batch {
   patterns       BatchPattern[]
   shipmentLines  ShipmentLine[]
   photos         Photo[] // ТЗ №16 B — общее фото партии
+  /// ТЗ №20 J — текстура для 3D однородной партии (без узоров).
+  texture        StoneTexture?
 
   @@index([stoneTypeId])
   @@index([arrivedAt])
@@ -370,6 +380,8 @@ model BatchPattern {
   reservations  Reservation[]
   samples       Sample[]
   shipmentLines ShipmentLine[]
+  /// ТЗ №20 J — текстура для 3D этого узора.
+  texture       StoneTexture?
 
   @@index([batchId])
 }
@@ -602,6 +614,8 @@ model User {
   saleReturnsAccepted   SaleReturn[]   @relation("SaleReturnAcceptedBy")
   /// ТЗ №20 I — подборки для клиентов, которые собрал сотрудник.
   collections           Collection[]   @relation("CollectionManager")
+  /// ТЗ №20 J — загруженные текстуры для 3D.
+  texturesUploaded      StoneTexture[] @relation("TextureUploadedBy")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -1365,4 +1379,39 @@ model Payment {
   @@index([debtId])
   @@index([paidAt, currency])
   @@index([receivedById, paidAt])
+}
+
+/// ТЗ №20 J (§11.2) — «Текстура для 3D»: фото плиты анфас у узора (или у
+/// однородной партии без узоров). Ровно один владелец — CHECK в миграции.
+/// Оригинал хранится как есть; превью 2048 px грузится в 3D-сцену; ZIP для
+/// скачивания собирается при первом запросе и пересобирается, если поменялись
+/// данные в info.txt (zipSignature).
+model StoneTexture {
+  id             String   @id @default(cuid())
+  stoneTypeId    String
+  batchId        String?  @unique
+  batchPatternId String?  @unique
+  /// storageKey оригинала (JPG ≥ 4000 px по длинной стороне).
+  originalKey    String
+  /// storageKey превью 2048 px (для 3D-сцены).
+  previewKey     String
+  widthPx        Int
+  heightPx       Int
+  previewWidthPx  Int
+  previewHeightPx Int
+  sizeBytes      Int
+  /// Пропорции фото не совпали с длиной × шириной плиты (>10%) — сохранили с предупреждением.
+  aspectMismatch Boolean  @default(false)
+  zipKey         String?
+  zipSignature   String?
+  uploadedById   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stoneType    StoneType     @relation(fields: [stoneTypeId], references: [id], onDelete: Cascade)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchPattern BatchPattern? @relation(fields: [batchPatternId], references: [id], onDelete: Cascade)
+  uploadedBy   User?         @relation("TextureUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([stoneTypeId])
 }

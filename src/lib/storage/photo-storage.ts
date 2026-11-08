@@ -191,3 +191,88 @@ export async function putPhotoObject(
   });
   return { storageKey: blob.url, mediaType: params.mediaType };
 }
+
+// ───────────── ТЗ №20 J — произвольные файлы (текстуры, ZIP) ─────────────
+
+export interface PutFileParams {
+  /** Полный путь в хранилище, С расширением (`textures/ONX-…/x-2048.jpg`). */
+  path: string;
+  bytes: Buffer | Uint8Array;
+  contentType: string;
+}
+
+export interface PutFileResult {
+  storageKey: string;
+  /** Vercel Blob: ссылка «скачать» (Content-Disposition: attachment). Диск — null. */
+  downloadUrl: string | null;
+}
+
+/**
+ * Запись файла по точному пути (в отличие от putPhotoObject, где расширение
+ * выводится из MIME). Путь перезаписывается — ZIP текстуры пересобирается под
+ * тем же именем, когда меняются данные info.txt.
+ */
+export async function putStorageFile(
+  params: PutFileParams,
+  env: StorageEnv = process.env,
+): Promise<PutFileResult> {
+  const bytes = Buffer.isBuffer(params.bytes) ? params.bytes : Buffer.from(params.bytes);
+  if (resolveDriver(env) === "local") {
+    const key = LOCAL_PREFIX + params.path;
+    const abs = localKeyToAbsPath(key, env);
+    if (abs === null) throw new Error(`Yaroqsiz fayl yo'li: ${params.path}`);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, bytes);
+    return { storageKey: key, downloadUrl: null };
+  }
+  const { put } = await import("@vercel/blob");
+  const blob = await put(params.path, bytes, {
+    access: "public",
+    contentType: params.contentType,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  return { storageKey: blob.url, downloadUrl: blob.downloadUrl };
+}
+
+/** Байты файла по storageKey (Blob-URL или `local:`). Нет файла → null. */
+export async function readStorageBytes(
+  storageKey: string,
+  env: StorageEnv = process.env,
+): Promise<Buffer | null> {
+  if (isLocalKey(storageKey)) {
+    const obj = await readLocalObject(storageKey, env);
+    return obj ? Buffer.from(obj.bytes) : null;
+  }
+  if (isRemoteUrl(storageKey)) {
+    const res = await fetch(storageKey, { cache: "no-store" });
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  }
+  return null;
+}
+
+/**
+ * URL нашего Vercel Blob-хранилища (загрузка прямо из браузера)? Сервер
+ * скачивает файл по присланной ссылке — без этой проверки action можно было бы
+ * заставить ходить на произвольный адрес (SSRF).
+ */
+export function isOwnBlobUrl(
+  url: string,
+  pathPrefix: string,
+  env: StorageEnv = process.env,
+): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:") return false;
+  if (!u.hostname.endsWith(".public.blob.vercel-storage.com")) return false;
+  // Хранилище — именно наше: id стора зашит в токене (vercel_blob_rw_<id>_…).
+  const storeId = /^vercel_blob_rw_([A-Za-z0-9]+)_/.exec(env.BLOB_READ_WRITE_TOKEN ?? "")?.[1];
+  if (storeId && u.hostname.split(".")[0] !== storeId.toLowerCase()) return false;
+  if (u.search || u.hash || u.username || u.password) return false;
+  return u.pathname.startsWith("/" + pathPrefix);
+}
