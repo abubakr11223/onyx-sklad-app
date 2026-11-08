@@ -1,11 +1,29 @@
 import type { NextConfig } from "next";
 
+/** Нативные файлы sharp для Linux x64 (Vercel). Локально (macOS) их нет — glob пустой. */
+const SHARP_LINUX_FILES = [
+  "./node_modules/@img/sharp-libvips-linux-x64/**/*",
+  "./node_modules/@img/sharp-linux-x64/**/*",
+];
+
 const nextConfig: NextConfig = {
   // Prod uchun kichik runtime image: `.next/standalone/server.js` yaratadi.
   output: "standalone",
   // Sirlar va zaxira tarballari build artefaktiga (.next/standalone) tushmasin.
   outputFileTracingExcludes: {
     "*": ["backups/**", "_to_delete/**", ".env*", "*.tar.gz", "*.tgz"],
+  },
+  // ТЗ №20 J/K — sharp (превью текстуры, фото для ИИ) на Vercel: трассировка
+  // не забирает нативную libvips (libvips-cpp.so), и модуль падает с
+  // ERR_DLOPEN_FAILED. Явно кладём Linux-пакеты sharp в функции, где он нужен.
+  outputFileTracingIncludes: {
+    "/kamen/[id]": SHARP_LINUX_FILES,
+    "/katalog": SHARP_LINUX_FILES,
+    "/poisk": SHARP_LINUX_FILES,
+    "/priemka": SHARP_LINUX_FILES,
+    "/priemka/edit/[id]": SHARP_LINUX_FILES,
+    "/api/cron/stone-traits": SHARP_LINUX_FILES,
+    "/api/telegram/webhook": SHARP_LINUX_FILES,
   },
   experimental: {
     serverActions: {

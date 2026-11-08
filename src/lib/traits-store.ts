@@ -36,8 +36,27 @@ export async function readPhotoBytes(storageKey: string): Promise<Buffer | null>
   }
 }
 
-/** Фото для ИИ: JPEG ≤ 1568 px (лимит картинки модели, меньше трафика). */
-export async function prepareForVision(bytes: Buffer): Promise<{ bytes: Buffer; mediaType: "image/jpeg" } | null> {
+type VisionMedia = "image/jpeg" | "image/png" | "image/webp";
+
+/** Тип картинки по первым байтам (без библиотек). */
+export function sniffImageType(b: Uint8Array): VisionMedia | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) {
+    return "image/webp";
+  }
+  return null;
+}
+
+/** Предел картинки для модели (5 МБ) с запасом. */
+const VISION_RAW_MAX = 4.5 * 1024 * 1024;
+
+/**
+ * Фото для ИИ: JPEG ≤ 1568 px (лимит модели, меньше трафика). Если sharp
+ * недоступен (нативная библиотека не загрузилась), отдаём исходник, когда
+ * он и так подходит модели (JPEG/PNG/WebP до 4,5 МБ) — поиск не ломается.
+ */
+export async function prepareForVision(bytes: Buffer): Promise<{ bytes: Buffer; mediaType: VisionMedia } | null> {
   try {
     const sharp = (await import("sharp")).default;
     const out = await sharp(bytes)
@@ -46,7 +65,10 @@ export async function prepareForVision(bytes: Buffer): Promise<{ bytes: Buffer; 
       .jpeg({ quality: 85 })
       .toBuffer();
     return { bytes: out, mediaType: "image/jpeg" };
-  } catch {
+  } catch (err) {
+    const type = sniffImageType(bytes);
+    if (type && bytes.length <= VISION_RAW_MAX) return { bytes, mediaType: type };
+    console.warn("[traits] фото не подготовлено:", (err as Error).message.slice(0, 200));
     return null;
   }
 }
