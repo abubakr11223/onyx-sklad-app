@@ -12,7 +12,7 @@ const EXPECTED: Record<Role, string> = {
   MANAGER: "Менеджер",
   WAREHOUSE: "Складчик",
       WAREHOUSE_LEAD: "Зав. складом",
-  PARTNER: "Дизайнер-партнёр",
+  PARTNER: "Партнёр", // ТЗ №20 L
 };
 
 describe("role-labels (BUG-06)", () => {

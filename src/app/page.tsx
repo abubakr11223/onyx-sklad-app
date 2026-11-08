@@ -4,6 +4,7 @@
 // один Promise.all, роль-фильтр по Capabilities. Отложенный C-риск снят: строки
 // не грузим, только счётчики.
 
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCapabilities, getCurrentUser } from "@/lib/session";
 import type { Capabilities } from "@/lib/permissions";
@@ -106,6 +107,8 @@ type Tile = {
 
 export default async function Home() {
   const [caps, user] = await Promise.all([getCapabilities(), getCurrentUser()]);
+  // ТЗ №20 L (§13.2) — главная партнёра — каталог (без складских разделов).
+  if (user?.role === "PARTNER") redirect("/katalog");
   const sections = visibleNavItems(caps);
   // ТЗ №20 C — блок «Заканчивается»: владелец и зав. складом (canSetMinStock).
   // Сбой расчёта не роняет главную — блок просто не показывается.

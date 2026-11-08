@@ -2,6 +2,7 @@
 // ТЗ №20 E — рейтинг клиентов (владелец — все, менеджер — свои) и «Продажи по
 // менеджерам» (только владелец). UZS/USD никогда не смешиваются.
 
+import { loadPartnerSummary, PARTNER_TYPE_RU, type PartnerSummaryRow } from "@/lib/partners";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -317,6 +318,74 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
   );
 }
 
+/** ТЗ №20 L (§13.3) — «Партнёры»: заявки, интересы, продажи по заявкам. */
+function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: RatingPeriod }) {
+  return (
+    <section className="mb-6">
+      <h2 className="mb-1 text-lg font-semibold text-ink">Партнёры</h2>
+      <p className="mb-2 text-xs text-ink/50">
+        Период: {periodCaption(period)} (переключатель — в рейтинге выше). «Заявки» — заявки на
+        объём; «Интересы» — просмотры карточек и скачанные текстуры; «Продажи» — оформленные из
+        заявок партнёра (сумма без возвратов, сум и $ отдельно).
+      </p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-ink/55">
+          Партнёров пока нет —{" "}
+          <Link href="/partnery" className="text-gold-deep underline">
+            завести
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-card border border-line bg-paper">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-ink/60">
+                <th className="py-2 pl-3 font-medium">Партнёр</th>
+                <th className="py-2 pl-3 text-right font-medium">Заявки</th>
+                <th className="py-2 pl-3 text-right font-medium">Интересы</th>
+                <th className="py-2 pl-3 text-right font-medium">Продажи</th>
+                <th className="py-2 pl-3 text-right font-medium">Сумма, сум</th>
+                <th className="py-2 px-3 text-right font-medium">Сумма, $</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.partnerId} className="border-b border-line/60 align-top last:border-b-0">
+                  <td className="py-2 pl-3">
+                    <Link
+                      href={`/zayavki?partner=${encodeURIComponent(r.partnerId)}`}
+                      className="font-semibold text-ink hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                    <span className="block text-xs text-ink/55">
+                      {[r.type ? PARTNER_TYPE_RU[r.type] : null, r.managerName ? `менеджер: ${r.managerName}` : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </td>
+                  <td className="tnum py-2 pl-3 text-right">{r.requests}</td>
+                  <td className="tnum py-2 pl-3 text-right">{r.interests}</td>
+                  <td className="tnum py-2 pl-3 text-right">{r.sales}</td>
+                  <MoneyCell amount={r.amountUzs.toFixed(2)} currency="UZS" />
+                  <td className="tnum whitespace-nowrap py-2 px-3 text-right">
+                    {r.amountUsd === 0 ? (
+                      <span className="text-ink/35">—</span>
+                    ) : (
+                      formatDebtMoney(r.amountUsd.toFixed(2), "USD")
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** ТЗ №20 H (§9.3) — «Чаще всего сканируют»: топ-10 кодов за период. */
 function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingPeriod }) {
   return (
@@ -399,7 +468,7 @@ export default async function SvodkaPage({
   const showAll = first(sp.all) === "1";
   const actorId = await currentActorId();
 
-  const [rating, managerRows, topScans] = await Promise.all([
+  const [rating, managerRows, topScans, partnerRows] = await Promise.all([
     loadClientRating(db, {
       period: ratingPeriod,
       sort,
@@ -412,6 +481,10 @@ export default async function SvodkaPage({
       : Promise.resolve([] as ManagerSalesRow[]),
     // ТЗ №20 §15 — топ сканирований видит только владелец.
     isOwner ? loadTopScans(db, ratingPeriod) : Promise.resolve([] as TopScanRow[]),
+    // ТЗ №20 L (§13.3) — «Партнёры» — только владелец.
+    isOwner
+      ? loadPartnerSummary(db, { from: ratingPeriod.from, to: ratingPeriod.toExclusive })
+      : Promise.resolve([] as PartnerSummaryRow[]),
   ]);
 
   // Ссылки переключателей сохраняют все прочие параметры страницы.
@@ -563,6 +636,8 @@ export default async function SvodkaPage({
       <ManagersSection rows={managerRows} period={ratingPeriod} />
 
       <TopScansSection rows={topScans} period={ratingPeriod} />
+
+      <PartnersSection rows={partnerRows} period={ratingPeriod} />
 
       <section className="mb-6">
         <h2 className="mb-2 text-lg font-semibold text-ink">

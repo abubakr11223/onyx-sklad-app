@@ -2,6 +2,7 @@
 // Server component: продаваемые цели + фильтруемая/пагинируемая история
 // продаж (W8-B). Флоу продажи — в клиентском SaleForm.
 
+import { loadLeadSalePrefill } from "@/lib/partners";
 import { formatPriceHint } from "@/lib/price-hint";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -149,6 +150,9 @@ export default async function ProdazhaPage({
   const retErr = first(sp.retErr);
   // Catalog bound: optional name filter for picker (never silent full dump).
   const catalogQ = (first(sp.catalogQ) ?? "").trim();
+  // ТЗ №20 L (§13.3) — «Оформить продажу» из заявки партнёра.
+  const leadClosed = first(sp.leadClosed) === "1";
+  const leadPrefill = caps.canSell ? await loadLeadSalePrefill(db, first(sp.fromLead)) : null;
   const nameFilter = stoneNameContainsFilter(catalogQ);
 
   // W7-B / §6.1 шаг 8: ?slab= | ?piece= deep-link. Query ishonchsiz — DB + canSell.
@@ -776,7 +780,12 @@ export default async function ProdazhaPage({
         </Alert>
       )}
 
-      <SaleForm stoneTypes={stoneTypes} initialPick={initialPick} />
+      {leadClosed && (
+        <Alert variant="success" className="mb-3">
+          Заявка партнёра закрыта и связана с этой продажей.
+        </Alert>
+      )}
+      <SaleForm stoneTypes={stoneTypes} initialPick={initialPick} leadPrefill={leadPrefill} />
 
       {/* W8-B — архив продаж: фильтр + keyset (TZ §5.4 «история: что, когда, кому»). */}
       <section id="sales" className="mt-8 scroll-mt-4">

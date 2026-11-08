@@ -342,6 +342,21 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Витрина для клиентов: фото, наличие, похожие",
     Icon: SamplesIcon,
   },
+  // ТЗ №20 L — кабинет партнёра и управление партнёрами.
+  {
+    href: "/moi-zayavki",
+    label: "Мои заявки",
+    short: "Заявки",
+    description: "Ваши заявки на объём и их статус",
+    Icon: LeadsIcon,
+  },
+  {
+    href: "/partnery",
+    label: "Партнёры",
+    short: "Партнёры",
+    description: "Дизайнеры, прорабы, подрядчики и их менеджеры",
+    Icon: UsersIcon,
+  },
   {
     href: "/podborki",
     label: "Подборки",

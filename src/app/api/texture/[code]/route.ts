@@ -9,6 +9,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { capabilitiesFor } from "@/lib/permissions";
 import { loadTextureZip } from "@/lib/texture-store";
+import { notifyPartnerLeadSafe } from "@/lib/partners";
+import { sendMessage } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +29,8 @@ export async function GET(
 
   if (user.role === "PARTNER") {
     try {
-      await db.lead.create({
+      const lead = await db.lead.create({
+        select: { id: true },
         data: {
           createdById: user.id,
           source: "PARTNER",
@@ -37,6 +40,8 @@ export async function GET(
           status: "NEW",
         },
       });
+      // ТЗ №20 L — интерес уведомляет закреплённого менеджера партнёра.
+      await notifyPartnerLeadSafe(db, sendMessage, lead.id);
     } catch (err) {
       // Учёт интереса не должен ломать скачивание.
       console.error("[texture] lead:", err);

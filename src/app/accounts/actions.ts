@@ -90,7 +90,17 @@ export async function createAccount(formData: FormData): Promise<void> {
   try {
     await db.$transaction(async (tx) => {
       const created = await tx.user.create({
-        data: { name, role, email, passwordHash, isActive: true, phone },
+        data: {
+          name,
+          role,
+          email,
+          passwordHash,
+          isActive: true,
+          phone,
+          // ТЗ №20 L (§13.1) — партнёр из «Сотрудников» — тип «дизайнер» по умолчанию
+          // (тип и менеджера меняют в «Партнёрах»).
+          ...(role === "PARTNER" ? { partnerType: "DESIGNER" as const } : {}),
+        },
         select: { id: true },
       });
       await logAccountAction(tx, actorId, created.id, {

@@ -15,6 +15,7 @@ import {
 } from "@/lib/pattern-stock";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import {
   EMPTY_AGGREGATE,
@@ -530,6 +531,9 @@ export default async function KamenPage({
       },
     }),
   ]);
+  // ТЗ №20 L (§13.2) — партнёр смотрит камень в своей карточке /k (текстура,
+  // 3D, «Заявка на объём»), складская карточка ему не нужна.
+  if (caps.requestsRouteToManager && st) redirect(`/k/${st.code}`);
   const isOwner = me?.role === "OWNER";
   // ТЗ №20 C (§15): порог задают владелец и зав. складом (реальная сессия,
   // как и сервер-гейт setMinStock); менеджер видит, но не меняет.

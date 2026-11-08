@@ -63,6 +63,9 @@ export type RestoreTable = (typeof RESTORE_ORDER)[number];
  */
 export const DEFERRED_FIELDS: Record<string, string[]> = {
   slab: ["photoRequestId"],
+  // ТЗ №20 L — партнёр → закреплённый менеджер (ссылка внутри той же таблицы:
+  // менеджер может идти в файле позже партнёра).
+  user: ["partnerManagerId"],
 };
 
 // ─────────────────── GENERATED ustunlar (W2-T1) ────────────────────

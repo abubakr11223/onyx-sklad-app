@@ -14,6 +14,7 @@ import type {
   LeadStatus,
   LeadKind,
   LeadSource,
+  PartnerType,
 } from "@prisma/client";
 
 export type { LeadStatus, LeadKind, LeadSource };
@@ -108,6 +109,10 @@ export interface CreateLeadInput {
   note: string | null;
   /** Default REQUEST (explicit form). VIEW only via recordPassiveView. */
   kind?: LeadKind;
+  /** ТЗ №20 L — объект текстом, срок, код камня с карточки. */
+  siteText?: string | null;
+  dueDate?: Date | null;
+  stoneCode?: string | null;
 }
 
 /**
@@ -127,6 +132,9 @@ export async function createLead(
       requestedAreaM2: input.requestedAreaM2,
       contact: input.contact,
       note: input.note,
+      siteText: input.siteText ?? null,
+      dueDate: input.dueDate ?? null,
+      stoneCode: input.stoneCode ?? null,
       status: "NEW",
     },
     select: { id: true },
@@ -216,7 +224,7 @@ export interface LeadListItem {
   createdAt: Date;
   updatedAt: Date;
   /** null — заявка клиента без входа (source = QR_CATALOG). */
-  createdBy: { name: string } | null;
+  createdBy: { name: string; role: string; partnerType: PartnerType | null } | null;
   stoneType: { id: string; name: string } | null;
   assignedManager: { name: string } | null;
   // ТЗ №20 H — заявка с карточки по QR.
@@ -225,6 +233,12 @@ export interface LeadListItem {
   clientPhone: string | null;
   stoneCode: string | null;
   client: { id: string; name: string } | null;
+  // ТЗ №20 L — заявка партнёра: объект, срок, продажа по заявке.
+  siteText: string | null;
+  dueDate: Date | null;
+  saleRecordId: string | null;
+  createdById: string | null;
+  saleRecord: { customerName: string | null; soldAt: Date } | null;
 }
 
 /** Hard cap for manager queue — avoids unbounded scan. */
@@ -241,7 +255,7 @@ const leadListSelect = {
   note: true,
   createdAt: true,
   updatedAt: true,
-  createdBy: { select: { name: true } },
+  createdBy: { select: { name: true, role: true, partnerType: true } },
   stoneType: { select: { id: true, name: true } },
   assignedManager: { select: { name: true } },
   source: true,
@@ -249,6 +263,12 @@ const leadListSelect = {
   clientPhone: true,
   stoneCode: true,
   client: { select: { id: true, name: true } },
+  // ТЗ №20 L — тип партнёра, объект, срок, продажа по заявке.
+  siteText: true,
+  dueDate: true,
+  saleRecordId: true,
+  createdById: true,
+  saleRecord: { select: { customerName: true, soldAt: true } },
 } satisfies Prisma.LeadSelect;
 
 /**
@@ -357,10 +377,17 @@ export function leadsKeysetWhere(
 export function leadsPageWhere(args: {
   status?: LeadStatus;
   cursor: LeadsListCursor | null;
+  /** ТЗ №20 L (§13.1) — фильтр «Тип партнёра» в «Заявках». */
+  partnerType?: PartnerType;
+  /** ТЗ №20 L — заявки одного партнёра (ссылка из «Партнёров»). */
+  partnerId?: string;
 }): Prisma.LeadWhereInput | undefined {
-  const base: Prisma.LeadWhereInput | undefined = args.status
-    ? { status: args.status }
-    : undefined;
+  const parts: Prisma.LeadWhereInput[] = [];
+  if (args.status) parts.push({ status: args.status });
+  if (args.partnerId) parts.push({ createdById: args.partnerId });
+  if (args.partnerType) parts.push({ createdBy: { role: "PARTNER", partnerType: args.partnerType } });
+  const base: Prisma.LeadWhereInput | undefined =
+    parts.length === 0 ? undefined : parts.length === 1 ? parts[0] : { AND: parts };
   if (!args.cursor) return base;
   const keyset = leadsKeysetWhere(args.cursor);
   return base ? { AND: [base, keyset] } : keyset;
@@ -376,6 +403,8 @@ export async function listLeadsPage(
     status?: LeadStatus;
     cursor?: string | null;
     pageSize?: number;
+    partnerType?: PartnerType;
+    partnerId?: string;
   } = {},
 ): Promise<{ items: LeadListItem[]; nextCursor: string | null }> {
   const pageSize = Math.min(
@@ -392,7 +421,12 @@ export async function listLeadsPage(
   const cursor = parseLeadsCursor(opts.cursor);
 
   const rows = await db.lead.findMany({
-    where: leadsPageWhere({ status: opts.status, cursor }),
+    where: leadsPageWhere({
+      status: opts.status,
+      cursor,
+      partnerType: opts.partnerType,
+      partnerId: opts.partnerId,
+    }),
     orderBy: LEADS_ORDER_BY,
     take: pageSize + 1,
     select: leadListSelect,

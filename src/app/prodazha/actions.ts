@@ -5,6 +5,7 @@
 // UPDATE + SaleRecord + AuditLog, ADR-006); здесь только разбор формы,
 // русские сообщения и редирект с итогом.
 
+import { closeLeadWithSale, saleStoneTypeId } from "@/lib/partners";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
@@ -311,11 +312,33 @@ export async function submitSale(
     batchPatternIds: [batchPatternId],
   });
 
+  // ТЗ №20 L (§13.3) — продажа из заявки партнёра: заявка закрывается со
+  // ссылкой на продажу (только если камень совпал и заявка ещё открыта).
+  const leadId = str("leadId");
+  let leadClosed = false;
+  if (leadId) {
+    try {
+      const stoneTypeId = await saleStoneTypeId(db, result.saleId);
+      if (stoneTypeId) {
+        leadClosed = await closeLeadWithSale(db, {
+          leadId,
+          saleId: result.saleId,
+          managerId,
+          stoneTypeId,
+        });
+      }
+    } catch (err) {
+      // Продажа уже оформлена — сбой привязки не откатывает её.
+      console.error("[prodazha] closeLeadWithSale:", err);
+    }
+  }
+
   const params = new URLSearchParams({
     ok: "1",
     what: await saleSummary(result.saleId),
     customer: customerName,
   });
+  if (leadClosed) params.set("leadClosed", "1");
   redirect(`/prodazha?${params.toString()}`);
 }
 

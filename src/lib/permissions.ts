@@ -186,6 +186,11 @@ export interface Capabilities {
    * клиент без входа — нет. Скачивание партнёром пишется в «Заявки».
    */
   canDownloadTexture: boolean;
+  /**
+   * ТЗ №20 L (§13.1, §15) — «Партнёры»: завести партнёра, тип, закрепить
+   * менеджера. OWNER и MANAGER; склад и партнёр — нет.
+   */
+  canManagePartners: boolean;
 }
 
 /**
@@ -225,6 +230,7 @@ export interface Capabilities {
  * | canUploadInterior        | true  | true             | false     | false   |
  * | canUploadTexture         | true  | true             | true      | false   |
  * | canDownloadTexture       | true  | true             | true      | true    |
+ * | canManagePartners        | true  | true             | false     | false   |
  *
  * (*) OWNER.canSeePurchasePrice — `opts` dan QAT'IY NAZAR har doim true
  * (schema: User.canSeePurchasePrice OWNER uchun e'tiborga olinmaydi).
@@ -269,6 +275,7 @@ export const DENY_ALL: Capabilities = {
   canUploadInterior: false,
   canUploadTexture: false,
   canDownloadTexture: false,
+  canManagePartners: false,
 };
 
 export function capabilitiesFor(
@@ -310,6 +317,7 @@ export function capabilitiesFor(
         canUploadInterior: true, // ТЗ №20 J
         canUploadTexture: true,
         canDownloadTexture: true,
+        canManagePartners: true, // ТЗ №20 L
       };
     case "MANAGER":
       return {
@@ -347,6 +355,7 @@ export function capabilitiesFor(
         canUploadInterior: true, // ТЗ №20 J — фото готовых работ
         canUploadTexture: true,
         canDownloadTexture: true,
+        canManagePartners: true, // ТЗ №20 L — заводит партнёров, закрепляется
       };
     case "WAREHOUSE":
     case "WAREHOUSE_LEAD":
@@ -390,6 +399,7 @@ export function capabilitiesFor(
         canUploadInterior: false, // ТЗ №20 §15 — интерьеры грузит продажа
         canUploadTexture: true, // ТЗ №20 J — складчик снимает плиту анфас
         canDownloadTexture: true,
+        canManagePartners: false,
       };
     case "PARTNER":
       return {
@@ -425,6 +435,7 @@ export function capabilitiesFor(
         canUploadInterior: false,
         canUploadTexture: false,
         canDownloadTexture: true, // ТЗ №20 J — дизайнер закладывает камень в 3D-проект
+        canManagePartners: false,
       };
     default:
       // Union'dan tashqari qiymat (kelajakdagi 5-chi rol / noto'g'ri cast) —

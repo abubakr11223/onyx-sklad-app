@@ -181,13 +181,17 @@ describe("nav with DENY_ALL (complaint signature)", () => {
       canAccessNav(href, caps),
     );
 
-  it("DENY_ALL → only always-open routes («Поиск»/«Карта»/«Каталог»)", () => {
+  it("DENY_ALL → only always-open routes («Каталог»)", () => {
     // ТЗ №20 I — «Каталог» публичный (клиент без входа), поэтому открыт всем.
-    expect(visible(DENY_ALL)).toEqual(["/poisk", "/karta", "/katalog"]);
+    // ТЗ №20 L — «Поиск»/«Карта» теперь только персоналу (canSeeExactRemainder).
+    expect(visible(DENY_ALL)).toEqual(["/katalog"]);
   });
 
   it("OWNER → all nav keys", () => {
     const owner = capabilitiesFor("OWNER", { canSeePurchasePrice: true });
-    expect(visible(owner)).toEqual(Object.keys(NAV_REQUIRED_CAPABILITY));
+    // «Мои заявки» — кабинет партнёра (у владельца — «Заявки»).
+    expect(visible(owner)).toEqual(
+      Object.keys(NAV_REQUIRED_CAPABILITY).filter((h) => h !== "/moi-zayavki"),
+    );
   });
 });

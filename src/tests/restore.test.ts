@@ -53,6 +53,7 @@ describe("RESTORE_ORDER — to'liq va tashqi kalitlarga mos", () => {
 
   it("halqa faqat Slab.photoRequestId orqali va u keyinga qoldirilgan", () => {
     expect(DEFERRED_FIELDS.slab).toEqual(["photoRequestId"]);
+    expect(DEFERRED_FIELDS.user).toEqual(["partnerManagerId"]); // ТЗ №20 L
   });
 });
 

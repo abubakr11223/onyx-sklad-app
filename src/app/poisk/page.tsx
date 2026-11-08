@@ -27,6 +27,7 @@
 //     Chegara urilsa natija to'liq emas va bu foydalanuvchiga aytiladi.
 //   • boy/qoldiq (W6-A2): SQL ORDER BY boundingAreaMm2 (=L×W) + take MAX+1,
 //     so'ng rankAndCapFittingPieces (id tie-break + cap). Unbounded fetch YO'Q.
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -201,6 +202,8 @@ export default async function PoiskPage({
   // §3 / §4.6 — aniq qoldiq va lokatsiya faqat canSeeExactRemainder.
   // /q: isStaff = caps.canSeeExactRemainder; /kamen: !caps.canSeeExactRemainder → «В наличии».
   const [params, caps] = await Promise.all([searchParams, getCapabilities()]);
+  // ТЗ №20 L (§13.2) — партнёр ищет в каталоге (requestsRouteToManager = PARTNER).
+  if (caps.requestsRouteToManager) redirect("/katalog");
   const canSeeExact = caps.canSeeExactRemainder;
 
   const q = firstParam(params.q);

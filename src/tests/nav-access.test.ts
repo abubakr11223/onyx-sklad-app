@@ -8,11 +8,22 @@ const caps = (role: Role) =>
   capabilitiesFor(role, { canSeePurchasePrice: false });
 
 describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
-  it("Поиск и Карта — доим ochiq (barcha rollarga)", () => {
-    for (const role of ["OWNER", "MANAGER", "WAREHOUSE", "PARTNER"] as Role[]) {
+  it("Поиск и Карта — весь персонал; партнёру — нет (ТЗ №20 L: только каталог)", () => {
+    for (const role of ["OWNER", "MANAGER", "WAREHOUSE", "WAREHOUSE_LEAD"] as Role[]) {
       expect(canAccessNav("/poisk", caps(role))).toBe(true);
       expect(canAccessNav("/karta", caps(role))).toBe(true);
     }
+    expect(canAccessNav("/poisk", caps("PARTNER"))).toBe(false);
+    expect(canAccessNav("/karta", caps("PARTNER"))).toBe(false);
+  });
+
+  it("ТЗ №20 L — партнёр видит только «Каталог» и «Мои заявки»", () => {
+    const p = caps("PARTNER");
+    const visible = Object.keys(NAV_REQUIRED_CAPABILITY).filter((h) => canAccessNav(h, p));
+    expect(visible.sort()).toEqual(["/katalog", "/moi-zayavki"]);
+    expect(canAccessNav("/partnery", caps("MANAGER"))).toBe(true);
+    expect(canAccessNav("/partnery", caps("WAREHOUSE"))).toBe(false);
+    expect(canAccessNav("/moi-zayavki", caps("MANAGER"))).toBe(false);
   });
 
   it("WAREHOUSE — Приёмка/Разбить/Фото-vazifalar (+ doim ochiqlar); sotuv yashirin", () => {
@@ -58,6 +69,8 @@ describe("canAccessNav — rol bo'yicha nav ko'rinishi", () => {
   it("OWNER — hamma yo'nalish ochiq (hech narsa yo'qotmaydi)", () => {
     const o = caps("OWNER");
     for (const href of Object.keys(NAV_REQUIRED_CAPABILITY)) {
+      // «Мои заявки» — кабинет партнёра, владельцу не нужен (у него «Заявки»).
+      if (href === "/moi-zayavki") continue;
       expect(canAccessNav(href, o)).toBe(true);
     }
   });

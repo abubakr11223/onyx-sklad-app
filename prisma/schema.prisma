@@ -124,6 +124,8 @@ enum AuditAction {
   RETURN_ACCEPT
   /// ТЗ №20 J (§11.2) — загружена/заменена текстура для 3D (узор или партия).
   TEXTURE_UPLOAD
+  /// ТЗ №20 L (§13.2) — партнёр оставил «Заявку на объём».
+  LEAD_CREATE
   /// Audit 2026-09-02 — zaxira olindi (tizim amali, userId = null).
   /// Egaga «zaxira kelmayapti» degan savolga javob shu yozuvlardan chiqadi.
   BACKUP
@@ -231,6 +233,13 @@ enum LeadStatus {
 enum LeadSource {
   PARTNER
   QR_CATALOG
+}
+
+/// ТЗ №20 L (§13.1) — тип партнёра: права одинаковые, тип — для отчётов и фильтра.
+enum PartnerType {
+  DESIGNER // дизайнер
+  FOREMAN // прораб
+  CONTRACTOR // подрядчик
 }
 
 /// TZ §6.8.5 — explicit request vs passive interest (looked, no order).
@@ -590,6 +599,10 @@ model User {
   tokenVersion        Int      @default(0)
   canSeePurchasePrice Boolean  @default(false) // Owner uchun e'tiborga olinmaydi (doim ko'radi)
   isActive            Boolean  @default(true)
+  /// ТЗ №20 L (§13.1) — только для роли PARTNER: тип и закреплённый менеджер
+  /// (его уведомляют заявки и интересы партнёра; null — все менеджеры).
+  partnerType         PartnerType?
+  partnerManagerId    String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -616,6 +629,9 @@ model User {
   collections           Collection[]   @relation("CollectionManager")
   /// ТЗ №20 J — загруженные текстуры для 3D.
   texturesUploaded      StoneTexture[] @relation("TextureUploadedBy")
+  /// ТЗ №20 L — закреплённый менеджер партнёра / партнёры менеджера.
+  partnerManager        User?          @relation("PartnerManager", fields: [partnerManagerId], references: [id], onDelete: SetNull)
+  partners              User[]         @relation("PartnerManager")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -919,6 +935,8 @@ model SaleRecord {
   shipment     Shipment?
   /// ТЗ №20 F — возвраты по продаже (частичные и полный).
   returns      SaleReturn[]
+  /// ТЗ №20 L (§13.3) — заявка партнёра, из которой оформлена продажа.
+  lead         Lead?
 
   @@index([managerId, soldAt])
   @@index([soldAt])
@@ -1144,6 +1162,11 @@ model Lead {
   /// «телефон|вид|день по Ташкенту» — одна заявка с телефона на камень в сутки.
   /// UNIQUE: две одновременные отправки не проходят обе.
   dedupeKey         String?    @unique
+  /// ТЗ №20 L (§13.2) — «Заявка на объём» партнёра: объект текстом и срок.
+  siteText          String?
+  dueDate           DateTime?
+  /// ТЗ №20 L (§13.3) — продажа, оформленная по заявке (заявка закрыта).
+  saleRecordId      String?    @unique
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -1151,6 +1174,7 @@ model Lead {
   stoneType       StoneType? @relation(fields: [stoneTypeId], references: [id], onDelete: Restrict)
   assignedManager User?      @relation("LeadAssignedManager", fields: [assignedManagerId], references: [id], onDelete: Restrict)
   client          Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  saleRecord      SaleRecord? @relation(fields: [saleRecordId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt]) // очередь менеджера: новые сверху
   @@index([createdById])

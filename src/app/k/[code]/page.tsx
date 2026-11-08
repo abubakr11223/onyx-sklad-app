@@ -37,6 +37,12 @@ import {
 } from "@/lib/public-i18n";
 import { recordScan } from "@/lib/stone-scans";
 import { recordPassiveView } from "@/lib/leads";
+import {
+  notifyPartnerLeadSafe,
+  VOLUME_REQUEST_ERROR_RU,
+  type VolumeRequestError,
+} from "@/lib/partners";
+import { sendMessage } from "@/lib/telegram";
 import { formatTashkentDate } from "@/lib/datetime";
 import { formatPriceHint } from "@/lib/price-hint";
 import { requestLead } from "@/app/kamen/[id]/lead-actions";
@@ -351,7 +357,9 @@ export default async function StoneByCodePage({
   // §6.8.5 — партнёр открыл карточку: «интерес» в «Заявках», как в /kamen.
   if (viewer === "partner" && user) {
     try {
-      await recordPassiveView(db, { createdById: user.id, stoneTypeId: facts.stoneTypeId });
+      const v = await recordPassiveView(db, { createdById: user.id, stoneTypeId: facts.stoneTypeId });
+      // ТЗ №20 L (§13.1) — новый интерес уведомляет закреплённого менеджера.
+      if (v.created && v.id) await notifyPartnerLeadSafe(db, sendMessage, v.id);
     } catch (err) {
       console.error("[k] recordPassiveView:", err);
     }
@@ -508,16 +516,25 @@ export default async function StoneByCodePage({
           <p className="mt-1 text-sm text-ink/60">{t.volumeRequestHint}</p>
           {leadOk && (
             <Alert variant="success" className="mt-3">
-              {t.leadOk}
+              {t.leadOk}{" "}
+              <Link href="/moi-zayavki" className="font-semibold underline">
+                {t.myLeads}
+              </Link>
             </Alert>
           )}
           {leadErr && (
+            // Код ошибки → текст (из ссылки показываем только известные коды).
             <Alert variant="danger" className="mt-3">
-              {leadErr}
+              {leadErr === "volume"
+                ? t.volumeRequired
+                : leadErr in VOLUME_REQUEST_ERROR_RU && locale === "ru"
+                  ? VOLUME_REQUEST_ERROR_RU[leadErr as VolumeRequestError]
+                  : t.partnerLeadErr}
             </Alert>
           )}
           <form action={requestLead} className="mt-3 flex flex-col gap-3">
             <input type="hidden" name="stoneTypeId" value={view.stoneTypeId} />
+            <input type="hidden" name="stoneCode" value={view.code} />
             <input type="hidden" name="next" value={back} />
             <div className="grid grid-cols-2 gap-2">
               <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
@@ -530,12 +547,16 @@ export default async function StoneByCodePage({
               </label>
             </div>
             <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
-              {t.phone}
-              <input name="contact" inputMode="tel" autoComplete="tel" className={inputClass} />
+              {t.siteLabel}
+              <input name="siteText" maxLength={200} placeholder={t.sitePlaceholder} className={inputClass} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+              {t.dueLabel}
+              <input name="dueDate" type="date" className={inputClass} />
             </label>
             <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
               {t.comment}
-              <textarea name="note" rows={2} placeholder={t.commentPlaceholder} className={inputClass + " py-2"} />
+              <textarea name="note" rows={2} maxLength={1000} placeholder={t.commentPlaceholder} className={inputClass + " py-2"} />
             </label>
             <Button type="submit" className="w-full sm:w-auto">
               {t.submit}

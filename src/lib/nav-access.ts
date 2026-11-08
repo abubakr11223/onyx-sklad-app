@@ -12,14 +12,16 @@ import type { Capabilities } from "./permissions";
  */
 export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> = {
   "/priemka": "canManageWarehouse",
-  "/poisk": null,
+  // ТЗ №20 L (§13.2) — партнёру «никаких складских разделов»: его главная —
+  // каталог. canSeeExactRemainder = весь персонал, кроме PARTNER.
+  "/poisk": "canSeeExactRemainder",
   "/bron": "canReserve",
   "/prodazha": "canSell",
   "/razbit": "canManageWarehouse",
   // READ ro'yxat: canViewPhotoTasks (WAREHOUSE ham). CREATE — canRequestPhoto
   // (sahifa/action ichida alohida).
   "/fotozapros": "canViewPhotoTasks",
-  "/karta": null,
+  "/karta": "canSeeExactRemainder",
   // «Карта склада» — точные локации: OWNER/MANAGER/WAREHOUSE, но НЕ PARTNER (TZ §3).
   "/karta-sklada": "canSeeExactRemainder",
   // «История» — журнал действий (AuditLog): только OWNER (TZ §3 «действия сотрудников»).
@@ -44,6 +46,9 @@ export const NAV_REQUIRED_CAPABILITY: Record<string, keyof Capabilities | null> 
   "/katalog": null,
   // ТЗ №20 I (§15) — «Подборки для клиента»: OWNER (все) / MANAGER (свои).
   "/podborki": "canManageCollections",
+  // ТЗ №20 L — «Мои заявки» (только партнёр) и «Партнёры» (владелец, менеджер).
+  "/moi-zayavki": "requestsRouteToManager",
+  "/partnery": "canManagePartners",
 };
 
 /** Joriy huquqlar bilan `href` nav'da ko'rinishi kerakmi (SOF). */

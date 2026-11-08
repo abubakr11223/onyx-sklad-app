@@ -23,6 +23,7 @@ import {
   listLeadsPage,
 } from "@/lib/leads";
 import { advanceLead } from "./actions";
+import { PARTNER_TYPES, PARTNER_TYPE_RU, formatDueDate, isPartnerType } from "@/lib/partners";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -79,9 +80,12 @@ export default async function ZayavkiPage({
     error?: string;
     status?: string;
     after?: string;
+    type?: string;
+    partner?: string;
   }>;
 }) {
   const caps = await getCapabilities();
+  const canSell = caps.canSell;
   if (!caps.canSeeLeads) {
     return (
       <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
@@ -99,11 +103,16 @@ export default async function ZayavkiPage({
   // W3-T5 — keyset-курсор (status+createdAt+id). Раньше очередь обрывалась на
   // 200-й заявке молча: следующей ссылки не было вовсе.
   const after = (sp.after ?? "").trim() || null;
+  // ТЗ №20 L — фильтр по типу партнёра и по конкретному партнёру.
+  const partnerType = isPartnerType(sp.type) ? sp.type : undefined;
+  const partnerId = /^[a-z0-9]{10,40}$/i.test(sp.partner ?? "") ? sp.partner : undefined;
 
   const page = await listLeadsPage(db, {
     status,
     cursor: after,
     pageSize: LEADS_PAGE_SIZE,
+    partnerType,
+    partnerId,
   });
   const leads = page.items;
 
@@ -112,6 +121,8 @@ export default async function ZayavkiPage({
   const buildHref = (over: { after?: string }) => {
     const p = new URLSearchParams();
     if (status) p.set("status", status);
+    if (partnerType) p.set("type", partnerType);
+    if (partnerId) p.set("partner", partnerId);
     if (over.after) p.set("after", over.after);
     const s = p.toString();
     return "/zayavki" + (s ? `?${s}` : "");
@@ -161,6 +172,18 @@ export default async function ZayavkiPage({
             <option value="CLOSED">{LEAD_STATUS_RU.CLOSED}</option>
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-sm text-ink/70">
+          Тип партнёра
+          <select name="type" defaultValue={partnerType ?? ""} className={inputClass}>
+            <option value="">Все</option>
+            {PARTNER_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {PARTNER_TYPE_RU[t]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {partnerId && <input type="hidden" name="partner" value={partnerId} />}
         <Button type="submit" variant="secondary" size="sm">
           Показать
         </Button>
@@ -215,7 +238,12 @@ export default async function ZayavkiPage({
                             )}
                           </>
                         ) : (
-                          (l.createdBy?.name ?? "—")
+                          <>
+                            {l.createdBy?.name ?? "—"}
+                            {l.createdBy?.partnerType && (
+                              <> ({PARTNER_TYPE_RU[l.createdBy.partnerType].toLowerCase()})</>
+                            )}
+                          </>
                         )}
                         {l.assignedManager && (
                           <> · ведёт: {l.assignedManager.name}</>
@@ -276,6 +304,29 @@ export default async function ZayavkiPage({
                         {l.contact}
                       </p>
                     )}
+                    {l.siteText && (
+                      <p>
+                        <span className="text-ink/55">Объект:</span> {l.siteText}
+                      </p>
+                    )}
+                    {l.dueDate && (
+                      <p>
+                        <span className="text-ink/55">Срок:</span>{" "}
+                        <span className="tnum">{formatDueDate(l.dueDate)}</span>
+                      </p>
+                    )}
+                    {l.saleRecord && (
+                      <p className="font-medium text-success">
+                        Продажа по заявке: {l.saleRecord.customerName ?? "клиент"},{" "}
+                        {formatTashkentDateTime(l.saleRecord.soldAt)} ·{" "}
+                        <Link
+                          href={`/prodazha?q=${encodeURIComponent(l.saleRecord.customerName ?? "")}#sales`}
+                          className="underline"
+                        >
+                          в «Истории продаж»
+                        </Link>
+                      </p>
+                    )}
                     {l.stoneCode && (
                       <p>
                         <span className="text-ink/55">Код с карточки:</span>{" "}
@@ -296,6 +347,19 @@ export default async function ZayavkiPage({
 
                   {nextStatuses.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2 border-t border-ink/10 pt-4">
+                      {/* ТЗ №20 L (§13.3) — заявка партнёра → форма продажи с камнем и объёмом. */}
+                      {canSell &&
+                        l.kind === "REQUEST" &&
+                        l.createdBy?.role === "PARTNER" &&
+                        l.stoneType &&
+                        !l.saleRecordId && (
+                          <Link
+                            href={`/prodazha?fromLead=${encodeURIComponent(l.id)}&catalogQ=${encodeURIComponent(l.stoneType.name)}`}
+                            className={buttonClass("primary", "sm")}
+                          >
+                            Оформить продажу
+                          </Link>
+                        )}
                       {nextStatuses.map((to) => (
                         <form key={to} action={advanceLead}>
                           <input type="hidden" name="id" value={l.id} />

@@ -171,6 +171,14 @@ export default async function AccountsPage({
           Аккаунты для входа по логину: менеджеры и складчики. Владелец —
           корневой аккаунт.
         </p>
+        {/* ТЗ №20 L — партнёров (тип, закреплённый менеджер) ведут в «Партнёрах». */}
+        <p className="mt-1 text-sm text-ink/60">
+          Дизайнеров, прорабов и подрядчиков удобнее вести в разделе{" "}
+          <a href="/partnery" className="font-semibold text-gold-deep underline">
+            «Партнёры»
+          </a>{" "}
+          — там тип партнёра и закреплённый менеджер.
+        </p>
       </header>
 
       {/* W11-A — who receives photo tasks in Telegram (self-correcting panel). */}

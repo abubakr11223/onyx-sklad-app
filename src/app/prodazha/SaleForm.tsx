@@ -7,6 +7,8 @@
 // BATCH-C: разметка переведена на бренд-дизайн-систему (Button/Field/Card/
 // Alert/Badge). Поведение, имена полей и контракт валидации НЕ менялись.
 
+import type { LeadSalePrefill } from "@/lib/partners";
+import { PARTNER_TYPE_RU } from "@/lib/partner-labels";
 import { PAY_METHODS, PAY_METHOD_LABEL, type PayMethod } from "@/lib/payment-rows";
 import {
   useActionState,
@@ -230,12 +232,20 @@ function initialStoneAndTarget(
 export default function SaleForm({
   stoneTypes,
   initialPick = null,
+  leadPrefill = null,
 }: {
   stoneTypes: StoneTypeGroup[];
   /** Server tomonda resolve qilingan preselect; null = oddiy ochilish. */
   initialPick?: SaleFormInitialPick | null;
+  /** ТЗ №20 L (§13.3) — продажа из заявки партнёра: камень, объём, объект. */
+  leadPrefill?: LeadSalePrefill | null;
 }) {
-  const boot = initialStoneAndTarget(stoneTypes, initialPick);
+  const boot0 = initialStoneAndTarget(stoneTypes, initialPick);
+  // Заявка партнёра: камень выбран сразу (партию/узор менеджер выбирает сам).
+  const boot =
+    !boot0.stone && leadPrefill
+      ? { stone: stoneTypes.find((s) => s.id === leadPrefill.stoneTypeId) ?? null, target: null }
+      : boot0;
   const [state, formAction, pending] = useActionState(submitSale, initialState);
   const [stone, setStone] = useState<StoneTypeGroup | null>(boot.stone);
   const [target, setTarget] = useState<Target | null>(boot.target);
@@ -296,8 +306,34 @@ export default function SaleForm({
   const [plannedTime, setPlannedTime] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<"" | "PICKUP" | "DELIVERY">("");
   const [debtComment, setDebtComment] = useState("");
-  const [qtySlabs, setQtySlabs] = useState("");
-  const [qtyAreaM2, setQtyAreaM2] = useState("");
+  const [qtySlabs, setQtySlabs] = useState(leadPrefill?.qtySlabs ?? "");
+  const [qtyAreaM2, setQtyAreaM2] = useState(leadPrefill?.qtyAreaM2 ?? "");
+
+  // ТЗ №20 L — плашка «продажа по заявке партнёра» (шаги 2–4).
+  const leadBanner = leadPrefill ? (
+    <div className="mb-3 rounded-card border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink">
+      <p className="font-semibold">
+        Продажа по заявке партнёра: {leadPrefill.partnerName}
+        {leadPrefill.partnerType ? ` (${PARTNER_TYPE_RU[leadPrefill.partnerType].toLowerCase()})` : ""}
+      </p>
+      <p className="text-ink/70">
+        {[
+          leadPrefill.stoneName,
+          [leadPrefill.qtySlabs && `${leadPrefill.qtySlabs} плит`, leadPrefill.qtyAreaM2 && `${leadPrefill.qtyAreaM2} м²`]
+            .filter(Boolean)
+            .join(" · ") || null,
+          leadPrefill.due ? `срок ${leadPrefill.due}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </p>
+      {leadPrefill.siteText && (
+        <p className="text-ink/70">
+          Объект из заявки: «{leadPrefill.siteText}» — выберите его у клиента в «Объект» или создайте новый.
+        </p>
+      )}
+    </div>
+  ) : null;
   // W1-T1: id СВОЕЙ брони, которую менеджер ЯВНО закрывает этой продажей.
   // По умолчанию пусто (галочка снята) — бронь остаётся в силе.
   const [consumeReservationId, setConsumeReservationId] = useState("");
@@ -582,6 +618,7 @@ export default function SaleForm({
   if (!target) {
     return (
       <Card>
+        {leadBanner}
         <BackButton onClick={() => setStone(null)} label="Вид камня" />
         <h2 className="mb-3 text-lg font-semibold text-ink">
           2. Что продаём — {stone.name}
@@ -803,6 +840,7 @@ export default function SaleForm({
 
     return (
       <Card>
+        {leadBanner}
         <BackButton onClick={() => setTarget(null)} label="Выбор камня" />
         <h2 className="mb-1 text-lg font-semibold text-ink">3. Клиент и оплата</h2>
         <p className="mb-3 text-sm text-ink/70">
@@ -1700,6 +1738,7 @@ export default function SaleForm({
 
       <form action={issueAsSample ? sampleAction : formAction}>
         <input type="hidden" name="mode" value={target.mode} />
+        {leadPrefill && <input type="hidden" name="leadId" value={leadPrefill.leadId} />}
         {target.mode === "SLAB" || target.mode === "PIECE" ? (
           <input type="hidden" name="unitId" value={target.id} />
         ) : target.mode === "PATTERN_VOLUME" ? (

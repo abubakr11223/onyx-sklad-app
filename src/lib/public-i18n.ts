@@ -169,6 +169,13 @@ const RU = {
   back: "Назад",
   showroom3dTitle: "Шоу-рум в 3D",
   fullscreen: "Во весь экран",
+  // ТЗ №20 L — кабинет партнёра.
+  siteLabel: "Объект",
+  sitePlaceholder: "Название, адрес",
+  dueLabel: "Срок",
+  myLeads: "Мои заявки",
+  volumeRequired: "Укажите объём: плиты или м².",
+  partnerLeadErr: "Не удалось отправить заявку — проверьте поля.",
 } as const;
 
 export type PublicDict = { [K in keyof typeof RU]: string };
@@ -272,6 +279,12 @@ const UZ: PublicDict = {
   back: "Orqaga",
   showroom3dTitle: "Shou-rum 3D’da",
   fullscreen: "To‘liq ekran",
+  siteLabel: "Obyekt",
+  sitePlaceholder: "Nomi, manzili",
+  dueLabel: "Muddat",
+  myLeads: "Mening arizalarim",
+  volumeRequired: "Hajmni kiriting: plita yoki m².",
+  partnerLeadErr: "Arizani yuborib bo‘lmadi — maydonlarni tekshiring.",
 };
 
 const DICTS: Record<PublicLocale, PublicDict> = { ru: RU, uz: UZ };

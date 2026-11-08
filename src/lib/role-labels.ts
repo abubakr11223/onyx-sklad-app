@@ -11,7 +11,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   MANAGER: "Менеджер",
   WAREHOUSE: "Складчик",
   WAREHOUSE_LEAD: "Зав. складом",
-  PARTNER: "Дизайнер-партнёр",
+  // ТЗ №20 L (§13.1) — роль переименована; тип (дизайнер/прораб/подрядчик) — отдельно.
+  PARTNER: "Партнёр",
 };
 
 export const roleLabel = (role: Role): string => ROLE_LABELS[role] ?? role;

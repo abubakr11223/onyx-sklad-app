@@ -12,7 +12,9 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireCapabilityOrRedirect } from "@/lib/session";
 import { createLead } from "@/lib/leads";
-import { parsePositiveDecimal, parsePositiveInt } from "@/lib/validators/intake";
+import { notifyPartnerLeadSafe, parseVolumeRequest } from "@/lib/partners";
+import { normalizeStoneCode } from "@/lib/stone-code";
+import { sendMessage } from "@/lib/telegram";
 
 /**
  * Куда вернуться. По умолчанию /poisk. Защита от open-redirect: путь должен быть
@@ -34,13 +36,13 @@ export async function requestLead(formData: FormData): Promise<void> {
   // POST от другой роли блокируется на сервере, не только скрытием формы.
   await requireCapabilityOrRedirect(
     "requestsRouteToManager",
-    `${next}?leadErr=${encodeURIComponent("Запрос объёма доступен дизайнеру-партнёру")}`,
+    `${next}?leadErr=denied#zayavka`,
   );
 
   const me = await getCurrentUser();
   if (!me) {
     redirect(
-      `${next}?leadErr=${encodeURIComponent("Пользователь не найден — выполните заполнение базы (seed)")}`,
+      `${next}?leadErr=denied#zayavka`,
     );
   }
 
@@ -56,33 +58,62 @@ export async function requestLead(formData: FormData): Promise<void> {
       select: { id: true },
     });
     if (!exists) {
-      redirect(`${next}?leadErr=${encodeURIComponent("Камень не найден")}`);
+      redirect(`${next}?leadErr=stone#zayavka`);
     }
   }
 
-  // Объём опционален (интерес может быть без точного количества), но если задан —
-  // должен быть корректным положительным числом (иначе ошибка поля, не 500).
-  const slabs = parsePositiveInt(String(formData.get("requestedSlabs") ?? ""));
-  if (slabs === undefined) {
-    redirect(`${next}?leadErr=${encodeURIComponent("Плиты — целое положительное число")}`);
+  // ТЗ №20 L (§13.2) — «Заявка на объём»: объём обязателен (плиты или м²),
+  // объект текстом, срок, комментарий.
+  const parsed = parseVolumeRequest({
+    requestedSlabs: String(formData.get("requestedSlabs") ?? ""),
+    requestedAreaM2: String(formData.get("requestedAreaM2") ?? ""),
+    siteText: String(formData.get("siteText") ?? ""),
+    dueDate: String(formData.get("dueDate") ?? ""),
+    note: String(formData.get("note") ?? ""),
+  });
+  if (!parsed.ok) {
+    redirect(`${next}?leadErr=${parsed.error}#zayavka`);
   }
-  const area = parsePositiveDecimal(String(formData.get("requestedAreaM2") ?? ""));
-  if (area === undefined) {
-    redirect(`${next}?leadErr=${encodeURIComponent("Площадь — положительное число, например 12,5")}`);
-  }
+  const v = parsed.value;
+  const contact = String(formData.get("contact") ?? "").trim().slice(0, 200) || null;
+  // Код с карточки (/k/ONX-…) — только формат кода, иначе не сохраняем.
+  const stoneCode = normalizeStoneCode(String(formData.get("stoneCode") ?? "")) ?? null;
 
-  const contact = String(formData.get("contact") ?? "").trim() || null;
-  const note = String(formData.get("note") ?? "").trim() || null;
-
-  await createLead(db, {
-    createdById: me.id,
-    stoneTypeId,
-    kind: "REQUEST",
-    requestedSlabs: slabs ?? null,
-    requestedAreaM2: area ?? null,
-    contact,
-    note,
+  const lead = await db.$transaction(async (tx) => {
+    const created = await createLead(tx, {
+      createdById: me.id,
+      stoneTypeId,
+      kind: "REQUEST",
+      requestedSlabs: v.requestedSlabs,
+      requestedAreaM2: v.requestedAreaM2,
+      contact,
+      note: v.note,
+      siteText: v.siteText,
+      dueDate: v.dueDate,
+      stoneCode,
+    });
+    // «История»: заявка партнёра (§15 «… и заявки — в Истории»).
+    await tx.auditLog.create({
+      data: {
+        userId: me.id,
+        action: "LEAD_CREATE",
+        entityType: "Lead",
+        entityId: created.id,
+        payload: {
+          stoneTypeId,
+          stoneCode,
+          requestedSlabs: v.requestedSlabs,
+          requestedAreaM2: v.requestedAreaM2,
+          siteText: v.siteText,
+          dueDate: v.dueDate?.toISOString() ?? null,
+        },
+      },
+    });
+    return created;
   });
 
-  redirect(`${next}?lead=ok`);
+  // Закреплённому менеджеру (или всем) — после коммита; сбой не роняет заявку.
+  await notifyPartnerLeadSafe(db, sendMessage, lead.id);
+
+  redirect(`${next}?lead=ok#zayavka`);
 }
