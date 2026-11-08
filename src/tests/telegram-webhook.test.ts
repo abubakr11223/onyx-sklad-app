@@ -253,7 +253,25 @@ describe("/start — kontakt so'rovi", () => {
     // Buyruq deb qabul qilinmaydi (kontakt klaviaturasi yo'q), lekin jim emas.
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot|фото|\/start/i);
-    expect(sendMessage.mock.calls[0][2]?.reply_markup).toBeUndefined();
+    // Контакт не запрашивается; под подсказкой — только кнопки «Каталог» / «Открыть склад».
+    expect(sendMessage.mock.calls[0][2]?.reply_markup?.keyboard).toBeUndefined();
+    expect(sendMessage.mock.calls[0][2]?.reply_markup?.inline_keyboard).toBeDefined();
+  });
+
+  // ТЗ №20 (§8.4) — «Каталог» отдельной кнопкой рядом с «Открыть склад».
+  it("/katalog → две отдельные кнопки: каталог (ссылка) и склад (Mini App)", async () => {
+    for (const text of ["/katalog", "/catalog", "/katalog@OnyxSkladBot"]) {
+      sendMessage.mockClear();
+      const upd = startUpdate(777);
+      upd.message!.text = text;
+      await handleUpdate(upd, makeDeps());
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      const row = sendMessage.mock.calls[0][2].reply_markup.inline_keyboard[0];
+      expect(row).toEqual([
+        { text: "📖 Каталог", url: "https://onyx.test/katalog" },
+        { text: "📦 Открыть склад", web_app: { url: "https://onyx.test/tg" } },
+      ]);
+    }
   });
 });
 

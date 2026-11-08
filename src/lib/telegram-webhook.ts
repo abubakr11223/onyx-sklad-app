@@ -10,6 +10,7 @@ import type {
   SendResult,
   TgCallbackQuery,
   TgDocument,
+  TgInlineKeyboardMarkup,
   TgReplyKeyboardMarkup,
   TgUpdate,
 } from "@/lib/telegram";
@@ -435,7 +436,26 @@ const MSG_EDITED_MEDIA_IGNORED =
 const MSG_UNKNOWN_HELP =
   "Onyx bot: отправьте фото по заданию (лучше ответом/reply на сообщение бота). " +
   "/start — привязка номера. /login — вход на сайт. /singan — битый камень. " +
-  "Код с этикетки (ONX-…) — карточка камня.";
+  "/katalog — каталог камней. Код с этикетки (ONX-…) — карточка камня.";
+
+// ТЗ №20 (§8.4) — «Каталог» отдельной кнопкой. Кнопка меню бота у Telegram
+// одна (там остаётся «Открыть склад»), поэтому каталог — команда /katalog и
+// кнопки под сообщением: обе ссылки рядом, каждая открывает своё.
+const MSG_KATALOG =
+  "Каталог камней — откройте кнопкой ниже. Ссылку на каталог можно переслать клиенту.";
+
+/** Две отдельные кнопки под сообщением: «Каталог» и «Открыть склад». */
+export function quickLinksKeyboard(baseUrl: string): TgInlineKeyboardMarkup {
+  const base = baseUrl.replace(/\/+$/, "");
+  return {
+    inline_keyboard: [
+      [
+        { text: "📖 Каталог", url: `${base}/katalog` },
+        { text: "📦 Открыть склад", web_app: { url: `${base}/tg` } },
+      ],
+    ],
+  };
+}
 
 // ТЗ №20 G (§8.4) — ответы на код камня.
 const MSG_CODE_NOT_STAFF =
@@ -575,6 +595,12 @@ function isSinganCommand(text: string): boolean {
   return first === "/singan" || first.startsWith("/singan@");
 }
 
+/** `/katalog` (или `/catalog`, с @BotName) — открыть каталог. */
+function isKatalogCommand(text: string): boolean {
+  const first = text.trim().split(/\s+/)[0].toLowerCase();
+  return ["/katalog", "/catalog"].some((c) => first === c || first.startsWith(`${c}@`));
+}
+
 function isLoginCommand(text: string): boolean {
   const parts = text.trim().split(/\s+/);
   const first = parts[0];
@@ -688,6 +714,14 @@ export async function handleUpdate(
       return;
     }
 
+    // 2e) ТЗ №20 (§8.4) — /katalog → кнопки «Каталог» и «Открыть склад».
+    if (typeof message.text === "string" && isKatalogCommand(message.text)) {
+      await deps.sendMessage(chatId, MSG_KATALOG, {
+        reply_markup: quickLinksKeyboard(deps.stoneCodeBaseUrl || deps.appBaseUrl),
+      });
+      return;
+    }
+
     // 3) /login (yoki `/start login` deep-link) → magic-link yuborish.
     //    /start dan OLDIN tekshiriladi (chunki `/start login` ikkalasiga ham mos).
     if (typeof message.text === "string" && isLoginCommand(message.text)) {
@@ -713,8 +747,11 @@ export async function handleUpdate(
       return;
     }
 
-    // 5) Boshqa matn / noma'lum xabar — qisqa yo'riqnoma (jimlik YO'Q).
-    await deps.sendMessage(chatId, MSG_UNKNOWN_HELP);
+    // 5) Boshqa matn / noma'lum xabar — qisqa yo'riqnoma (jimlik YO'Q) +
+    //    ТЗ №20 — те же две кнопки, чтобы каталог был под рукой.
+    await deps.sendMessage(chatId, MSG_UNKNOWN_HELP, {
+      reply_markup: quickLinksKeyboard(deps.stoneCodeBaseUrl || deps.appBaseUrl),
+    });
   } catch (err) {
     // W10-B — domain yiqilsa claim'ni bo'shat: Telegram qayta yuborsa qayta urinadi.
     // Success pathda claim qoladi (replay → already_seen).

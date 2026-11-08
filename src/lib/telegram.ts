@@ -133,6 +133,8 @@ export interface TgInlineKeyboardButton {
   text: string;
   callback_data?: string;
   url?: string;
+  /** Mini App (только в личном чате с ботом) — открывается внутри Telegram. */
+  web_app?: { url: string };
 }
 
 export interface TgInlineKeyboardMarkup {
