@@ -374,3 +374,37 @@ export async function sendDocument(
   }
   return { ok: true, messageId: json.result?.message_id ?? null };
 }
+
+// ───────────── ТЗ №20 H — проверка вебхука бота (страница владельца) ─────────────
+
+/** Нужное из getWebhookInfo (без токена; адрес вебхука — наш же сайт). */
+export interface TgWebhookInfo {
+  url: string;
+  pending_update_count?: number;
+  last_error_date?: number;
+  last_error_message?: string;
+  max_connections?: number;
+  /** Пусто/нет — Telegram шлёт все обычные типы (в т.ч. callback_query). */
+  allowed_updates?: string[];
+}
+
+export async function getWebhookInfo(): Promise<ApiResult<TgWebhookInfo>> {
+  return apiPost<TgWebhookInfo>("getWebhookInfo", {});
+}
+
+/**
+ * Переустановить вебхук с тем же адресом и секретом, поменяв только список
+ * типов обновлений. secret_token обязателен: без него Telegram сбросит секрет,
+ * и наш маршрут начнёт отвергать все запросы.
+ */
+export async function setWebhookUpdates(args: {
+  url: string;
+  secretToken: string;
+  allowedUpdates: string[];
+}): Promise<ApiResult<boolean>> {
+  return apiPost<boolean>("setWebhook", {
+    url: args.url,
+    secret_token: args.secretToken,
+    allowed_updates: args.allowedUpdates,
+  });
+}

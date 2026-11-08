@@ -179,6 +179,13 @@ export default async function AccountsPage({
           </a>{" "}
           — там тип партнёра и закреплённый менеджер.
         </p>
+        <p className="mt-1 text-sm text-ink/60">
+          Состояние Telegram-бота (вебхук, нажатия кнопок):{" "}
+          <a href="/accounts/bot" className="font-semibold text-gold-deep underline">
+            «Бот»
+          </a>
+          .
+        </p>
       </header>
 
       {/* W11-A — who receives photo tasks in Telegram (self-correcting panel). */}
