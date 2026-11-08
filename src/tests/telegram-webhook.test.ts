@@ -1935,3 +1935,44 @@ describe("W2-T4 edited_message — foto oqimi", () => {
     expect(sendMessage.mock.calls[0][1]).toMatch(/Onyx bot/i);
   });
 });
+
+// ТЗ №20 K (§12.4) — /naiti: ИИ-поиск в боте, только сотрудникам.
+describe("/naiti — ИИ-поиск в боте", () => {
+  const textUpdate = (text: string) => {
+    const upd = startUpdate(777);
+    upd.message!.text = text;
+    return upd;
+  };
+
+  it("сотрудник: текст уходит в поиск, ответ — топ-5", async () => {
+    userFindFirst.mockResolvedValue({ id: "u1", role: "MANAGER" });
+    const aiSearch = vi.fn(async () => "Нашёл по запросу:\n1. Оникс — в наличии");
+    await handleUpdate(textUpdate("/naiti светлый оникс 3 на 1,6"), makeDeps({ aiSearch }));
+    expect(aiSearch).toHaveBeenCalledWith({ text: "светлый оникс 3 на 1,6" });
+    expect(sendMessage.mock.calls.at(-1)?.[1]).toContain("Нашёл по запросу");
+  });
+
+  it("фото с подписью /naiti → поиск по фото (file_id самого большого размера)", async () => {
+    userFindFirst.mockResolvedValue({ id: "u1", role: "WAREHOUSE" });
+    const aiSearch = vi.fn(async () => "Похожие по фото:");
+    const upd = startUpdate(777);
+    upd.message!.text = undefined;
+    upd.message!.caption = "/naiti";
+    upd.message!.photo = [
+      { file_id: "small", file_unique_id: "s", width: 90, height: 60 },
+      { file_id: "big", file_unique_id: "b", width: 1280, height: 853 },
+    ] as never;
+    await handleUpdate(upd, makeDeps({ aiSearch }));
+    expect(aiSearch).toHaveBeenCalledWith({ photoFileId: "big" });
+  });
+
+  it("не сотрудник — отказ, поиск не вызывается; пустая команда — подсказка", async () => {
+    userFindFirst.mockResolvedValue(null);
+    const aiSearch = vi.fn();
+    await handleUpdate(textUpdate("/naiti оникс"), makeDeps({ aiSearch }));
+    expect(aiSearch).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls.at(-1)?.[1]).toContain("доступен сотрудникам");
+    await handleUpdate(textUpdate("/naiti"), makeDeps({ aiSearch }));
+    expect(sendMessage.mock.calls.at(-1)?.[1]).toContain("/naiti");
+  });
+});

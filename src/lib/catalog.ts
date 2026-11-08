@@ -22,6 +22,8 @@
 // Модуль: чистые правила (видимость, сортировка, поля по ролям, похожие) +
 // тонкие загрузчики с db параметром — тесты гоняют их на mock-БД.
 
+import { hasWantedTraits, traitScore, type WantedTraits } from "./stone-traits";
+import { loadTraitsByType } from "./traits-store";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { formatDim, formatThickness, thicknessToNumber } from "./dimensions";
 import { loadStockLevels, loadStockLevelsByBatch, type StockLevel } from "./min-stock";
@@ -179,6 +181,8 @@ interface CatalogItemBase {
   sizes: string[];
   thicknesses: string[];
   availability: CardAvailability;
+  /** ТЗ №20 K — совпадение признаков с ИИ-запросом (только при ИИ-поиске). */
+  traitMatch?: number;
 }
 
 export interface ClientCatalogItem extends CatalogItemBase {
@@ -556,7 +560,7 @@ export function catalogTypesWhere(
 /** /katalog: виды под фильтры → плитки для этого зрителя, в порядке §10.1. */
 export async function loadCatalog(
   db: PrismaClient,
-  args: { viewer: CatalogViewer; filters: CatalogFilters; now?: Date },
+  args: { viewer: CatalogViewer; filters: CatalogFilters; now?: Date; wanted?: WantedTraits },
 ): Promise<CatalogResult> {
   const { viewer, filters } = args;
   const now = args.now ?? new Date();
@@ -595,9 +599,22 @@ export async function loadCatalog(
       ),
     ),
   ].sort((a, b) => a - b);
-  const items = sortCatalog(
+  let items = sortCatalog(
     visible.filter((f) => matchesThickness(f, filters.thickness)).map((f) => buildCatalogItem(f, viewer)),
   );
+  // ТЗ №20 K — ИИ-поиск: тон/рисунок/цвет по признакам узоров ранжируют.
+  if (args.wanted && hasWantedTraits(args.wanted)) {
+    const wanted = args.wanted;
+    const idByCode = new Map(visible.map((f) => [f.code, f.stoneTypeId]));
+    const traits = await loadTraitsByType(db, [...idByCode.values()]);
+    items = rankByTraits(
+      items.map((it) => {
+        const list = traits.get(idByCode.get(it.code) ?? "") ?? [];
+        const best = list.reduce((m, t) => Math.max(m, traitScore(t, wanted)), 0);
+        return { ...it, traitMatch: best };
+      }),
+    );
+  }
   const uniq = (xs: Array<string | null>) =>
     [...new Set(xs.map((x) => (x ?? "").trim()).filter(Boolean))].sort(nameCollator.compare);
   return {
@@ -610,6 +627,21 @@ export async function loadCatalog(
     total: items.length,
     truncated,
   };
+}
+
+/**
+ * ТЗ №20 K (§12.3) — ранжирование ИИ-поиска: совпадение признаков →
+ * наличие → название (размер уже отфильтрован «Нужным размером»).
+ */
+export function rankByTraits<T extends { availability: CardAvailability; name: string; traitMatch?: number }>(
+  items: readonly T[],
+): T[] {
+  return [...items].sort(
+    (a, b) =>
+      (b.traitMatch ?? 0) - (a.traitMatch ?? 0) ||
+      AVAILABILITY_RANK[a.availability] - AVAILABILITY_RANK[b.availability] ||
+      nameCollator.compare(a.name, b.name),
+  );
 }
 
 /** Порция кандидатов, которую проверяем на наличие за один заход. */

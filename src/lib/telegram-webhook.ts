@@ -343,6 +343,12 @@ export interface WebhookDeps {
    * Без него callback_query молча игнорируется (как раньше).
    */
   handleCallbackQuery?(cq: TgCallbackQuery): Promise<unknown>;
+  /**
+   * ТЗ №20 K (§12.4) — `/naiti` текст или фото с подписью `/naiti` → топ-5
+   * камней с наличием и ссылками. Inject: route → ai-search. Без него
+   * команда отвечает подсказкой.
+   */
+  aiSearch?(input: { text: string } | { photoFileId: string }): Promise<string>;
 }
 
 // ───────────────────────── Matnlar (uz/ru) ─────────────────────────
@@ -436,7 +442,8 @@ const MSG_EDITED_MEDIA_IGNORED =
 const MSG_UNKNOWN_HELP =
   "Onyx bot: отправьте фото по заданию (лучше ответом/reply на сообщение бота). " +
   "/start — привязка номера. /login — вход на сайт. /singan — битый камень. " +
-  "/katalog — каталог камней. Код с этикетки (ONX-…) — карточка камня.";
+  "/katalog — каталог камней. /naiti — ИИ-поиск (текст или фото с подписью /naiti). " +
+  "Код с этикетки (ONX-…) — карточка камня.";
 
 // ТЗ №20 (§8.4) — «Каталог» отдельной кнопкой. Кнопка меню бота у Telegram
 // одна (там остаётся «Открыть склад»), поэтому каталог — команда /katalog и
@@ -595,6 +602,18 @@ function isSinganCommand(text: string): boolean {
   return first === "/singan" || first.startsWith("/singan@");
 }
 
+/** ТЗ №20 K — `/naiti …` (или `/naiti@BotName …`). Возвращает текст после команды или null. */
+export function naitiCommandText(text: string | undefined): string | null {
+  if (typeof text !== "string") return null;
+  const m = /^\s*\/naiti(?:@\S+)?(?:\s+([\s\S]*))?$/i.exec(text);
+  return m ? (m[1] ?? "").trim() : null;
+}
+
+const MSG_NAITI_HELP =
+  "ИИ-поиск камня: «/naiti светлый оникс 3 на 1,6» или фото с подписью /naiti — пришлю 5 подходящих камней в наличии.";
+const MSG_NAITI_NOT_STAFF =
+  "ИИ-поиск в боте доступен сотрудникам. Отправьте /start, чтобы привязать номер.";
+
 /** `/katalog` (или `/catalog`, с @BotName) — открыть каталог. */
 function isKatalogCommand(text: string): boolean {
   const first = text.trim().split(/\s+/)[0].toLowerCase();
@@ -688,6 +707,11 @@ export async function handleUpdate(
         await deps.sendMessage(chatId, image.reply);
         return;
       }
+      // 2a0) ТЗ №20 K — фото с подписью /naiti → ИИ-поиск по фото.
+      if (naitiCommandText(message.caption) !== null) {
+        await handleNaiti(chatId, { photoFileId: image.fileId }, deps);
+        return;
+      }
       // 2a) §5.5b: rasm + «singan»/«бой» izohi → AI-shakl oqimi.
       if (
         typeof message.caption === "string" &&
@@ -711,6 +735,14 @@ export async function handleUpdate(
     // 2d) §5.5b: `/singan` matn buyrug'i (rasmsiz) → yo'riqnoma.
     if (typeof message.text === "string" && isSinganCommand(message.text)) {
       await deps.sendMessage(chatId, MSG_SINGAN_INSTRUCTION);
+      return;
+    }
+
+    // 2d0) ТЗ №20 K (§12.4) — `/naiti текст` → топ-5 по ИИ-поиску.
+    const naiti = naitiCommandText(message.text);
+    if (naiti !== null) {
+      if (!naiti) await deps.sendMessage(chatId, MSG_NAITI_HELP);
+      else await handleNaiti(chatId, { text: naiti }, deps);
       return;
     }
 
@@ -774,6 +806,27 @@ export async function handleUpdate(
  * ТЗ №20 G (§8.4) — сводка камня по коду. Только привязанный активный
  * сотрудник (печать QR / наличие и локации — не для партнёра, §15).
  */
+/** ТЗ №20 K — `/naiti`: только сотрудникам (как поиск по коду). */
+async function handleNaiti(
+  chatId: number,
+  input: { text: string } | { photoFileId: string },
+  deps: WebhookDeps,
+): Promise<void> {
+  const user = await deps.db.user.findFirst({
+    where: { telegramId: String(chatId), isActive: true },
+    select: { id: true, role: true },
+  });
+  if (!user || !capabilitiesFor(user.role as Role, { canSeePurchasePrice: false }).canPrintQr) {
+    await deps.sendMessage(chatId, MSG_NAITI_NOT_STAFF);
+    return;
+  }
+  if (!deps.aiSearch) {
+    await deps.sendMessage(chatId, MSG_NAITI_HELP);
+    return;
+  }
+  await deps.sendMessage(chatId, await deps.aiSearch(input));
+}
+
 async function handleStoneCode(
   chatId: number,
   code: string,

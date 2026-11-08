@@ -10,6 +10,8 @@
 // код ONX-… (тот же поиск, что «Поиск»), порода, цвет, толщина, нужный размер
 // L×W — та же логика, что «Поиск» (poisk-size-fit.ts: запас 2 см, поворот).
 // Сортировка: в наличии → по названию. noindex — metadata + X-Robots-Tag.
+import AiSearchBox from "@/components/public/AiSearchBox";
+import { PATTERN_RU, PATTERN_UZ, TONE_RU, TONE_UZ, parseWantedTraits } from "@/lib/stone-traits";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies, headers } from "next/headers";
@@ -71,7 +73,42 @@ export default async function CatalogPage({
         });
   const t = publicDict(locale);
   const filters = parseCatalogFilters(sp);
-  const result = await loadCatalog(db, { viewer, filters });
+  // ТЗ №20 K — тон/рисунок/прожилки/цвет по признакам (ИИ-поиск) ранжируют.
+  const wanted = parseWantedTraits(sp);
+  const result = await loadCatalog(db, { viewer, filters, wanted });
+  const one = (k: string) => {
+    const v = sp[k];
+    return ((Array.isArray(v) ? v[0] : v) ?? "").trim();
+  };
+  const aiQuery = one("ai");
+  const aiPhoto = one("aiPhoto");
+  const aiMode = aiQuery !== "" || aiPhoto !== "";
+  const toneName = (x: string) => (locale === "uz" ? TONE_UZ : TONE_RU)[x as keyof typeof TONE_RU] ?? x;
+  const patName = (x: string) => (locale === "uz" ? PATTERN_UZ : PATTERN_RU)[x as keyof typeof PATTERN_RU] ?? x;
+  // Чипы: каждый — ссылка на тот же каталог без этого фильтра.
+  const chipDefs: Array<{ keys: string[]; label: string }> = [];
+  if (filters.rock) chipDefs.push({ keys: ["rock"], label: `${t.chipRock}: ${filters.rock}` });
+  if (filters.color) chipDefs.push({ keys: ["color"], label: `${t.chipColor}: ${filters.color}` });
+  if (one("tcolor")) chipDefs.push({ keys: ["tcolor"], label: `${t.chipColor}: ${one("tcolor")}` });
+  if (wanted.tone) chipDefs.push({ keys: ["tone"], label: `${t.chipTone}: ${toneName(wanted.tone)}` });
+  if (wanted.pattern) chipDefs.push({ keys: ["pat"], label: `${t.chipPattern}: ${patName(wanted.pattern)}` });
+  if (wanted.veinColor) chipDefs.push({ keys: ["vein"], label: `${t.chipVein}: ${wanted.veinColor}` });
+  if (hasSizeFilter(filters)) {
+    chipDefs.push({ keys: ["l", "w"], label: `${t.chipSize}: ${filters.lengthCm} × ${filters.widthCm} ${t.cm}` });
+  }
+  if (filters.thickness !== null) {
+    chipDefs.push({ keys: ["t"], label: `${t.chipThickness}: ${formatThickness(filters.thickness)} ${t.cm}` });
+  }
+  if (filters.q && aiMode) chipDefs.push({ keys: ["q"], label: `«${filters.q}»` });
+  const chipHref = (drop: string[]) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      const val = Array.isArray(v) ? v[0] : v;
+      if (val && !drop.includes(k)) p.set(k, val);
+    }
+    const q = p.toString();
+    return `/katalog${q ? `?${q}` : ""}#results`;
+  };
   const back = `/katalog${catalogQueryString(filters)}`;
   const anyFilter =
     !!filters.q || !!filters.rock || !!filters.color || filters.thickness !== null ||
@@ -102,8 +139,26 @@ export default async function CatalogPage({
         </p>
       </header>
 
+      {/* ТЗ №20 K — «Спросить ИИ» / «Найти по фото» → те же фильтры ниже. */}
+      <AiSearchBox
+        defaultQuery={aiQuery}
+        labels={{
+          title: t.aiTitle,
+          placeholder: t.aiPlaceholder,
+          submit: t.aiSubmit,
+          thinking: t.aiThinking,
+          photo: t.aiPhoto,
+          photoHint: t.aiPhotoHint,
+          photoBad: t.aiPhotoBad,
+        }}
+      />
+
       {/* Фильтры: GET-форма — состояние в адресе, кнопка «назад» работает. */}
       <form method="get" action="/katalog" className="rounded-card border border-line bg-paper-2 p-4">
+        {/* ТЗ №20 K — правка фильтров не теряет признаки ИИ-запроса. */}
+        {["ai", "tone", "pat", "vein", "tcolor"].map((k) =>
+          one(k) ? <input key={k} type="hidden" name={k} value={one(k)} /> : null,
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex flex-col gap-1 text-sm font-semibold text-ink sm:col-span-2">
             {t.searchLabel}
@@ -197,6 +252,38 @@ export default async function CatalogPage({
         </Alert>
       )}
 
+      {aiMode && (
+        <div id="results" className="mt-4 scroll-mt-4 rounded-card border border-line bg-paper-2 p-3">
+          <p className="text-sm font-semibold text-ink">
+            {aiPhoto ? t.aiByPhoto : t.aiUnderstood}
+            {aiQuery && <span className="font-normal text-ink/70"> — «{aiQuery}»</span>}
+          </p>
+          {(aiPhoto === "0" || aiPhoto === "bad" || aiPhoto === "big") && (
+            <p className="mt-1 text-sm text-ink/60">{aiPhoto === "0" ? t.aiPhotoFail : t.aiPhotoBad}</p>
+          )}
+          {aiQuery && one("aiFail") === "1" && (
+            <p className="mt-1 text-sm text-ink/60">{t.aiFallback}</p>
+          )}
+          {chipDefs.length > 0 && (
+            <>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {chipDefs.map((c) => (
+                  <Link
+                    key={c.keys.join("+")}
+                    href={chipHref(c.keys)}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-gold/50 bg-gold/10 px-3 text-sm text-ink hover:bg-gold/20"
+                  >
+                    {c.label}
+                    <span aria-hidden className="text-ink/50">✕</span>
+                  </Link>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-ink/50">{t.aiChipHint}</p>
+            </>
+          )}
+        </div>
+      )}
+
       <p className="mt-4 text-sm text-ink/60">
         {t.catalogFound}: <span className="tnum font-semibold text-ink">{result.total}</span>
         {hasSizeFilter(filters) && (
@@ -221,6 +308,9 @@ export default async function CatalogPage({
           {result.items.map((item) => (
             <li key={item.code}>
               <StoneTile item={item} t={t}>
+                {item.traitMatch !== undefined && item.traitMatch >= 2 && (
+                  <p className="text-xs font-semibold text-gold-deep">✦ {t.aiMatch}</p>
+                )}
                 {/* Нет в наличии → «Оставить заявку» (форма H на карточке). */}
                 {viewer !== "staff" && item.availability === "OUT_OF_STOCK" && (
                   <Link

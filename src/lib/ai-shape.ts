@@ -12,6 +12,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { sideCount, validatePolygon } from "@/lib/chertyoj";
+// ТЗ №20 K — одна vision-модель на ИИ-чертёж и ИИ-поиск.
+import { AI_VISION_MODEL } from "@/lib/ai-vision";
 
 // ──────────────────── Tiplar / Типы ────────────────────
 
@@ -117,7 +119,7 @@ export async function analyzeBrokenStoneShape(
   // null QAYTARMAYDI) — ikkalasi ham fail-closed kontraktga ko'ra null bo'lishi kerak.
   try {
     const response = await client.messages.parse({
-      model: "claude-opus-4-8",
+      model: AI_VISION_MODEL,
       max_tokens: 2048,
       messages: [
         {

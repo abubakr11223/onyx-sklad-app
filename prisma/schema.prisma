@@ -126,6 +126,8 @@ enum AuditAction {
   TEXTURE_UPLOAD
   /// ТЗ №20 L (§13.2) — партнёр оставил «Заявку на объём».
   LEAD_CREATE
+  /// ТЗ №20 K (§12.1) — сотрудник поправил признаки узора/партии вручную.
+  TRAITS_EDIT
   /// Audit 2026-09-02 — zaxira olindi (tizim amali, userId = null).
   /// Egaga «zaxira kelmayapti» degan savolga javob shu yozuvlardan chiqadi.
   BACKUP
@@ -235,6 +237,40 @@ enum LeadSource {
   QR_CATALOG
 }
 
+/// ТЗ №20 K (§12.1) — тон камня.
+enum StoneTone {
+  LIGHT // светлый
+  MEDIUM // средний
+  DARK // тёмный
+}
+
+/// ТЗ №20 K (§12.1) — рисунок камня.
+enum StonePattern {
+  UNIFORM // однородный
+  CLOUDY // облачный
+  VEINS // прожилки
+  BOLD_VEINS // крупные прожилки
+  BRECCIA // брекчия
+}
+
+/// ТЗ №20 K — кто выставил признаки. MANUAL ИИ больше не перезаписывает.
+enum TraitsSource {
+  AI
+  MANUAL
+}
+
+/// ТЗ №20 K (§12.4) — откуда пришёл ИИ-запрос и что искали.
+enum AiSearchChannel {
+  STAFF // «Поиск» / каталог под сотрудником
+  CATALOG // каталог: клиент или партнёр
+  BOT // Telegram /naiti
+}
+
+enum AiSearchKind {
+  TEXT
+  PHOTO
+}
+
 /// ТЗ №20 L (§13.1) — тип партнёра: права одинаковые, тип — для отчётов и фильтра.
 enum PartnerType {
   DESIGNER // дизайнер
@@ -292,6 +328,7 @@ model StoneType {
   scans   StoneCodeScan[]
   collectionItems CollectionItem[]
   textures StoneTexture[]
+  traits   StoneTraits[]
 
   @@index([rockType])
   @@index([color])
@@ -345,6 +382,8 @@ model Batch {
   photos         Photo[] // ТЗ №16 B — общее фото партии
   /// ТЗ №20 J — текстура для 3D однородной партии (без узоров).
   texture        StoneTexture?
+  /// ТЗ №20 K — признаки однородной партии (цвет, тон, рисунок).
+  traits         StoneTraits?
 
   @@index([stoneTypeId])
   @@index([arrivedAt])
@@ -391,6 +430,8 @@ model BatchPattern {
   shipmentLines ShipmentLine[]
   /// ТЗ №20 J — текстура для 3D этого узора.
   texture       StoneTexture?
+  /// ТЗ №20 K — признаки узора (цвет, тон, рисунок, прожилки).
+  traits        StoneTraits?
 
   @@index([batchId])
 }
@@ -632,6 +673,8 @@ model User {
   /// ТЗ №20 L — закреплённый менеджер партнёра / партнёры менеджера.
   partnerManager        User?          @relation("PartnerManager", fields: [partnerManagerId], references: [id], onDelete: SetNull)
   partners              User[]         @relation("PartnerManager")
+  /// ТЗ №20 K — кто вручную правил признаки камня.
+  traitsEdited          StoneTraits[]  @relation("TraitsEditedBy")
 }
 
 /// §1.8 — fotozapros (Telegram vazifasi). IN_PROGRESS statusi ataylab yo'q.
@@ -1438,4 +1481,51 @@ model StoneTexture {
   uploadedBy   User?         @relation("TextureUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([stoneTypeId])
+}
+
+/// ТЗ №20 K (§12.1) — признаки узора (или однородной партии): основной цвет,
+/// тон, рисунок, цвет прожилок. Выставляет ИИ по фото один раз (photoId —
+/// по какому фото), сотрудник может поправить (source = MANUAL — ИИ больше
+/// не трогает). Ровно один владелец — CHECK в миграции.
+model StoneTraits {
+  id             String        @id @default(cuid())
+  stoneTypeId    String
+  batchId        String?       @unique
+  batchPatternId String?       @unique
+  color          String?
+  tone           StoneTone?
+  pattern        StonePattern?
+  veinColor      String?
+  source         TraitsSource  @default(AI)
+  /// Фото, по которому ИИ выставил признаки (новое фото → пересчёт, если не MANUAL).
+  photoId        String?
+  editedById     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  stoneType    StoneType     @relation(fields: [stoneTypeId], references: [id], onDelete: Cascade)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchPattern BatchPattern? @relation(fields: [batchPatternId], references: [id], onDelete: Cascade)
+  editedBy     User?         @relation("TraitsEditedBy", fields: [editedById], references: [id], onDelete: SetNull)
+
+  @@index([stoneTypeId])
+}
+
+/// ТЗ №20 K (§12.4) — журнал ИИ-запросов (без фото клиента): что искали и
+/// что нашлось. Владелец видит в «Сводке» топ запросов и «чего нет на складе».
+model AiSearchLog {
+  id           String          @id @default(cuid())
+  channel      AiSearchChannel
+  kind         AiSearchKind
+  /// Текст запроса (до 300 символов); для фото — null.
+  query        String?
+  /// Распознанные фильтры (порода, цвет, тон, рисунок, размер, толщина).
+  filters      Json
+  /// ИИ ответил вовремя (false — показали обычный поиск по тексту).
+  aiOk         Boolean
+  resultCount  Int
+  inStockCount Int
+  createdAt    DateTime        @default(now())
+
+  @@index([createdAt])
 }

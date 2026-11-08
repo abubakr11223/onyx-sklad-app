@@ -2,6 +2,8 @@
 // `x-telegram-bot-api-secret-token` sarlavhasida keladi — uni timing-safe
 // solishtiramiz (auth.ts naqshi). Auth o'tsa update handler chaqiriladi va
 // DOIM 200 qaytadi (Telegram qayta urmasligi uchun). Auth xatosi → 401.
+import { botAiSearchReply } from "@/lib/ai-search";
+import { readPhotoBytes } from "@/lib/traits-store";
 import { signMagicLinkToken } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -101,6 +103,9 @@ export async function POST(req: Request) {
     // ТЗ №20 G (§8.4) — код камня → сводка (наличие из общих помощников).
     lookupStoneCode: (code) => loadStoneCodeCard(db, code),
     stoneCodeBaseUrl: publicBaseUrl(),
+    // ТЗ №20 K (§12.4) — /naiti: ИИ-поиск, топ-5 с наличием и ссылками.
+    aiSearch: (input) =>
+      botAiSearchReply(db, input, publicBaseUrl(), { downloadPhoto: readPhotoBytes }),
     // ТЗ №20 H (§9.2) — «Менеджер связался»: первый нажавший берёт заявку.
     handleCallbackQuery: (cq) =>
       handleLeadClaimCallback(cq, {

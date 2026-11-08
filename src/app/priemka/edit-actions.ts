@@ -2,6 +2,7 @@
 
 // ТЗ №14 §3 — server actions: сохранить правку партии.
 
+import { scheduleTraitsRefresh } from "@/lib/traits-hook";
 import { redirect } from "next/navigation";
 import {
   applyBatchEdit,
@@ -333,6 +334,8 @@ export async function submitBatchEdit(
 
     // ТЗ №20 C — правка количества меняет остаток: пересчитать порог вида.
     await checkMinStockSafe({ batchIds: [batchId] });
+    // ТЗ №20 K (§12.1) — новое фото узора → признаки (в фоне, после ответа).
+    scheduleTraitsRefresh([batchId]);
 
     redirect(
       `/priemka?edited=1&batch=${encodeURIComponent(result.batchId)}&n=${result.changes.length}`,

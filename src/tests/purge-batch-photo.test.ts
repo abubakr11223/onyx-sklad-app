@@ -150,6 +150,7 @@ function makeSemanticDb(fx: Fixture) {
     lead: zeroModel,
     stoneCodeScan: zeroModel, // ТЗ №20 H
     stoneTexture: zeroModel, // ТЗ №20 J
+    stoneTraits: zeroModel, // ТЗ №20 K
     collectionItem: zeroModel, // ТЗ №20 I
     shipmentLine: zeroModel,
     shipment: zeroModel,

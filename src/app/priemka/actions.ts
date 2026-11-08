@@ -4,6 +4,7 @@
 // Вся запись — ОДНОЙ транзакцией: StoneType (если новый) + Batch +
 // BatchLocation[] + AuditLog(INTAKE) — правило data-model.md §1.10.
 
+import { scheduleTraitsRefresh } from "@/lib/traits-hook";
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -300,6 +301,8 @@ export async function submitIntake(
 
   // ТЗ №20 C — приёмка: остаток вырос → снять пометку «мало», если выше порога.
   await checkMinStockSafe({ batchIds: [summary.batchId] });
+  // ТЗ №20 K (§12.1) — признаки узоров по новым фото: после ответа, в фоне.
+  scheduleTraitsRefresh([summary.batchId]);
 
   const params = new URLSearchParams({ ok: "1", stone: summary.stoneName });
   if (data.slabsTotal !== null) params.set("slabs", String(data.slabsTotal));

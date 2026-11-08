@@ -28,6 +28,7 @@
 //   • boy/qoldiq (W6-A2): SQL ORDER BY boundingAreaMm2 (=L×W) + take MAX+1,
 //     so'ng rankAndCapFittingPieces (id tie-break + cap). Unbounded fetch YO'Q.
 import { redirect } from "next/navigation";
+import AiSearchBox from "@/components/public/AiSearchBox";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -625,6 +626,20 @@ export default async function PoiskPage({
           Поиск камня
         </h1>
       </header>
+
+      {/* ТЗ №20 K (§12.4) — ИИ-поиск: фраза или фото → фильтры каталога
+          (сотруднику — с остатками; результат открывается в «Каталоге»). */}
+      <AiSearchBox
+        labels={{
+          title: "Спросить ИИ",
+          placeholder: "Например: светлый оникс на столешницу 3 на 1,6",
+          submit: "Найти",
+          thinking: "Ищем…",
+          photo: "Найти по фото",
+          photoHint: "Фото интерьера, скриншот или фото образца — до 10 МБ. Результат — в «Каталоге».",
+          photoBad: "Нужна картинка (JPG, PNG) до 10 МБ.",
+        }}
+      />
 
       <Card>
         <form method="get" className="flex flex-col gap-4">

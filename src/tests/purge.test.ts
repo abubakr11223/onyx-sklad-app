@@ -249,6 +249,12 @@ function makeFakePurgeDb(seed: {
         return { count: countOf("saleReturn", 0) };
       },
     },
+    stoneTraits: {
+      deleteMany: async ({ where } = {}) => {
+        calls.push({ model: "stoneTraits", op: "deleteMany", where });
+        return { count: countOf("stoneTraits", 0) };
+      },
+    },
     stoneTexture: {
       deleteMany: async ({ where } = {}) => {
         calls.push({ model: "stoneTexture", op: "deleteMany", where });

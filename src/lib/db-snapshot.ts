@@ -58,6 +58,8 @@ export const SNAPSHOT_TABLES = [
   "collection", // ТЗ №20 I — подборки для клиента
   "collectionItem",
   "stoneTexture", // ТЗ №20 J — текстуры для 3D (файлы — в хранилище фото)
+  "stoneTraits", // ТЗ №20 K — признаки камня (цвет, тон, рисунок)
+  "aiSearchLog", // ТЗ №20 K — журнал ИИ-запросов
   "photoRequest",
   "photoDispatch",
   "photo",

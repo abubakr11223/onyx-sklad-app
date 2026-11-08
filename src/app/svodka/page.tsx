@@ -2,6 +2,7 @@
 // ТЗ №20 E — рейтинг клиентов (владелец — все, менеджер — свои) и «Продажи по
 // менеджерам» (только владелец). UZS/USD никогда не смешиваются.
 
+import { loadTopAiQueries, type TopAiQueryRow } from "@/lib/ai-search";
 import { loadPartnerSummary, PARTNER_TYPE_RU, type PartnerSummaryRow } from "@/lib/partners";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -318,6 +319,63 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
   );
 }
 
+/** ТЗ №20 K (§12.4) — что ищут через ИИ и чего нет на складе. */
+function AiQueriesSection({
+  data,
+  period,
+}: {
+  data: { rows: TopAiQueryRow[]; photoCount: number; total: number };
+  period: RatingPeriod;
+}) {
+  return (
+    <section className="mb-6">
+      <h2 className="mb-1 text-lg font-semibold text-ink">ИИ-поиск: что ищут</h2>
+      <p className="mb-2 text-xs text-ink/50">
+        Период: {periodCaption(period)} (переключатель — в рейтинге выше). Запросов: {data.total}, из
+        них по фото: {data.photoCount}. «Нет на складе» — в последний раз по запросу не нашлось
+        камня в наличии.
+      </p>
+      {data.rows.length === 0 ? (
+        <p className="text-sm text-ink/55">За период текстовых ИИ-запросов не было.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-card border border-line bg-paper">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-ink/60">
+                <th className="py-2 pl-3 font-medium">Запрос</th>
+                <th className="py-2 pl-3 text-right font-medium">Раз</th>
+                <th className="py-2 px-3 text-right font-medium">В наличии</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r) => (
+                <tr key={r.query} className="border-b border-line/60 align-top last:border-b-0">
+                  <td className="py-2 pl-3">
+                    <Link
+                      href={`/katalog?ai=${encodeURIComponent(r.query)}`}
+                      className="text-ink hover:underline"
+                    >
+                      {r.query}
+                    </Link>
+                  </td>
+                  <td className="tnum py-2 pl-3 text-right">{r.count}</td>
+                  <td className="py-2 px-3 text-right">
+                    {r.lastInStock > 0 ? (
+                      <span className="tnum">{r.lastInStock}</span>
+                    ) : (
+                      <Badge variant="warning">нет на складе</Badge>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** ТЗ №20 L (§13.3) — «Партнёры»: заявки, интересы, продажи по заявкам. */
 function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: RatingPeriod }) {
   return (
@@ -468,7 +526,7 @@ export default async function SvodkaPage({
   const showAll = first(sp.all) === "1";
   const actorId = await currentActorId();
 
-  const [rating, managerRows, topScans, partnerRows] = await Promise.all([
+  const [rating, managerRows, topScans, partnerRows, aiQueries] = await Promise.all([
     loadClientRating(db, {
       period: ratingPeriod,
       sort,
@@ -485,6 +543,10 @@ export default async function SvodkaPage({
     isOwner
       ? loadPartnerSummary(db, { from: ratingPeriod.from, to: ratingPeriod.toExclusive })
       : Promise.resolve([] as PartnerSummaryRow[]),
+    // ТЗ №20 K (§12.4, §15) — топ ИИ-запросов — только владелец.
+    isOwner
+      ? loadTopAiQueries(db, { from: ratingPeriod.from, to: ratingPeriod.toExclusive })
+      : Promise.resolve({ rows: [] as TopAiQueryRow[], photoCount: 0, total: 0 }),
   ]);
 
   // Ссылки переключателей сохраняют все прочие параметры страницы.
@@ -636,6 +698,8 @@ export default async function SvodkaPage({
       <ManagersSection rows={managerRows} period={ratingPeriod} />
 
       <TopScansSection rows={topScans} period={ratingPeriod} />
+
+      <AiQueriesSection data={aiQueries} period={ratingPeriod} />
 
       <PartnersSection rows={partnerRows} period={ratingPeriod} />
 

@@ -51,6 +51,8 @@ export const RESTORE_ORDER = [
   "collection", // ТЗ №20 I — после User и Client
   "collectionItem", // ТЗ №20 I — после Collection и StoneType
   "stoneTexture", // ТЗ №20 J — после StoneType, Batch, BatchPattern, User
+  "stoneTraits", // ТЗ №20 K — после StoneType, Batch, BatchPattern, User
+  "aiSearchLog", // ТЗ №20 K — без связей
   "telegramAccessRequest",
   "auditLog",
 ] as const;

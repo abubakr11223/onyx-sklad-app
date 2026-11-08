@@ -62,6 +62,8 @@ import { CameraIcon } from "@/components/ui/Icons";
 import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 import TextureUploader from "./TextureUploader";
+import { saveTraitsAction } from "../traits-actions";
+import { PATTERN_RU, STONE_PATTERNS, STONE_TONES, TONE_RU, TRAIT_COLORS } from "@/lib/stone-traits";
 import InteriorUploader from "./InteriorUploader";
 import { deleteInteriorPhoto } from "../texture-actions";
 import { resolveDriver } from "@/lib/storage/photo-storage";
@@ -374,7 +376,7 @@ export default async function KamenPage({
   // и «Запросить фото» (§7, canRequestPhoto) — только соответствующие роли.
   // getCapabilities() — в общий Promise.all, чтобы не добавлять лишний
   // последовательный round-trip на самой горячей странице.
-  const [st, photoCfg, caps, me, interiors, ownInteriors, textures] = await Promise.all([
+  const [st, photoCfg, caps, me, interiors, ownInteriors, textures, traitRows] = await Promise.all([
     // BATCH-B (perf): весь склад не тянем. Для формулы §3 — счётчики партий +
     // агрегаты (getBatchRemainders ниже); для показа — только AVAILABLE плиты/куски
     // и последние 12 фото. Наличие и «свежесть» фото (TG-C) считаются так же.
@@ -528,6 +530,19 @@ export default async function KamenPage({
         heightPx: true,
         aspectMismatch: true,
         updatedAt: true,
+      },
+    }),
+    // ТЗ №20 K (§12.1) — признаки узоров / однородных партий.
+    db.stoneTraits.findMany({
+      where: { stoneTypeId: id },
+      select: {
+        batchId: true,
+        batchPatternId: true,
+        color: true,
+        tone: true,
+        pattern: true,
+        veinColor: true,
+        source: true,
       },
     }),
   ]);
@@ -1157,6 +1172,133 @@ export default async function KamenPage({
                 ))}
               </ul>
             )}
+          </Card>
+        );
+      })()}
+
+      {/* ТЗ №20 K (§12.1) — признаки для ИИ-поиска: ИИ ставит по фото узора,
+          сотрудник может поправить (ручную правку ИИ не перезаписывает). */}
+      {(() => {
+        const trByPattern = new Map(traitRows.filter((r) => r.batchPatternId).map((r) => [r.batchPatternId!, r]));
+        const trByBatch = new Map(traitRows.filter((r) => r.batchId).map((r) => [r.batchId!, r]));
+        const rows = st.batches.flatMap((b) =>
+          b.patterns.length > 0
+            ? b.patterns.map((p) => ({
+                key: p.id,
+                label: `Узор «${p.description}»`,
+                batchId: "",
+                batchPatternId: p.id,
+                tr: trByPattern.get(p.id) ?? null,
+              }))
+            : [
+                {
+                  key: b.id,
+                  label: `Партия от ${formatTashkentDate(b.arrivedAt)}`,
+                  batchId: b.id,
+                  batchPatternId: "",
+                  tr: trByBatch.get(b.id) ?? null,
+                },
+              ],
+        );
+        if (rows.length === 0) return null;
+        const trOk = firstParam(sp.trOk) === "1";
+        const trErr = firstParam(sp.trErr);
+        return (
+          <Card className="mt-6" id="traits">
+            <h2 className="text-lg font-semibold text-ink">Признаки для ИИ-поиска</h2>
+            <p className="mt-1 text-sm text-ink/60">
+              Цвет, тон, рисунок и прожилки. ИИ выставляет их по фото узора; если ошибся —
+              поправьте, и ИИ больше не будет менять этот узор.
+            </p>
+            {trOk && (
+              <Alert variant="success" className="mt-3">
+                Признаки сохранены.
+              </Alert>
+            )}
+            {trErr && (
+              <Alert variant="danger" className="mt-3">
+                {trErr === "denied" ? "Недостаточно прав." : "Не удалось сохранить признаки."}
+              </Alert>
+            )}
+            <ul className="mt-3 divide-y divide-line rounded-card border border-line">
+              {rows.map((r) => (
+                <li key={r.key} className="p-3">
+                  <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
+                    {r.label}
+                    {r.tr ? (
+                      <Badge variant={r.tr.source === "MANUAL" ? "success" : "neutral"}>
+                        {r.tr.source === "MANUAL" ? "поправлено вручную" : "ИИ"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning">ещё не определены</Badge>
+                    )}
+                  </p>
+                  {caps.canUploadTexture ? (
+                    <form action={saveTraitsAction} className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:items-end">
+                      <input type="hidden" name="stoneTypeId" value={st.id} />
+                      <input type="hidden" name="batchId" value={r.batchId} />
+                      <input type="hidden" name="batchPatternId" value={r.batchPatternId} />
+                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                        Цвет
+                        <select name="color" defaultValue={r.tr?.color ?? ""} className={inputClass}>
+                          <option value="">—</option>
+                          {TRAIT_COLORS.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                        Тон
+                        <select name="tone" defaultValue={r.tr?.tone ?? ""} className={inputClass}>
+                          <option value="">—</option>
+                          {STONE_TONES.map((x) => (
+                            <option key={x} value={x}>
+                              {TONE_RU[x]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                        Рисунок
+                        <select name="pattern" defaultValue={r.tr?.pattern ?? ""} className={inputClass}>
+                          <option value="">—</option>
+                          {STONE_PATTERNS.map((x) => (
+                            <option key={x} value={x}>
+                              {PATTERN_RU[x]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                        Прожилки
+                        <select name="veinColor" defaultValue={r.tr?.veinColor ?? ""} className={inputClass}>
+                          <option value="">—</option>
+                          {TRAIT_COLORS.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Button type="submit" variant="secondary" size="sm" className="col-span-2 sm:col-span-1">
+                        Сохранить
+                      </Button>
+                    </form>
+                  ) : (
+                    r.tr && (
+                      <p className="mt-1 text-sm text-ink/70">
+                        {[r.tr.color, r.tr.tone ? TONE_RU[r.tr.tone] : null, r.tr.pattern ? PATTERN_RU[r.tr.pattern] : null,
+                          r.tr.veinColor ? `прожилки ${r.tr.veinColor}` : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    )
+                  )}
+                </li>
+              ))}
+            </ul>
           </Card>
         );
       })()}

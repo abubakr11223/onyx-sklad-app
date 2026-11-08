@@ -201,6 +201,7 @@ export type PurgeTableKey =
   | "slab"
   | "batchLocation"
   | "stoneTexture" // ТЗ №20 J: текстура 3D → Batch/BatchPattern (Cascade, но удаляем явно)
+  | "stoneTraits" // ТЗ №20 K: признаки → Batch/BatchPattern (Cascade, но удаляем явно)
   | "batchPattern"
   | "batch"
   | "stoneType"
@@ -233,6 +234,7 @@ export const PURGE_DELETE_ORDER: readonly PurgeTableKey[] = [
   "slab",
   "batchLocation", // after PhotoRequest (PR → BatchLocation Restrict)
   "stoneTexture", // ТЗ №20 J → Batch / BatchPattern / StoneType
+  "stoneTraits", // ТЗ №20 K → Batch / BatchPattern / StoneType
   "batchPattern",
   "batch",
   "stoneCodeScan", // ТЗ №20 H → StoneType
@@ -376,6 +378,10 @@ export interface PurgeDb {
   };
   // ТЗ №20 J — текстуры 3D (файлы в хранилище не трогаем — как и фото).
   stoneTexture: {
+    deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
+  };
+  // ТЗ №20 K — признаки камня для ИИ-поиска.
+  stoneTraits: {
     deleteMany(args: { where?: unknown }): Promise<{ count: number }>;
   };
   // ТЗ №20 H — счётчик сканирований QR (дневной агрегат по коду).
@@ -1121,6 +1127,10 @@ export async function executePurge(
       await tx.stoneTexture.deleteMany({ where: all ? {} : { stoneTypeId: stIn } })
     ).count;
     log(`  StoneTexture deleted: ${stoneTextures}`);
+    const stoneTraits = (
+      await tx.stoneTraits.deleteMany({ where: all ? {} : { stoneTypeId: stIn } })
+    ).count;
+    log(`  StoneTraits deleted: ${stoneTraits}`);
 
     // 12 BatchPattern
     const batchPatterns = (
