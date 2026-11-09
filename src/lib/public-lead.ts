@@ -415,7 +415,10 @@ export async function claimLeadFromTelegram(
     where: { telegramId: String(args.telegramUserId), isActive: true },
     select: { id: true, name: true, role: true },
   });
-  if (!me || (me.role !== "OWNER" && me.role !== "MANAGER")) return { status: "denied" };
+  if (!me || (me.role !== "OWNER" && me.role !== "MANAGER")) {
+    await logClaimDenied(db, String(args.telegramUserId), me?.role ?? null);
+    return { status: "denied" };
+  }
 
   const won = await db.$transaction(async (tx) => {
     const res = await tx.lead.updateMany({
@@ -448,6 +451,38 @@ export async function claimLeadFromTelegram(
   });
   if (!lead) return { status: "notfound" };
   return { status: "taken", managerName: lead.assignedManager?.name ?? null };
+}
+
+/** «…1234» — хвост ID для логов (полный ID в логи не пишем). */
+export function maskTelegramId(id: string): string {
+  const t = id.trim();
+  return t.length <= 4 ? "…" : `…${t.slice(-4)}`;
+}
+
+/**
+ * Почему нажатие «Менеджер связался» отвергнуто — в лог, без персональных
+ * данных: найден ли аккаунт с этим Telegram (в т.ч. отключённый), его роль,
+ * и нет ли у сотрудников ID «почти такого же» (пробелы и т.п.).
+ */
+async function logClaimDenied(db: ClaimDb, telegramId: string, activeRole: string | null) {
+  try {
+    const any = await db.user.findFirst({
+      where: { telegramId },
+      select: { role: true, isActive: true },
+    });
+    const staff = await db.user.findMany({
+      where: { role: { in: ["OWNER", "MANAGER"] }, isActive: true, telegramId: { not: null } },
+      select: { telegramId: true },
+    });
+    const nearMatch = staff.some((u) => (u.telegramId ?? "").replace(/\D/g, "") === telegramId.replace(/\D/g, ""));
+    console.warn(
+      `[public-lead] claim denied: tg ${maskTelegramId(telegramId)} · activeRole=${activeRole ?? "-"} · ` +
+        `anyUser=${any ? `${any.role}/${any.isActive ? "active" : "inactive"}` : "none"} · ` +
+        `staffWithTelegram=${staff.length} · digitsMatch=${nearMatch}`,
+    );
+  } catch (e) {
+    console.warn("[public-lead] claim denied (diag failed):", (e as Error).message);
+  }
 }
 
 export interface LeadCallbackDeps {

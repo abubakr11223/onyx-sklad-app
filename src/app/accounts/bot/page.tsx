@@ -5,6 +5,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getRealSessionUser } from "@/lib/session";
+import { db } from "@/lib/db";
+import { maskTelegramId } from "@/lib/public-lead";
 import { getWebhookInfo } from "@/lib/telegram";
 import { isOurWebhookUrl, missingUpdates, REQUIRED_UPDATES } from "@/lib/telegram-bot-setup";
 import { formatTashkentDateTime } from "@/lib/datetime";
@@ -45,7 +47,15 @@ export default async function BotPage({
     );
   }
   const sp = await searchParams;
-  const info = await getWebhookInfo();
+  const [info, staff] = await Promise.all([
+    getWebhookInfo(),
+    // Кому уходят уведомления о заявках и кто может нажать «Менеджер связался».
+    db.user.findMany({
+      where: { role: { in: ["OWNER", "MANAGER"] } },
+      orderBy: [{ isActive: "desc" }, { role: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, role: true, isActive: true, telegramId: true },
+    }),
+  ]);
   const w = info.ok ? info.result : null;
   const missing = w ? missingUpdates(w.allowed_updates) : [];
   const ours = w ? isOurWebhookUrl(w.url, appHosts()) : false;
@@ -114,6 +124,32 @@ export default async function BotPage({
             </dd>
           </dl>
         )}
+      </Card>
+
+      <Card className="mt-4">
+        <h2 className="text-lg font-semibold text-ink">Кто получает заявки и может нажать «Менеджер связался»</h2>
+        <p className="mt-1 text-sm text-ink/60">
+          Активные менеджеры и владелец с привязанным Telegram. Если человек получает
+          уведомления, но кнопка отвечает «Заявки берут менеджеры и владелец», — его Telegram
+          привязан к другому (или отключённому) аккаунту: проверьте в «Сотрудниках».
+        </p>
+        <ul className="mt-3 divide-y divide-line rounded-card border border-line text-sm">
+          {staff.map((u) => (
+            <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
+              <span className="text-ink">
+                {u.name} <span className="text-ink/55">· {u.role === "OWNER" ? "владелец" : "менеджер"}</span>
+              </span>
+              <span className="flex flex-wrap gap-1.5">
+                {!u.isActive && <Badge variant="neutral">отключён</Badge>}
+                {u.telegramId ? (
+                  <Badge variant="success">Telegram {maskTelegramId(u.telegramId)}</Badge>
+                ) : (
+                  <Badge variant="warning">Telegram не привязан</Badge>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
       </Card>
 
       {w && missing.length > 0 && ours && (
