@@ -3,7 +3,7 @@ name: onyx-ui
 description: Onyx design system — exact tokens, component vocabulary, layout shell, form contracts and warehouse-field rules. Use whenever building or changing ANY user-facing screen, form, list or component in this repo, and before adding a new page.
 ---
 
-# Onyx UI — «Графит + золото»
+# Onyx UI — «Графит»
 
 The single source of truth is `src/app/globals.css` (Tailwind v4 `@theme`; there is **no** `tailwind.config.*`). This file records what that system actually is, plus the rules that keep screens consistent. When code and this file disagree, the code wins — fix this file in the same change.
 
@@ -13,41 +13,38 @@ Read this before touching any screen. Never invent a colour, radius or font size
 
 ## 1. Tokens (exact — use the Tailwind utility, not the hex)
 
+Theme **«Графит»** (approved 2026-11-11, variant A of three demos): light work area, dark navy sidebar, one blue accent, calm large numbers. Token NAMES are historical (`gold*` is now simply the accent role, blue) — they were kept so the whole app recolours from `globals.css` alone.
+
 ### Surfaces and ink
 | Token | Hex | Utility | Use for |
 |---|---|---|---|
-| `--color-paper` | `#f6f3ee` | `bg-paper` | page background, input fill |
-| `--color-paper-2` | `#fdfbf6` | `bg-paper-2` | raised surface (cards, secondary buttons) — **lighter** than the page |
-| `--color-ink` | `#211f1b` | `text-ink` | all primary text |
-| `--color-line` | `#e8e1d5` | `border-line` | every hairline border |
+| `--color-paper` | `#f4f6f9` | `bg-paper` | page background, input fill |
+| `--color-paper-2` | `#ffffff` | `bg-paper-2` | raised surface (cards, secondary buttons) |
+| `--color-ink` | `#14202e` | `text-ink` | all primary text |
+| `--color-line` | `#e3e7ed` | `border-line` | every hairline border |
 
-Text de-emphasis is an opacity ramp on ink, never a new colour: `text-ink/80` → `/70` → `/60` → `/55` → `/40`. Fills: `bg-ink/5`, `bg-ink/8`. Borders: `border-ink/10`, `/15`.
+Text de-emphasis is an opacity ramp on ink, never a new colour: `text-ink/80` → `/70` → `/60` → `/55`. Fills: `bg-ink/5`, `bg-ink/8`. Borders: `border-ink/10`, `/15`.
 
-### Dark rail
-`--color-side #17161b` · `--color-side-2 #201e25` · `--color-side-ink #cfc7b8` · `--color-side-muted #8b8371`.
+### Sidebar
+`--color-side #0f1b2a` · `--color-side-2 #1b2b40` (active item) · `--color-side-ink #9fb0c6` · `--color-side-muted #7489a4`. Active item = `bg-side-2` + 3px inset accent bar on the left.
 
-### Gold
+### Accent (role name «gold», colour blue)
 | Token | Hex | Use for |
 |---|---|---|
-| `--color-gold` | `#a9832f` | **all focus rings**, active nav, card hover border |
-| `--color-gold-soft` | `#c8ab63` | gradient bottom stop, 3px active-nav bar |
-| `--color-gold-hi` | `#dabd7a` | gradient top stop |
-| `--color-on-gold` | `#2a1e08` | text **on** gold surfaces |
-| `--color-gold-deep` | `#7d5e17` | gold as **small text** (≈5.4:1 on paper — AA). Eyebrows, active tab labels |
+| `--color-gold` | `#2f6fed` | primary button fill, focus rings, active nav bar |
+| `--color-gold-soft` / `--color-gold-hi` | `#2f6fed` / `#3d7bf0` | legacy gradient stops — keep solid |
+| `--color-on-gold` | `#ffffff` | text **on** accent surfaces |
+| `--color-gold-deep` | `#1e54c4` | accent as **small text** (links, eyebrows, active tab labels) |
 
-Gold on light backgrounds as text is **always** `gold-deep`. `gold` is for strokes and fills, not body text.
+### Status (each ≥4.5:1 as text on white)
+`--color-success #147a50` · `--color-warning #9a5b00` (amber — «требует проверки», never an error) · `--color-danger #b42318` (errors only).
 
-### Status (each ≥4.5:1 as text on paper)
-`--color-success #1f7a4d` (готово) · `--color-warning #9a6b00` (**amber** — «требует проверки», never an error) · `--color-danger #b23b2e` (errors only).
-
-Opacity convention: `/8`–`/12` fills, `/35`–`/40` borders.
-
-> **One highlight per screen.** Amber and gold-tinted panels each claim attention; four tinted sections in a row (today's `/poisk`) means none of them highlights anything. Pick the single most important block and leave the rest neutral.
+> **One highlight per screen.** Pick the single most important block and leave the rest neutral.
 
 ### Type
-Loaded in `src/app/layout.tsx` via `next/font/google`. **Montserrat** 400/500/600/700 = `--font-sans`, all UI and body. **Lora** 600/700 = `--font-serif`, page headings and big display figures only.
+One font: **Inter** (300–700, cyrillic) via `next/font/google` in `src/app/layout.tsx`, exposed as `--font-inter`. Both `--font-sans` and the legacy `--font-serif` role point at it — `font-serif` headings now render as bold Inter. The login page keeps its own fonts (`src/app/login/login-fonts.ts`).
 
-Fixed patterns — copy them verbatim, do not re-invent:
+Fixed patterns:
 ```
 eyebrow   text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep
 h1        mt-2 font-serif text-display font-bold tracking-tight text-ink
@@ -58,14 +55,14 @@ label     text-sm font-semibold text-ink
 hint      text-sm text-ink/55
 error     text-sm font-medium text-danger
 ```
-`--text-display` = 2rem / lh 1.15 / ls -0.01em.
+`--text-display` = 2.25rem / lh 1.15 / ls -0.02em.
 
 ### Radii, shadow, motion
-**Exactly two radii**: `rounded-field` (0.7rem — inputs, buttons, badges) and `rounded-card` (1rem — cards, panels). Do not introduce a third.
-Shadows: `shadow-card`, `shadow-gold`, `shadow-gold-lg`, `shadow-pop` — all warm-tinted, never grey.
+**Exactly two radii**: `rounded-field` (0.375rem — inputs, buttons, badges) and `rounded-card` (0.5rem — cards, panels). Do not introduce a third.
+Shadows: `shadow-card`, `shadow-gold`, `shadow-gold-lg`, `shadow-pop` — near-invisible; Grafit holds shape with borders, not shadows.
 `prefers-reduced-motion` is already forced globally in the base layer; do not re-implement it per component.
 
-**Light mode only.** There is no dark theme and no `data-theme`. Do not add one screen's worth of dark styling — that is a whole-app decision.
+**Light work area only** (the sidebar is the one dark plane). No `data-theme`; a theme change is a whole-app decision made in `globals.css`.
 
 ---
 
@@ -73,7 +70,7 @@ Shadows: `shadow-card`, `shadow-gold`, `shadow-gold-lg`, `shadow-pop` — all wa
 
 Everything lives in `src/components/ui/`: `Button`, `Field`, `Alert`, `Card`, `Badge`, `Modal`, `toast`, `Icons`, plus `Ripple`. App-level: `Nav`, `BottomTabBar`, `nav-items`, `NoAccess`, `OfflineBanner`, `WarehouseLocationSelect`, `ConfirmSubmitButton`.
 
-- **Button** — `variant`: `primary` (gold gradient) · `secondary` (bordered paper-2) · `ghost` · `danger` (outline only, never a filled red button). `size`: `md` | `sm`, **both 44px min-height**. Default `type="button"` — a submit button must pass `type="submit"` explicitly. For a link styled as a button use the exported `buttonClass(variant, size, extra)`.
+- **Button** — `variant`: `primary` (solid blue) · `secondary` (bordered paper-2) · `ghost` · `danger` (outline only, never a filled red button). `size`: `md` | `sm`, **both 44px min-height**. Default `type="button"` — a submit button must pass `type="submit"` explicitly. For a link styled as a button use the exported `buttonClass(variant, size, extra)`.
 - **Field** — always pass an explicit `id`. Renders label + control + hint + error with `aria-invalid` and `role="alert"` wiring already correct.
 - **Alert** — page-level messages. `role="alert"` is built in.
 - **Badge** — short status only. Long status goes in text.

@@ -309,7 +309,7 @@ export default async function CatalogPage({
             <li key={item.code}>
               <StoneTile item={item} t={t}>
                 {item.traitMatch !== undefined && item.traitMatch >= 2 && (
-                  <p className="text-xs font-semibold text-gold-deep">✦ {t.aiMatch}</p>
+                  <p className="text-xs font-semibold text-gold-deep">{t.aiMatch}</p>
                 )}
                 {/* Нет в наличии → «Оставить заявку» (форма H на карточке). */}
                 {viewer !== "staff" && item.availability === "OUT_OF_STOCK" && (

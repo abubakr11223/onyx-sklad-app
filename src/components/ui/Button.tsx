@@ -21,18 +21,15 @@ const BASE =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold " +
   "focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
 
-// Единый стиль на всё приложение (утв. макет): золото-градиент = основное,
+// Единый стиль на всё приложение (тема «Графит»): сплошной синий = основное,
 // светлая панель+контур = второстепенное, «призрак» = третьестепенное,
 // красный контур = деструктивное (красным не кричим — лишь контур).
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "text-on-gold bg-[linear-gradient(180deg,var(--color-gold-hi),var(--color-gold))] " +
-    "shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_6px_16px_-7px_rgb(169_131_47/0.7)] " +
-    "hover:-translate-y-px " +
-    "hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_12px_24px_-8px_rgb(169_131_47/0.9)]",
+    "text-on-gold bg-gold shadow-gold hover:bg-gold-deep",
   secondary:
     "border border-line bg-paper-2 text-ink " +
-    "hover:-translate-y-px hover:border-gold hover:text-gold-deep hover:shadow-card",
+    "hover:border-ink/25 hover:bg-paper",
   ghost: "bg-transparent text-ink/70 hover:bg-ink/5 hover:text-ink",
   danger:
     "border border-danger/35 bg-transparent text-danger " +

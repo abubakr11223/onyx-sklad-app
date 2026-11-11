@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
-import { Montserrat, Lora } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import BottomTabBar from "@/components/BottomTabBar";
@@ -18,23 +18,14 @@ import { GATED_REQUEST_HEADER } from "@/lib/auth";
 import { staleSessionLoginHref } from "@/lib/gated-request";
 import { capabilitiesFor } from "@/lib/permissions";
 
-// Фирменная типографика бренда «Графит + золото» (см. public/karta.html):
-// Montserrat = UI/sans, Lora = заголовки/serif. Оба грузятся через next/font
-// (сеть до fonts.gstatic.com на билде есть) с cyrillic-сабсетом — интерфейс на
-// русском. globals.css потребляет эти переменные (--font-montserrat/--font-lora)
-// с системным стеком как fallback.
-const montserrat = Montserrat({
+// Тема «Графит» (утв. 2026-11-11): один шрифт — Inter, с cyrillic-сабсетом
+// (интерфейс на русском). globals.css потребляет --font-inter и для sans, и
+// для роли «serif» (заголовки, крупные цифры), с системным стеком как fallback.
+const inter = Inter({
   subsets: ["latin", "cyrillic"],
-  variable: "--font-montserrat",
+  variable: "--font-inter",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
-
-const lora = Lora({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-lora",
-  display: "swap",
-  weight: ["600", "700"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -83,7 +74,7 @@ export default async function RootLayout({
     : capabilitiesFor("PARTNER", { canSeePurchasePrice: false });
 
   return (
-    <html lang="ru" className={`${montserrat.variable} ${lora.variable}`}>
+    <html lang="ru" className={inter.variable}>
       <body className="antialiased">
         {/* §7/§8 — офлайн-индикатор (над всем интерфейсом). */}
         <OfflineBanner />

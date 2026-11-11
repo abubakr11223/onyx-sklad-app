@@ -79,7 +79,7 @@ export default function AiSearchBox({
     <section className="mb-4 rounded-card border border-gold/40 bg-gold/5 p-4" aria-label={labels.title}>
       <form action={aiTextSearchAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-semibold text-ink">
-          ✦ {labels.title}
+          {labels.title}
           <input
             name="ai"
             defaultValue={defaultQuery}
@@ -109,7 +109,7 @@ export default function AiSearchBox({
           disabled={busy}
           onClick={() => fileInput.current?.click()}
         >
-          {busy ? labels.thinking : `📷 ${labels.photo}`}
+          {busy ? labels.thinking : labels.photo}
         </Button>
         <span className="text-xs text-ink/55">{labels.photoHint}</span>
       </div>
