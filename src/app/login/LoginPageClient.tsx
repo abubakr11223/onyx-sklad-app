@@ -3,8 +3,9 @@
 // TZ №8 v2 — /login redizayn client wrapper.
 // Server component (page.tsx) auth check + env'ni bajaradi, keyin bu client'ga
 // flag'lar bilan render qiladi. Bu qatlam FAQAT vizual: dark bg + radial
-// gradient + shisha karta + Framer Motion. 3D sfera S3'da qo'shiladi (dynamic
-// import, ssr:false). S2 da statik logo turadi.
+// gradient + oq karta + Framer Motion + 3D sfera (dynamic import, ssr:false).
+// 2026-11-11 «Графит»: fon — yon panel bilan bir xil to'q ko'k, forma — oq
+// karta, asosiy tugma — ko'k aksent. Shrift — ilovaning Inter'i (--font-inter).
 //
 // XAVFSIZLIK: loginWithPassword — "use server" action, client'dan `<form action={...}>`
 // orqali chaqiriladi (Next.js buni qo'llab-quvvatlaydi). Field/Button UI komponentlari
@@ -17,7 +18,6 @@ import { loginWithPassword } from "./actions";
 import { StaticLogo } from "@/components/login/StaticLogo";
 import { useIsWeakDevice } from "@/lib/use-device-heuristic";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
-import { loraWordmark, montserratTag } from "./login-fonts";
 
 // TZ §11 / §6 — 3D sfera FAQAT client'da, dynamic import, ssr:false. `loading`
 // darhol StaticLogo (breathing variant) — 3D chunk yuklanguncha ham SLOT to'la
@@ -67,7 +67,7 @@ export function LoginPageClient({
   return (
     <MotionConfig reducedMotion={reducedMotion ? "always" : "never"}>
     <main
-      className={`${loraWordmark.variable} ${montserratTag.variable} login-root`}
+      className="login-root"
     >
       {/* Radial gradient overlay — TZ §3 */}
       <div className="login-bg-radial" aria-hidden />
@@ -96,7 +96,7 @@ export function LoginPageClient({
         )}
       </motion.div>
 
-      {/* Wordmark: "ONYX" (Lora, gold gradient) + "stones boutique" (Montserrat) */}
+      {/* Wordmark: "ONYX" + "stones boutique" (Inter, oq) */}
       <motion.header
         className="login-header"
         initial={{ opacity: 0, y: 12 }}
@@ -107,7 +107,7 @@ export function LoginPageClient({
         <p className="login-tag">stones boutique</p>
       </motion.header>
 
-      {/* Shisha karta */}
+      {/* Oq karta */}
       <motion.section
         className="login-card"
         initial={{ opacity: 0, y: 20 }}
@@ -186,21 +186,21 @@ export function LoginPageClient({
           globals.css tegilmagan (TZ §3 talabidek). */}
       <style>{`
         :root {
-          --login-bg-base: #14100A;
-          --login-bg-radial: radial-gradient(ellipse 120% 100% at 50% 30%, #3A2A16 0%, #251C10 35%, #14100A 70%, #0F0A05 100%);
-          --login-gold-main: #C9A55C;
-          --login-gold-hi-1: #E9CF8F;
-          --login-gold-hi-2: #F5E7C0;
-          --login-gold-glow: rgba(233, 207, 143, 0.35);
-          --login-card-bg: rgba(28, 22, 14, 0.72);
-          --login-card-border: rgba(233, 207, 143, 0.28);
-          --login-card-blur: 24px;
-          --login-text-primary: #F5F0E8;
-          --login-text-muted: rgba(245, 240, 232, 0.6);
-          --login-input-bg: rgba(20, 16, 10, 0.55);
-          --login-input-border: rgba(233, 207, 143, 0.28);
-          --login-input-border-focus: #E9CF8F;
-          --login-error: #FF6B6B;
+          --login-bg-base: #0F1B2A;
+          --login-bg-radial: radial-gradient(ellipse 110% 90% at 50% 28%, #1F3550 0%, #15253A 40%, #0F1B2A 75%, #0B1522 100%);
+          --login-accent: #2F6FED;
+          --login-accent-hover: #1E54C4;
+          --login-glow: rgba(47, 111, 237, 0.28);
+          --login-card-bg: #FFFFFF;
+          --login-card-border: #E3E7ED;
+          --login-on-dark: #FFFFFF;
+          --login-on-dark-muted: #9FB0C6;
+          --login-text-primary: #14202E;
+          --login-text-muted: #5B6B80;
+          --login-input-bg: #FFFFFF;
+          --login-input-border: #DCE1E8;
+          --login-input-border-focus: #2F6FED;
+          --login-error: #B42318;
         }
 
         .login-root {
@@ -213,7 +213,8 @@ export function LoginPageClient({
           gap: 24px;
           padding: 24px 16px;
           background: var(--login-bg-base);
-          color: var(--login-text-primary);
+          color: var(--login-on-dark);
+          font-family: var(--font-inter), system-ui, sans-serif;
           /* Faqat gorizontal kesish: past ekranlarda (≈720px) forma pastga
              tushsa, sahifa vertikal aylanishi (scroll) SHART — tugma
              ko'rinmay qolmasin. */
@@ -270,24 +271,18 @@ export function LoginPageClient({
           margin-top: -8px;
         }
         .login-wordmark {
-          font-family: var(--font-lora-wordmark), Georgia, serif;
-          font-weight: 400;
+          font-weight: 700;
           font-size: 44px;
-          letter-spacing: 0.15em;
-          background: linear-gradient(135deg, #E9CF8F 0%, #C9A55C 50%, #F5E7C0 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
+          letter-spacing: 0.12em;
+          color: var(--login-on-dark);
           margin: 0;
-          filter: drop-shadow(0 0 24px var(--login-gold-glow));
         }
         .login-tag {
-          font-family: var(--font-montserrat-tag), Arial, sans-serif;
-          font-weight: 300;
+          font-weight: 500;
           font-size: 11px;
           letter-spacing: 0.4em;
           text-transform: uppercase;
-          color: var(--login-text-muted);
+          color: var(--login-on-dark-muted);
           margin: 4px 0 0 0;
         }
         @media (max-width: 640px) {
@@ -302,11 +297,10 @@ export function LoginPageClient({
           max-width: 420px;
           padding: 40px 32px;
           background: var(--login-card-bg);
+          color: var(--login-text-primary);
           border: 1px solid var(--login-card-border);
-          border-radius: 20px;
-          backdrop-filter: blur(var(--login-card-blur));
-          -webkit-backdrop-filter: blur(var(--login-card-blur));
-          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7), 0 0 40px rgba(233, 207, 143, 0.08), inset 0 1px 0 rgba(233, 207, 143, 0.12);
+          border-radius: 8px;
+          box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
         }
         @media (max-width: 640px) {
           .login-card { padding: 28px 20px; }
@@ -328,9 +322,9 @@ export function LoginPageClient({
         .login-alert {
           padding: 10px 14px;
           margin-bottom: 16px;
-          border-radius: 10px;
-          background: rgba(255, 107, 107, 0.08);
-          border: 1px solid rgba(255, 107, 107, 0.25);
+          border-radius: 6px;
+          background: #FEF3F2;
+          border: 1px solid #FECDCA;
           color: var(--login-error);
           font-size: 14px;
         }
@@ -338,10 +332,9 @@ export function LoginPageClient({
         .login-form { display: flex; flex-direction: column; gap: 16px; }
         .login-field { display: flex; flex-direction: column; gap: 6px; }
         .login-label {
-          font-size: 12px;
-          color: var(--login-text-muted);
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--login-text-primary);
         }
         .login-input {
           width: 100%;
@@ -349,15 +342,17 @@ export function LoginPageClient({
           font-size: 15px;
           background: var(--login-input-bg);
           border: 1px solid var(--login-input-border);
-          border-radius: 10px;
+          border-radius: 6px;
           color: var(--login-text-primary);
+          min-height: 44px;
+          box-sizing: border-box;
           transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
           outline: none;
         }
-        .login-input::placeholder { color: rgba(245, 240, 232, 0.3); }
+        .login-input::placeholder { color: #8A97A8; }
         .login-input:focus {
           border-color: var(--login-input-border-focus);
-          box-shadow: 0 0 0 3px rgba(245, 217, 142, 0.15);
+          box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
         }
         .login-input[aria-invalid="true"] {
           border-color: var(--login-error);
@@ -367,22 +362,20 @@ export function LoginPageClient({
           margin-top: 8px;
           padding: 13px 20px;
           border: none;
-          border-radius: 10px;
-          background: linear-gradient(135deg, var(--login-gold-hi-1) 0%, var(--login-gold-main) 100%);
-          color: #0B0B0D;
+          border-radius: 6px;
+          min-height: 44px;
+          background: var(--login-accent);
+          color: #FFFFFF;
           font-size: 15px;
-          font-weight: 500;
-          letter-spacing: 0.02em;
+          font-weight: 600;
           cursor: pointer;
-          transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+          transition: background 0.15s ease-out;
         }
         @media (hover: hover) and (pointer: fine) {
-          .login-button-primary:hover {
-            transform: scale(1.02);
-            box-shadow: 0 8px 24px rgba(245, 217, 142, 0.25);
-          }
+          .login-button-primary:hover { background: var(--login-accent-hover); }
         }
-        .login-button-primary:active { transform: scale(0.98); }
+        .login-button-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.35); }
+        .login-button-primary:active { transform: scale(0.99); }
         .login-button-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .login-divider {
@@ -394,12 +387,11 @@ export function LoginPageClient({
         .login-divider-line {
           flex: 1;
           height: 1px;
-          background: rgba(245, 217, 142, 0.12);
+          background: var(--login-card-border);
         }
         .login-divider-text {
-          font-size: 11px;
+          font-size: 12px;
           color: var(--login-text-muted);
-          letter-spacing: 0.05em;
         }
 
         .login-button-secondary {
@@ -408,17 +400,19 @@ export function LoginPageClient({
           padding: 12px 20px;
           text-align: center;
           border: 1px solid var(--login-input-border);
-          border-radius: 10px;
-          background: transparent;
+          border-radius: 6px;
+          background: #FFFFFF;
           color: var(--login-text-primary);
           font-size: 14px;
+          font-weight: 500;
           text-decoration: none;
+          box-sizing: border-box;
           transition: border-color 0.2s ease-out, background 0.2s ease-out;
         }
         @media (hover: hover) and (pointer: fine) {
           .login-button-secondary:hover {
-            border-color: var(--login-input-border-focus);
-            background: rgba(245, 217, 142, 0.04);
+            border-color: #B8C2CF;
+            background: #F4F6F9;
           }
         }
         .login-tg-hint {
