@@ -2,11 +2,11 @@
 // в 5 файлах). Server-component-friendly (без "use client"): в клиентских формах
 // принимает onClick, в серверных — работает как submit/ссылка-стиль.
 //
-// Мобиль-first: все интерактивные варианты ≥44px (min-h-11). Варианты:
-//   primary   — графит (основное действие)
-//   secondary — контур (второстепенное)
-//   ghost     — без фона (третьестепенное)
-//   danger    — красный (деструктивное действие)
+// Касание: 44px на телефоне, 36px на десктопе (ТЗ №20 §5). Варианты:
+//   primary   — чёрная (одно главное действие экрана)
+//   secondary — мрамор + рамка (второстепенное)
+//   ghost     — текстовая ссылка honey-ink (действия в строках)
+//   danger    — сердолик контуром (деструктивное)
 
 import type { ButtonHTMLAttributes } from "react";
 
@@ -14,32 +14,29 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "md" | "sm";
 
 const BASE =
-  "onyx-btn inline-flex items-center justify-center gap-2 rounded-field font-semibold " +
-  "transition-[transform,box-shadow,background-color,border-color,color] duration-150 " +
-  "ease-out select-none will-change-transform active:translate-y-0 active:scale-[.99] " +
-  "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0 " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold " +
-  "focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
+  "onyx-btn inline-flex items-center justify-center gap-2 rounded-field font-medium " +
+  "transition-[background-color,border-color,color] duration-150 ease-out select-none " +
+  "disabled:opacity-40 disabled:cursor-not-allowed " +
+  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-honey-soft " +
+  "focus-visible:border-honey";
 
-// Единый стиль на всё приложение (тема «Графит»): сплошной синий = основное,
-// светлая панель+контур = второстепенное, «призрак» = третьестепенное,
-// красный контур = деструктивное (красным не кричим — лишь контур).
+// Тема «Оникс» (ТЗ №20 §7.1): основная — ЧЁРНАЯ (ink, hover onyx-800);
+// мёд на кнопках запрещён (белый на мёде не проходит контраст). Вторичная —
+// мрамор + рамка line-strong; текстовая — ссылка honey-ink; опасная — мрамор
+// + сердолик, всегда с подтверждением (как сейчас).
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    "text-on-gold bg-gold shadow-gold hover:bg-gold-deep",
+  primary: "border border-ink bg-ink text-white hover:border-onyx-800 hover:bg-onyx-800",
   secondary:
-    "border border-line bg-paper-2 text-ink " +
-    "hover:border-ink/25 hover:bg-paper",
-  ghost: "bg-transparent text-ink/70 hover:bg-ink/5 hover:text-ink",
+    "border border-line-strong bg-marble text-ink hover:bg-stone-100",
+  ghost: "border border-transparent bg-transparent text-honey-ink hover:underline underline-offset-4",
   danger:
-    "border border-danger/35 bg-transparent text-danger " +
-    "hover:-translate-y-px hover:border-danger hover:bg-danger/8",
+    "border border-carnelian-line bg-marble text-carnelian hover:bg-carnelian-bg",
 };
 
-// min-h-11 = 44px — минимальная зона касания (мобиль-first).
+// 36px на десктопе, 44px на телефоне (касание пальцем).
 const SIZES: Record<ButtonSize, string> = {
-  md: "min-h-11 px-4 text-base",
-  sm: "min-h-11 px-3 text-sm",
+  md: "min-h-11 md:min-h-9 px-4 text-sm",
+  sm: "min-h-11 md:min-h-9 px-3 text-sm",
 };
 
 /**

@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
-import { Inter } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import BottomTabBar from "@/components/BottomTabBar";
-import Ripple from "@/components/ui/Ripple";
 import Toaster from "@/components/ui/toast";
 import FlashToaster from "@/components/FlashToaster";
 import TelegramBackButton from "@/components/TelegramBackButton";
@@ -18,15 +17,26 @@ import { GATED_REQUEST_HEADER } from "@/lib/auth";
 import { staleSessionLoginHref } from "@/lib/gated-request";
 import { capabilitiesFor } from "@/lib/permissions";
 
-// Тема «Графит» (утв. 2026-11-11): один шрифт — Inter, с cyrillic-сабсетом
-// (интерфейс на русском). globals.css потребляет --font-inter и для sans, и
-// для роли «serif» (заголовки, крупные цифры), с системным стеком как fallback.
-const inter = Inter({
+// Тема «Оникс» (ТЗ №20 §4): IBM Plex Sans — весь интерфейс, IBM Plex Mono —
+// коды блоков/партий и габариты. Оба с кириллицей; веса 400/500/600.
+// globals.css потребляет --font-plex-sans / --font-plex-mono.
+const plexSans = IBM_Plex_Sans({
   subsets: ["latin", "cyrillic"],
-  variable: "--font-inter",
+  variable: "--font-plex-sans",
   display: "swap",
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600"],
 });
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-plex-mono",
+  display: "swap",
+  weight: ["400", "500"],
+});
+
+// Свёрнутое боковое меню (ТЗ №20 §6.1) — выставить ДО первой отрисовки,
+// иначе меню «прыгает» из широкого в узкое. Только чтение localStorage.
+const NAV_STATE_SCRIPT =
+  "try{if(localStorage.getItem('onyx-nav')==='collapsed')document.documentElement.dataset.nav='collapsed'}catch(e){}";
 
 export const metadata: Metadata = {
   title: "Onyx — складская система",
@@ -74,28 +84,35 @@ export default async function RootLayout({
     : capabilitiesFor("PARTNER", { canSeePurchasePrice: false });
 
   return (
-    <html lang="ru" className={inter.variable}>
+    <html
+      lang="ru"
+      className={`${plexSans.variable} ${plexMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="antialiased">
+        <script dangerouslySetInnerHTML={{ __html: NAV_STATE_SCRIPT }} />
         {/* §7/§8 — офлайн-индикатор (над всем интерфейсом). */}
         <OfflineBanner />
         {/* R6: навигация — только для вошедших. Без сессии (страница /login,
             куда gate перенаправляет) — чистый экран без панели/таб-бара. */}
         {user ? (
           <>
-            {/* Десктоп: фиксированная боковая панель слева (w-64). */}
+            {/* Десктоп: фиксированная боковая панель слева (240px, свёрнутая — 64px). */}
             <Nav caps={caps} user={{ name: user.name, role: user.role }} />
-            {/* Контент сдвинут вправо на ширину панели (md:pl-64); на мобиле —
-                во всю ширину, pb-20 чтобы не прятался за нижним таб-баром. */}
-            <div className="min-h-screen pb-20 md:pb-0 md:pl-64">{children}</div>
+            {/* Контент сдвинут вправо на ширину панели; на мобиле — во всю
+                ширину, pb-20 чтобы не прятался за нижним таб-баром. */}
+            <div className="min-h-screen pb-20 md:pb-0 md:pl-60 md:nav-collapsed:pl-16">
+              {children}
+            </div>
             {/* Мобиль: нижний таб-бар (панель скрыта). */}
-            <BottomTabBar caps={caps} />
+            <BottomTabBar caps={caps} user={{ name: user.name, role: user.role }} />
           </>
         ) : (
           <div className="min-h-screen">{children}</div>
         )}
 
-        {/* Micro-interactions: ripple на кнопках, тосты, мост флеш→тост. */}
-        <Ripple />
+        {/* Тосты и мост флеш→тост. (Ripple убран — ТЗ №20 §2: без анимаций
+            ради анимаций.) */}
         <Toaster />
         <Suspense fallback={null}>
           <FlashToaster />

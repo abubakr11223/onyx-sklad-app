@@ -52,10 +52,10 @@ export default function Toaster() {
       // Пометить «уходящим» перед удалением (анимация выхода).
       window.setTimeout(() => {
         setItems((xs) => xs.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
-      }, 3300);
+      }, 3850);
       window.setTimeout(() => {
         setItems((xs) => xs.filter((t) => t.id !== id));
-      }, 3600);
+      }, 4000);
     }
     window.addEventListener(EVENT, onToast);
     return () => window.removeEventListener(EVENT, onToast);

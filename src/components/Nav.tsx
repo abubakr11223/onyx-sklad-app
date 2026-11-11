@@ -1,8 +1,10 @@
 "use client";
 
-// Боковая панель (десктоп). Мобиль использует BottomTabBar — здесь
-// `hidden md:flex`. Тема «Графит» (2026-11-11): тёмно-синяя панель, синяя
-// метка активного раздела, две группы (Работа / Управление).
+// Боковое меню (десктоп). Мобиль использует BottomTabBar — здесь
+// `hidden md:flex`. Тема «Оникс» (ТЗ №20 §6.1): фон onyx-950, 240px,
+// сворачивается до 64px (только иконки, подпись — в тултипе; состояние
+// запоминается в localStorage и ставится скриптом в layout.tsx ДО отрисовки).
+// Пункты сгруппированы (Склад / Продажи / Справочники / Контроль).
 //
 // ⚠️ R2 — навигация КОСМЕТИЧНА: скрывает ссылки, недоступные текущей роли.
 // Реальная защита — login-gate (middleware) + гейты страниц/server-action'ов.
@@ -14,18 +16,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logoutSession } from "@/app/login/actions";
-import { visibleNavItems, type NavItem } from "@/components/nav-items";
+import { groupedNavItems, type NavItem } from "@/components/nav-items";
 import { roleLabel } from "@/lib/role-labels";
 import type { Capabilities, Role } from "@/lib/permissions";
 
-// Раздел «Работа» (ежедневные операции) vs «Управление» (обзор/настройки).
-const WORK = new Set(["/poisk", "/priemka", "/bron", "/prodazha", "/razbit"]);
+const NAV_KEY = "onyx-nav";
 
-// Инициалы для аватара пользователя в подвале.
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const chars = parts.slice(0, 2).map((p) => p[0]);
-  return (chars.join("") || "?").toUpperCase();
+function toggleCollapsed() {
+  const root = document.documentElement;
+  const collapsed = root.dataset.nav !== "collapsed";
+  if (collapsed) root.dataset.nav = "collapsed";
+  else delete root.dataset.nav;
+  try {
+    localStorage.setItem(NAV_KEY, collapsed ? "collapsed" : "open");
+  } catch {
+    // приватный режим — просто не запоминаем
+  }
 }
 
 export default function Nav({
@@ -36,138 +42,116 @@ export default function Nav({
   user?: { name: string; role: Role } | null;
 }) {
   const pathname = usePathname();
-  const links = visibleNavItems(caps);
-  const work = links.filter((l) => WORK.has(l.href));
-  const manage = links.filter((l) => !WORK.has(l.href));
+  const groups = groupedNavItems(caps);
 
-  const isActive = (href: string) => href !== "/" && pathname?.startsWith(href);
+  const isActive = (href: string) => href !== "/" && !!pathname?.startsWith(href);
 
-  // Тема «Графит»: активный пункт — подложка side-2 + синяя метка 3px слева
-  // (inset-тень, не псевдоэлемент — не съезжает при скролле списка).
+  // Пункт: 36px, иконка 18 + текст 14, цвет side-text. Hover — onyx-900,
+  // активный — onyx-800 + полоса мёда 3px слева (inset-тень: не съезжает).
   const linkClass = (active: boolean) =>
     [
-      "group flex min-h-11 items-center gap-3.5 px-6 py-2.5 text-[15px] transition-colors",
+      "flex h-9 items-center gap-3 px-5 text-sm transition-colors duration-150",
+      "nav-collapsed:justify-center nav-collapsed:px-0",
       active
-        ? "bg-side-2 font-medium text-white shadow-[inset_3px_0_0_var(--color-gold)]"
-        : "text-side-ink hover:text-white",
+        ? "bg-onyx-800 font-medium text-white shadow-[inset_3px_0_0_var(--color-honey)]"
+        : "text-side-text hover:bg-onyx-900 hover:text-white",
     ].join(" ");
 
   const item = (it: NavItem) => {
-    const active = !!isActive(it.href);
+    const active = isActive(it.href);
     const inner = (
       <>
-        <it.Icon
-          width={18}
-          height={18}
-          className={active ? "text-white" : "opacity-80 group-hover:opacity-100"}
-        />
-        <span className="truncate">{it.label}</span>
+        <it.Icon width={18} height={18} strokeWidth={1.5} className="shrink-0" />
+        <span className="truncate nav-collapsed:sr-only">{it.label}</span>
       </>
     );
+    const common = {
+      href: it.href,
+      title: it.label,
+      "aria-current": active ? ("page" as const) : undefined,
+      className: linkClass(active),
+    };
     return (
       <li key={it.href}>
-        {it.external ? (
-          <a
-            href={it.href}
-            aria-current={active ? "page" : undefined}
-            className={linkClass(active)}
-          >
-            {inner}
-          </a>
-        ) : (
-          <Link
-            href={it.href}
-            aria-current={active ? "page" : undefined}
-            className={linkClass(active)}
-          >
-            {inner}
-          </Link>
-        )}
+        {it.external ? <a {...common}>{inner}</a> : <Link {...common}>{inner}</Link>}
       </li>
     );
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col bg-side text-side-ink md:flex">
-      {/* Бренд */}
+    <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col bg-onyx-950 text-side-text md:flex nav-collapsed:w-16">
+      {/* Логотип + роль */}
       <Link
         href="/"
-        className="flex items-center gap-3 px-6 pb-6 pt-7 transition hover:opacity-90"
+        title="Onyx — главная"
+        className="block px-5 pb-5 pt-6 nav-collapsed:px-0 nav-collapsed:text-center"
       >
-        <svg viewBox="0 0 34 34" width={32} height={32} aria-hidden="true" className="shrink-0">
-          <circle cx="17" cy="17" r="15" fill="none" stroke="#fff" strokeWidth="2.5" />
-          <circle cx="17" cy="17" r="7" fill="var(--color-gold)" />
-        </svg>
-        <span className="leading-tight">
-          <span className="block text-[22px] font-bold tracking-tight text-white">
-            Onyx
-          </span>
-          <span className="block text-[11px] font-medium text-side-muted">
-            Склад камня
-          </span>
+        <span className="block text-xl font-semibold leading-6 tracking-[0.08em] text-white">
+          <span className="nav-collapsed:hidden">ONYX</span>
+          <span className="hidden nav-collapsed:inline">O</span>
         </span>
+        {user && (
+          <span className="mt-1 block text-xs text-side-text nav-collapsed:hidden">
+            {roleLabel(user.role)}
+          </span>
+        )}
       </Link>
 
-      {/* Навигация */}
-      <nav
-        aria-label="Основная навигация"
-        className="flex-1 overflow-y-auto pb-2"
-      >
-        {work.length > 0 && (
-          <>
-            <p className="px-6 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-side-muted">
-              Работа
+      {/* Навигация по группам */}
+      <nav aria-label="Основная навигация" className="flex-1 overflow-y-auto pb-2">
+        {groups.map((g, i) => (
+          <div key={g.title} className={i === 0 ? "" : "mt-4"}>
+            <p className="px-5 pb-1 text-[11px] font-medium uppercase tracking-[0.06em] text-side-muted nav-collapsed:sr-only">
+              {g.title}
             </p>
-            <ul>{work.map(item)}</ul>
-          </>
-        )}
-        {manage.length > 0 && (
-          <>
-            <p className="px-6 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-side-muted">
-              Управление
-            </p>
-            <ul>{manage.map(item)}</ul>
-          </>
-        )}
+            <ul>{g.items.map(item)}</ul>
+          </div>
+        ))}
       </nav>
 
-      {/* Подвал: текущий пользователь + выход (R6 — реальная сессия). */}
-      <div className="border-t border-side-2 p-4">
+      {/* Подвал: имя пользователя, «Выйти», свернуть меню. */}
+      <div className="border-t border-onyx-800 px-3 py-3">
         {user ? (
-          <>
-            <div className="flex items-center gap-3 px-2 py-2">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold text-sm font-semibold text-white">
-                {initials(user.name)}
-              </span>
-              <span className="min-w-0 leading-tight">
-                <span className="block truncate text-sm font-medium text-white">
-                  {user.name}
-                </span>
-                <span className="block text-[11px] text-side-muted">
-                  {roleLabel(user.role)}
-                </span>
-              </span>
-            </div>
-            <form action={logoutSession} className="mt-2">
+          <div className="flex items-center gap-2 nav-collapsed:flex-col">
+            <span
+              className="min-w-0 flex-1 truncate px-2 text-sm text-white nav-collapsed:sr-only"
+              title={user.name}
+            >
+              {user.name}
+            </span>
+            <form action={logoutSession}>
               <button
                 type="submit"
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-field text-xs font-semibold text-side-ink ring-1 ring-side-2 transition hover:text-white hover:ring-side-muted"
+                title="Выйти"
+                className="flex h-9 items-center gap-2 rounded-field px-2 text-sm text-side-text transition-colors duration-150 hover:bg-onyx-900 hover:text-white"
               >
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
                 </svg>
-                Выйти
+                <span className="nav-collapsed:sr-only">Выйти</span>
               </button>
             </form>
-          </>
+          </div>
         ) : (
           <Link
             href="/login"
-            className="flex min-h-11 w-full items-center justify-center rounded-field text-xs font-semibold text-side-ink ring-1 ring-side-2 transition hover:text-white hover:ring-side-muted"
+            className="flex h-9 items-center justify-center rounded-field text-sm text-side-text transition-colors duration-150 hover:bg-onyx-900 hover:text-white"
           >
             Войти
           </Link>
         )}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title="Свернуть / развернуть меню"
+          aria-label="Свернуть или развернуть меню"
+          className="mt-1 flex h-9 w-full items-center gap-2 rounded-field px-2 text-sm text-side-muted transition-colors duration-150 hover:bg-onyx-900 hover:text-white nav-collapsed:justify-center"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="nav-collapsed:rotate-180">
+            <path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />
+          </svg>
+          <span className="nav-collapsed:sr-only">Свернуть меню</span>
+        </button>
       </div>
     </aside>
   );

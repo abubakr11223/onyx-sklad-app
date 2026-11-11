@@ -4,8 +4,10 @@
 // Server component (page.tsx) auth check + env'ni bajaradi, keyin bu client'ga
 // flag'lar bilan render qiladi. Bu qatlam FAQAT vizual: dark bg + radial
 // gradient + oq karta + Framer Motion + 3D sfera (dynamic import, ssr:false).
-// 2026-11-11 «Графит»: fon — yon panel bilan bir xil to'q ko'k, forma — oq
-// karta, asosiy tugma — ko'k aksent. Shrift — ilovaning Inter'i (--font-inter).
+// ТЗ №20 «Оникс» (2026-11-11): fon — onyx-950 tekis (gradient taqiqlangan),
+// forma — marble karta, asosiy tugma — qora (ink), fokus — asal (honey).
+// Shrift — IBM Plex Sans (--font-plex-sans). Chap yarmida haqiqiy oniks plita
+// fotosi (§6.3) — rasm egadan kutilmoqda; hozircha logotip-sfera turadi.
 //
 // XAVFSIZLIK: loginWithPassword — "use server" action, client'dan `<form action={...}>`
 // orqali chaqiriladi (Next.js buni qo'llab-quvvatlaydi). Field/Button UI komponentlari
@@ -69,9 +71,6 @@ export function LoginPageClient({
     <main
       className="login-root"
     >
-      {/* Radial gradient overlay — TZ §3 */}
-      <div className="login-bg-radial" aria-hidden />
-
       {/* 3D sfera slot — fallback zanjiri (TZ §8):
           reduced-motion → static (animatsiya yo'q)
           weak-device / low-FPS → static glow
@@ -186,21 +185,19 @@ export function LoginPageClient({
           globals.css tegilmagan (TZ §3 talabidek). */}
       <style>{`
         :root {
-          --login-bg-base: #0F1B2A;
-          --login-bg-radial: radial-gradient(ellipse 110% 90% at 50% 28%, #1F3550 0%, #15253A 40%, #0F1B2A 75%, #0B1522 100%);
-          --login-accent: #2F6FED;
-          --login-accent-hover: #1E54C4;
-          --login-glow: rgba(47, 111, 237, 0.28);
-          --login-card-bg: #FFFFFF;
-          --login-card-border: #E3E7ED;
+          --login-bg-base: var(--color-onyx-950);
+          --login-accent: var(--color-ink);
+          --login-accent-hover: var(--color-onyx-800);
+          --login-card-bg: var(--color-marble);
+          --login-card-border: var(--color-line);
           --login-on-dark: #FFFFFF;
-          --login-on-dark-muted: #9FB0C6;
-          --login-text-primary: #14202E;
-          --login-text-muted: #5B6B80;
-          --login-input-bg: #FFFFFF;
-          --login-input-border: #DCE1E8;
-          --login-input-border-focus: #2F6FED;
-          --login-error: #B42318;
+          --login-on-dark-muted: var(--color-side-text);
+          --login-text-primary: var(--color-ink);
+          --login-text-muted: var(--color-ink-2);
+          --login-input-bg: var(--color-marble);
+          --login-input-border: var(--color-line-strong);
+          --login-input-border-focus: var(--color-honey);
+          --login-error: var(--color-carnelian);
         }
 
         .login-root {
@@ -214,20 +211,12 @@ export function LoginPageClient({
           padding: 24px 16px;
           background: var(--login-bg-base);
           color: var(--login-on-dark);
-          font-family: var(--font-inter), system-ui, sans-serif;
+          font-family: var(--font-plex-sans), system-ui, sans-serif;
           /* Faqat gorizontal kesish: past ekranlarda (≈720px) forma pastga
              tushsa, sahifa vertikal aylanishi (scroll) SHART — tugma
              ko'rinmay qolmasin. */
           overflow-x: hidden;
         }
-        .login-bg-radial {
-          position: absolute;
-          inset: 0;
-          background: var(--login-bg-radial);
-          pointer-events: none;
-          z-index: 0;
-        }
-
         .login-logo-slot {
           position: relative;
           z-index: 1;
@@ -271,7 +260,7 @@ export function LoginPageClient({
           margin-top: -8px;
         }
         .login-wordmark {
-          font-weight: 700;
+          font-weight: 600;
           font-size: 44px;
           letter-spacing: 0.12em;
           color: var(--login-on-dark);
@@ -299,8 +288,8 @@ export function LoginPageClient({
           background: var(--login-card-bg);
           color: var(--login-text-primary);
           border: 1px solid var(--login-card-border);
-          border-radius: 8px;
-          box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55);
+          border-radius: 10px;
+          box-shadow: none;
         }
         @media (max-width: 640px) {
           .login-card { padding: 28px 20px; }
@@ -323,8 +312,8 @@ export function LoginPageClient({
           padding: 10px 14px;
           margin-bottom: 16px;
           border-radius: 6px;
-          background: #FEF3F2;
-          border: 1px solid #FECDCA;
+          background: var(--color-carnelian-bg);
+          border: 1px solid var(--color-carnelian-line);
           color: var(--login-error);
           font-size: 14px;
         }
@@ -332,9 +321,9 @@ export function LoginPageClient({
         .login-form { display: flex; flex-direction: column; gap: 16px; }
         .login-field { display: flex; flex-direction: column; gap: 6px; }
         .login-label {
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 500;
-          color: var(--login-text-primary);
+          color: var(--login-text-muted);
         }
         .login-input {
           width: 100%;
@@ -346,13 +335,13 @@ export function LoginPageClient({
           color: var(--login-text-primary);
           min-height: 44px;
           box-sizing: border-box;
-          transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out;
+          transition: border-color 0.15s ease-out;
           outline: none;
         }
-        .login-input::placeholder { color: #8A97A8; }
+        .login-input::placeholder { color: var(--color-ink-3); }
         .login-input:focus {
           border-color: var(--login-input-border-focus);
-          box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
+          box-shadow: 0 0 0 3px var(--color-honey-soft);
         }
         .login-input[aria-invalid="true"] {
           border-color: var(--login-error);
@@ -366,17 +355,16 @@ export function LoginPageClient({
           min-height: 44px;
           background: var(--login-accent);
           color: #FFFFFF;
-          font-size: 15px;
-          font-weight: 600;
+          font-size: 14px;
+          font-weight: 500;
           cursor: pointer;
           transition: background 0.15s ease-out;
         }
         @media (hover: hover) and (pointer: fine) {
           .login-button-primary:hover { background: var(--login-accent-hover); }
         }
-        .login-button-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.35); }
-        .login-button-primary:active { transform: scale(0.99); }
-        .login-button-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+        .login-button-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--color-honey-soft), 0 0 0 1px var(--color-honey); }
+        .login-button-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .login-divider {
           display: flex;
@@ -401,18 +389,17 @@ export function LoginPageClient({
           text-align: center;
           border: 1px solid var(--login-input-border);
           border-radius: 6px;
-          background: #FFFFFF;
+          background: var(--color-marble);
           color: var(--login-text-primary);
           font-size: 14px;
           font-weight: 500;
           text-decoration: none;
           box-sizing: border-box;
-          transition: border-color 0.2s ease-out, background 0.2s ease-out;
+          transition: border-color 0.15s ease-out, background 0.15s ease-out;
         }
         @media (hover: hover) and (pointer: fine) {
           .login-button-secondary:hover {
-            border-color: #B8C2CF;
-            background: #F4F6F9;
+            background: var(--color-stone-100);
           }
         }
         .login-tg-hint {

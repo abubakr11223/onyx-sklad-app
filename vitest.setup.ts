@@ -8,6 +8,8 @@ import { vi } from "vitest";
 // (test faqat metadata/tuzilishni tekshiradi).
 vi.mock("next/font/google", () => ({
   Inter: () => ({ variable: "--font-inter", className: "" }),
+  IBM_Plex_Sans: () => ({ variable: "--font-plex-sans", className: "" }),
+  IBM_Plex_Mono: () => ({ variable: "--font-plex-mono", className: "" }),
   Montserrat: () => ({ variable: "--font-montserrat", className: "" }),
   Lora: () => ({ variable: "--font-lora", className: "" }),
 }));

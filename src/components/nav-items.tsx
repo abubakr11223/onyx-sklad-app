@@ -287,7 +287,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/karta-sklada",
-    label: "Карта",
+    label: "Карта склада",
     short: "Карта",
     description: "Где какой камень лежит",
     Icon: MapIcon,
@@ -379,10 +379,76 @@ export function visibleNavItems(caps: Capabilities): NavItem[] {
 }
 
 /**
- * До 4 пунктов для нижнего таб-бара (зона большого пальца): Главная + первые
- * доступные разделы по приоритету. Поиск открыт всем, поэтому бар никогда
- * не пустой даже для PARTNER.
+ * Группы бокового меню (ТЗ №20 §6.1). Меняют только ПОРЯДОК и подписи групп —
+ * состав и видимость по ролям остаются как были (visibleNavItems). Пустая для
+ * роли группа скрывается. Раздел, не попавший ни в одну группу, уходит в
+ * последнюю — так новый пункт никогда не «пропадёт» из меню.
  */
+export const NAV_GROUPS: { title: string; hrefs: string[] }[] = [
+  {
+    title: "Склад",
+    hrefs: ["/priemka", "/karta-sklada", "/razbit", "/poisk", "/fotozapros"],
+  },
+  {
+    title: "Продажи",
+    hrefs: ["/prodazha", "/bron", "/otgruzki", "/obraztsy", "/shourum", "/dolzhniki"],
+  },
+  {
+    title: "Справочники",
+    hrefs: ["/klienty", "/obekty", "/partnery", "/podborki", "/katalog"],
+  },
+  {
+    title: "Контроль",
+    hrefs: ["/svodka", "/istoriya", "/zayavki", "/moi-zayavki", "/accounts"],
+  },
+];
+
+export type NavGroup = { title: string; items: NavItem[] };
+
+export function groupedNavItems(caps: Capabilities): NavGroup[] {
+  const visible = visibleNavItems(caps);
+  const byHref = new Map(visible.map((it) => [it.href, it]));
+  const placed = new Set<string>();
+  const groups: NavGroup[] = NAV_GROUPS.map((g) => ({
+    title: g.title,
+    items: g.hrefs.flatMap((h) => {
+      const it = byHref.get(h);
+      if (!it) return [];
+      placed.add(h);
+      return [it];
+    }),
+  }));
+  const rest = visible.filter((it) => !placed.has(it.href));
+  if (rest.length > 0) groups[groups.length - 1].items.push(...rest);
+  return groups.filter((g) => g.items.length > 0);
+}
+
+/**
+ * Порядок для нижней панели телефона (ТЗ №20 §9): 4 пункта роли + «Ещё».
+ * Складчик получает Отгрузки, Приёмка, Разбить, Поиск. Остальное — в «Ещё».
+ */
+const BOTTOM_PRIORITY = [
+  "/otgruzki",
+  "/priemka",
+  "/razbit",
+  "/poisk",
+  "/prodazha",
+  "/bron",
+  "/klienty",
+  "/svodka",
+  "/katalog",
+  "/moi-zayavki",
+  "/podborki",
+];
+
+/** До 4 пунктов для нижней панели; всё остальное доступно через «Ещё». */
 export function bottomTabItems(caps: Capabilities): NavItem[] {
-  return [HOME_ITEM, ...visibleNavItems(caps).slice(0, 3)];
+  const visible = visibleNavItems(caps);
+  const rank = (h: string) => {
+    const i = BOTTOM_PRIORITY.indexOf(h);
+    return i === -1 ? BOTTOM_PRIORITY.length : i;
+  };
+  return [...visible]
+    .sort((a, b) => rank(a.href) - rank(b.href))
+    .slice(0, 4);
 }

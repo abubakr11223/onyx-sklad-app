@@ -3,13 +3,15 @@
 
 import type { HTMLAttributes } from "react";
 
-export type BadgeVariant = "success" | "warning" | "danger" | "neutral";
+export type BadgeVariant = "success" | "warning" | "danger" | "neutral" | "info";
 
+// ТЗ №20 §3.3/§7.4: пара «текст + тонированный фон» из «камневых» оттенков.
 const VARIANTS: Record<BadgeVariant, string> = {
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/12 text-warning",
-  danger: "bg-danger/12 text-danger",
-  neutral: "bg-ink/8 text-ink/70",
+  success: "bg-malachite-bg text-malachite",
+  warning: "bg-amber-bg text-amber",
+  danger: "bg-carnelian-bg text-carnelian",
+  info: "bg-slate-bg text-slate",
+  neutral: "bg-neutral-bg text-neutral",
 };
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
@@ -24,7 +26,7 @@ export default function Badge({
   return (
     <span
       className={[
-        "inline-flex items-center gap-1 rounded-field px-2 py-0.5 text-xs font-semibold",
+        "inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-badge px-2 text-xs font-medium",
         VARIANTS[variant],
         className,
       ]
