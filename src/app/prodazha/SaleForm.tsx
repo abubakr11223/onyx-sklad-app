@@ -33,6 +33,7 @@ import {
   type ClientHit,
   type SiteHit,
 } from "./client-actions";
+import SearchResults, { Highlight } from "@/components/ui/SearchResults";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -985,22 +986,21 @@ export default function SaleForm({
                 </div>
                 <FieldError msg={e.clientId ?? clientSearchError ?? undefined} />
                 {clientHits.length > 0 && (
-                  <ul className="mt-2 max-h-48 overflow-auto rounded-field border border-line bg-paper">
-                    {clientHits.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          className="w-full border-b border-line px-3 py-2.5 text-left last:border-0 active:bg-gold/10"
-                          onClick={() => void selectClient(c)}
-                        >
-                          <span className="font-semibold text-ink">{c.name}</span>
-                          <span className="mt-0.5 block text-sm text-ink/65">
-                            {CLIENT_TYPE_LABELS[c.type]} · {c.phone}
+                  <SearchResults
+                    className="mt-2"
+                    items={clientHits.map((c) => ({
+                      key: c.id,
+                      onSelect: () => void selectClient(c),
+                      content: (
+                        <span className="min-w-0 truncate">
+                          <span className="font-normal"><Highlight text={c.name} query={clientQuery} /></span>
+                          <span className="tnum text-ink-2">
+                            {" · "}{CLIENT_TYPE_LABELS[c.type]} · <Highlight text={c.phone} query={clientQuery} />
                           </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                        </span>
+                      ),
+                    }))}
+                  />
                 )}
                 <Button
                   type="button"

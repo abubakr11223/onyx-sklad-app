@@ -9,19 +9,19 @@ export type AlertVariant = "success" | "danger" | "warning" | "info";
 
 const TONE: Record<AlertVariant, { box: string; mark: ReactNode }> = {
   success: {
-    box: "border-success/40 bg-success/10 text-success",
+    box: "border-malachite/25 bg-malachite-bg text-malachite",
     mark: <CheckMark />,
   },
   danger: {
-    box: "border-danger/40 bg-danger/10 text-danger",
+    box: "border-carnelian-line bg-carnelian-bg text-carnelian",
     mark: <AlertTriangleIcon className="mt-0.5 shrink-0" />,
   },
   warning: {
-    box: "border-warning/40 bg-warning/10 text-warning",
+    box: "border-amber/25 bg-amber-bg text-amber",
     mark: <AlertTriangleIcon className="mt-0.5 shrink-0" />,
   },
   info: {
-    box: "border-ink/15 bg-ink/5 text-ink/80",
+    box: "border-line bg-stone-100 text-ink",
     mark: null,
   },
 };
@@ -30,11 +30,11 @@ function CheckMark() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width={20}
-      height={20}
+      width={16}
+      height={16}
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.5}
+      strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -64,7 +64,7 @@ export default function Alert({
     <div
       role={variant === "danger" ? "alert" : "status"}
       className={[
-        "flex gap-2.5 rounded-card border p-4 text-base",
+        "flex gap-2.5 rounded-card border px-4 py-3 text-sm",
         tone.box,
         className,
       ]
@@ -73,7 +73,7 @@ export default function Alert({
     >
       {tone.mark}
       <div className="min-w-0">
-        {title && <p className="font-semibold">{title}</p>}
+        {title && <p className="font-medium">{title}</p>}
         {children && <div className={title ? "mt-0.5" : ""}>{children}</div>}
       </div>
     </div>

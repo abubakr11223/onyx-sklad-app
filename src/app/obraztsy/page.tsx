@@ -1,6 +1,8 @@
 // TZ №10 — раздел «Образцы»: группировка по клиенту, просрочка, действия.
 import type { Metadata } from "next";
 import Link from "next/link";
+import Tabs from "@/components/ui/Tabs";
+import EmptyState from "@/components/ui/EmptyState";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDate } from "@/lib/datetime";
@@ -134,31 +136,18 @@ export default async function ObraztsyPage({
         </dl>
       </Card>
 
-      <div className="mb-4 flex flex-wrap gap-2 text-sm">
-        <Link
-          href="/obraztsy"
-          className={
-            tab === "active"
-              ? "font-bold text-gold-deep"
-              : "text-ink/60 underline"
-          }
-        >
-          Активные
-        </Link>
-        <Link
-          href="/obraztsy?tab=closed"
-          className={
-            tab === "closed"
-              ? "font-bold text-gold-deep"
-              : "text-ink/60 underline"
-          }
-        >
-          Закрытые
-        </Link>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-2 border-b border-line">
+        <Tabs
+          underline={false}
+          items={[
+            { href: "/obraztsy", label: "Активные", active: tab === "active" },
+            { href: "/obraztsy?tab=closed", label: "Закрытые", active: tab === "closed" },
+          ]}
+        />
         {tab === "active" && (
           <Link
             href="/obraztsy?overdue=1"
-            className="text-ink/60 underline"
+            className="flex min-h-10 items-center text-sm text-honey-ink hover:underline"
           >
             Только просроченные
           </Link>
@@ -166,11 +155,7 @@ export default async function ObraztsyPage({
       </div>
 
       {groups.size === 0 ? (
-        <Card>
-          <p className="text-sm text-ink/60">
-            Образцов нет. Выдайте из раздела «Продажа».
-          </p>
-        </Card>
+        <EmptyState title="Образцов нет.">Выдайте из раздела «Продажа».</EmptyState>
       ) : (
         <div className="flex flex-col gap-4">
           {[...groups.entries()].map(([clientId, list]) => (

@@ -124,10 +124,10 @@ export default async function CollectionStaffPage({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-card border border-line bg-paper-2">
-            <table className="w-full border-collapse text-sm">
+          <div className="onyx-table-wrap">
+            <table className="onyx-table">
               <thead>
-                <tr className="border-b border-line text-left text-ink/60">
+                <tr>
                   <th className="py-2 pl-3 font-medium">Камень</th>
                   <th className="py-2 pl-3 font-medium">Код</th>
                   <th className="py-2 pl-3 font-medium">Комментарий</th>
@@ -137,7 +137,7 @@ export default async function CollectionStaffPage({
               </thead>
               <tbody>
                 {c.items.map((i) => (
-                  <tr key={i.id} className="border-b border-line/60 align-top last:border-b-0">
+                  <tr key={i.id} className="align-top">
                     <td className="py-2 pl-3">
                       <Link href={`/k/${i.stoneCode}`} className="font-semibold text-ink underline decoration-gold/50">
                         {i.stoneName}

@@ -569,7 +569,7 @@ export default function StoneViewer3D({
               onClick={() => setSceneKey(k)}
               className={
                 btn +
-                " shadow-sm " +
+                " border border-line " +
                 (k === sceneKey ? "bg-gold text-on-gold" : "bg-paper/85 text-ink hover:bg-paper")
               }
             >
@@ -581,14 +581,14 @@ export default function StoneViewer3D({
           <button
             type="button"
             onClick={toggleFullscreen}
-            className={btn + " absolute right-2 top-2 bg-paper/85 text-ink shadow-sm hover:bg-paper"}
+            className={btn + " absolute right-2 top-2 bg-paper/85 text-ink border border-line hover:bg-paper"}
           >
             {labels.fullscreen}
           </button>
         )}
         {stone && (
           <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex justify-between gap-2">
-            <p className="rounded-card bg-paper/85 px-3 py-1.5 text-sm text-ink shadow-sm">
+            <p className="rounded-card bg-paper/85 px-3 py-1.5 text-sm text-ink border border-line">
               <span className="font-semibold">{stone.name}</span>
               {stone.lengthCm && stone.widthCm && (
                 <span className="text-ink/60">

@@ -1174,7 +1174,7 @@ export default async function PoiskPage({
                   >
                     <span
                       aria-hidden="true"
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold/12 font-serif text-lg font-bold text-gold-deep sm:h-12 sm:w-12"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-sm font-medium text-gold-deep sm:h-12 sm:w-12"
                     >
                       {monogram}
                     </span>

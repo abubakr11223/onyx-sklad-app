@@ -760,7 +760,7 @@ export default async function KamenPage({
               (визуально связывает список → деталь). */}
           <span
             aria-hidden="true"
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gold/12 font-serif text-2xl font-bold text-gold-deep"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-lg font-medium text-gold-deep"
           >
             {(st.rockType || st.name).trim().charAt(0).toUpperCase()}
           </span>

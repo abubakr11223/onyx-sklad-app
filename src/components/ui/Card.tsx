@@ -1,5 +1,5 @@
-// Onyx UI — Card. Единая карточка/панель (бумага-2 поверхность, мягкая рамка,
-// радиус карточки). Композиционная: любой контент внутрь.
+// Onyx UI — Card. ТЗ №20 §7.5: marble, рамка line, радиус 10px, отступ
+// 20px, без тени. Композиционная: любой контент внутрь.
 
 import type { HTMLAttributes } from "react";
 
@@ -9,7 +9,7 @@ export default function Card({ className = "", ...props }: CardProps) {
   return (
     <div
       className={[
-        "rounded-card border border-line bg-paper-2 p-5 shadow-card",
+        "rounded-card border border-line bg-marble p-5",
         className,
       ]
         .filter(Boolean)

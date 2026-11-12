@@ -3,7 +3,16 @@
 
 import type { HTMLAttributes } from "react";
 
-export type BadgeVariant = "success" | "warning" | "danger" | "neutral" | "info";
+export type BadgeVariant =
+  | "success"
+  | "warning"
+  | "danger"
+  | "neutral"
+  | "info"
+  // Тип задачи (Отгрузки) — рамка вместо заливки, чтобы не путать со статусом.
+  | "type-sale"
+  | "type-sample"
+  | "type-showroom";
 
 // ТЗ №20 §3.3/§7.4: пара «текст + тонированный фон» из «камневых» оттенков.
 const VARIANTS: Record<BadgeVariant, string> = {
@@ -12,6 +21,9 @@ const VARIANTS: Record<BadgeVariant, string> = {
   danger: "bg-carnelian-bg text-carnelian",
   info: "bg-slate-bg text-slate",
   neutral: "bg-neutral-bg text-neutral",
+  "type-sale": "border border-ink text-ink",
+  "type-sample": "border border-slate text-slate",
+  "type-showroom": "border border-honey-ink text-honey-ink",
 };
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {

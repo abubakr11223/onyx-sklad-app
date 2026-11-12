@@ -19,8 +19,7 @@ function CancelActions({ onClose }: { onClose: () => void }) {
     <>
       <Button
         type="button"
-        variant="ghost"
-        className="flex-1"
+        variant="secondary"
         disabled={pending}
         onClick={onClose}
       >
@@ -29,8 +28,7 @@ function CancelActions({ onClose }: { onClose: () => void }) {
       <Button
         type="submit"
         variant="danger"
-        className="flex-1"
-        disabled={pending}
+        pending={pending}
       >
         {pending ? "Снятие…" : "Да, снять"}
       </Button>
@@ -60,7 +58,7 @@ export default function CancelReservationButton({
           Камень <span className="font-medium text-ink">«{label}»</span> вернётся
           «В наличии». Отменить это нельзя.
         </p>
-        <form action={action} className="mt-5 flex gap-2.5">
+        <form action={action} className="mt-5 flex justify-end gap-2">
           <input type="hidden" name="reservationId" value={reservationId} />
           <CancelActions onClose={() => setOpen(false)} />
         </form>

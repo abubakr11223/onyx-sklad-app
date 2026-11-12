@@ -2,6 +2,9 @@
 // Все страницы force-dynamic с тяжёлыми запросами — без скелета переход даёт
 // пустой экран (аудит: причина «тормозит» №1). Nav/таб-бар живут в layout и
 // остаются на месте; здесь — только область контента.
+// ТЗ №20 §7.7: плашки stone-100 по форме контента, без анимации.
+
+import Skeleton from "@/components/ui/Skeleton";
 
 export default function Loading() {
   return (
@@ -11,21 +14,20 @@ export default function Loading() {
       className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12"
     >
       <div className="mb-8">
-        <div className="h-3 w-28 animate-pulse rounded bg-ink/10" />
-        <div className="mt-3 h-9 w-72 max-w-full animate-pulse rounded bg-ink/10" />
-        <div className="mt-3 h-5 w-96 max-w-full animate-pulse rounded bg-ink/10" />
+        <Skeleton className="h-8 w-72 max-w-full" />
+        <Skeleton className="mt-3 h-4 w-96 max-w-full" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="flex items-start gap-3 rounded-card border border-ink/10 bg-paper-2/50 p-5"
+            className="flex items-start gap-3 rounded-card border border-line bg-marble p-5"
           >
-            <div className="size-11 shrink-0 animate-pulse rounded-field bg-ink/10" />
+            <Skeleton className="size-11 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="h-5 w-24 animate-pulse rounded bg-ink/10" />
-              <div className="mt-2 h-4 w-full animate-pulse rounded bg-ink/10" />
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="mt-2 h-4 w-full" />
             </div>
           </div>
         ))}

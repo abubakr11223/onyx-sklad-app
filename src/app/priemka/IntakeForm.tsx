@@ -12,6 +12,7 @@
 // поле. Серверный submitIntake остаётся defense-in-depth (валидирует повторно
 // и отдаёт ошибки уровня БД).
 
+import { AlertTriangleIcon } from "@/components/ui/Icons";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { submitIntake, type IntakeFormState } from "./actions";
 import {
@@ -1283,8 +1284,11 @@ export default function IntakeForm({
                 {converged
                   ? "✓"
                   : hasSlabsTgt && placedSlabs < tgtSlabs
-                    ? `— не размещено ${tgtSlabs - placedSlabs} плит ⚠`
-                    : "⚠"}
+                    ? `— не размещено ${tgtSlabs - placedSlabs} плит`
+                    : null}
+                {!converged && (
+                  <AlertTriangleIcon className="ml-1 inline align-[-2px]" />
+                )}
               </p>
               {!converged &&
                 shortfalls.map((s) => (

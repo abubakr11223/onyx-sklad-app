@@ -210,7 +210,7 @@ export default async function QrStonePage({
                     : "aspect-square w-full rounded-card object-cover"
                 }
               />
-              <span className="absolute bottom-2 left-2 rounded-full bg-paper/75 px-2 py-0.5 text-xs font-medium text-ink">
+              <span className="absolute bottom-2 left-2 rounded-badge bg-marble/85 px-2 py-0.5 text-xs font-medium text-ink">
                 {photoKindLabelRu(p.kind)}
               </span>
             </a>
@@ -221,7 +221,7 @@ export default async function QrStonePage({
           <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 bg-gold/10 px-4">
             <span
               aria-hidden
-              className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gold/20 font-serif text-3xl font-bold text-gold-deep"
+              className="flex h-16 w-16 items-center justify-center rounded-field bg-stone-100 font-mono text-xl font-medium text-gold-deep"
             >
               {monogram}
             </span>

@@ -205,10 +205,10 @@ function RatingSection({
         <p className="text-sm text-ink/55">Нет продаж клиентам за период.</p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-card border border-line bg-paper">
-            <table className="w-full border-collapse text-sm">
+          <div className="onyx-table-wrap">
+            <table className="onyx-table">
               <thead>
-                <tr className="border-b border-line text-left text-ink/60">
+                <tr>
                   <th className="py-2 pl-3 text-right font-medium">#</th>
                   <th className="py-2 pl-3 font-medium">Клиент</th>
                   <th className="py-2 pl-3 font-medium">Тип</th>
@@ -221,7 +221,7 @@ function RatingSection({
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.clientId} className="border-b border-line/60 align-top last:border-b-0">
+                  <tr key={r.clientId} className="align-top">
                     <td className="tnum py-2 pl-3 text-right text-ink/45">{r.place}</td>
                     <td className="py-2 pl-3">
                       <Link
@@ -277,10 +277,10 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
       {rows.length === 0 ? (
         <p className="text-sm text-ink/55">Нет продаж и платежей за период.</p>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-line bg-paper">
-          <table className="w-full border-collapse text-sm">
+        <div className="onyx-table-wrap">
+          <table className="onyx-table">
             <thead>
-              <tr className="border-b border-line text-left text-ink/60">
+              <tr>
                 <th className="py-2 pl-3 font-medium">Менеджер</th>
                 <th className="py-2 pl-3 text-right font-medium">Продаж</th>
                 <th className="py-2 pl-3 text-right font-medium">Сумма, сум</th>
@@ -293,7 +293,7 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.managerId} className="border-b border-line/60 align-top last:border-b-0">
+                <tr key={r.managerId} className="align-top">
                   <td className="py-2 pl-3 font-semibold text-ink">
                     {r.name}
                     {!r.isActive && (
@@ -338,10 +338,10 @@ function AiQueriesSection({
       {data.rows.length === 0 ? (
         <p className="text-sm text-ink/55">За период текстовых ИИ-запросов не было.</p>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-line bg-paper">
-          <table className="w-full border-collapse text-sm">
+        <div className="onyx-table-wrap">
+          <table className="onyx-table">
             <thead>
-              <tr className="border-b border-line text-left text-ink/60">
+              <tr>
                 <th className="py-2 pl-3 font-medium">Запрос</th>
                 <th className="py-2 pl-3 text-right font-medium">Раз</th>
                 <th className="py-2 px-3 text-right font-medium">В наличии</th>
@@ -349,7 +349,7 @@ function AiQueriesSection({
             </thead>
             <tbody>
               {data.rows.map((r) => (
-                <tr key={r.query} className="border-b border-line/60 align-top last:border-b-0">
+                <tr key={r.query} className="align-top">
                   <td className="py-2 pl-3">
                     <Link
                       href={`/katalog?ai=${encodeURIComponent(r.query)}`}
@@ -395,10 +395,10 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
           .
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-line bg-paper">
-          <table className="w-full border-collapse text-sm">
+        <div className="onyx-table-wrap">
+          <table className="onyx-table">
             <thead>
-              <tr className="border-b border-line text-left text-ink/60">
+              <tr>
                 <th className="py-2 pl-3 font-medium">Партнёр</th>
                 <th className="py-2 pl-3 text-right font-medium">Заявки</th>
                 <th className="py-2 pl-3 text-right font-medium">Интересы</th>
@@ -409,7 +409,7 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.partnerId} className="border-b border-line/60 align-top last:border-b-0">
+                <tr key={r.partnerId} className="align-top">
                   <td className="py-2 pl-3">
                     <Link
                       href={`/zayavki?partner=${encodeURIComponent(r.partnerId)}`}
@@ -456,10 +456,10 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
       {rows.length === 0 ? (
         <p className="text-sm text-ink/55">За период карточки по QR не открывали.</p>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-line bg-paper">
-          <table className="w-full border-collapse text-sm">
+        <div className="onyx-table-wrap">
+          <table className="onyx-table">
             <thead>
-              <tr className="border-b border-line text-left text-ink/60">
+              <tr>
                 <th className="py-2 pl-3 font-medium">#</th>
                 <th className="py-2 pl-3 font-medium">Камень</th>
                 <th className="py-2 pl-3 font-medium">Код</th>
@@ -468,7 +468,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.code} className="border-b border-line/60 last:border-b-0">
+                <tr key={r.code}>
                   <td className="tnum py-2 pl-3 text-ink/45">{i + 1}</td>
                   <td className="py-2 pl-3">
                     <Link

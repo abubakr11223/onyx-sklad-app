@@ -229,18 +229,19 @@ export default async function Home() {
           <p className="mt-1 text-sm text-ink/55">
             Свободный остаток вида ниже минимального (без броней, шоу-рума и образцов).
           </p>
-          <table className="mt-3 w-full text-sm">
+          <div className="onyx-table-wrap mt-3">
+          <table className="onyx-table">
             <thead>
-              <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink/55">
-                <th className="py-2 pr-2 font-semibold">Вид</th>
-                <th className="py-2 pr-2 text-right font-semibold">Остаток</th>
-                <th className="py-2 text-right font-semibold">Порог</th>
+              <tr>
+                <th className="py-2 pl-3 pr-2 font-medium">Вид</th>
+                <th className="py-2 pr-2 text-right font-medium">Остаток</th>
+                <th className="py-2 pr-3 text-right font-medium">Порог</th>
               </tr>
             </thead>
             <tbody>
               {lowStock.map((item) => (
-                <tr key={item.stoneTypeId} className="border-b border-line last:border-0">
-                  <td className="py-2 pr-2">
+                <tr key={item.stoneTypeId}>
+                  <td className="py-2 pl-3 pr-2">
                     <Link
                       href={`/kamen/${item.stoneTypeId}`}
                       className="font-medium text-ink hover:text-gold-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
@@ -251,7 +252,7 @@ export default async function Home() {
                   <td className="tnum py-2 pr-2 text-right font-semibold text-warning">
                     {formatStockQty(item.free, item.threshold.unit)}
                   </td>
-                  <td className="tnum py-2 text-right text-ink/70">
+                  <td className="tnum py-2 pr-3 text-right text-ink/70">
                     {formatThreshold(item.threshold)}
                     {item.threshold.unit === "SLABS" ? " пл." : ""}
                   </td>
@@ -259,6 +260,7 @@ export default async function Home() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
 

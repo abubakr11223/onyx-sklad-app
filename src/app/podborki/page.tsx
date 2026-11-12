@@ -5,6 +5,8 @@
 // здесь (пустая) или кнопкой «В подборку» на карточке / в каталоге.
 import type { Metadata } from "next";
 import Link from "next/link";
+import Tabs from "@/components/ui/Tabs";
+import EmptyState from "@/components/ui/EmptyState";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { clientListScope } from "@/lib/clients";
@@ -107,34 +109,23 @@ export default async function CollectionsPage({
         </form>
       </Card>
 
-      <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
-        <Link
-          href="/podborki"
-          aria-current={onlyOpen ? "page" : undefined}
-          className={onlyOpen ? "font-semibold text-ink" : "text-gold-deep underline"}
-        >
-          Открытые
-        </Link>
-        <Link
-          href="/podborki?status=all"
-          aria-current={!onlyOpen ? "page" : undefined}
-          className={!onlyOpen ? "font-semibold text-ink" : "text-gold-deep underline"}
-        >
-          Все, включая закрытые
-        </Link>
-      </div>
+      <Tabs
+        className="mb-3"
+        items={[
+          { href: "/podborki", label: "Открытые", active: onlyOpen },
+          { href: "/podborki?status=all", label: "Все, включая закрытые", active: !onlyOpen },
+        ]}
+      />
 
       {rows.length === 0 ? (
-        <div className="rounded-card border border-line bg-paper-2 p-6 text-center">
-          <p className="text-sm text-ink/60">
-            Подборок пока нет. Создайте первую выше или нажмите «В подборку» в каталоге.
-          </p>
-        </div>
+        <EmptyState title="Подборок пока нет.">
+          Создайте первую выше или нажмите «В подборку» в каталоге.
+        </EmptyState>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-line bg-paper-2">
-          <table className="w-full border-collapse text-sm">
+        <div className="onyx-table-wrap">
+          <table className="onyx-table">
             <thead>
-              <tr className="border-b border-line text-left text-ink/60">
+              <tr>
                 <th className="py-2 pl-3 font-medium">Подборка</th>
                 <th className="py-2 pl-3 font-medium">Клиент</th>
                 {caps.canSeeAllCollections && <th className="py-2 pl-3 font-medium">Менеджер</th>}
@@ -146,7 +137,7 @@ export default async function CollectionsPage({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-line/60 align-top last:border-b-0">
+                <tr key={r.id} className="align-top">
                   <td className="py-2 pl-3">
                     <Link href={`/podborki/${r.id}`} className="font-semibold text-ink underline decoration-gold/50 hover:text-gold-deep">
                       {r.title}

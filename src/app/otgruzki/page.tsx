@@ -1,6 +1,7 @@
 // TZ №15 Slice 1 — warehouse «Отгрузки»: open queue + archive + confirm.
 import type { Metadata } from "next";
 import Link from "next/link";
+import Tabs from "@/components/ui/Tabs";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
@@ -167,42 +168,15 @@ export default async function OtgruzkiPage({
         </Alert>
       )}
 
-      <div className="mb-4 flex gap-2">
-        <Link
-          href="/otgruzki"
-          className={
-            "rounded-field px-3 py-2 text-sm font-semibold " +
-            (tab === "open"
-              ? "bg-gold/20 text-ink"
-              : "bg-paper-2 text-ink/60")
-          }
-        >
-          К отгрузке
-        </Link>
-        {/* ТЗ №20 B — задачи с плановой датой сегодня. */}
-        <Link
-          href="/otgruzki?today=1"
-          className={
-            "rounded-field px-3 py-2 text-sm font-semibold " +
-            (tab === "open" && filters.today
-              ? "bg-gold/20 text-ink"
-              : "bg-paper-2 text-ink/60")
-          }
-        >
-          На сегодня
-        </Link>
-        <Link
-          href="/otgruzki?tab=archive"
-          className={
-            "rounded-field px-3 py-2 text-sm font-semibold " +
-            (tab === "archive"
-              ? "bg-gold/20 text-ink"
-              : "bg-paper-2 text-ink/60")
-          }
-        >
-          Архив
-        </Link>
-      </div>
+      <Tabs
+        className="mb-4"
+        items={[
+          { href: "/otgruzki", label: "К отгрузке", active: tab === "open" && !filters.today },
+          // ТЗ №20 B — задачи с плановой датой сегодня.
+          { href: "/otgruzki?today=1", label: "На сегодня", active: tab === "open" && !!filters.today },
+          { href: "/otgruzki?tab=archive", label: "Архив", active: tab === "archive" },
+        ]}
+      />
 
       {/* ТЗ №15 §3.2/§7.7 — поиск/фильтр: клиент, тип, дата, менеджер.
           GET-форма: фильтр остаётся в ссылке — её можно сохранить и переслать. */}

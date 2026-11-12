@@ -74,18 +74,16 @@ There is no dark theme: only the sidebar is dark.
 
 ## 2. Components — reuse, never re-roll
 
-Everything lives in `src/components/ui/`: `Button`, `Field`, `Alert`, `Card`, `Badge`, `Modal`, `toast`, `Icons`, plus `Ripple`. App-level: `Nav`, `BottomTabBar`, `nav-items`, `NoAccess`, `OfflineBanner`, `WarehouseLocationSelect`, `ConfirmSubmitButton`.
+Everything lives in `src/components/ui/` (ТЗ №20 §7, stage 3 done 2026-11-12):
 
-- **Button** — `variant`: `primary` (solid blue) · `secondary` (bordered paper-2) · `ghost` · `danger` (outline only, never a filled red button). `size`: `md` | `sm`, **both 44px min-height**. Default `type="button"` — a submit button must pass `type="submit"` explicitly. For a link styled as a button use the exported `buttonClass(variant, size, extra)`.
-- **Field** — always pass an explicit `id`. Renders label + control + hint + error with `aria-invalid` and `role="alert"` wiring already correct.
-- **Alert** — page-level messages. `role="alert"` is built in.
-- **Badge** — short status only. Long status goes in text.
-- **Modal** — confirmation and focused sub-forms; it owns focus trap and scroll lock.
-- **Icons** — stroke SVG. **Never use emoji as an icon** anywhere in the product.
-
-Missing on purpose (build only when a screen truly needs one, then add it here): `Table`, `Tabs`, `EmptyState`, `Skeleton`, `Tooltip`.
-
----
+- **Button** — `primary` (black ink, hover onyx-800) · `secondary` (marble + line-strong) · `ghost` (honey-ink text link) · `danger` (marble + carnelian outline). 36px desktop / 44px phone. `pending` prop = 14px spinner + disabled. `buttonClass()` for links. In a plain `<form action>` use **SubmitButton** (useFormStatus → pending).
+- **Field** — label 12px ink-2, `required` adds a carnelian `*` via CSS, `suffix` puts the unit inside the field («см», «м²»), hint/error 12px. Exports `inputClass`, `labelClass`, `hintClass`, `errorClass`.
+- **SearchResults** + `Highlight` — the one look for client/block/batch search results (rows 36px, match bold). Search logic stays in the form.
+- **SegmentedControl** — mode switch (stone-100 track, marble selected), `hint` = one line under it.
+- **Tabs** — link tabs, honey 2px underline, optional `count`.
+- **Table** — CSS classes `.onyx-table-wrap` + `.onyx-table` (stone-100 header 12px, line rows, hover, `data-selected` row = honey-soft + 3px strip). Numbers right-aligned, codes `font-mono`.
+- **Badge** — statuses + `type-sale` / `type-sample` / `type-showroom` outline badges.
+- **Card**, **Alert**, **Modal** (`size="lg"` = 640px; buttons bottom-right: secondary «Отмена» + main), **toast**, **EmptyState** (title + 1–2 lines + action, texts verbatim), **Skeleton** (stone-100, no animation), **Icons** (16px, stroke 1.5; never emoji).
 
 ## 3. Layout shell
 

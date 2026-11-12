@@ -187,10 +187,10 @@ function StaffBlock({ view }: { view: StaffCardView }) {
         )}
 
         {view.rows.length > 0 && (
-          <div className="mt-3 overflow-x-auto rounded-card border border-line">
-            <table className="w-full border-collapse text-sm">
+          <div className="mt-3 onyx-table-wrap">
+            <table className="onyx-table">
               <thead>
-                <tr className="border-b border-line text-left text-ink/60">
+                <tr>
                   <th className="py-2 pl-3 font-medium">Узор / партия</th>
                   <th className="py-2 pl-3 text-right font-medium">Плит</th>
                   <th className="py-2 pl-3 text-right font-medium">м²</th>
@@ -200,7 +200,7 @@ function StaffBlock({ view }: { view: StaffCardView }) {
               </thead>
               <tbody>
                 {view.rows.map((r) => (
-                  <tr key={r.id} className="border-b border-line/60 align-top last:border-b-0">
+                  <tr key={r.id} className="align-top">
                     <td className="py-2 pl-3">
                       <span className="font-medium text-ink">{r.label}</span>
                       {r.format && <span className="block text-xs text-ink/55">{r.format}</span>}

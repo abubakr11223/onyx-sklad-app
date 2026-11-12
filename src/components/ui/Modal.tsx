@@ -11,12 +11,15 @@ export default function Modal({
   title,
   children,
   labelledById = "onyx-modal-title",
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
   title?: React.ReactNode;
   children: React.ReactNode;
   labelledById?: string;
+  /** Ширина: md = 480px, lg = 640px (ТЗ №20 §7.7). */
+  size?: "md" | "lg";
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -50,14 +53,14 @@ export default function Modal({
     >
       <div
         ref={cardRef}
-        className="onyx-modal"
+        className={size === "lg" ? "onyx-modal onyx-modal-lg" : "onyx-modal"}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? labelledById : undefined}
         tabIndex={-1}
       >
         {title && (
-          <h3 id={labelledById} className="mb-1.5 text-lg font-bold tracking-tight text-ink">
+          <h3 id={labelledById} className="mb-2 text-base font-semibold text-ink">
             {title}
           </h3>
         )}

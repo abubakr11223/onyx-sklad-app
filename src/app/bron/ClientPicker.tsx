@@ -13,6 +13,7 @@ import {
   type ClientHit,
 } from "@/app/prodazha/client-actions";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/clients";
+import SearchResults, { Highlight } from "@/components/ui/SearchResults";
 import Button from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
 
@@ -135,20 +136,21 @@ export default function ClientPicker({
       {error && <p className="text-sm text-danger">{error}</p>}
       {busy && <p className="text-xs text-ink/55">Поиск…</p>}
       {hits.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {hits.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                className="w-full rounded-field border border-line bg-paper-2 px-3 py-2 text-left text-sm transition hover:border-gold"
-                onClick={() => pick(c)}
-              >
-                <span className="font-medium text-ink">{c.name}</span>
-                <span className="tnum text-ink/60"> · {c.phone}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SearchResults
+          items={hits.map((c) => ({
+            key: c.id,
+            onSelect: () => pick(c),
+            content: (
+              <span className="min-w-0 truncate">
+                <Highlight text={c.name} query={query} />
+                <span className="tnum text-ink-2">
+                  {" · "}
+                  <Highlight text={c.phone} query={query} />
+                </span>
+              </span>
+            ),
+          }))}
+        />
       )}
       {msg && <p className="text-sm text-ink/70">{msg}</p>}
       {similar.map((c) => (

@@ -8,6 +8,7 @@
 // (soft). OWNER — корневой аккаунт: его нельзя удалить/сменить роль; сам владелец
 // может сменить СВОЙ пароль (после seed-дефолта).
 
+import { PhoneIcon, SendIcon } from "@/components/ui/Icons";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getRealSessionUser } from "@/lib/session";
@@ -515,7 +516,7 @@ export default async function AccountsPage({
                   )}
                 </p>
                 <p className="tnum text-sm text-ink/60">
-                  {r.phone ? <>📞 {r.phone}</> : "телефон не передан"}
+                  {r.phone ? <><PhoneIcon className="mr-1 inline align-[-2px]" />{r.phone}</> : "телефон не передан"}
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
                   <form
@@ -591,7 +592,7 @@ export default async function AccountsPage({
                     </p>
                     <p className="text-sm">
                       {u.phone ? (
-                        <span className="tnum text-ink/60">📞 {u.phone}</span>
+                        <span className="tnum text-ink/60"><PhoneIcon className="mr-1 inline align-[-2px]" />{u.phone}</span>
                       ) : isWarehouseRole(u.role) ? (
                         <span className="text-warning">
                           телефон не задан — Telegram не привяжется
@@ -603,7 +604,7 @@ export default async function AccountsPage({
                     <p className="text-sm">
                       {u.telegramId ? (
                         <span className="tnum text-ink/60">
-                          ✈️ TG ID: {u.telegramId}
+                          <SendIcon className="mr-1 inline align-[-2px]" />TG ID: {u.telegramId}
                           {isWarehouseRole(u.role) &&
                             isDemoWarehouseAccount(u) && (
                               <span className="ml-1 font-semibold text-warning">

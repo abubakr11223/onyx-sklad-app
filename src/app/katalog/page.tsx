@@ -271,7 +271,7 @@ export default async function CatalogPage({
                   <Link
                     key={c.keys.join("+")}
                     href={chipHref(c.keys)}
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-gold/50 bg-gold/10 px-3 text-sm text-ink hover:bg-gold/20"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-field border border-line-strong bg-marble px-3 text-sm text-ink hover:bg-stone-100"
                   >
                     {c.label}
                     <span aria-hidden className="text-ink/50">✕</span>

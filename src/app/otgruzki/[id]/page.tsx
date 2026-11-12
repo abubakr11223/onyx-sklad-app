@@ -103,9 +103,9 @@ export default async function ShipmentDocPage({
           </div>
         </dl>
 
-        <table className="w-full border-collapse text-sm">
+        <table className="onyx-table">
           <thead>
-            <tr className="border-y border-line text-left text-ink/60">
+            <tr>
               <th className="py-2 pr-2 font-medium">Камень</th>
               <th className="py-2 pr-2 font-medium">Что</th>
               <th className="py-2 pr-2 font-medium">Размер, см</th>
@@ -115,7 +115,7 @@ export default async function ShipmentDocPage({
           </thead>
           <tbody>
             {doc.lines.map((l, i) => (
-              <tr key={i} className="border-b border-line/60 align-top">
+              <tr key={i} className="align-top">
                 <td className="py-2 pr-2 font-medium">
                   {l.stoneName}
                   {l.code && (

@@ -17,6 +17,7 @@ import {
   breakRenderedKeys,
 } from "./break-form-errors";
 import { BREAK_CAUSES } from "@/lib/breaking";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -255,27 +256,21 @@ export default function BreakForm({
       {/* ── Что разбиваем ── */}
       <Card>
         <h2 className="mb-3 text-lg font-semibold text-ink">Что разбиваем</h2>
-        <div className="mb-2 flex gap-2">
-          <Button
-            variant={mode === "slab" ? "primary" : "secondary"}
-            onClick={() => setMode("slab")}
-            className="flex-1"
-          >
-            Плита
-          </Button>
-          <Button
-            variant={mode === "direct" ? "primary" : "secondary"}
-            onClick={() => setMode("direct")}
-            className="flex-1"
-          >
-            Бой в партии
-          </Button>
-        </div>
-        <p className="mb-4 text-sm text-ink/60">
-          {mode === "slab"
-            ? "Плита — разбить конкретную выделенную плиту (была выбрана под клиента)."
-            : "Бой в партии — разбить/списать плиту из общего количества партии (обычный случай на складе)."}
-        </p>
+        <SegmentedControl
+          className="mb-4"
+          label="Что разбиваем"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "slab", label: "Плита" },
+            { value: "direct", label: "Бой в партии" },
+          ]}
+          hint={
+            mode === "slab"
+              ? "Плита — разбить конкретную выделенную плиту (была выбрана под клиента)."
+              : "Бой в партии — разбить/списать плиту из общего количества партии (обычный случай на складе)."
+          }
+        />
 
         {mode === "slab" ? (
           slabs.length === 0 ? (
