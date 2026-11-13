@@ -437,7 +437,7 @@ export default async function BronPage({
   const err = firstParam(params.err);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="mx-auto max-w-3xl p-4 pb-12 md:p-6 xl:max-w-[1200px] xl:p-8">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">
           Брони
@@ -464,8 +464,12 @@ export default async function BronPage({
         </Alert>
       )}
 
+      {/* ТЗ №20 §8 — на широком экране (≥1280px) две колонки: слева форма
+          «Новая бронь», справа «Активные брони» и «История». На телефоне и
+          планшете порядок прежний: активные → новая → история. */}
+      <div className="xl:grid xl:grid-cols-[minmax(0,680px)_minmax(0,1fr)] xl:items-start xl:gap-x-6 xl:gap-y-8">
       {/* ── Faol bronlar (keyset page) ── */}
-      <section className="mt-6">
+      <section className="mt-6 xl:col-start-2 xl:row-start-1 xl:mt-0">
         <h2 className="text-base font-semibold text-ink">Активные брони</h2>
         {afterCursor === "malformed" && (
           <Alert variant="warning" className="mt-3">
@@ -544,7 +548,7 @@ export default async function BronPage({
       </section>
 
       {/* ── Yangi bron ── */}
-      <section className="mt-8 rounded-card border border-line bg-marble p-4">
+      <section className="mt-8 rounded-card border border-line bg-marble p-4 xl:col-start-1 xl:row-span-2 xl:row-start-1 xl:mt-0 xl:p-5">
         <h2 className="mb-3 text-base font-semibold text-ink">Новая бронь</h2>
         <form
           method="get"
@@ -585,7 +589,7 @@ export default async function BronPage({
       </section>
 
       {/* ── Tarix ── */}
-      <section className="mt-8">
+      <section className="mt-8 xl:col-start-2 xl:row-start-2 xl:mt-0">
         <h2 className="text-base font-semibold text-ink">История (последние 20)</h2>
         {history.length === 0 ? (
           <p className="mt-3 text-ink-2">Пока пусто.</p>
@@ -615,6 +619,7 @@ export default async function BronPage({
           </ul>
         )}
       </section>
+      </div>
     </main>
   );
 }
