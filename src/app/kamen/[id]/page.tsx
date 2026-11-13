@@ -102,13 +102,13 @@ const PIECE_KIND_RU: Record<string, string> = {
 // ширина под горизонтальную форму (Field даёт w-full/столбец). min-h-11 —
 // зона касания 44px (складчик работает с телефона).
 const inlineInput =
-  "min-h-11 rounded-field border border-ink/20 bg-paper px-2 text-sm text-ink " +
-  "placeholder:text-ink/40 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/40";
+  "min-h-11 rounded-field border border-line bg-paper px-2 text-sm text-ink " +
+  "placeholder:text-ink-3 focus:border-gold focus:outline-none focus:ring-2 focus:ring-honey-soft";
 
 // ТЗ №20 G (§8.1) — постоянный код ONX-… рядом с названием записи.
 function CodeTag({ code }: { code: string }) {
   return (
-    <span className="tnum ml-1.5 inline-block rounded-field border border-line px-1.5 align-middle text-xs font-semibold tracking-wide text-ink/70">
+    <span className="tnum ml-1.5 inline-block rounded-field border border-line px-1.5 align-middle text-xs font-semibold tracking-wide text-ink-2">
       {code}
     </span>
   );
@@ -202,9 +202,9 @@ function SlabLocationForm({
     >
       <input type="hidden" name="slabId" value={slabId} />
       <input type="hidden" name="next" value={backTo} />
-      <label className="text-ink/55">Блок</label>
+      <label className="text-ink-2">Блок</label>
       <input name="block" defaultValue={block} className={inlineInput + " w-16"} />
-      <label className="text-ink/55">ориентир</label>
+      <label className="text-ink-2">ориентир</label>
       <input
         name="landmark"
         defaultValue={landmark}
@@ -236,7 +236,7 @@ function MoveQtyForm({
     <form action={moveQty} className="mt-1 flex flex-wrap items-center gap-1.5">
       <input type="hidden" name="sourceLocationId" value={sourceId} />
       <input type="hidden" name="next" value={backTo} />
-      <span className="text-ink/55">Перенести в</span>
+      <span className="text-ink-2">Перенести в</span>
       <select
         name="destLocationId"
         defaultValue=""
@@ -286,9 +286,9 @@ function AddLocationForm({
     <form action={addLocation} className="mt-2 flex flex-wrap items-center gap-1.5">
       <input type="hidden" name="batchId" value={batchId} />
       <input type="hidden" name="next" value={backTo} />
-      <label className="text-ink/55">Блок</label>
+      <label className="text-ink-2">Блок</label>
       <input name="block" placeholder="А" className={inlineInput + " w-16"} />
-      <label className="text-ink/55">ориентир</label>
+      <label className="text-ink-2">ориентир</label>
       <input name="landmark" placeholder="2" className={inlineInput + " w-20"} />
       <input
         name="slabsHere"
@@ -581,14 +581,11 @@ export default async function KamenPage({
 
   if (!st) {
     return (
-      <main className="mx-auto max-w-3xl p-4 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+        <h1 className="text-display font-semibold text-ink">
           Камень не найден
         </h1>
-        <p className="mt-2 text-base text-ink/70">
+        <p className="mt-1 text-sm text-ink-2">
           Возможно, он архивирован или ссылка устарела.
         </p>
         <Link
@@ -742,7 +739,7 @@ export default async function KamenPage({
   }));
 
   return (
-    <main className="mx-auto max-w-3xl p-4 sm:p-8">
+    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <Link
         href="/poisk"
         className="text-sm font-medium text-gold-deep hover:underline"
@@ -752,23 +749,20 @@ export default async function KamenPage({
 
       {/* 1. Заголовок */}
       <header className="mt-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · камень
-        </p>
         <div className="mt-2 flex items-center gap-4">
           {/* Монограмма по породе — тот же якорь, что в карточках поиска
               (визуально связывает список → деталь). */}
           <span
             aria-hidden="true"
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-lg font-medium text-gold-deep"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-lg font-medium text-ink-2"
           >
             {(st.rockType || st.name).trim().charAt(0).toUpperCase()}
           </span>
           <div className="min-w-0">
-            <h1 className="font-serif text-display font-bold tracking-tight text-ink">
+            <h1 className="text-display font-semibold text-ink">
               {st.name}
             </h1>
-            <p className="mt-1 text-sm text-ink/60">
+            <p className="mt-1 text-sm text-ink-2">
               {st.rockType}
               {st.color && <> · {st.color}</>}
               <CodeTag code={st.code} />
@@ -871,7 +865,7 @@ export default async function KamenPage({
       {/* OWN-02 (ТЗ №2) — редактирование карточки: ТОЛЬКО владелец. Свёрнуто,
           чтобы не мешать обычному просмотру. */}
       {isOwner && (
-        <details className="mt-4 rounded-card border border-line bg-paper-2 p-4">
+        <details className="mt-4 rounded-card border border-line bg-marble p-4">
           <summary className="cursor-pointer font-semibold text-ink">
             Редактировать карточку
           </summary>
@@ -882,7 +876,7 @@ export default async function KamenPage({
             <input type="hidden" name="stoneTypeId" value={st.id} />
             <input type="hidden" name="next" value={`/kamen/${st.id}`} />
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Название</span>
+              <span className="text-ink-2">Название</span>
               <input
                 name="name"
                 defaultValue={st.name}
@@ -892,7 +886,7 @@ export default async function KamenPage({
             </label>
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink/70">Порода</span>
+                <span className="text-ink-2">Порода</span>
                 <input
                   name="rockType"
                   defaultValue={st.rockType}
@@ -901,7 +895,7 @@ export default async function KamenPage({
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink/70">Цвет</span>
+                <span className="text-ink-2">Цвет</span>
                 <input
                   name="color"
                   defaultValue={st.color ?? ""}
@@ -911,7 +905,7 @@ export default async function KamenPage({
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink/70">Цена продажи (за м²)</span>
+                <span className="text-ink-2">Цена продажи (за м²)</span>
                 <input
                   name="basePrice"
                   inputMode="decimal"
@@ -921,7 +915,7 @@ export default async function KamenPage({
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink/70">Закупочная цена (за м²)</span>
+                <span className="text-ink-2">Закупочная цена (за м²)</span>
                 <input
                   name="purchasePrice"
                   inputMode="decimal"
@@ -932,7 +926,7 @@ export default async function KamenPage({
               </label>
             </div>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">Описание</span>
+              <span className="text-ink-2">Описание</span>
               <textarea
                 name="description"
                 defaultValue={st.description ?? ""}
@@ -941,7 +935,7 @@ export default async function KamenPage({
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink/70">
+              <span className="text-ink-2">
                 Свойства — по строке «ключ: значение»
               </span>
               <textarea
@@ -962,8 +956,8 @@ export default async function KamenPage({
       {/* §6.7 — публичная QR-ссылка для шоу-рума. Все, кто открыл /kamen, —
           сотрудники (страница за login-gate), поэтому показываем всем им. */}
       <Card className="mt-6">
-        <h2 className="text-lg font-semibold text-ink">QR для шоу-рума</h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <h2 className="text-base font-semibold text-ink">QR для шоу-рума</h2>
+        <p className="mt-1 text-sm text-ink-2">
           Публичная страница вида камня — для клиента (без остатков и цен).
           Разместите QR на образце: ссылка открывает эту карточку.
         </p>
@@ -978,8 +972,8 @@ export default async function KamenPage({
 
       {/* §6.7 «B» — AI-интерьеры камня (генерирует OWNER/MANAGER по фото). */}
       <Card className="mt-6">
-        <h2 className="text-lg font-semibold text-ink">Интерьеры (AI)</h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <h2 className="text-base font-semibold text-ink">Интерьеры (AI)</h2>
+        <p className="mt-1 text-sm text-ink-2">
           Как этот камень смотрится в интерьере — ресепшен, ванная, гостиная.
           Клиент видит их на QR-странице.
         </p>
@@ -1022,7 +1016,7 @@ export default async function KamenPage({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-ink/40">Интерьеры ещё не созданы.</p>
+          <p className="mt-3 text-sm text-ink-3">Интерьеры ещё не созданы.</p>
         )}
         {canGenAI && (
           <form action={generateInteriors} className="mt-3">
@@ -1038,8 +1032,8 @@ export default async function KamenPage({
 
       {/* ТЗ №20 J (§11.1) — «В интерьере»: фото/рендеры готовых работ. */}
       <Card className="mt-6" id="interior">
-        <h2 className="text-lg font-semibold text-ink">В интерьере</h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <h2 className="text-base font-semibold text-ink">В интерьере</h2>
+        <p className="mt-1 text-sm text-ink-2">
           Фото готовых работ с этим камнем (до {INTERIOR_MAX}). Клиент видит их в
           карточке по QR и в каталоге — первым фото, если нет фото узора.
         </p>
@@ -1081,7 +1075,7 @@ export default async function KamenPage({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-ink/40">Фото готовых работ ещё нет.</p>
+          <p className="mt-3 text-sm text-ink-3">Фото готовых работ ещё нет.</p>
         )}
         {caps.canUploadInterior && (
           <InteriorUploader stoneTypeId={st.id} remaining={INTERIOR_MAX - ownInteriors.length} />
@@ -1120,33 +1114,33 @@ export default async function KamenPage({
         return (
           <Card className="mt-6" id="texture">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-ink">Текстуры для 3D</h2>
+              <h2 className="text-base font-semibold text-ink">Текстуры для 3D</h2>
               {any && (
                 <Link href={`/k/${st.code}/3d`} target="_blank" className={buttonClass("secondary", "sm")}>
                   Показать в интерьере
                 </Link>
               )}
             </div>
-            <p className="mt-1 text-sm text-ink/60">
+            <p className="mt-1 text-sm text-ink-2">
               Фото плиты анфас: ровно, без бликов, JPG, не меньше 4000 px по длинной
               стороне. Дизайнеры скачивают его для 3D-проектов, клиент видит камень
               в 3D-интерьере.
             </p>
             {rows.length === 0 ? (
-              <p className="mt-3 text-sm text-ink/40">Партий нет — текстуру загрузить некуда.</p>
+              <p className="mt-3 text-sm text-ink-3">Партий нет — текстуру загрузить некуда.</p>
             ) : (
               <ul className="mt-3 divide-y divide-line rounded-card border border-line">
                 {rows.map((r) => (
                   <li key={r.key} className="flex flex-wrap items-start justify-between gap-3 p-3">
                     <div className="min-w-0">
                       <p className="font-medium text-ink">{r.label}</p>
-                      <p className="text-xs text-ink/55">
+                      <p className="text-xs text-ink-2">
                         {[r.sub, r.lengthCm && r.widthCm ? `плита ${r.lengthCm} × ${r.widthCm} см` : "размер плиты не указан", r.code]
                           .filter(Boolean)
                           .join(" · ")}
                       </p>
                       {r.tex ? (
-                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink/70">
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-2">
                           <span className="tnum">
                             {r.tex.widthPx} × {r.tex.heightPx} px · {formatTashkentDate(r.tex.updatedAt)}
                           </span>
@@ -1155,7 +1149,7 @@ export default async function KamenPage({
                           )}
                         </p>
                       ) : (
-                        <p className="mt-1 text-xs text-ink/40">Текстуры нет</p>
+                        <p className="mt-1 text-xs text-ink-3">Текстуры нет</p>
                       )}
                     </div>
                     <div className="flex flex-wrap items-start gap-2">
@@ -1205,8 +1199,8 @@ export default async function KamenPage({
         const trErr = firstParam(sp.trErr);
         return (
           <Card className="mt-6" id="traits">
-            <h2 className="text-lg font-semibold text-ink">Признаки для ИИ-поиска</h2>
-            <p className="mt-1 text-sm text-ink/60">
+            <h2 className="text-base font-semibold text-ink">Признаки для ИИ-поиска</h2>
+            <p className="mt-1 text-sm text-ink-2">
               Цвет, тон, рисунок и прожилки. ИИ выставляет их по фото узора; если ошибся —
               поправьте, и ИИ больше не будет менять этот узор.
             </p>
@@ -1238,7 +1232,7 @@ export default async function KamenPage({
                       <input type="hidden" name="stoneTypeId" value={st.id} />
                       <input type="hidden" name="batchId" value={r.batchId} />
                       <input type="hidden" name="batchPatternId" value={r.batchPatternId} />
-                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                      <label className="flex flex-col gap-1 text-xs text-ink-2">
                         Цвет
                         <select name="color" defaultValue={r.tr?.color ?? ""} className={inputClass}>
                           <option value="">—</option>
@@ -1249,7 +1243,7 @@ export default async function KamenPage({
                           ))}
                         </select>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                      <label className="flex flex-col gap-1 text-xs text-ink-2">
                         Тон
                         <select name="tone" defaultValue={r.tr?.tone ?? ""} className={inputClass}>
                           <option value="">—</option>
@@ -1260,7 +1254,7 @@ export default async function KamenPage({
                           ))}
                         </select>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                      <label className="flex flex-col gap-1 text-xs text-ink-2">
                         Рисунок
                         <select name="pattern" defaultValue={r.tr?.pattern ?? ""} className={inputClass}>
                           <option value="">—</option>
@@ -1271,7 +1265,7 @@ export default async function KamenPage({
                           ))}
                         </select>
                       </label>
-                      <label className="flex flex-col gap-1 text-xs text-ink/60">
+                      <label className="flex flex-col gap-1 text-xs text-ink-2">
                         Прожилки
                         <select name="veinColor" defaultValue={r.tr?.veinColor ?? ""} className={inputClass}>
                           <option value="">—</option>
@@ -1288,7 +1282,7 @@ export default async function KamenPage({
                     </form>
                   ) : (
                     r.tr && (
-                      <p className="mt-1 text-sm text-ink/70">
+                      <p className="mt-1 text-sm text-ink-2">
                         {[r.tr.color, r.tr.tone ? TONE_RU[r.tr.tone] : null, r.tr.pattern ? PATTERN_RU[r.tr.pattern] : null,
                           r.tr.veinColor ? `прожилки ${r.tr.veinColor}` : null]
                           .filter(Boolean)
@@ -1308,18 +1302,18 @@ export default async function KamenPage({
           canSeeExactRemainder (OWNER/MANAGER/WAREHOUSE). Партнёр/клиент видит
           лишь нейтральный признак «в наличии», без чисел и без локаций. */}
       <Card className="mt-6">
-        <h2 className="text-lg font-semibold text-ink">Наличие</h2>
+        <h2 className="text-base font-semibold text-ink">Наличие</h2>
         {!caps.canSeeExactRemainder ? (
-          <p className="mt-1 text-sm text-ink/70">
+          <p className="mt-1 text-sm text-ink-2">
             {hasStock ? (
               <span className="font-semibold text-success">В наличии</span>
             ) : (
-              <span className="text-ink/50">Нет в наличии</span>
+              <span className="text-ink-3">Нет в наличии</span>
             )}
           </p>
         ) : (
         <>
-        <p className="mt-1 text-sm text-ink/70">
+        <p className="mt-1 text-sm text-ink-2">
           {totalParts.length > 0 ? (
             <>
               <span className="font-semibold text-success">Свободно:</span>{" "}
@@ -1331,16 +1325,16 @@ export default async function KamenPage({
               ) : null}
             </>
           ) : (
-            <span className="text-ink/50">Нет в наличии (по объёму партий)</span>
+            <span className="text-ink-3">Нет в наличии (по объёму партий)</span>
           )}
         </p>
         {remainderNegative && (
-          <p className="mt-1 text-xs text-ink/55">
+          <p className="mt-1 text-xs text-ink-2">
             Свободный остаток ушёл в минус — данные требуют сверки.
           </p>
         )}
         {slabsUnknown && !slabsKnown && (
-          <p className="mt-1 text-xs text-ink/55">
+          <p className="mt-1 text-xs text-ink-2">
             Количество плит неизвестно — партия учтена только в м².
           </p>
         )}
@@ -1349,10 +1343,10 @@ export default async function KamenPage({
             разобранная партия читается как «нет в наличии»). */}
         {batches.some((x) => x.availableSlabs.length > 0) && (
           <div className="mt-3">
-            <h3 className="text-sm font-semibold text-ink/70">
+            <h3 className="text-sm font-semibold text-ink-2">
               Отдельные плиты
             </h3>
-            <ul className="mt-1 space-y-0.5 text-sm text-ink/70">
+            <ul className="mt-1 space-y-0.5 text-sm text-ink-2">
               {batches.flatMap(({ availableSlabs }) =>
                 availableSlabs.map((s) => (
                   <li key={s.id}>
@@ -1405,7 +1399,7 @@ export default async function KamenPage({
                               href={"/api/photo/" + ph.id}
                               target="_blank"
                               rel="noreferrer"
-                              className="block h-16 w-16 overflow-hidden rounded-field border border-ink/10"
+                              className="block h-16 w-16 overflow-hidden rounded-field border border-line"
                             >
                               <img
                                 src={"/api/photo/" + ph.id}
@@ -1424,7 +1418,7 @@ export default async function KamenPage({
                         ))}
                       </div>
                     ) : (
-                      <span className="ml-2 align-middle text-xs text-ink/60">
+                      <span className="ml-2 align-middle text-xs text-ink-2">
                         без фото
                       </span>
                     )}
@@ -1448,8 +1442,8 @@ export default async function KamenPage({
         {/* Бой и остатки в наличии — как в /poisk. */}
         {availablePieces.length > 0 && (
           <div className="mt-3">
-            <h3 className="text-sm font-semibold text-ink/70">Бой и остатки</h3>
-            <ul className="mt-1 space-y-0.5 text-sm text-ink/70">
+            <h3 className="text-sm font-semibold text-ink-2">Бой и остатки</h3>
+            <ul className="mt-1 space-y-0.5 text-sm text-ink-2">
               {availablePieces.map((p) => (
                 <li key={p.id}>
                   <span className="font-semibold text-ink">
@@ -1482,7 +1476,7 @@ export default async function KamenPage({
                     <img
                       src={p.drawingUrl}
                       alt="Чертёж (размеры)"
-                      className="mt-1 block w-full max-w-xs rounded-field border border-ink/10"
+                      className="mt-1 block w-full max-w-xs rounded-field border border-line"
                     />
                   )}
                 </li>
@@ -1499,11 +1493,11 @@ export default async function KamenPage({
       {caps.canSeeExactRemainder && (
         <Card className="mt-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold text-ink">Минимальный остаток</h2>
+            <h2 className="text-base font-semibold text-ink">Минимальный остаток</h2>
             {minLow && <Badge variant="warning">заканчивается</Badge>}
           </div>
           {minThreshold ? (
-            <p className="mt-1 text-sm text-ink/70">
+            <p className="mt-1 text-sm text-ink-2">
               Порог:{" "}
               <span className="tnum font-semibold text-ink">
                 {formatThreshold(minThreshold)}
@@ -1520,7 +1514,7 @@ export default async function KamenPage({
               )}
             </p>
           ) : (
-            <p className="mt-1 text-sm text-ink/55">
+            <p className="mt-1 text-sm text-ink-2">
               Не отслеживается. Когда свободный остаток вида упадёт ниже порога,
               владелец получит сообщение в Telegram.
             </p>
@@ -1587,12 +1581,12 @@ export default async function KamenPage({
       {caps.canSeePriceHint && (
       <Card className="mt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-ink">Онлайн-каталог</h2>
+          <h2 className="text-base font-semibold text-ink">Онлайн-каталог</h2>
           <Badge variant={st.showInCatalog ? "success" : "neutral"}>
             {st.showInCatalog ? "показывается" : "скрыт"}
           </Badge>
         </div>
-        <p className="mt-1 text-sm text-ink/55">
+        <p className="mt-1 text-sm text-ink-2">
           Клиенты видят вид в{" "}
           <Link href="/katalog" className="font-semibold text-gold-deep underline">
             каталоге
@@ -1628,17 +1622,17 @@ export default async function KamenPage({
           сотрудники (canSeePriceHint), меняет только владелец. */}
       {caps.canSeePriceHint && (
         <Card className="mt-4">
-          <h2 className="text-lg font-semibold text-ink">Ориентир цены</h2>
-          <p className="mt-1 text-sm text-ink/70">
+          <h2 className="text-base font-semibold text-ink">Ориентир цены</h2>
+          <p className="mt-1 text-sm text-ink-2">
             {formatPriceHint(st.priceHintUzsM2, st.priceHintUsdM2) ? (
               <span className="tnum font-semibold text-ink">
                 {formatPriceHint(st.priceHintUzsM2, st.priceHintUsdM2)}
               </span>
             ) : (
-              <span className="text-ink/55">Не задан.</span>
+              <span className="text-ink-2">Не задан.</span>
             )}
           </p>
-          <p className="mt-1 text-sm text-ink/55">
+          <p className="mt-1 text-sm text-ink-2">
             В продаже — только подсказка: цену менеджер вводит сам.
           </p>
           {hintOk && (
@@ -1702,18 +1696,18 @@ export default async function KamenPage({
       {((caps.canSeePrices && basePrice !== null) ||
         (caps.canSeePurchasePrice && purchasePrice !== null)) && (
         <Card className="mt-4">
-          <h2 className="text-lg font-semibold text-ink">Цена</h2>
+          <h2 className="text-base font-semibold text-ink">Цена</h2>
           {caps.canSeePrices && basePrice !== null && (
-            <p className="mt-1 text-sm text-ink/70">
-              <span className="text-ink/55">Продажная:</span>{" "}
+            <p className="mt-1 text-sm text-ink-2">
+              <span className="text-ink-2">Продажная:</span>{" "}
               {priceFmt.format(basePrice)} за м²
             </p>
           )}
           {/* §5.8: закупочная + маржа — строго под canSeePurchasePrice, поэтому
               менеджер без разрешения (canSeePurchasePrice=false) их НЕ видит. */}
           {caps.canSeePurchasePrice && purchasePrice !== null && (
-            <p className="mt-1 text-sm text-ink/70">
-              <span className="text-ink/55">Закупочная:</span>{" "}
+            <p className="mt-1 text-sm text-ink-2">
+              <span className="text-ink-2">Закупочная:</span>{" "}
               {priceFmt.format(purchasePrice)} за м²
             </p>
           )}
@@ -1721,8 +1715,8 @@ export default async function KamenPage({
               строго под ОБОИМИ флагами (defense-in-depth): без canSeePrices
               маржа не должна утечь базовую цену. */}
           {caps.canSeePrices && caps.canSeePurchasePrice && margin !== null && (
-            <p className="mt-1 text-sm text-ink/70">
-              <span className="text-ink/55">Маржа:</span>{" "}
+            <p className="mt-1 text-sm text-ink-2">
+              <span className="text-ink-2">Маржа:</span>{" "}
               {priceFmt.format(margin)} за м²
             </p>
           )}
@@ -1732,19 +1726,19 @@ export default async function KamenPage({
       {/* 4. Свойства + описание */}
       {(propRows.length > 0 || st.description) && (
         <Card className="mt-4">
-          <h2 className="text-lg font-semibold text-ink">Свойства</h2>
+          <h2 className="text-base font-semibold text-ink">Свойства</h2>
           {propRows.length > 0 && (
             <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
               {propRows.map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-2 text-sm">
-                  <dt className="text-ink/55">{k}</dt>
+                  <dt className="text-ink-2">{k}</dt>
                   <dd className="text-right font-semibold text-ink">{v}</dd>
                 </div>
               ))}
             </dl>
           )}
           {st.description && (
-            <p className="mt-2 whitespace-pre-line text-sm text-ink/70">
+            <p className="mt-2 whitespace-pre-line text-sm text-ink-2">
               {st.description}
             </p>
           )}
@@ -1756,15 +1750,15 @@ export default async function KamenPage({
           скрыта от партнёра/клиента (без canSeeExactRemainder). */}
       {caps.canSeeExactRemainder && (
       <Card className="mt-4">
-        <h2 className="text-lg font-semibold text-ink">Локации</h2>
+        <h2 className="text-base font-semibold text-ink">Локации</h2>
         {st.batches.length === 0 ? (
-          <p className="mt-2 text-sm text-ink/50">Партий нет.</p>
+          <p className="mt-2 text-sm text-ink-3">Партий нет.</p>
         ) : (
           <ul className="mt-2 space-y-3">
             {st.batches.map((b) => (
               <li
                 key={b.id}
-                className="rounded-card border border-ink/10 bg-paper p-3 text-sm"
+                className="rounded-card border border-line bg-marble p-3 text-sm"
               >
                 <div className="font-semibold text-ink">
                   Партия от {formatTashkentDate(b.arrivedAt)}
@@ -1782,7 +1776,7 @@ export default async function KamenPage({
                   )}
                 </div>
                 {(b.lengthMm != null && b.widthMm != null) && (
-                  <p className="mt-1 text-ink/70">
+                  <p className="mt-1 text-ink-2">
                     Плита: {b.lengthMm}×{b.widthMm}
                     {b.thicknessMm != null
                       ? `×${formatThickness(thicknessToNumber(b.thicknessMm))}`
@@ -1802,7 +1796,7 @@ export default async function KamenPage({
                   // ТЗ №19 E3 — партия без места: складчик не найдёт её по карте.
                   <p className="mt-1 text-sm font-medium text-warning">локация не указана</p>
                 ) : (
-                  <ul className="mt-1 space-y-2 text-ink/70">
+                  <ul className="mt-1 space-y-2 text-ink-2">
                     {b.locations.map((loc) => (
                       <li key={loc.id}>
                         {/* R2/SK-1: склад (canManageWarehouse) правит локацию
@@ -1814,13 +1808,13 @@ export default async function KamenPage({
                           >
                             <input type="hidden" name="locationId" value={loc.id} />
                             <input type="hidden" name="next" value={"/kamen/" + id} />
-                            <label className="text-ink/55">Блок</label>
+                            <label className="text-ink-2">Блок</label>
                             <input
                               name="block"
                               defaultValue={loc.block}
                               className={inlineInput + " w-16"}
                             />
-                            <label className="text-ink/55">ориентир</label>
+                            <label className="text-ink-2">ориентир</label>
                             <input
                               name="landmark"
                               defaultValue={loc.landmark}
@@ -1833,10 +1827,10 @@ export default async function KamenPage({
                               className={inlineInput + " w-32"}
                             />
                             {loc.slabsHere !== null && (
-                              <span className="text-ink/55">~{loc.slabsHere} плит</span>
+                              <span className="text-ink-2">~{loc.slabsHere} плит</span>
                             )}
                             {loc.areaHereM2 !== null && (
-                              <span className="text-ink/55">
+                              <span className="text-ink-2">
                                 ≈{m2Fmt.format(Number(loc.areaHereM2))} м²
                               </span>
                             )}
@@ -1852,7 +1846,7 @@ export default async function KamenPage({
                               <> · ≈{m2Fmt.format(Number(loc.areaHereM2))} м²</>
                             )}
                             {loc.note && (
-                              <span className="text-ink/55"> ({loc.note})</span>
+                              <span className="text-ink-2"> ({loc.note})</span>
                             )}
                           </>
                         )}
@@ -1886,7 +1880,7 @@ export default async function KamenPage({
                     как поставка пришла; одно другое не заменяет. */}
                 {b.photos.length > 0 && (
                   <div className="mt-3 border-t border-line pt-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
+                    <p className="mb-2 text-xs font-semibold text-gold-deep">
                       Фото партии
                     </p>
                     <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -1906,7 +1900,7 @@ export default async function KamenPage({
                               className="aspect-square w-full rounded-lg object-cover"
                             />
                           </a>
-                          <p className="mt-1 text-[11px] text-ink/45">
+                          <p className="mt-1 text-[11px] text-ink-3">
                             {formatTashkentDate(ph.takenAt)}
                           </p>
                         </li>
@@ -1931,7 +1925,7 @@ export default async function KamenPage({
                   return (
                   <div className="mt-3 border-t border-line pt-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gold-deep">
+                      <p className="text-xs font-semibold text-gold-deep">
                         Узоры в партии
                       </p>
                       {/* ТЗ №20 G — пакетная печать: этикетка на каждый узор. */}
@@ -1955,7 +1949,7 @@ export default async function KamenPage({
                       {b.patterns.map((pat) => (
                         <li
                           key={pat.id}
-                          className="rounded-card border border-line bg-paper-2 p-2"
+                          className="rounded-card border border-line bg-marble p-2"
                         >
                           {pat.photos.length > 0 ? (
                             <>
@@ -1974,7 +1968,7 @@ export default async function KamenPage({
                                 />
                               </a>
                               {/* TZ §5.3 — дата съёмки узора + «свежесть». */}
-                              <p className="mb-1.5 text-[11px] text-ink/45">
+                              <p className="mb-1.5 text-[11px] text-ink-3">
                                 Снято {formatTashkentDate(pat.photos[0].takenAt)}
                               </p>
                               {isPhotoStale(
@@ -1988,7 +1982,7 @@ export default async function KamenPage({
                               )}
                             </>
                           ) : (
-                            <div className="mb-1.5 flex aspect-square w-full items-center justify-center rounded-lg bg-ink/[0.04] text-center text-xs text-ink/40">
+                            <div className="mb-1.5 flex aspect-square w-full items-center justify-center rounded-lg bg-ink/[0.04] text-center text-xs text-ink-3">
                               фото ожидается
                             </div>
                           )}
@@ -1999,7 +1993,7 @@ export default async function KamenPage({
                             <CodeTag code={pat.code} />
                             {caps.canPrintQr && <QrLink codes={[pat.code]} />}
                             {pat.lengthMm != null && pat.widthMm != null && (
-                              <span className="text-xs text-ink/55">
+                              <span className="text-xs text-ink-2">
                                 {pat.lengthMm}×{pat.widthMm}
                                 {pat.thicknessMm != null
                                   ? `×${formatThickness(thicknessToNumber(pat.thicknessMm))}`
@@ -2052,7 +2046,7 @@ export default async function KamenPage({
                             );
                             return (
                               <>
-                                <p className="tnum text-xs text-ink/60">
+                                <p className="tnum text-xs text-ink-2">
                                   {pat.thicknessMm !== null && (
                                     <>{formatThickness(thicknessToNumber(pat.thicknessMm))} см · </>
                                   )}
@@ -2060,7 +2054,7 @@ export default async function KamenPage({
                                   {m2Fmt.format(clamped.areaRemainingM2)} м²
                                 </p>
                                 {ps && (
-                                  <p className="text-xs text-ink/60">
+                                  <p className="text-xs text-ink-2">
                                     {formatLocationsShort(ps.locations)}
                                   </p>
                                 )}
@@ -2068,7 +2062,7 @@ export default async function KamenPage({
                             );
                           })()}
                           {pat.slabsSold > 0 && (
-                            <p className="tnum text-xs text-ink/60">
+                            <p className="tnum text-xs text-ink-2">
                               продано {pat.slabsSold} из {pat.slabsCount}
                             </p>
                           )}
@@ -2087,12 +2081,12 @@ export default async function KamenPage({
 
       {/* 6. Фото — вечное хранение + дата съёмки и «свежесть» (TZ §5.3) */}
       <Card className="mt-4">
-        <h2 className="text-lg font-semibold text-ink">Фото</h2>
+        <h2 className="text-base font-semibold text-ink">Фото</h2>
         {photoItems.length === 0 ? (
-          <p className="mt-2 text-sm text-ink/50">Фото пока нет.</p>
+          <p className="mt-2 text-sm text-ink-3">Фото пока нет.</p>
         ) : (
           <>
-            <p className="mt-1 text-xs text-ink/55">
+            <p className="mt-1 text-xs text-ink-2">
               Фото уже есть — склад повторно не снимаем.
             </p>
             {/* Клиентский лайтбокс: клик по миниатюре → фото во весь экран.
@@ -2106,11 +2100,11 @@ export default async function KamenPage({
       {/* R2: запрос фото — только роли с canRequestPhoto (OWNER/MANAGER). */}
       {caps.canRequestPhoto && st.batches.length > 0 && (
         <Card className="mt-4">
-          <h2 className="text-lg font-semibold text-ink">Запросить фото</h2>
+          <h2 className="text-base font-semibold text-ink">Запросить фото</h2>
           <ul className="mt-2 space-y-2">
             {st.batches.map((b) => (
               <li key={b.id} className="text-sm">
-                <div className="text-ink/60">
+                <div className="text-ink-2">
                   Партия от {formatTashkentDate(b.arrivedAt)}
                 </div>
                 {b.locations.length === 0 ? (
@@ -2137,7 +2131,7 @@ export default async function KamenPage({
                             value={loc.id}
                           />
                           <input type="hidden" name="next" value={"/kamen/" + id} />
-                          <span className="text-ink/70">
+                          <span className="text-ink-2">
                             {formatLocation(loc.block, loc.landmark)}
                           </span>
                           <Button type="submit" variant="secondary" size="sm">
@@ -2160,22 +2154,22 @@ export default async function KamenPage({
           → Lead(NEW) для менеджера, «ни один интерес не теряется» (§6.8.5). */}
       {caps.requestsRouteToManager && (
         <Card className="mt-4">
-          <h2 className="text-lg font-semibold text-ink">Запросить объём</h2>
-          <p className="mt-1 text-sm text-ink/60">
+          <h2 className="text-base font-semibold text-ink">Запросить объём</h2>
+          <p className="mt-1 text-sm text-ink-2">
             Оставьте запрос — менеджер свяжется с вами и подберёт камень под проект.
           </p>
           <form action={requestLead} className="mt-3 flex flex-col gap-3">
             <input type="hidden" name="stoneTypeId" value={st.id} />
             <input type="hidden" name="next" value={"/kamen/" + id} />
             <div className="flex flex-wrap items-center gap-2">
-              <label className="text-sm text-ink/55">Плиты</label>
+              <label className="text-sm text-ink-2">Плиты</label>
               <input
                 name="requestedSlabs"
                 inputMode="numeric"
                 placeholder="напр. 10"
                 className={inlineInput + " w-24"}
               />
-              <label className="text-sm text-ink/55">м²</label>
+              <label className="text-sm text-ink-2">м²</label>
               <input
                 name="requestedAreaM2"
                 inputMode="decimal"

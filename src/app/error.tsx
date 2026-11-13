@@ -24,14 +24,14 @@ export default function Error({
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center px-4 text-center">
-      <span className="flex size-14 items-center justify-center rounded-card bg-danger/12 text-danger">
+      <span className="flex size-14 items-center justify-center rounded-card bg-carnelian-bg text-carnelian">
         <AlertTriangleIcon width={28} height={28} />
       </span>
 
-      <h1 className="mt-5 font-serif text-2xl font-bold text-ink">
+      <h1 className="mt-5 text-display font-semibold text-ink">
         Что-то пошло не так
       </h1>
-      <p className="mt-2 text-base text-ink/70">
+      <p className="mt-2 text-base text-ink-2">
         Не удалось загрузить страницу. Попробуйте ещё раз.
       </p>
 
@@ -45,7 +45,7 @@ export default function Error({
       </div>
 
       {error.digest && (
-        <p className="mt-6 text-xs text-ink/60">Код: {error.digest}</p>
+        <p className="mt-6 text-xs text-ink-2">Код: {error.digest}</p>
       )}
     </main>
   );

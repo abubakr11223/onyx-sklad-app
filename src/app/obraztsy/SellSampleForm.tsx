@@ -68,7 +68,7 @@ export default function SellSampleForm({ sampleId }: { sampleId: string }) {
   return (
     <form
       action={formAction}
-      className="flex flex-col gap-2 rounded-field border border-line bg-paper-2 p-2"
+      className="flex flex-col gap-3 rounded-field border border-line bg-marble p-3"
     >
       <input type="hidden" name="sampleId" value={sampleId} />
       <input
@@ -76,13 +76,13 @@ export default function SellSampleForm({ sampleId }: { sampleId: string }) {
         name="price"
         value={priceSubmit || normalizeMoneyForSubmit(priceDisplay)}
       />
-      <p className="text-xs font-semibold text-ink">Оформить продажу</p>
+      <p className="text-sm font-semibold text-ink">Оформить продажу</p>
       {banner && (
         <Alert variant="danger" title="Ошибка">
           {banner}
         </Alert>
       )}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Field id={`price-${sampleId}`} label="Цена *" error={e.price}>
           <input
             ref={priceInputRef}
@@ -124,7 +124,7 @@ export default function SellSampleForm({ sampleId }: { sampleId: string }) {
           </select>
         </Field>
       </div>
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" pending={pending} className="self-start">
         {pending ? "Оформляем…" : "Продать"}
       </Button>
     </form>

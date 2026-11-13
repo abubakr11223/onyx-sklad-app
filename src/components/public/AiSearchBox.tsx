@@ -76,7 +76,7 @@ export default function AiSearchBox({
   }
 
   return (
-    <section className="mb-4 rounded-card border border-gold/40 bg-gold/5 p-4" aria-label={labels.title}>
+    <section className="mb-4 rounded-card border border-honey bg-honey-soft p-4" aria-label={labels.title}>
       <form action={aiTextSearchAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-semibold text-ink">
           {labels.title}
@@ -111,7 +111,7 @@ export default function AiSearchBox({
         >
           {busy ? labels.thinking : labels.photo}
         </Button>
-        <span className="text-xs text-ink/55">{labels.photoHint}</span>
+        <span className="text-xs text-ink-2">{labels.photoHint}</span>
       </div>
       {err && (
         <p role="alert" className="mt-2 text-xs text-danger">

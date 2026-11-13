@@ -73,7 +73,7 @@ export default async function RazbitPage({
   const caps = await getCapabilities();
   if (!caps.canManageWarehouse) {
     return (
-      <main className="mx-auto max-w-xl p-4 pb-12">
+      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -235,23 +235,20 @@ export default async function RazbitPage({
   );
 
   return (
-    <main className="mx-auto max-w-xl p-4 pb-12">
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · склад
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Разбить камень
         </h1>
-        <p className="mt-2 text-base text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Бой или распил: система всегда отражает реальное состояние склада.
         </p>
       </header>
 
       {/* W10-A — two doors for §6.4 (photo+AI stays in Telegram; form below = manual). */}
-      <Card className="mb-6 border-gold/30">
-        <h2 className="text-base font-bold text-ink">Два пути (сценарий 6.4)</h2>
-        <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink/80">
+      <Card className="mb-6 border-honey">
+        <h2 className="text-base font-semibold text-ink">Два пути (сценарий 6.4)</h2>
+        <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink">
           <li>
             <span className="font-semibold text-ink">
               Бой с фото и чертежом ИИ
@@ -266,11 +263,11 @@ export default async function RazbitPage({
             <p className="mt-2">
               <Link
                 href="/singan"
-                className="font-semibold text-gold-deep underline"
+                className="font-semibold text-honey-ink underline"
               >
                 Открыть «Бой по фото»
               </Link>
-              <span className="text-ink/50">
+              <span className="text-ink-3">
                 {" "}
                 — без ссылки из бота форма размеров не откроется; страница
                 напомнит шаги.
@@ -296,19 +293,19 @@ export default async function RazbitPage({
             {pieceCount && `кусков: ${pieceCount}`}
           </p>
           {causeLabel && (
-            <p className="mt-1 text-sm text-ink/70">
+            <p className="mt-1 text-sm text-ink-2">
               Причина: <span className="font-medium text-ink">{causeLabel}</span>
             </p>
           )}
           {reserveCancelled && (
-            <p className="mt-1 font-medium text-warning">
+            <p className="mt-1 font-medium text-amber">
               Бронь на плиту снята — менеджер увидит в журнале.
             </p>
           )}
-          <p className="mt-2 text-sm text-ink/70">
+          <p className="mt-2 text-sm text-ink-2">
             Нужен чертёж по фото? Отправьте фото куска в бот с подписью «бой» —
             откроется{" "}
-            <Link href="/singan" className="font-semibold text-gold-deep underline">
+            <Link href="/singan" className="font-semibold text-honey-ink underline">
               Бой по фото
             </Link>
             .

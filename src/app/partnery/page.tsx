@@ -52,7 +52,7 @@ export default async function PartnersPage({
   const caps = await getCapabilities();
   if (!caps.canManagePartners) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -107,11 +107,10 @@ export default async function PartnersPage({
   );
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">Onyx · партнёры</p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">Партнёры</h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <h1 className="text-display font-semibold text-ink">Партнёры</h1>
+        <p className="mt-1 text-sm text-ink-2">
           Дизайнеры, прорабы и подрядчики. Партнёр видит каталог с остатками (плиты и м²),
           скачивает текстуры для 3D и оставляет заявки на объём — они приходят закреплённому
           менеджеру. Цен, клиентов и складских разделов партнёр не видит.
@@ -129,7 +128,7 @@ export default async function PartnersPage({
         </Alert>
       )}
 
-      <details className="mb-6 rounded-card border border-line bg-paper-2 p-4" open={partners.length === 0}>
+      <details className="mb-6 rounded-card border border-line bg-marble p-4" open={partners.length === 0}>
         <summary className="cursor-pointer font-semibold text-ink">+ Завести партнёра</summary>
         <form action={createPartner} className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
@@ -178,7 +177,7 @@ export default async function PartnersPage({
       </details>
 
       <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-sm text-ink/70">
+        <label className="flex flex-col gap-1 text-sm text-ink-2">
           Тип
           <select name="type" defaultValue={typeFilter ?? ""} className={inputClass}>
             <option value="">Все</option>
@@ -196,7 +195,7 @@ export default async function PartnersPage({
 
       {partners.length === 0 ? (
         <Card>
-          <p className="text-sm text-ink/60">Партнёров пока нет.</p>
+          <p className="text-sm text-ink-2">Партнёров пока нет.</p>
         </Card>
       ) : (
         <ul className="space-y-3">
@@ -206,10 +205,10 @@ export default async function PartnersPage({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold text-ink">{p.name}</p>
-                    <p className="text-sm text-ink/60">
+                    <p className="text-sm text-ink-2">
                       {[p.email, p.phone].filter(Boolean).join(" · ")}
                     </p>
-                    <p className="mt-1 text-xs text-ink/55">
+                    <p className="mt-1 text-xs text-ink-2">
                       Заявок: <span className="tnum">{requests.get(p.id) ?? 0}</span>
                       {" · "}
                       менеджер:{" "}
@@ -231,7 +230,7 @@ export default async function PartnersPage({
 
                 <form action={updatePartner} className="mt-3 grid gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
                   <input type="hidden" name="id" value={p.id} />
-                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink/70">
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink-2">
                     Тип
                     <select name="partnerType" defaultValue={p.partnerType ?? "DESIGNER"} className={inputClass}>
                       {PARTNER_TYPES.map((t) => (
@@ -241,7 +240,7 @@ export default async function PartnersPage({
                       ))}
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink/70">
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink-2">
                     Закреплённый менеджер
                     <select
                       name="managerId"

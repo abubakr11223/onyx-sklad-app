@@ -88,7 +88,7 @@ export default async function ZayavkiPage({
   const canSell = caps.canSell;
   if (!caps.canSeeLeads) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -129,15 +129,12 @@ export default async function ZayavkiPage({
   };
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · заявки
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Заявки
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Запросы и просмотры дизайнеров-партнёров и заявки клиентов с
           карточки по QR («QR / каталог»). «Заявка» — явный запрос; «Интерес
           (посмотрел)» — партнёр открыл карточку, объём не заказывал. Ни один
@@ -159,7 +156,7 @@ export default async function ZayavkiPage({
       {/* GET-форма: фильтр остаётся в ссылке. Отправка формы сбрасывает
           курсор — новый фильтр всегда начинается с первой страницы. */}
       <form method="get" className="mb-4 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-sm text-ink/70">
+        <label className="flex flex-col gap-1 text-sm text-ink-2">
           Статус
           <select
             name="status"
@@ -172,7 +169,7 @@ export default async function ZayavkiPage({
             <option value="CLOSED">{LEAD_STATUS_RU.CLOSED}</option>
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm text-ink/70">
+        <label className="flex flex-col gap-1 text-sm text-ink-2">
           Тип партнёра
           <select name="type" defaultValue={partnerType ?? ""} className={inputClass}>
             <option value="">Все</option>
@@ -191,7 +188,7 @@ export default async function ZayavkiPage({
 
       {leads.length === 0 ? (
         <Card>
-          <p className="text-sm text-ink/60">
+          <p className="text-sm text-ink-2">
             {status
               ? `Заявок со статусом «${LEAD_STATUS_RU[status]}» нет.`
               : "Заявок пока нет."}
@@ -215,10 +212,10 @@ export default async function ZayavkiPage({
                             {l.stoneType.name}
                           </Link>
                         ) : (
-                          <span className="text-ink/60">Вид не указан</span>
+                          <span className="text-ink-2">Вид не указан</span>
                         )}
                       </p>
-                      <p className="text-sm text-ink/60">
+                      <p className="text-sm text-ink-2">
                         От:{" "}
                         {l.source === "QR_CATALOG" ? (
                           <>
@@ -263,14 +260,14 @@ export default async function ZayavkiPage({
                     </div>
                   </div>
 
-                  <div className="mt-3 space-y-1 text-sm text-ink/70">
+                  <div className="mt-3 space-y-1 text-sm text-ink-2">
                     {l.kind === "VIEW" ? (
-                      <p className="text-ink/60">
+                      <p className="text-ink-2">
                         Просмотр карточки — объём не запрашивал. Перезвоните:
                         «Вы интересовались таким камнем?»
                       </p>
                     ) : l.kind === "TEXTURE_DOWNLOAD" ? (
-                      <p className="text-ink/60">
+                      <p className="text-ink-2">
                         Скачал текстуру для 3D{l.stoneCode ? ` (${l.stoneCode})` : ""} —
                         закладывает камень в проект. Уточните объём и сроки.
                       </p>
@@ -278,10 +275,10 @@ export default async function ZayavkiPage({
                       l.requestedSlabs === null &&
                       l.requestedAreaM2 === null ? null : (
                       <p>
-                        <span className="text-ink/55">Запрос:</span>{" "}
+                        <span className="text-ink-2">Запрос:</span>{" "}
                         {l.requestedSlabs === null &&
                         l.requestedAreaM2 === null ? (
-                          <span className="text-ink/50">объём не указан</span>
+                          <span className="text-ink-3">объём не указан</span>
                         ) : (
                           [
                             l.requestedSlabs !== null
@@ -298,7 +295,7 @@ export default async function ZayavkiPage({
                     )}
                     {l.contact && (
                       <p>
-                        <span className="text-ink/55">
+                        <span className="text-ink-2">
                           {l.source === "QR_CATALOG" ? "Телефон:" : "Контакт:"}
                         </span>{" "}
                         {l.contact}
@@ -306,12 +303,12 @@ export default async function ZayavkiPage({
                     )}
                     {l.siteText && (
                       <p>
-                        <span className="text-ink/55">Объект:</span> {l.siteText}
+                        <span className="text-ink-2">Объект:</span> {l.siteText}
                       </p>
                     )}
                     {l.dueDate && (
                       <p>
-                        <span className="text-ink/55">Срок:</span>{" "}
+                        <span className="text-ink-2">Срок:</span>{" "}
                         <span className="tnum">{formatDueDate(l.dueDate)}</span>
                       </p>
                     )}
@@ -329,7 +326,7 @@ export default async function ZayavkiPage({
                     )}
                     {l.stoneCode && (
                       <p>
-                        <span className="text-ink/55">Код с карточки:</span>{" "}
+                        <span className="text-ink-2">Код с карточки:</span>{" "}
                         <Link href={"/k/" + l.stoneCode} className="tnum text-gold-deep hover:underline">
                           {l.stoneCode}
                         </Link>
@@ -337,16 +334,16 @@ export default async function ZayavkiPage({
                     )}
                     {l.note && (
                       <p className="whitespace-pre-line">
-                        <span className="text-ink/55">Комментарий:</span> {l.note}
+                        <span className="text-ink-2">Комментарий:</span> {l.note}
                       </p>
                     )}
-                    <p className="text-xs text-ink/50">
+                    <p className="text-xs text-ink-3">
                       {formatTashkentDateTime(l.createdAt)}
                     </p>
                   </div>
 
                   {nextStatuses.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-ink/10 pt-4">
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
                       {/* ТЗ №20 L (§13.3) — заявка партнёра → форма продажи с камнем и объёмом. */}
                       {canSell &&
                         l.kind === "REQUEST" &&

@@ -17,6 +17,7 @@ import {
 import { formatCurrencySummaryLine } from "@/lib/debts-ui";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import Button, { buttonClass } from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -40,7 +41,7 @@ export default async function ObektyPage({
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -85,10 +86,10 @@ export default async function ObektyPage({
   ]);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-ink">Объекты</h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <h1 className="text-display font-semibold text-ink">Объекты</h1>
+        <p className="mt-1 text-sm text-ink-2">
           Стройки и площадки. Итоги отгрузки — из продаж (возвраты не считаются).
         </p>
       </header>
@@ -144,13 +145,52 @@ export default async function ObektyPage({
       </Card>
 
       {sites.length === 0 ? (
-        <Card>
-          <p className="text-sm text-ink/65">
-            Объектов не найдено. Их можно создать при продаже.
-          </p>
-        </Card>
+        <EmptyState title="Объектов не найдено.">Их можно создать при продаже.</EmptyState>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <>
+          {/* ТЗ №20 §8: список — таблица; на телефоне — карточки (§9). */}
+          <div className="onyx-table-wrap hidden md:block">
+            <table className="onyx-table">
+              <thead>
+                <tr>
+                  <th className="py-2 pl-3">Объект</th>
+                  <th className="py-2 pl-3">Тип</th>
+                  <th className="py-2 pl-3">Заказчик</th>
+                  <th className="py-2 pl-3 text-right">Объём</th>
+                  <th className="py-2 pl-3 text-right">Сумма</th>
+                  <th className="py-2 px-3">Статус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sites.map((s) => {
+                  const money = formatCurrencySummaryLine(s.purchaseTotals);
+                  const vol = formatVolumeLine(s.volume);
+                  return (
+                    <tr key={s.id} className="align-top">
+                      <td className="py-2.5 pl-3">
+                        <Link
+                          href={`/obekty/${s.id}`}
+                          className="font-medium text-ink hover:text-honey-ink hover:underline"
+                        >
+                          {s.name}
+                        </Link>
+                      </td>
+                      <td className="py-2.5 pl-3 text-ink-2">{SITE_TYPE_LABELS[s.type]}</td>
+                      <td className="py-2.5 pl-3 text-ink-2">{s.clientName}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{vol ?? <span className="text-ink-3">—</span>}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{money || <span className="text-ink-3">—</span>}</td>
+                      <td className="py-2.5 px-3">
+                        <Badge variant={s.status === "ACTIVE" ? "success" : "neutral"}>
+                          {SITE_STATUS_LABELS[s.status]}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        <ul className="flex flex-col gap-2 md:hidden">
           {sites.map((s) => {
             const money = formatCurrencySummaryLine(s.purchaseTotals);
             const vol = formatVolumeLine(s.volume);
@@ -158,25 +198,25 @@ export default async function ObektyPage({
               <li key={s.id}>
                 <Link
                   href={`/obekty/${s.id}`}
-                  className="block rounded-card border border-line bg-paper p-3 shadow-card transition hover:border-gold"
+                  className="block rounded-card border border-line bg-marble p-4 transition-colors duration-150 hover:border-line-strong"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-semibold text-ink">{s.name}</span>
+                    <span className="text-base font-medium text-ink">{s.name}</span>
                     <Badge
                       variant={s.status === "ACTIVE" ? "success" : "neutral"}
                     >
                       {SITE_STATUS_LABELS[s.status]}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-sm text-ink/70">
+                  <p className="mt-1 text-sm text-ink-2">
                     {SITE_TYPE_LABELS[s.type]} · {s.clientName}
                   </p>
-                  <p className="mt-1 text-sm text-ink/70">
+                  <p className="mt-1 text-sm text-ink-2">
                     {vol ?? "объём: —"}
                     {money && (
                       <>
                         {" · "}
-                        <span className="tnum font-semibold text-ink">{money}</span>
+                        <span className="tnum font-medium text-ink">{money}</span>
                       </>
                     )}
                   </p>
@@ -185,6 +225,7 @@ export default async function ObektyPage({
             );
           })}
         </ul>
+        </>
       )}
 
       <p className="mt-6 text-center text-sm">

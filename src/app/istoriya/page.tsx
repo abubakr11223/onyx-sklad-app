@@ -32,7 +32,7 @@ import {
 } from "@/lib/history-labels";
 import type { Role } from "@/lib/permissions";
 import NoAccess from "@/components/NoAccess";
-import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import { buttonClass } from "@/components/ui/Button";
 
@@ -198,7 +198,7 @@ export default async function IstoriyaPage() {
   const caps = await getCapabilities();
   if (!caps.canSeeHistory) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -222,15 +222,12 @@ export default async function IstoriyaPage() {
   const lookups = await loadHistoryLookups(entries);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · журнал
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           История
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Кто что делал: приёмка, продажи, брони, разбитие и перемещения.
           Последние {HISTORY_LIMIT} действий, новые сверху.
         </p>
@@ -242,46 +239,79 @@ export default async function IstoriyaPage() {
       </header>
 
       {entries.length === 0 ? (
-        <Card>
-          <p className="text-sm text-ink/70">
-            Пока пусто — действия появятся здесь по мере работы со складом.
-          </p>
-        </Card>
+        <EmptyState title="Пока пусто — действия появятся здесь по мере работы со складом." />
       ) : (
-        <ul className="space-y-2">
-          {entries.map((e) => {
-            const d = describeHistoryEntry(e, lookups);
-            const actor = e.user
-              ? `${e.user.name} · ${roleLabel(e.user.role as Role)}`
-              : "Система";
-            return (
-              <li
-                key={e.id}
-                className="rounded-card border border-line bg-paper p-3 text-sm text-ink/80"
-              >
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Badge variant={actionVariant(e.action)}>
-                    {actionLabelRu(e.action)}
-                  </Badge>
-                  <span className="font-medium text-ink">{d.summary}</span>
-                </div>
-                {d.changes.length > 0 && (
-                  <ul className="mt-1 space-y-0.5 text-ink/75">
-                    {d.changes.map((c, i) => (
-                      <li key={i} className="tabular-nums">
-                        {c}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-1 text-ink/60">
-                  {actor} · {formatTashkentDateTime(e.createdAt)}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        // ТЗ №20 §8: плотная таблица (строка ~36px, 13px) — дата, кто,
+        // действие, объект, было → стало (моно, «было» зачёркнуто ink-3).
+        // На телефоне — карточки (§9), таблица прокручивается внутри рамки.
+        <div className="onyx-table-wrap">
+          <table className="onyx-table text-[13px] leading-[18px]">
+            <thead>
+              <tr>
+                <th className="py-2 pl-3 pr-2">Когда</th>
+                <th className="hidden py-2 pr-2 md:table-cell">Кто</th>
+                <th className="py-2 pr-2">Действие</th>
+                <th className="py-2 pr-3">Объект и изменения</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => {
+                const d = describeHistoryEntry(e, lookups);
+                const actor = e.user
+                  ? `${e.user.name} · ${roleLabel(e.user.role as Role)}`
+                  : "Система";
+                return (
+                  <tr key={e.id} className="align-top">
+                    <td className="tnum whitespace-nowrap py-2 pl-3 pr-2 text-ink-2">
+                      {formatTashkentDateTime(e.createdAt)}
+                      <span className="mt-0.5 block text-ink-2 md:hidden">{actor}</span>
+                    </td>
+                    <td className="hidden py-2 pr-2 text-ink-2 md:table-cell">{actor}</td>
+                    <td className="py-2 pr-2">
+                      <Badge variant={actionVariant(e.action)}>
+                        {actionLabelRu(e.action)}
+                      </Badge>
+                    </td>
+                    <td className="min-w-[14rem] py-2 pr-3">
+                      <span className="font-medium text-ink">{d.summary}</span>
+                      {d.changes.length > 0 && (
+                        <ul className="mt-0.5 space-y-0.5">
+                          {d.changes.map((c, i) => (
+                            <li key={i}>
+                              <ChangeLine text={c} />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
+  );
+}
+
+/**
+ * «Поле: было → стало» — значения моно, «было» зачёркнуто ink-3 (ТЗ №20 §8).
+ * Строки другого вида показываются как есть.
+ */
+function ChangeLine({ text }: { text: string }) {
+  const arrow = text.indexOf(" → ");
+  if (arrow < 0) return <span className="tnum text-ink">{text}</span>;
+  const colon = text.lastIndexOf(": ", arrow);
+  const label = colon >= 0 ? text.slice(0, colon + 1) : "";
+  const before = text.slice(colon >= 0 ? colon + 2 : 0, arrow);
+  const after = text.slice(arrow + 3);
+  return (
+    <span className="text-ink">
+      {label && <span className="text-ink-2">{label} </span>}
+      <span className="font-mono text-ink-3 line-through">{before}</span>
+      <span className="text-ink-2"> → </span>
+      <span className="font-mono">{after}</span>
+    </span>
   );
 }

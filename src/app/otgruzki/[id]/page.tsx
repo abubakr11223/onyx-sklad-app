@@ -24,7 +24,7 @@ export default async function ShipmentDocPage({
   const caps = await getCapabilities();
   if (!caps.canSeeShipments) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -42,28 +42,28 @@ export default async function ShipmentDocPage({
   if (!doc) notFound();
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       {/* Экранная шапка — при печати скрыта. */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
-        <Link href="/otgruzki" className="text-sm text-ink/60 underline">
+        <Link href="/otgruzki" className="text-sm text-ink-2 underline">
           ← К отгрузкам
         </Link>
-        <span className="text-sm text-ink/60">
+        <span className="text-sm text-ink-2">
           Печать: Ctrl/⌘ + P
         </span>
       </div>
 
-      <article className="rounded-card border border-line bg-paper p-5 text-ink print:border-0 print:p-0">
+      <article className="rounded-card border border-line bg-marble p-5 text-ink print:border-0 print:p-0">
         <header className="mb-4 border-b border-line pb-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h1 className="text-xl font-bold">
+            <h1 className="text-xl font-semibold">
               Накладная № {doc.number}
             </h1>
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-ink-2">
               от {formatTashkentDate(doc.createdAt)}
             </p>
           </div>
-          <p className="mt-1 text-sm text-ink/70">
+          <p className="mt-1 text-sm text-ink-2">
             Onyx · склад — {doc.kindLabel}
             {doc.kind === "SAMPLE" && doc.returnDueDate && (
               <> · вернуть до {formatTashkentDate(doc.returnDueDate)}</>
@@ -73,32 +73,32 @@ export default async function ShipmentDocPage({
 
         <dl className="mb-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-ink/55">Кому</dt>
+            <dt className="text-ink-2">Кому</dt>
             <dd className="font-medium">{doc.clientName ?? "—"}</dd>
           </div>
           {doc.siteName && (
             <div>
-              <dt className="text-ink/55">Объект</dt>
+              <dt className="text-ink-2">Объект</dt>
               <dd className="font-medium">{doc.siteName}</dd>
             </div>
           )}
           <div>
-            <dt className="text-ink/55">Оформил</dt>
+            <dt className="text-ink-2">Оформил</dt>
             <dd className="font-medium">{doc.managerName}</dd>
           </div>
           <div>
-            <dt className="text-ink/55">Выдал со склада</dt>
+            <dt className="text-ink-2">Выдал со склада</dt>
             <dd className="font-medium">
               {doc.issuedByName ?? "— ещё не выдано —"}
               {doc.issuedAt && (
-                <span className="ml-1 font-normal text-ink/55">
+                <span className="ml-1 font-normal text-ink-2">
                   ({formatTashkentDateTime(doc.issuedAt)})
                 </span>
               )}
             </dd>
           </div>
           <div>
-            <dt className="text-ink/55">Статус</dt>
+            <dt className="text-ink-2">Статус</dt>
             <dd className="font-medium">{doc.statusLabel}</dd>
           </div>
         </dl>
@@ -106,20 +106,20 @@ export default async function ShipmentDocPage({
         <table className="onyx-table">
           <thead>
             <tr>
-              <th className="py-2 pr-2 font-medium">Камень</th>
+              <th className="py-2 pl-2 pr-2 font-medium">Камень</th>
               <th className="py-2 pr-2 font-medium">Что</th>
               <th className="py-2 pr-2 font-medium">Размер, см</th>
-              <th className="py-2 pr-2 font-medium">Заказано</th>
-              <th className="py-2 font-medium">Отгружено</th>
+              <th className="py-2 pr-2 text-right font-medium">Заказано</th>
+              <th className="py-2 pr-2 text-right font-medium">Отгружено</th>
             </tr>
           </thead>
           <tbody>
             {doc.lines.map((l, i) => (
               <tr key={i} className="align-top">
-                <td className="py-2 pr-2 font-medium">
+                <td className="py-2 pl-2 pr-2 font-medium">
                   {l.stoneName}
                   {l.code && (
-                    <span className="tnum block text-xs font-normal text-ink/55">
+                    <span className="block font-mono text-xs font-normal text-ink-2">
                       {l.code}
                     </span>
                   )}
@@ -127,36 +127,36 @@ export default async function ShipmentDocPage({
                 <td className="py-2 pr-2">
                   {l.what}
                   {l.locationSnapshot && (
-                    <span className="block text-xs text-ink/50">
+                    <span className="block font-mono text-xs text-ink-2">
                       {l.locationSnapshot}
                     </span>
                   )}
                 </td>
-                <td className="tnum py-2 pr-2">{l.gabarit ?? "—"}</td>
-                <td className="tnum py-2 pr-2">{l.qtyOrdered ?? "—"}</td>
-                <td className="tnum py-2">{l.qtyShipped ?? "—"}</td>
+                <td className="py-2 pr-2 font-mono">{l.gabarit ?? "—"}</td>
+                <td className="tnum py-2 pr-2 text-right">{l.qtyOrdered ?? "—"}</td>
+                <td className="tnum py-2 pr-2 text-right">{l.qtyShipped ?? "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
         {doc.note && (
-          <p className="mt-3 text-sm text-ink/70">
-            <span className="text-ink/50">Комментарий:</span> {doc.note}
+          <p className="mt-3 text-sm text-ink-2">
+            <span className="text-ink-3">Комментарий:</span> {doc.note}
           </p>
         )}
 
         {/* Подписи — бумажная часть; ТЗ §8.4 (электронная подпись/QR) на будущее. */}
         <div className="mt-8 grid gap-6 text-sm sm:grid-cols-2">
           <div>
-            <p className="mb-6 text-ink/55">Выдал (склад)</p>
-            <div className="border-t border-ink/40 pt-1 text-xs text-ink/50">
+            <p className="mb-6 text-ink-2">Выдал (склад)</p>
+            <div className="border-t border-line-strong pt-1 text-xs text-ink-3">
               подпись / ФИО
             </div>
           </div>
           <div>
-            <p className="mb-6 text-ink/55">Получил</p>
-            <div className="border-t border-ink/40 pt-1 text-xs text-ink/50">
+            <p className="mb-6 text-ink-2">Получил</p>
+            <div className="border-t border-line-strong pt-1 text-xs text-ink-3">
               подпись / ФИО
             </div>
           </div>

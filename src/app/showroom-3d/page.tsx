@@ -66,8 +66,8 @@ export default async function Showroom3DPage() {
       {stones.length === 0 ? (
         <div className="flex min-h-[100dvh] items-center justify-center p-8 text-center">
           <div>
-            <h1 className="font-serif text-2xl font-bold text-ink">{t.showroom3dTitle}</h1>
-            <p className="mt-2 text-base text-ink/60">{t.scene3dEmpty}</p>
+            <h1 className="text-display font-semibold text-ink">{t.showroom3dTitle}</h1>
+            <p className="mt-2 text-base text-ink-2">{t.scene3dEmpty}</p>
           </div>
         </div>
       ) : (

@@ -35,7 +35,7 @@ export default async function SimilarStones({
   const t = publicDict(locale);
   return (
     <section className="mt-6" aria-labelledby="similar-title">
-      <h2 id="similar-title" className="font-serif text-xl font-bold text-ink">
+      <h2 id="similar-title" className="text-xl font-semibold text-ink">
         {t.similarTitle}
       </h2>
       <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">

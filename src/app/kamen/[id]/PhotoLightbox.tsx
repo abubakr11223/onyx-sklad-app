@@ -120,9 +120,9 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
                 lastTriggerRef.current = ev.currentTarget;
                 setOpenIndex(i);
               }}
-              className="block w-full overflow-hidden rounded-card border border-ink/10 transition
+              className="block w-full overflow-hidden rounded-card border border-line transition
                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold
-                         focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+                         focus-visible:ring-offset-2 focus-visible:ring-offset-travertine"
               aria-label="Открыть фото во весь экран"
             >
               <img
@@ -132,7 +132,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
                 alt="фото камня"
               />
             </button>
-            <figcaption className="mt-1 text-ink/60">{p.caption}</figcaption>
+            <figcaption className="mt-1 text-ink-2">{p.caption}</figcaption>
             {p.stale && (
               <Badge variant="warning" className="mt-1">
                 <AlertTriangleIcon width={12} height={12} />
@@ -150,7 +150,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
           aria-modal="true"
           aria-label="Просмотр фото"
           onClick={close}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-paper/90 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-travertine p-4"
         >
           <button
             ref={closeButtonRef}
@@ -158,7 +158,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
             onClick={close}
             aria-label="Закрыть"
             className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-field
-                       bg-ink/10 text-ink transition hover:bg-ink/20
+                       bg-stone-100 text-ink transition-colors duration-150 hover:bg-ink/20
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
           >
             <svg
@@ -190,7 +190,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               aria-label="Предыдущее фото"
               className="absolute left-4 top-1/2 flex h-11 min-h-11 w-11 -translate-y-1/2
                          items-center justify-center rounded-field bg-ink/15 text-ink
-                         transition hover:bg-ink/25 hover:text-gold
+                         transition-colors duration-150 hover:bg-ink/25 hover:text-gold
                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
             >
               <svg
@@ -218,7 +218,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               aria-label="Следующее фото"
               className="absolute right-4 top-1/2 flex h-11 min-h-11 w-11 -translate-y-1/2
                          items-center justify-center rounded-field bg-ink/15 text-ink
-                         transition hover:bg-ink/25 hover:text-gold
+                         transition-colors duration-150 hover:bg-ink/25 hover:text-gold
                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
             >
               <svg
@@ -240,7 +240,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
             <div
               aria-live="polite"
               className="absolute left-4 top-4 rounded-field bg-ink/15 px-2 py-1
-                         text-sm text-ink/80"
+                         text-sm text-ink"
             >
               {(openIndex ?? 0) + 1} / {photos.length}
             </div>
@@ -256,7 +256,7 @@ export default function PhotoLightbox({ photos }: { photos: LightboxPhoto[] }) {
               alt="фото камня"
               className="max-h-[80vh] max-w-full rounded-card object-contain"
             />
-            <figcaption className="text-sm text-ink/80">
+            <figcaption className="text-sm text-ink">
               {open.caption}
               {open.stale && (
                 <Badge variant="warning" className="ml-2 align-middle">

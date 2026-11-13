@@ -7,6 +7,7 @@ import {
 } from "@/lib/pattern-stock";
 import type { Metadata } from "next";
 import Link from "next/link";
+import EmptyState from "@/components/ui/EmptyState";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDateTime } from "@/lib/datetime";
@@ -43,7 +44,7 @@ export default async function ShourumPage({
   const caps = await getCapabilities();
   if (!caps.canSeeShowroom) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -218,17 +219,21 @@ export default async function ShourumPage({
       : "";
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold text-ink">Шоу-рум</h1>
-        <p className="mt-1 text-sm text-ink/60">
-          Камень на витрине — не обычное наличие. Статус меняется при отправке;
-          склад подтверждает физический перенос в «Отгрузках».
-        </p>
-        {/* ТЗ №20 J (§11.3) — 3D-режим для планшета в зале (без входа). */}
-        <Link href="/showroom-3d" target="_blank" className={buttonClass("secondary", "sm", "mt-3")}>
-          3D-режим для планшета
-        </Link>
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+      <header className="mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-display font-semibold text-ink">Шоу-рум</h1>
+            <p className="mt-1 text-sm text-ink-2">
+              Камень на витрине — не обычное наличие. Статус меняется при отправке;
+              склад подтверждает физический перенос в «Отгрузках».
+            </p>
+          </div>
+          {/* ТЗ №20 J (§11.3) — 3D-режим для планшета в зале (без входа). */}
+          <Link href="/showroom-3d" target="_blank" className={buttonClass("secondary", "sm")}>
+            3D-режим для планшета
+          </Link>
+        </div>
       </header>
 
       {ok === "sent" && (
@@ -302,13 +307,13 @@ export default async function ShourumPage({
               className={inputClass}
             />
             {batches.length === 0 && (
-              <p className="text-xs text-ink/50">
+              <p className="text-xs text-ink-3">
                 Партий со свободными плитами нет.
               </p>
             )}
             <Button
               type="submit"
-              className="min-h-12 w-full sm:w-auto"
+              className="w-full sm:w-auto sm:self-start"
               disabled={batches.length === 0}
             >
               Выделить и отправить
@@ -359,14 +364,14 @@ export default async function ShourumPage({
             <Button
               type="submit"
               variant="secondary"
-              className="min-h-12 w-full sm:w-auto"
+              className="w-full sm:w-auto sm:self-start"
             >
               Отправить в шоу-рум
             </Button>
           </form>
           {/* Explicit per-unit send forms — reliable without client JS. */}
           <div className="mt-4 border-t border-line pt-3">
-            <p className="mb-2 text-xs font-semibold text-ink/60">
+            <p className="mb-2 text-xs font-medium text-ink-2">
               Быстрая отправка (плиты, до 20)
             </p>
             <ul className="flex flex-col gap-2">
@@ -404,7 +409,7 @@ export default async function ShourumPage({
         <h2 className="text-base font-semibold text-ink">
           Сейчас в шоу-руме
           {items.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-ink/55">
+            <span className="ml-2 text-sm font-normal text-ink-2">
               {items.length}
               {items.length >= MAX_SHOWROOM_PAGE ? "+" : ""}
             </span>
@@ -423,9 +428,7 @@ export default async function ShourumPage({
       </div>
 
       {items.length === 0 ? (
-        <Card>
-          <p className="text-ink/60">Пусто — отправьте камень на витрину.</p>
-        </Card>
+        <EmptyState title="Пусто — отправьте камень на витрину." />
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((it) => (
@@ -435,18 +438,18 @@ export default async function ShourumPage({
                   <div>
                     <p className="font-semibold text-ink">{it.stoneLabel}</p>
                     {codeOf(it) && (
-                      <p className="tnum text-xs font-semibold tracking-wide text-ink/60">
+                      <p className="font-mono text-xs text-ink-2">
                         {codeOf(it)}
                       </p>
                     )}
-                    <Badge variant="warning">в шоу-руме</Badge>
+                    <Badge variant="info" className="mt-1">в шоу-руме</Badge>
                     {it.standNote && (
                       <p className="mt-1 text-sm text-ink">
                         Стенд: {it.standNote}
                       </p>
                     )}
-                    <p className="text-sm text-ink/70">{it.location}</p>
-                    <p className="mt-1 text-xs text-ink/55">
+                    <p className="font-mono text-sm text-ink">{it.location}</p>
+                    <p className="mt-1 text-xs text-ink-2">
                       {it.sentByName} · {formatTashkentDateTime(it.sentAt)}
                     </p>
                   </div>
@@ -461,7 +464,7 @@ export default async function ShourumPage({
                   )}
                 </div>
 
-                <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+                <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3 md:flex-row md:flex-wrap md:items-start">
                   <form action={returnFromShowroomAction}>
                     <input
                       type="hidden"
@@ -490,7 +493,7 @@ export default async function ShourumPage({
 
                       <form
                         action={sampleFromShowroomAction}
-                        className="flex flex-col gap-2 rounded-field border border-line bg-paper-2 p-2"
+                        className="flex flex-col gap-2 rounded-field border border-line bg-marble p-3 md:w-72"
                       >
                         <input
                           type="hidden"
@@ -498,10 +501,10 @@ export default async function ShourumPage({
                           value={it.targetType}
                         />
                         <input type="hidden" name="unitId" value={it.unitId} />
-                        <p className="text-xs font-semibold text-ink">
+                        <p className="text-sm font-semibold text-ink">
                           Выдать как образец
                         </p>
-                        <label className="text-xs text-ink/60">
+                        <label className="text-xs text-ink-2">
                           Клиент
                           <select
                             name="clientId"
@@ -519,7 +522,7 @@ export default async function ShourumPage({
                             ))}
                           </select>
                         </label>
-                        <label className="text-xs text-ink/60">
+                        <label className="text-xs text-ink-2">
                           Вернуть до
                           <input
                             type="date"
@@ -541,12 +544,12 @@ export default async function ShourumPage({
         </ul>
       )}
 
-      <p className="mt-6 text-sm text-ink/50">
-        <Link href="/otgruzki" className="underline">
+      <p className="mt-6 text-sm text-ink-3">
+        <Link href="/otgruzki" className="text-honey-ink hover:underline">
           Отгрузки
         </Link>
         {" · "}
-        <Link href="/poisk" className="underline">
+        <Link href="/poisk" className="text-honey-ink hover:underline">
           Поиск
         </Link>
       </p>

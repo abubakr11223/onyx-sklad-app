@@ -139,7 +139,7 @@ export default function SinganForm({
         </Alert>
       )}
 
-      <div className="flex justify-center rounded-card border border-ink/10 bg-paper-2/60 p-4">
+      <div className="flex justify-center rounded-card border border-line bg-paper-2/60 p-4">
         {/* SVG — наш renderChertyoj (валидация + экранирование на сервере). */}
         <div dangerouslySetInnerHTML={{ __html: svg }} />
       </div>
@@ -279,7 +279,7 @@ export default function SinganForm({
               </select>
             </Field>
           )}
-          <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">
+          <p className="rounded-field border border-line bg-paper-2 px-3 py-2 text-sm text-ink-2">
             Кусок списывает <strong>1 плиту</strong> из свободного остатка
             партии (учёт §3).
           </p>
@@ -337,13 +337,13 @@ export default function SinganForm({
       {/* Липкая нижняя панель отправки — CTA под большим пальцем на мобиле;
           на десктопе (md:) возвращается в обычный поток. */}
       <div
-        className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
-                   md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
+        className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 border-t border-line bg-marble px-4 py-3
+                   md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0"
       >
         <Button
           type="submit"
-          disabled={pending}
-          className="min-h-14 w-full text-lg font-bold"
+          pending={pending}
+          className="min-h-12 w-full text-base"
         >
           {pending ? "Запись…" : "Сохранить"}
         </Button>

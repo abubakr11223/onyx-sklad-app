@@ -12,8 +12,9 @@ import { db } from "@/lib/db";
 import { getCapabilities, getRealSessionUser } from "@/lib/session";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import { inputClass } from "@/components/ui/Field";
 import { FlagIcon } from "@/components/ui/Icons";
@@ -49,7 +50,7 @@ type StoneHere = {
  */
 function StoneList({ stones }: { stones: StoneHere[] }) {
   if (stones.length === 0) {
-    return <p className="text-xs text-ink/60">Пусто.</p>;
+    return <p className="text-xs text-ink-2">Пусто.</p>;
   }
   return (
     <ul className="space-y-0.5">
@@ -108,7 +109,7 @@ export default async function KartaSkladaPage({
   const caps = await getCapabilities();
   if (!caps.canSeeExactRemainder) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -223,16 +224,13 @@ export default async function KartaSkladaPage({
     }));
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-            Onyx · склад
-          </p>
-          <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+          <h1 className="text-display font-semibold text-ink">
             Карта склада
           </h1>
-          <p className="mt-1 text-sm text-ink/60">
+          <p className="mt-1 text-sm text-ink-2">
             Блоки — зоны, ориентиры — флажки. Размечайте склад заранее, включая
             пустые зоны.
           </p>
@@ -240,16 +238,12 @@ export default async function KartaSkladaPage({
         {/* ТЗ №6 / №17 §6 — режим редактирования: владелец или зав. складом. */}
         {canEditMap &&
           (editMode ? (
-            <Link href="/karta-sklada">
-              <Button variant="primary" size="sm">
-                Готово
-              </Button>
+            <Link href="/karta-sklada" className={buttonClass("primary", "sm")}>
+              Готово
             </Link>
           ) : (
-            <Link href="/karta-sklada?edit=1">
-              <Button variant="secondary" size="sm">
-                Редактировать карту
-              </Button>
+            <Link href="/karta-sklada?edit=1" className={buttonClass("secondary", "sm")}>
+              Редактировать карту
             </Link>
           ))}
       </header>
@@ -267,8 +261,8 @@ export default async function KartaSkladaPage({
 
       {/* Режим редактирования: добавить новый блок. */}
       {editMode && (
-        <Card className="mb-6 border-gold/40">
-          <h2 className="mb-3 font-serif text-xl font-bold text-ink">Добавить блок</h2>
+        <Card className="mb-6 border-honey">
+          <h2 className="mb-3 text-base font-semibold text-ink">Добавить блок</h2>
           <form action={addBlock} className="flex flex-wrap items-end gap-2">
             <input
               name="letter"
@@ -290,20 +284,20 @@ export default async function KartaSkladaPage({
           </form>
           {/* ТЗ №17 §3.1 — код блока только латиницей: подсказка совпадает
               с текстом ошибки, чтобы не вводить в заблуждение. */}
-          <p className="mt-2 text-xs text-ink/60">
+          <p className="mt-2 text-xs text-ink-2">
             Код блока — только латиницей и цифрами, например A1, D3.
           </p>
         </Card>
       )}
 
       {blocks.length === 0 ? (
-        <Card>
-          <p className="text-sm text-ink/70">
-            {editMode
+        <EmptyState
+          title={
+            editMode
               ? "Блоков ещё нет. Добавьте первый блок выше."
-              : "Склад ещё не размечен. Владелец может добавить блоки: «Редактировать карту»."}
-          </p>
-        </Card>
+              : "Склад ещё не размечен. Владелец может добавить блоки: «Редактировать карту»."
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {blocks.map((blk) => {
@@ -325,14 +319,14 @@ export default async function KartaSkladaPage({
             return (
             <section
               key={blk.letter}
-              className="relative overflow-hidden rounded-card border border-line bg-paper-2 p-5 shadow-card"
+              className="relative overflow-hidden rounded-card border border-line bg-marble p-5"
             >
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-serif text-3xl font-bold leading-none text-gold-deep">
+                  <span className="font-mono text-xl font-medium leading-none text-ink">
                     {blk.letter}
                   </span>
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/50">
+                  <span className="text-xs font-semibold text-ink-3">
                     блок
                   </span>
                 </div>
@@ -343,7 +337,7 @@ export default async function KartaSkladaPage({
 
               {/* Площадь + заметка (просмотр). */}
               {(blk.areaM2 !== null || blk.note) && (
-                <p className="mb-3 text-xs text-ink/60">
+                <p className="mb-3 text-xs text-ink-2">
                   {blk.areaM2 !== null && <>≈{m2Fmt.format(blk.areaM2)} м²</>}
                   {blk.areaM2 !== null && blk.note && " · "}
                   {blk.note}
@@ -352,9 +346,9 @@ export default async function KartaSkladaPage({
 
               {/* ── Режим редактирования: правки блока (все блоки, ТЗ №7 §4) ── */}
               {editMode && (
-                <div className="mb-3 flex flex-col gap-2 rounded-field border border-gold/25 bg-gold/[0.04] p-3">
+                <div className="mb-3 flex flex-col gap-2 rounded-field border border-honey bg-travertine p-3">
                   {!blk.blockId && (
-                    <p className="text-xs text-ink/50">
+                    <p className="text-xs text-ink-3">
                       Блок из приёмки. Любая правка внесёт его в сетку склада.
                     </p>
                   )}
@@ -394,7 +388,7 @@ export default async function KartaSkladaPage({
                         name="isFull"
                         value="1"
                         defaultChecked={blk.isFull}
-                        className="h-5 w-5 accent-ink"
+                        className="h-4 w-4"
                       />
                       Заполнен (нет места)
                     </label>
@@ -416,7 +410,7 @@ export default async function KartaSkladaPage({
                       Удалить блок
                     </ConfirmSubmitButton>
                     {stonesInBlock > 0 && (
-                      <p className="text-xs text-ink/50">
+                      <p className="text-xs text-ink-3">
                         В блоке есть камень — сначала переместите его.
                       </p>
                     )}
@@ -431,23 +425,23 @@ export default async function KartaSkladaPage({
                     адрес до уровня блока. Если бы такой камень не отображался
                     на карте, приёмка без ориентира была бы хуже блокировки. */}
                 {blk.noLandmark.length > 0 && (
-                  <div className="rounded-field border border-dashed border-ink/25 bg-paper/50 p-3">
-                    <div className="mb-2 inline-flex items-center rounded-field bg-ink/[0.06] px-2.5 py-1 text-sm font-semibold text-ink/70">
+                  <div className="rounded-field border border-dashed border-line-strong bg-travertine p-3">
+                    <div className="mb-2 inline-flex items-center rounded-field bg-stone-100 px-2.5 py-1 text-sm font-medium text-ink-2">
                       без ориентира
                     </div>
                     <StoneList stones={blk.noLandmark} />
                   </div>
                 )}
                 {blk.landmarks.length === 0 && blk.noLandmark.length === 0 && (
-                  <p className="text-xs text-ink/60">Ориентиров пока нет.</p>
+                  <p className="text-xs text-ink-2">Ориентиров пока нет.</p>
                 )}
                 {blk.landmarks.map((lm) => (
                   <div
                     key={lm.number}
-                    className="rounded-field border border-ink/8 bg-paper/50 p-3"
+                    className="rounded-field border border-line bg-travertine p-3"
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="inline-flex items-center gap-1.5 rounded-field bg-gold/15 px-2.5 py-1 text-sm font-bold text-gold-deep ring-1 ring-gold/25">
+                      <div className="inline-flex items-center gap-1.5 rounded-field border border-line bg-marble px-2.5 py-1 font-mono text-sm font-medium text-ink">
                         <FlagIcon className="h-4 w-4" />
                         <span>{lm.number}</span>
                       </div>

@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Tabs from "@/components/ui/Tabs";
+import EmptyState from "@/components/ui/EmptyState";
 import { db } from "@/lib/db";
 import { getCapabilities, currentActorId } from "@/lib/session";
 import { formatTashkentDate, formatTashkentDateTime } from "@/lib/datetime";
@@ -131,10 +132,10 @@ export default async function OtgruzkiPage({
     : [];
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold text-ink">Отгрузки</h1>
-        <p className="mt-1 text-sm text-ink/60">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+      <header className="mb-6">
+        <h1 className="text-display font-semibold text-ink">Отгрузки</h1>
+        <p className="mt-1 text-sm text-ink-2">
           Продажа уже списала камень. Здесь — факт выдачи со склада.
         </p>
       </header>
@@ -191,7 +192,7 @@ export default async function OtgruzkiPage({
             defaultValue={filters.client ?? ""}
           />
           <div>
-            <label htmlFor="f-kind" className="mb-1 block text-sm text-ink/70">
+            <label htmlFor="f-kind" className="mb-1 block text-xs font-medium text-ink-2">
               Тип
             </label>
             <select
@@ -224,7 +225,7 @@ export default async function OtgruzkiPage({
             <div>
               <label
                 htmlFor="f-manager"
-                className="mb-1 block text-sm text-ink/70"
+                className="mb-1 block text-xs font-medium text-ink-2"
               >
                 Менеджер
               </label>
@@ -251,7 +252,7 @@ export default async function OtgruzkiPage({
           {filtersOn && (
             <Link
               href={tab === "archive" ? "/otgruzki?tab=archive" : "/otgruzki"}
-              className="text-sm text-ink/60 underline"
+              className="text-sm text-ink-2 underline"
             >
               Сбросить фильтр
             </Link>
@@ -261,7 +262,7 @@ export default async function OtgruzkiPage({
 
       {pendingReturns.rows.length > 0 && (
         <section className="mb-4">
-          <h2 className="mb-2 text-lg font-bold text-ink">Возвраты к приёму</h2>
+          <h2 className="mb-2 text-base font-semibold text-ink">Возвраты к приёму</h2>
           <ul className="flex flex-col gap-3">
             {pendingReturns.rows.map((r) => {
               const sale = r.saleRecord;
@@ -276,14 +277,14 @@ export default async function OtgruzkiPage({
                 .join(", ");
               return (
                 <li key={r.id}>
-                  <Card className="border-gold/50">
+                  <Card className="border-honey">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold text-ink">
                           {sale.batch?.stoneType.name ?? "Камень"}
                           {sale.batchPattern ? ` · узор «${sale.batchPattern.description}»` : ""}
                         </p>
-                        <p className="text-sm text-ink/70">
+                        <p className="text-sm text-ink-2">
                           {sale.customerName}
                           {sale.site ? ` · ${sale.site.name}` : ""}
                         </p>
@@ -292,17 +293,17 @@ export default async function OtgruzkiPage({
                           {formatReturnQty(r.pendingSlabs, Number(r.pendingAreaM2))}
                           {where ? ` · вернуть в ${where}` : ""}
                         </p>
-                        <p className="text-sm text-ink/70">
+                        <p className="text-sm text-ink-2">
                           {r.destination === "REMAINDER"
                             ? "Куда: в бой/остаток (куски, «проверить»)"
                             : "Куда: в тот же узор / то же место"}
                         </p>
                         {r.reason && (
-                          <p className="text-sm text-ink/70">
-                            <span className="text-ink/50">Причина:</span> {r.reason}
+                          <p className="text-sm text-ink-2">
+                            <span className="text-ink-3">Причина:</span> {r.reason}
                           </p>
                         )}
-                        <p className="mt-1 text-xs text-ink/55">
+                        <p className="mt-1 text-xs text-ink-2">
                           Возврат оформил {r.createdBy.name} ·{" "}
                           {formatTashkentDateTime(r.createdAt)}
                           {r.isFull ? " · полный возврат" : " · частичный возврат"}
@@ -313,7 +314,7 @@ export default async function OtgruzkiPage({
                     {caps.canConfirmShipment && (
                       <form action={acceptSaleReturnAction} className="mt-3 border-t border-line pt-3">
                         <input type="hidden" name="saleReturnId" value={r.id} />
-                        <Button type="submit" className="min-h-12 w-full sm:w-auto">
+                        <Button type="submit" className="w-full sm:w-auto">
                           Принять возврат
                         </Button>
                       </form>
@@ -327,37 +328,35 @@ export default async function OtgruzkiPage({
       )}
 
       {items.length === 0 ? (
-        <Card>
-          <p className="text-ink/60">
-            {tab === "open" ? "Нет задач к отгрузке." : "Архив пуст."}
-          </p>
-        </Card>
+        <EmptyState title={tab === "open" ? "Нет задач к отгрузке." : "Архив пуст."} />
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((s) => (
             <li key={s.id}>
-              <Card className={s.planOverdue ? "border-danger/60 bg-danger/5" : undefined}>
+              <Card className={s.planOverdue ? "border-carnelian-line" : undefined}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-ink">{s.stoneLabel}</p>
-                      {s.isSample && (
-                        <Badge variant="warning">ОБРАЗЕЦ</Badge>
-                      )}
-                      {s.isShowroom && (
-                        <Badge variant="warning">ШОУ-РУМ</Badge>
+                    {/* ТЗ №20 §7.4 — тип задачи: бейдж с рамкой (не путать со статусом). */}
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      {s.isSample ? (
+                        <Badge variant="type-sample">Образец</Badge>
+                      ) : s.isShowroom ? (
+                        <Badge variant="type-showroom">Шоу-рум</Badge>
+                      ) : (
+                        <Badge variant="type-sale">Продажа</Badge>
                       )}
                       {/* ТЗ №15 §8.5 — клиент ждёт: задача идёт первой в очереди. */}
-                      {s.isUrgent && <Badge variant="danger">СРОЧНО</Badge>}
+                      {s.isUrgent && <Badge variant="danger">Срочно</Badge>}
                     </div>
-                    <p className="text-sm text-ink/70">
+                    <p className="text-base font-semibold text-ink">{s.stoneLabel}</p>
+                    <p className="text-sm text-ink-2">
                       {s.clientName ?? "—"}
                       {s.siteName ? ` · ${s.siteName}` : ""}
                     </p>
                     {/* ТЗ №20 B — «Заберут: 05.11, 10:00 · самовывоз»; в архиве
                         — план рядом с фактом выдачи (видно опоздания). */}
                     {formatShipmentPlan(s) && (
-                      <p className={`text-sm ${s.planOverdue ? "font-semibold text-danger" : "text-ink/80"}`}>
+                      <p className={`text-sm ${s.planOverdue ? "font-medium text-carnelian" : "text-ink"}`}>
                         {tab === "archive" ? "План" : "Заберут"}: {formatShipmentPlan(s)}
                         {s.planOverdue && " · просрочено"}
                         {tab === "archive" && s.completedAt && (
@@ -366,25 +365,26 @@ export default async function OtgruzkiPage({
                       </p>
                     )}
                     {s.isSample && s.returnDueDate && (
-                      <p className="text-sm text-ink/80">
+                      <p className="text-sm text-ink">
                         Вернуть до {formatTashkentDate(s.returnDueDate)}
                       </p>
                     )}
                     {/* ТЗ №15 §3.1 — что выдать: габарит в см. */}
                     {s.gabarit && (
-                      <p className="tnum text-sm text-ink/80">{s.gabarit}</p>
+                      <p className="font-mono text-sm text-ink">{s.gabarit}</p>
                     )}
+                    {/* Локация — крупно, моно (ТЗ №20 §8). */}
                     {s.lines.length <= 1 && s.locationSnapshot && (
-                      <p className="text-sm text-ink">{s.locationSnapshot}</p>
+                      <p className="mt-1 font-mono text-lg font-medium text-ink">{s.locationSnapshot}</p>
                     )}
                     {/* ТЗ №15 §3.1 — комментарий менеджера к задаче. */}
                     {s.note && (
-                      <p className="mt-1 text-sm text-ink/70">
-                        <span className="text-ink/50">Комментарий:</span>{" "}
+                      <p className="mt-1 text-sm text-ink-2">
+                        <span className="text-ink-3">Комментарий:</span>{" "}
                         {s.note}
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-ink/55">
+                    <p className="mt-1 text-xs text-ink-2">
                       Менеджер {s.managerName}
                       {s.soldAt
                         ? ` · продажа ${formatTashkentDate(s.soldAt)}`
@@ -397,7 +397,7 @@ export default async function OtgruzkiPage({
                     {s.lines.length <= 1 &&
                       (s.qtyOrderedSlabs != null ||
                       s.qtyOrderedAreaM2 != null) && (
-                      <p className="tnum text-sm text-ink/80">
+                      <p className="tnum text-sm text-ink">
                         Заказано:{" "}
                         {[
                           s.qtyOrderedSlabs != null &&
@@ -444,14 +444,14 @@ export default async function OtgruzkiPage({
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <Link
                     href={`/otgruzki/${s.id}`}
-                    className="text-sm text-gold-deep underline"
+                    className={buttonClass("secondary", "sm")}
                   >
                     Накладная →
                   </Link>
                   {/* ТЗ №20 B — менеджер может перенести дату отгрузки. */}
                   {caps.canSell && tab === "open" && s.kind === "SALE" && s.status !== "CANCELLED" && (
                     <details className="text-sm">
-                      <summary className="cursor-pointer text-ink/60 underline">
+                      <summary className="cursor-pointer text-ink-2 underline">
                         {s.plannedAt ? "Изменить дату" : "Указать дату"}
                       </summary>
                       <form action={updateShipmentPlanAction} className="mt-2 flex flex-wrap items-end gap-2">
@@ -480,7 +480,7 @@ export default async function OtgruzkiPage({
                       />
                       <button
                         type="submit"
-                        className="text-sm text-ink/60 underline"
+                        className="text-sm text-ink-2 underline"
                       >
                         {s.isUrgent ? "Снять «срочно»" : "Отметить срочной"}
                       </button>
@@ -501,15 +501,17 @@ export default async function OtgruzkiPage({
                           {l.patternLabel && (
                             <p className="font-medium text-ink">{l.patternLabel}</p>
                           )}
-                          <p className="tnum text-ink/80">
+                          <p className="tnum text-ink">
                             {[
                               l.qtyOrderedSlabs != null && `${l.qtyOrderedSlabs} плит`,
                               l.qtyOrderedAreaM2 != null && `${l.qtyOrderedAreaM2} м²`,
                             ]
                               .filter(Boolean)
                               .join(" / ")}
-                            {l.locationSnapshot ? ` · ${l.locationSnapshot}` : ""}
                           </p>
+                          {l.locationSnapshot && (
+                            <p className="font-mono text-base font-medium text-ink">{l.locationSnapshot}</p>
+                          )}
                         </div>
                         {l.fullyShipped ? (
                           <Badge variant="success">Отгружено</Badge>
@@ -574,7 +576,7 @@ export default async function OtgruzkiPage({
                           отгрузка записывается как обычно. */}
                       <label
                         htmlFor={`ph-${s.id}`}
-                        className="mb-2 block text-sm text-ink/70"
+                        className="mb-2 block text-sm text-ink-2"
                       >
                         Фото выдачи (необязательно)
                       </label>
@@ -584,9 +586,9 @@ export default async function OtgruzkiPage({
                         type="file"
                         accept="image/*"
                         capture="environment"
-                        className="mb-3 block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+                        className="mb-3 block w-full rounded-card border border-dashed border-line-strong p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
                       />
-                      <Button type="submit" className="min-h-12 w-full sm:w-auto">
+                      <Button type="submit" className="w-full sm:w-auto">
                         Отгрузить
                         {s.targetType === "BATCH_VOLUME"
                           ? " (полностью или частично)"

@@ -21,7 +21,6 @@ import { collectionPath, listCollections } from "@/lib/collections";
 import { formatCurrencySummaryLine, formatDebtMoney } from "@/lib/debts-ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/validators/sale-payment";
 import NoAccess from "@/components/NoAccess";
-import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import { buttonClass } from "@/components/ui/Button";
 
@@ -39,7 +38,7 @@ export default async function ClientCardPage({
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -72,69 +71,48 @@ export default async function ClientCardPage({
   const volLine = formatVolumeLine(card.volume);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="mb-3">
-        <Link href="/klienty" className="text-sm font-semibold text-gold-deep">
+        <Link href="/klienty" className="text-sm font-medium text-honey-ink hover:underline">
           ← Клиенты
         </Link>
       </p>
 
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-ink">{card.name}</h1>
-        <p className="mt-1 text-sm text-ink/70">
+        <h1 className="text-display font-semibold text-ink">{card.name}</h1>
+        <p className="mt-1 text-sm text-ink-2">
           <Badge variant="neutral">{CLIENT_TYPE_LABELS[card.type]}</Badge>
           <span className="ml-2">{card.phone}</span>
         </p>
         {card.extraContacts && (
-          <p className="mt-1 text-sm text-ink/60">Ещё: {card.extraContacts}</p>
+          <p className="mt-1 text-sm text-ink-2">Ещё: {card.extraContacts}</p>
         )}
         {card.comment && (
-          <p className="mt-1 text-sm text-ink/55">{card.comment}</p>
+          <p className="mt-1 text-sm text-ink-2">{card.comment}</p>
         )}
         {caps.canSeeAllClients && (
-          <p className="mt-1 text-xs text-ink/45">Менеджер: {card.managerName}</p>
+          <p className="mt-1 text-xs text-ink-3">Менеджер: {card.managerName}</p>
         )}
       </header>
 
-      <Card className="mb-4">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
-          Итоги
-        </h2>
-        <dl className="space-y-1 text-sm">
-          <div className="flex justify-between gap-3">
-            <dt className="text-ink/60">Куплено (активные продажи)</dt>
-            <dd className="tnum text-right font-semibold text-ink">
-              {purchaseLine ?? "—"}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-ink/60">В долгу (активные)</dt>
-            <dd className="tnum text-right font-semibold text-ink">
-              {debtLine ?? "—"}
-            </dd>
-          </div>
-          {volLine && (
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink/60">Объём</dt>
-              <dd className="text-right text-ink">{volLine}</dd>
-            </div>
-          )}
-          <div className="flex justify-between gap-3">
-            <dt className="text-ink/60">Продаж (без возвратов)</dt>
-            <dd className="text-right text-ink">{card.volume.saleCount}</dd>
-          </div>
-        </dl>
-        <p className="mt-2 text-xs text-ink/45">
+      <section className="mb-6" aria-label="Итоги">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Kpi label="Куплено (активные продажи)" line={purchaseLine} />
+          <Kpi label="В долгу (активные)" line={debtLine} danger />
+          <Kpi label="Объём" line={volLine ?? null} />
+          <Kpi label="Продаж (без возвратов)" line={card.volume.saleCount} />
+        </div>
+        <p className="mt-2 text-xs text-ink-2">
           UZS и USD не суммируются. Возвращённые продажи в итог не входят.
         </p>
-      </Card>
+      </section>
 
       <section className="mb-4">
-        <h2 className="mb-2 text-lg font-semibold text-ink">
+        <h2 className="mb-2 text-base font-semibold text-ink">
           Объекты ({card.sites.length})
         </h2>
         {card.sites.length === 0 ? (
-          <p className="text-sm text-ink/55">Нет привязанных объектов.</p>
+          <p className="text-sm text-ink-2">Нет привязанных объектов.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {card.sites.map((s) => {
@@ -144,7 +122,7 @@ export default async function ClientCardPage({
                 <li key={s.id}>
                   <Link
                     href={`/obekty/${s.id}`}
-                    className="block rounded-card border border-line bg-paper p-3 hover:border-gold"
+                    className="block rounded-card border border-line bg-marble p-3 hover:border-line-strong"
                   >
                     <span className="font-semibold text-ink">{s.name}</span>
                     <Badge variant="neutral" className="ml-2">
@@ -156,7 +134,7 @@ export default async function ClientCardPage({
                     >
                       {SITE_STATUS_LABELS[s.status]}
                     </Badge>
-                    <p className="mt-1 text-sm text-ink/70">
+                    <p className="mt-1 text-sm text-ink-2">
                       {v ?? "без объёма"}
                       {m && (
                         <>
@@ -174,11 +152,11 @@ export default async function ClientCardPage({
       </section>
 
       <section className="mb-4">
-        <h2 className="mb-2 text-lg font-semibold text-ink">
+        <h2 className="mb-2 text-base font-semibold text-ink">
           Продажи ({card.sales.length})
         </h2>
         {card.sales.length === 0 ? (
-          <p className="text-sm text-ink/55">Продаж с привязкой к карточке нет.</p>
+          <p className="text-sm text-ink-2">Продаж с привязкой к карточке нет.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {card.sales.map((s) => {
@@ -195,7 +173,7 @@ export default async function ClientCardPage({
                   key={s.id}
                   className={
                     "rounded-card border border-line p-3 text-sm " +
-                    (returned ? "bg-paper-2 opacity-70" : "bg-paper")
+                    (returned ? "bg-marble opacity-70" : "bg-paper")
                   }
                 >
                   <div className="flex flex-wrap justify-between gap-2">
@@ -213,7 +191,7 @@ export default async function ClientCardPage({
                         : "—"}
                     </span>
                   </div>
-                  <p className="mt-1 text-ink/70">
+                  <p className="mt-1 text-ink-2">
                     {s.targetType}
                     {s.qtySlabs != null && s.qtySlabs > 0 && ` · ${s.qtySlabs} плит`}
                     {s.qtyAreaM2 && s.qtyAreaM2 !== "0" && ` · ${s.qtyAreaM2} м²`}
@@ -221,7 +199,7 @@ export default async function ClientCardPage({
                     {pay}
                     {s.siteName ? ` · объект: ${s.siteName}` : " · без объекта"}
                   </p>
-                  <p className="text-xs text-ink/45">Менеджер: {s.managerName}</p>
+                  <p className="text-xs text-ink-3">Менеджер: {s.managerName}</p>
                 </li>
               );
             })}
@@ -230,7 +208,7 @@ export default async function ClientCardPage({
       </section>
 
       <section className="mb-4">
-        <h2 className="mb-2 text-lg font-semibold text-ink">
+        <h2 className="mb-2 text-base font-semibold text-ink">
           Активные долги ({card.debts.filter((d) => d.status === "ACTIVE").length})
         </h2>
         {/* ТЗ №20 A §2.4 — одна сумма клиента на несколько долгов. */}
@@ -247,7 +225,7 @@ export default async function ClientCardPage({
               </Link>
             ))}
         {card.debts.filter((d) => d.status === "ACTIVE").length === 0 ? (
-          <p className="text-sm text-ink/55">Активных долгов нет.</p>
+          <p className="text-sm text-ink-2">Активных долгов нет.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {card.debts
@@ -255,13 +233,13 @@ export default async function ClientCardPage({
               .map((d) => (
                 <li
                   key={d.id}
-                  className="rounded-card border border-line bg-paper p-3 text-sm"
+                  className="rounded-card border border-line bg-marble p-3 text-sm"
                 >
                   <span className="tnum font-semibold">
                     {formatDebtMoney(d.amount, d.currency)}
                   </span>
                   {d.dueDate && (
-                    <span className="ml-2 text-ink/60">
+                    <span className="ml-2 text-ink-2">
                       срок {formatTashkentDate(d.dueDate)}
                     </span>
                   )}
@@ -280,17 +258,17 @@ export default async function ClientCardPage({
       </section>
 
       <section className="mb-4">
-        <h2 className="mb-2 text-lg font-semibold text-ink">
+        <h2 className="mb-2 text-base font-semibold text-ink">
           Активные брони ({card.reservations.length})
         </h2>
         {card.reservations.length === 0 ? (
-          <p className="text-sm text-ink/55">Активных броней не найдено.</p>
+          <p className="text-sm text-ink-2">Активных броней не найдено.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {card.reservations.map((r) => (
               <li
                 key={r.id}
-                className="rounded-card border border-line bg-paper p-3 text-sm"
+                className="rounded-card border border-line bg-marble p-3 text-sm"
               >
                 {r.targetType} · до {formatTashkentDate(r.expiresAt)}
               </li>
@@ -300,11 +278,11 @@ export default async function ClientCardPage({
       </section>
 
       <section className="mb-4">
-        <h2 className="mb-2 text-lg font-semibold text-ink">
+        <h2 className="mb-2 text-base font-semibold text-ink">
           Активные образцы ({samples.length})
         </h2>
         {samples.length === 0 ? (
-          <p className="text-sm text-ink/55">Активных образцов нет.</p>
+          <p className="text-sm text-ink-2">Активных образцов нет.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {samples.map((s) => (
@@ -319,7 +297,7 @@ export default async function ClientCardPage({
                 {s.overdue && (
                   <span className="ml-2 text-warning">просрочен</span>
                 )}
-                <p className="text-ink/60">
+                <p className="text-ink-2">
                   до {formatTashkentDate(s.returnDueDate)}
                 </p>
               </li>
@@ -335,11 +313,11 @@ export default async function ClientCardPage({
 
       {caps.canManageCollections && (
         <section className="mb-4">
-          <h2 className="mb-2 text-lg font-semibold text-ink">
+          <h2 className="mb-2 text-base font-semibold text-ink">
             Подборки камней ({collections.length})
           </h2>
           {collections.length === 0 ? (
-            <p className="text-sm text-ink/55">
+            <p className="text-sm text-ink-2">
               Подборок для клиента нет. Соберите в{" "}
               <Link href="/podborki" className="text-gold-deep underline">
                 «Подборках»
@@ -351,14 +329,14 @@ export default async function ClientCardPage({
               {collections.map((c) => (
                 <li
                   key={c.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-paper p-3 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-marble p-3 text-sm"
                 >
                   <span>
                     <Link href={`/podborki/${c.id}`} className="font-semibold text-ink underline">
                       {c.title}
                     </Link>
-                    {c.closedAt && <span className="ml-2 text-ink/55">закрыта</span>}
-                    <span className="block text-ink/60">
+                    {c.closedAt && <span className="ml-2 text-ink-2">закрыта</span>}
+                    <span className="block text-ink-2">
                       камней: <span className="tnum">{c.items}</span> · нравится:{" "}
                       <span className="tnum">{c.likes}</span> · {formatTashkentDate(c.createdAt)}
                     </span>
@@ -373,5 +351,44 @@ export default async function ClientCardPage({
         </section>
       )}
     </main>
+  );
+}
+
+/**
+ * Итог-KPI (ТЗ №20 §7.5): подпись 12px ink-2 сверху, цифра 28px Medium,
+ * вторая валюта — отдельной строкой 14px. Валюты не складываются: строка
+ * formatCurrencySummaryLine уже разделена по валютам («  ·  »).
+ */
+function Kpi({
+  label,
+  line,
+  danger = false,
+}: {
+  label: string;
+  line: string | number | null;
+  danger?: boolean;
+}) {
+  const parts = line == null ? [] : String(line).split("  ·  ");
+  const tone = danger && parts.length > 0 ? "text-carnelian" : "text-ink";
+  return (
+    <div className="rounded-card border border-line bg-marble p-4">
+      <p className="text-xs font-medium text-ink-2">{label}</p>
+      {parts.length === 0 ? (
+        <p className="mt-1 text-[28px] font-medium leading-9 text-ink-3">—</p>
+      ) : (
+        parts.map((p, i) => (
+          <p
+            key={i}
+            className={
+              i === 0
+                ? `tnum mt-1 text-[28px] font-medium leading-9 ${tone}`
+                : `tnum text-sm ${tone}`
+            }
+          >
+            {p}
+          </p>
+        ))
+      )}
+    </div>
   );
 }

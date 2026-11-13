@@ -28,7 +28,7 @@ export default async function MyLeadsPage() {
   const [caps, me] = await Promise.all([getCapabilities(), getCurrentUser()]);
   if (!caps.requestsRouteToManager || !me) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -36,13 +36,10 @@ export default async function MyLeadsPage() {
   const leads = await loadMyLeads(db, me.id);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · кабинет партнёра
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">Мои заявки</h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <h1 className="text-display font-semibold text-ink">Мои заявки</h1>
+        <p className="mt-1 text-sm text-ink-2">
           Заявки на объём, которые вы оставили в карточке камня. Менеджер свяжется с вами;
           статус меняется здесь.
         </p>
@@ -50,7 +47,7 @@ export default async function MyLeadsPage() {
 
       {leads.length === 0 ? (
         <Card>
-          <p className="text-sm text-ink/60">
+          <p className="text-sm text-ink-2">
             Заявок пока нет. Откройте камень в каталоге и нажмите «Заявка на объём».
           </p>
           <Link href="/katalog" className={buttonClass("secondary", "md", "mt-3")}>
@@ -73,35 +70,35 @@ export default async function MyLeadsPage() {
                         (l.stoneName ?? "Камень не указан")
                       )}
                     </p>
-                    <p className="text-sm text-ink/60">от {formatTashkentDate(l.createdAt)}</p>
+                    <p className="text-sm text-ink-2">от {formatTashkentDate(l.createdAt)}</p>
                   </div>
                   <Badge variant={STATUS_VARIANT[l.status]}>{LEAD_STATUS_RU[l.status]}</Badge>
                 </div>
                 <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                  <dt className="text-ink/55">Объём</dt>
+                  <dt className="text-ink-2">Объём</dt>
                   <dd className="tnum text-ink">{l.volume}</dd>
                   {l.siteText && (
                     <>
-                      <dt className="text-ink/55">Объект</dt>
+                      <dt className="text-ink-2">Объект</dt>
                       <dd className="text-ink">{l.siteText}</dd>
                     </>
                   )}
                   {l.due && (
                     <>
-                      <dt className="text-ink/55">Срок</dt>
+                      <dt className="text-ink-2">Срок</dt>
                       <dd className="tnum text-ink">{l.due}</dd>
                     </>
                   )}
                   {l.managerName && (
                     <>
-                      <dt className="text-ink/55">Менеджер</dt>
+                      <dt className="text-ink-2">Менеджер</dt>
                       <dd className="text-ink">{l.managerName}</dd>
                     </>
                   )}
                   {l.note && (
                     <>
-                      <dt className="text-ink/55">Комментарий</dt>
-                      <dd className="text-ink/80">{l.note}</dd>
+                      <dt className="text-ink-2">Комментарий</dt>
+                      <dd className="text-ink">{l.note}</dd>
                     </>
                   )}
                 </dl>

@@ -43,13 +43,13 @@ function first(v: string | string[] | undefined): string | undefined {
 function PageHeader({ subtitle }: { subtitle?: string }) {
   return (
     <header className="mb-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+      <p className="text-xs font-medium text-ink-2">
         Onyx · склад
       </p>
-      <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+      <h1 className="mt-1 text-display font-semibold text-ink">
         Бой по фото
       </h1>
-      {subtitle && <p className="mt-2 text-base text-ink/60">{subtitle}</p>}
+      {subtitle && <p className="mt-2 text-base text-ink-2">{subtitle}</p>}
     </header>
   );
 }
@@ -89,18 +89,18 @@ export default async function SinganPage({
           }
         >
           {photoWarn ? (
-            <p className="text-ink/70">
+            <p className="text-ink-2">
               Кусок в остатке есть (чертёж сохранён), но фото из Telegram не
               прикрепилось. Откройте карточку камня и добавьте фото вручную,
               либо повторите из бота.
             </p>
           ) : (
-            <p className="text-ink/70">
+            <p className="text-ink-2">
               Чертёж и фото сохранены в карточке камня.
             </p>
           )}
           {causeLabel && (
-            <p className="mt-1 text-sm text-ink/70">
+            <p className="mt-1 text-sm text-ink-2">
               Причина: <span className="font-medium text-ink">{causeLabel}</span>
             </p>
           )}
@@ -140,12 +140,12 @@ export default async function SinganPage({
           }
           className="mb-6"
         >
-          <p className="text-ink/70">
+          <p className="text-ink-2">
             {hadD
               ? "Откройте свежую ссылку из бота или начните заново:"
               : "Эта страница открывается по ссылке из бота после распознавания формы. Так задумано: фото и ИИ — в Telegram, размеры — здесь."}
           </p>
-          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink/80">
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-ink">
             <li>Откройте Telegram-бот Onyx (тот же, что для фотозапросов).</li>
             <li>
               Отправьте <strong>фото</strong> куска; в подписи напишите{" "}
@@ -165,7 +165,7 @@ export default async function SinganPage({
           </div>
         </Alert>
         <Card>
-          <p className="text-sm text-ink/60">
+          <p className="text-sm text-ink-2">
             Команда бота <code className="text-ink">/singan</code> без фото
             пришлёт ту же инструкцию. После сохранения куска его можно открыть
             в карточке камня (поиск → вид).

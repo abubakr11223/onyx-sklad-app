@@ -13,16 +13,16 @@ export default async function NoAccess() {
   const sections = visibleNavItems(caps);
 
   return (
-    <div className="rounded-card border border-ink/10 bg-paper-2/60 p-6 text-center">
-      <h1 className="font-serif text-2xl font-bold text-ink">Нет доступа</h1>
-      <p className="mt-2 text-base text-ink/70">
+    <div className="rounded-card border border-line bg-paper-2/60 p-6 text-center">
+      <h1 className="text-display font-semibold text-ink">Нет доступа</h1>
+      <p className="mt-2 text-base text-ink-2">
         Эта страница доступна другой роли. Вам доступны разделы:
       </p>
 
       <ul className="mx-auto mt-5 flex max-w-md flex-col gap-2">
         {sections.map((section) => {
           const cls =
-            "flex min-h-11 items-center gap-2.5 rounded-field border border-ink/15 bg-paper px-4 text-left text-ink transition hover:border-gold hover:text-gold-deep";
+            "flex min-h-11 items-center gap-2.5 rounded-field border border-line bg-paper px-4 text-left text-ink transition hover:border-gold hover:text-gold-deep";
           const body = (
             <>
               <section.Icon
@@ -31,7 +31,7 @@ export default async function NoAccess() {
                 className="shrink-0 text-gold-deep"
               />
               <span className="font-semibold">{section.label}</span>
-              <span className="ml-auto text-sm text-ink/55">
+              <span className="ml-auto text-sm text-ink-2">
                 {section.description}
               </span>
             </>

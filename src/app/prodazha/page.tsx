@@ -136,7 +136,7 @@ export default async function ProdazhaPage({
   const caps = await getCapabilities();
   if (!caps.canSell) {
     return (
-      <main className="mx-auto max-w-xl p-4 pb-12">
+      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -701,15 +701,12 @@ export default async function ProdazhaPage({
     .map((st) => ({ ...st, batches: st.batches.filter((b) => b.hasFree || b.needsCheck) }));
 
   return (
-    <main className="mx-auto max-w-xl p-4 pb-12">
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · продажа
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Продажа и списание
         </h1>
-        <p className="mt-2 text-base text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Камень списывается из наличия в момент продажи — не «потом отмечу».
         </p>
       </header>
@@ -748,7 +745,7 @@ export default async function ProdazhaPage({
         action="/prodazha"
         className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end"
       >
-        <label className="min-w-0 flex-1 text-sm text-ink/70">
+        <label className="min-w-0 flex-1 text-sm text-ink-2">
           Фильтр каталога (вид камня)
           <input
             name="catalogQ"
@@ -789,8 +786,8 @@ export default async function ProdazhaPage({
 
       {/* W8-B — архив продаж: фильтр + keyset (TZ §5.4 «история: что, когда, кому»). */}
       <section id="sales" className="mt-8 scroll-mt-4">
-        <h2 className="text-lg font-bold text-ink">История продаж</h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <h2 className="text-base font-semibold text-ink">История продаж</h2>
+        <p className="mt-1 text-sm text-ink-2">
           {caps.canSeeHistory
             ? "Все продажи склада (вы — владелец)."
             : "Только ваши продажи."}{" "}
@@ -800,11 +797,11 @@ export default async function ProdazhaPage({
         <form
           method="get"
           action="/prodazha"
-          className="mt-3 space-y-3 rounded-card border border-line bg-paper-2/40 p-3"
+          className="mt-3 space-y-3 rounded-card border border-line bg-marble p-3"
         >
           {/* Deep-link preselect saqlanmasin — filtr yangilansa toza tarix. */}
           <div className="grid grid-cols-2 gap-2">
-            <label className="block text-sm text-ink/70">
+            <label className="block text-sm text-ink-2">
               С даты
               <input
                 type="date"
@@ -813,7 +810,7 @@ export default async function ProdazhaPage({
                 className={inputClass + " mt-1"}
               />
             </label>
-            <label className="block text-sm text-ink/70">
+            <label className="block text-sm text-ink-2">
               По дату
               <input
                 type="date"
@@ -823,7 +820,7 @@ export default async function ProdazhaPage({
               />
             </label>
           </div>
-          <label className="block text-sm text-ink/70">
+          <label className="block text-sm text-ink-2">
             Клиент
             <input
               type="search"
@@ -834,7 +831,7 @@ export default async function ProdazhaPage({
               className={inputClass + " mt-1"}
             />
           </label>
-          <label className="block text-sm text-ink/70">
+          <label className="block text-sm text-ink-2">
             Возврат
             <select
               name="returned"
@@ -857,7 +854,7 @@ export default async function ProdazhaPage({
         </form>
 
         {recentSales.length === 0 ? (
-          <p className="mt-3 text-ink/60">
+          <p className="mt-3 text-ink-2">
             По этим фильтрам продаж нет.
           </p>
         ) : (
@@ -936,14 +933,14 @@ export default async function ProdazhaPage({
                   key={s.id}
                   className={`rounded-card border p-3 text-sm ${
                     returned
-                      ? "border-danger/30 bg-danger/5"
-                      : "border-ink/10 bg-paper-2/60"
+                      ? "border-carnelian-line bg-carnelian-bg"
+                      : "border-line bg-marble"
                   }`}
                 >
                   <div className="font-semibold text-ink">
                     {title}
                     {qty && (
-                      <span className="font-normal text-ink/70"> · {qty}</span>
+                      <span className="font-normal text-ink-2"> · {qty}</span>
                     )}
                     {returned && (
                       <Badge variant="danger" className="ml-2 align-middle">
@@ -967,17 +964,17 @@ export default async function ProdazhaPage({
                       </Badge>
                     )}
                   </div>
-                  <div className="text-ink/70">
+                  <div className="text-ink-2">
                     Клиент: {s.customerName}
                     {s.customerContact && <> ({s.customerContact})</>}
                   </div>
-                  <div className="text-ink/60">
+                  <div className="text-ink-2">
                     {s.manager.name} · {formatTashkentDateTime(s.soldAt)}
                     {priceStr !== null && <> · {priceStr}</>}
                   </div>
                   {/* ТЗ №20 B — «план 05.11, 10:00 · выдано 05.11, 10:40». */}
                   {s.shipment && (s.shipment.plannedAt || s.shipment.deliveryMode) && (
-                    <div className="text-ink/60">
+                    <div className="text-ink-2">
                       план{" "}
                       {formatShipmentPlan({
                         plannedAt: s.shipment.plannedAt ?? null,
@@ -990,17 +987,17 @@ export default async function ProdazhaPage({
                     </div>
                   )}
                   {returned && s.returnedAt && (
-                    <div className="mt-1 text-danger/80">
+                    <div className="mt-1 text-carnelian/80">
                       Возврат оформлен:{" "}
                       {formatTashkentDateTime(s.returnedAt)}
                     </div>
                   )}
 
                   {partialLabel && (
-                    <div className="mt-1 font-medium text-warning">{partialLabel}</div>
+                    <div className="mt-1 font-medium text-amber">{partialLabel}</div>
                   )}
                   {pendingText && (
-                    <div className="text-ink/60">
+                    <div className="text-ink-2">
                       Ждёт приёма складом: {pendingText}
                     </div>
                   )}

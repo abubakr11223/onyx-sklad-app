@@ -43,7 +43,7 @@ export default function BulkClosePanel({
         <span className="underline decoration-warning/50 underline-offset-2">
           Закрыть зависшие запросы…
         </span>
-        <span className="ml-2 font-normal text-ink/60">
+        <span className="ml-2 font-normal text-ink-2">
           (открыто: {pendingAll}
           {pendingOlder > 0
             ? `, старше ${defaultDays} дн.: ${pendingOlder}`
@@ -88,7 +88,7 @@ export default function BulkClosePanel({
                 <span className="font-semibold text-ink">
                   Только старше {defaultDays} дней
                 </span>
-                <span className="block text-ink/60">
+                <span className="block text-ink-2">
                   Безопаснее: свежие задачи не трогаем ({pendingOlder} шт.)
                 </span>
               </span>
@@ -106,7 +106,7 @@ export default function BulkClosePanel({
                 <span className="font-semibold text-ink">
                   Все открытые ({pendingAll})
                 </span>
-                <span className="block text-ink/60">
+                <span className="block text-ink-2">
                   В том числе сегодняшние — только если очередь точно мусор
                 </span>
               </span>
@@ -135,7 +135,7 @@ export default function BulkClosePanel({
             type="submit"
             variant="danger"
             disabled={!ack || closeCount === 0}
-            className="min-h-12 w-full font-bold"
+            className="min-h-12 w-full font-semibold"
           >
             {closeCount === 0
               ? scope === "older"

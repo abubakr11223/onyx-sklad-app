@@ -3,6 +3,8 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import Tabs from "@/components/ui/Tabs";
+import EmptyState from "@/components/ui/EmptyState";
 import { db } from "@/lib/db";
 import { getCapabilities } from "@/lib/session";
 import { formatTashkentDate, todayTashkentISO } from "@/lib/datetime";
@@ -105,28 +107,28 @@ function DebtCard({
     // id — якорь для ссылок из Telegram-напоминаний (ТЗ №20 D, lib/debt-reminders).
     <li
       id={`debt-${d.id}`}
-      className="scroll-mt-4 rounded-card border border-line bg-paper p-3 text-sm text-ink/80 target:border-gold"
+      className="scroll-mt-4 rounded-card border border-line bg-marble p-4 text-sm text-ink target:border-honey"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <span className="font-semibold text-ink">{d.sale.customerName}</span>
           {d.sale.customerContact && (
-            <span className="ml-2 text-ink/60">{d.sale.customerContact}</span>
+            <span className="ml-2 text-ink-2">{d.sale.customerContact}</span>
           )}
         </div>
-        <span className="tnum font-semibold text-ink">
+        <span className="tnum font-semibold text-carnelian">
           {formatDebtMoney(d.amount, d.currency)}
         </span>
       </div>
-      <p className="mt-1 text-ink/70">{formatDebtPurchase(d.sale)}</p>
-      <p className="mt-1 text-ink/55">
+      <p className="mt-1 text-ink-2">{formatDebtPurchase(d.sale)}</p>
+      <p className="mt-1 text-ink-2">
         Продажа {formatTashkentDate(d.sale.soldAt)}
         {d.dueDate && (
           <>
             {" "}
             · срок {formatTashkentDate(d.dueDate)}
             {d.overdue && (
-              <Badge variant="warning" className="ml-1.5 align-middle">
+              <Badge variant="danger" className="ml-1.5 align-middle">
                 просрочен
               </Badge>
             )}
@@ -136,11 +138,11 @@ function DebtCard({
         {d.sale.managerName}
       </p>
       {d.comment && (
-        <p className="mt-1 text-xs text-ink/50">Комментарий: {d.comment}</p>
+        <p className="mt-1 text-xs text-ink-3">Комментарий: {d.comment}</p>
       )}
       {/* ТЗ №20 A §2.3 — история платежей по долгу и остаток. */}
       {d.payments.length > 0 && (
-        <ul className="mt-2 space-y-0.5 text-xs text-ink/60">
+        <ul className="mt-2 space-y-0.5 text-xs text-ink-2">
           {d.payments.map((p, i) => (
             <li key={i} className="tnum">
               {formatTashkentDate(p.paidAt)} — {formatDebtMoney(p.amount, d.currency)}{" "}
@@ -158,7 +160,7 @@ function DebtCard({
         <form action={addDebtPaymentAction} className="mt-3 flex flex-wrap items-end gap-2">
           <input type="hidden" name="debtId" value={d.id} />
           <input type="hidden" name="returnTo" value={returnTo} />
-          <label className="flex flex-col gap-0.5 text-xs text-ink/60">
+          <label className="flex flex-col gap-0.5 text-xs text-ink-2">
             Сумма
             {/* по умолчанию весь остаток — полное погашение в один клик */}
             <input
@@ -169,7 +171,7 @@ function DebtCard({
               required
             />
           </label>
-          <label className="flex flex-col gap-0.5 text-xs text-ink/60">
+          <label className="flex flex-col gap-0.5 text-xs text-ink-2">
             Способ
             <select name="method" className={inputClass + " min-h-10 text-sm"} defaultValue="CASH">
               {PAY_METHODS.map((m) => (
@@ -179,7 +181,7 @@ function DebtCard({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-0.5 text-xs text-ink/60">
+          <label className="flex flex-col gap-0.5 text-xs text-ink-2">
             Дата
             <input
               type="date"
@@ -195,7 +197,7 @@ function DebtCard({
           {d.clientId && (
             <Link
               href={`/dolzhniki/klient/${d.clientId}?currency=${d.currency}`}
-              className="text-xs text-gold-deep underline"
+              className="text-xs text-honey-ink hover:underline"
             >
               Внести платёж клиента
             </Link>
@@ -203,7 +205,7 @@ function DebtCard({
         </form>
       )}
       {tab === "repaid" && d.repaidAt && (
-        <p className="mt-1 text-success">
+        <p className="mt-1 text-malachite">
           Погашен {formatTashkentDate(d.repaidAt)}
           {d.repaidAmount && (
             <> · {formatDebtMoney(d.repaidAmount, d.currency)}</>
@@ -223,7 +225,7 @@ export default async function DolzhnikiPage({
   const caps = await getCapabilities();
   if (!caps.canSeeDebts) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -286,21 +288,17 @@ export default async function DolzhnikiPage({
 
   const returnTo = buildHref({});
 
-  const activeLine = formatCurrencySummaryLine(summary.activeByCurrency);
   const overdueLine = formatCurrencySummaryLine(summary.overdueByCurrency);
   const overdueCount = summary.overdueByCurrency.reduce((n, r) => n + r.count, 0);
   const revenueLines = formatRevenueByMethod(revenue);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · владелец
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Должники
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Продажи «в долг»: кто должен, сколько, когда вернуть. Суммы — по
           валютам отдельно (сум и $ не складываются).
         </p>
@@ -317,33 +315,40 @@ export default async function DolzhnikiPage({
         </Alert>
       )}
 
-      {/* Summary — per currency, omit empty */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      {/* Итоги (ТЗ №20 §8 «Должники»): долг по валютам ОТДЕЛЬНО — сум и $
+          не складываются. Цифры — уже посчитанные debtSummary. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {(["UZS", "USD"] as const).map((cur) => {
+          const row = summary.activeByCurrency.find((r) => r.currency === cur && r.count > 0);
+          return (
+            <Card key={cur}>
+              <p className="text-xs font-medium text-ink-2">
+                {cur === "UZS" ? "Долг, сум" : "Долг, $"}
+              </p>
+              <p
+                className={
+                  "tnum mt-1 text-[28px] font-medium leading-9 " +
+                  (row ? "text-carnelian" : "text-ink")
+                }
+              >
+                {row ? formatDebtMoney(row.amount, cur) : "—"}
+              </p>
+            </Card>
+          );
+        })}
         <Card>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
-            Активные долги
-          </p>
-          <p className="tnum mt-1 text-lg font-bold text-ink">
-            {activeLine ?? "—"}
-          </p>
-        </Card>
-        <Card>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
-            Должников
-          </p>
-          <p className="tnum mt-1 text-lg font-bold text-ink">
+          <p className="text-xs font-medium text-ink-2">Должников</p>
+          <p className="tnum mt-1 text-[28px] font-medium leading-9 text-ink">
             {summary.activeDebtorCount}
           </p>
         </Card>
         <Card>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
-            Просрочено
-          </p>
-          <p className="tnum mt-1 text-lg font-bold text-ink">
+          <p className="text-xs font-medium text-ink-2">Просрочено</p>
+          <p className="tnum mt-1 text-sm font-medium text-ink">
             {overdueLine ?? "—"}
           </p>
           {overdueCount > 0 && (
-            <p className="mt-0.5 text-xs text-warning">
+            <p className="mt-0.5 text-xs text-carnelian">
               {overdueCount}{" "}
               {overdueCount === 1 ? "долг" : "долгов"}
             </p>
@@ -357,11 +362,11 @@ export default async function DolzhnikiPage({
           <h2 className="text-sm font-semibold text-ink">
             Выручка по способам оплаты
           </h2>
-          <p className="mt-0.5 text-xs text-ink/50">
+          <p className="mt-0.5 text-xs text-ink-3">
             Все невозвращённые продажи с указанным способом. По валютам
             отдельно.
           </p>
-          <ul className="mt-2 space-y-1 text-sm text-ink/80">
+          <ul className="mt-2 space-y-1 text-sm text-ink">
             {revenueLines.map((r) => (
               <li key={r.methodRu} className="flex flex-wrap justify-between gap-2">
                 <span>{r.methodRu}</span>
@@ -372,27 +377,13 @@ export default async function DolzhnikiPage({
         </Card>
       )}
 
-      {/* Tabs */}
-      <div className="mb-4 flex gap-2">
-        <Link
-          href={buildHref({ tab: "active", after: undefined })}
-          className={buttonClass(
-            tab === "active" ? "primary" : "secondary",
-            "sm",
-          )}
-        >
-          Активные
-        </Link>
-        <Link
-          href={buildHref({ tab: "repaid", after: undefined, overdue: "" })}
-          className={buttonClass(
-            tab === "repaid" ? "primary" : "secondary",
-            "sm",
-          )}
-        >
-          Погашенные
-        </Link>
-      </div>
+      <Tabs
+        className="mb-4"
+        items={[
+          { href: buildHref({ tab: "active", after: undefined }), label: "Активные", active: tab === "active" },
+          { href: buildHref({ tab: "repaid", after: undefined, overdue: "" }), label: "Погашенные", active: tab === "repaid" },
+        ]}
+      />
 
       {/* Filters §9.1 */}
       <Card className="mb-6">
@@ -442,7 +433,7 @@ export default async function DolzhnikiPage({
                 name="overdue"
                 value="1"
                 defaultChecked={overdueOnly}
-                className="h-5 w-5 accent-ink"
+                className="h-4 w-4"
               />
               Только просроченные
             </label>
@@ -454,21 +445,19 @@ export default async function DolzhnikiPage({
       </Card>
 
       {list.items.length === 0 ? (
-        <p className="text-ink/60">
-          {tab === "active"
-            ? "Активных долгов нет."
-            : "Погашенных долгов пока нет."}
-        </p>
+        <EmptyState
+          title={tab === "active" ? "Активных долгов нет." : "Погашенных долгов пока нет."}
+        />
       ) : (
         <div className="space-y-6">
           {groups.map((g) => (
             <section key={g.key}>
               {g.debts.length > 1 && (
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-base font-bold text-ink">
+                  <h2 className="text-base font-semibold text-ink">
                     {g.customerName}
                     {g.customerContact && (
-                      <span className="ml-2 text-sm font-normal text-ink/55">
+                      <span className="ml-2 text-sm font-normal text-ink-2">
                         {g.customerContact}
                       </span>
                     )}

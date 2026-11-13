@@ -111,13 +111,13 @@ export default async function QrPrintPage({ searchParams }: Props) {
       <style>{LABEL_CSS + (single ? PRINT_LABEL_CSS : PRINT_A4_CSS)}</style>
 
       <div className="mb-6 print:hidden">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        <p className="text-xs font-medium text-ink-2">
           QR-этикетки
         </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="mt-1 text-display font-semibold text-ink">
           Печать QR
         </h1>
-        <p className="mt-2 text-sm text-ink/55">
+        <p className="mt-2 text-sm text-ink-2">
           {labels.length > 0
             ? `Этикеток: ${labels.length}. QR открывает карточку камня.`
             : "Нет этикеток для печати."}
@@ -157,7 +157,7 @@ export default async function QrPrintPage({ searchParams }: Props) {
           </div>
         )}
         {params.codes.length === 0 && (
-          <p className="mt-4 text-sm text-ink/55">
+          <p className="mt-4 text-sm text-ink-2">
             Откройте печать кнопкой «QR» в карточке камня, в «Шоу-руме» или
             отметьте камни в «Поиске».
           </p>

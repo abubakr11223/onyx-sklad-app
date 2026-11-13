@@ -73,15 +73,15 @@ export default async function ClientPaymentPage({
 
   return (
     <main className="mx-auto max-w-xl p-4 pb-12">
-      <Link href="/dolzhniki" className="text-sm text-gold-deep underline">
+      <Link href="/dolzhniki" className="text-sm text-honey-ink hover:underline">
         ← Должники
       </Link>
-      <h1 className="mt-2 font-serif text-2xl font-bold text-ink">Платёж клиента</h1>
+      <h1 className="mt-2 text-display font-semibold text-ink">Платёж клиента</h1>
       {!client ? (
         <Alert variant="danger" title="Клиент не найден" />
       ) : (
         <>
-          <p className="mt-1 text-ink/70">
+          <p className="mt-1 text-ink-2">
             {client.name} · {client.phone}
           </p>
           <div className="mt-3 flex gap-2 text-sm">
@@ -91,7 +91,7 @@ export default async function ClientPaymentPage({
                 href={`?currency=${c}`}
                 className={
                   "rounded-field border px-3 py-1.5 " +
-                  (c === currency ? "border-gold bg-gold/15 font-semibold" : "border-line")
+                  (c === currency ? "border-honey bg-honey-soft font-semibold" : "border-line")
                 }
               >
                 {c === "UZS" ? "сум" : "$"}
@@ -106,16 +106,16 @@ export default async function ClientPaymentPage({
           )}
 
           {debts.length === 0 ? (
-            <p className="mt-4 text-ink/60">Открытых долгов в этой валюте нет.</p>
+            <p className="mt-4 text-ink-2">Открытых долгов в этой валюте нет.</p>
           ) : (
             <>
-              <p className="tnum mt-3 text-sm text-ink/70">
+              <p className="tnum mt-3 text-sm text-ink-2">
                 Долгов: {debts.length} · всего {formatMoneyCents(totalDebt, currency)}
               </p>
               {/* Шаг 1 — сумма: раскладка считается от старого долга к новому. */}
               <form method="get" className="mt-3 flex flex-wrap items-end gap-2">
                 <input type="hidden" name="currency" value={currency} />
-                <label className="flex flex-col gap-0.5 text-sm text-ink/70">
+                <label className="flex flex-col gap-0.5 text-sm text-ink-2">
                   Клиент принёс
                   <input
                     name="total"
@@ -130,7 +130,7 @@ export default async function ClientPaymentPage({
                 </Button>
               </form>
               {plan && !plan.ok && (
-                <p className="mt-2 text-sm text-danger">{plan.message}</p>
+                <p className="mt-2 text-sm text-carnelian">{plan.message}</p>
               )}
 
               {/* Шаг 2 — раскладка (можно поправить) и сохранение. */}
@@ -156,7 +156,7 @@ export default async function ClientPaymentPage({
                         </li>
                       ))}
                     </ul>
-                    <p className="text-xs text-ink/55">
+                    <p className="text-xs text-ink-2">
                       {plan.lines
                         .map(
                           (l) =>

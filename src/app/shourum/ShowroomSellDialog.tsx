@@ -57,7 +57,7 @@ const RENDERED_KEYS = [
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="mt-1 text-sm font-medium text-danger">{msg}</p>;
+  return <p className="mt-1 text-sm font-medium text-carnelian">{msg}</p>;
 }
 
 export default function ShowroomSellDialog({
@@ -237,6 +237,7 @@ export default function ShowroomSellDialog({
         onClose={() => setOpen(false)}
         title={`Продажа: ${stoneLabel}`}
         labelledById={`showroom-sell-${unitId}`}
+        size="lg"
       >
         <form action={formAction} className="flex flex-col gap-3">
           <input type="hidden" name="targetType" value={targetType} />
@@ -271,14 +272,14 @@ export default function ShowroomSellDialog({
           {/* ── Клиент ── */}
           <div>
             <p className="mb-1.5 text-sm font-semibold text-ink">
-              Клиент <span className="text-danger">*</span>
+              Клиент <span className="text-carnelian">*</span>
             </p>
             {selectedClient ? (
-              <div className="rounded-field border border-gold/40 bg-gold/10 p-3">
+              <div className="rounded-field border border-honey bg-honey-soft p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-ink">{selectedClient.name}</p>
-                    <p className="text-sm text-ink/70">
+                    <p className="text-sm text-ink-2">
                       {CLIENT_TYPE_LABELS[selectedClient.type]} ·{" "}
                       {selectedClient.phone}
                     </p>
@@ -361,8 +362,8 @@ export default function ShowroomSellDialog({
           </div>
 
           {showNewClient && !selectedClient && (
-            <div className="rounded-card border border-line bg-paper-2 p-3">
-              <p className="mb-2 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+            <div className="rounded-card border border-line bg-marble p-3">
+              <p className="mb-2 text-base font-semibold text-ink">
                 Новый клиент
               </p>
               <div className="flex flex-col gap-2">
@@ -386,8 +387,8 @@ export default function ShowroomSellDialog({
                         className={
                           "flex min-h-11 cursor-pointer items-center justify-center rounded-field border text-sm font-semibold " +
                           (newClientType === tp
-                            ? "border-gold bg-gold/15"
-                            : "border-line bg-paper")
+                            ? "border-honey bg-honey-soft"
+                            : "border-line bg-marble")
                         }
                       >
                         <input
@@ -469,14 +470,14 @@ export default function ShowroomSellDialog({
           )}
 
           {/* ── Оплата (TZ №9) ── */}
-          <fieldset className="rounded-card border border-line bg-paper p-3">
-            <legend className="px-1 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+          <fieldset className="rounded-card border border-line bg-marble p-3">
+            <legend className="px-1 text-base font-semibold text-ink">
               Оплата
             </legend>
 
             <div className="mt-1">
               <p className="mb-2 text-sm font-semibold text-ink">
-                Способ оплаты <span className="text-danger">*</span>
+                Способ оплаты <span className="text-carnelian">*</span>
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {(
@@ -491,10 +492,10 @@ export default function ShowroomSellDialog({
                     <label
                       key={value}
                       className={
-                        "flex min-h-11 cursor-pointer items-center justify-center rounded-field border px-1 text-center text-sm font-semibold transition " +
+                        "flex min-h-11 cursor-pointer items-center justify-center rounded-field border px-1 text-center text-sm font-semibold transition-colors duration-150 " +
                         (selected
-                          ? "border-gold bg-gold/15 text-ink shadow-card"
-                          : "border-line bg-paper-2 text-ink/80 active:bg-gold/10")
+                          ? "border-honey bg-honey-soft text-ink"
+                          : "border-line bg-marble text-ink active:bg-honey-soft")
                       }
                     >
                       <input
@@ -518,7 +519,7 @@ export default function ShowroomSellDialog({
                 id={`sell-price-${unitId}`}
                 label={
                   <>
-                    Цена продажи <span className="text-danger">*</span>
+                    Цена продажи <span className="text-carnelian">*</span>
                   </>
                 }
                 error={e.price}
@@ -537,7 +538,7 @@ export default function ShowroomSellDialog({
               </Field>
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-semibold text-ink">
-                  Валюта <span className="text-danger">*</span>
+                  Валюта <span className="text-carnelian">*</span>
                 </span>
                 <div className="flex min-h-11 gap-1">
                   {(
@@ -551,10 +552,10 @@ export default function ShowroomSellDialog({
                       <label
                         key={value}
                         className={
-                          "flex min-h-11 min-w-12 cursor-pointer items-center justify-center rounded-field border px-2 text-sm font-bold transition " +
+                          "flex min-h-11 min-w-12 cursor-pointer items-center justify-center rounded-field border px-2 text-sm font-semibold transition-colors duration-150 " +
                           (selected
-                            ? "border-gold bg-gold/15 text-ink"
-                            : "border-line bg-paper-2 text-ink/70")
+                            ? "border-honey bg-honey-soft text-ink"
+                            : "border-line bg-marble text-ink-2")
                         }
                       >
                         <input
@@ -606,7 +607,7 @@ export default function ShowroomSellDialog({
             >
               Отмена
             </Button>
-            <Button type="submit" disabled={pending} className="min-h-12">
+            <Button type="submit" pending={pending}>
               {pending ? "Оформляем…" : "Подтвердить продажу"}
             </Button>
           </div>

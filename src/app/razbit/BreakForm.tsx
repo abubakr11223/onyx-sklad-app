@@ -18,6 +18,7 @@ import {
 } from "./break-form-errors";
 import { BREAK_CAUSES } from "@/lib/breaking";
 import SegmentedControl from "@/components/ui/SegmentedControl";
+import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -96,13 +97,13 @@ const emptyPiece = (): PieceVals => ({
 
 /** Звёздочка «обязательное поле». */
 function Req() {
-  return <span className="text-danger">*</span>;
+  return <span className="text-carnelian">*</span>;
 }
 
 /** Кросс-полевая ошибка (не привязана к одному input — напр. pieces). */
 function CrossError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="text-sm font-medium text-danger">{msg}</p>;
+  return <p className="text-sm font-medium text-carnelian">{msg}</p>;
 }
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
@@ -255,7 +256,7 @@ export default function BreakForm({
 
       {/* ── Что разбиваем ── */}
       <Card>
-        <h2 className="mb-3 text-lg font-semibold text-ink">Что разбиваем</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Что разбиваем</h2>
         <SegmentedControl
           className="mb-4"
           label="Что разбиваем"
@@ -309,35 +310,43 @@ export default function BreakForm({
             </select>
           </Field>
           {selectedSlab && (
-            <div className="mt-3 flex gap-3 rounded-card border border-ink/10 bg-paper p-3 text-sm text-ink">
+            /* ТЗ №20 §7.5 — карточка камня: фото 72×72 слева, справа вид,
+               плита, габарит и локация моно, бронь — бейджем. */
+            <div className="mt-3 flex gap-3 rounded-card border border-line bg-marble p-3 text-sm text-ink">
               {selectedSlab.photoId ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={"/api/photo/" + selectedSlab.photoId}
                   alt={selectedSlab.label}
-                  className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                  className="h-[72px] w-[72px] shrink-0 rounded-field object-cover"
                 />
               ) : (
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-ink/[0.04] text-center text-[10px] text-ink/60">
+                <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-field bg-stone-100 text-center text-xs text-ink-2">
                   нет фото
                 </div>
               )}
               <div className="min-w-0">
-                <p className="font-semibold">{selectedSlab.stoneName}</p>
-                <p className="mt-1 text-ink/70">
+                <p className="font-medium">{selectedSlab.stoneName}</p>
+                <p className="mt-0.5 font-mono text-xs text-ink-2">
                   {selectedSlab.label}
                 </p>
-                <p className="mt-1 text-ink/70">
-                  Габарит: {formatGabarit(selectedSlab.lengthMm, selectedSlab.widthMm, selectedSlab.thicknessMm)}
+                <p className="mt-1 text-ink-2">
+                  Габарит:{" "}
+                  <span className="font-mono text-ink">
+                    {formatGabarit(selectedSlab.lengthMm, selectedSlab.widthMm, selectedSlab.thicknessMm)}
+                  </span>
                   {selectedSlab.areaM2 != null
                     ? ` · ${selectedSlab.areaM2.toFixed(2)} м²`
                     : ""}
                 </p>
-                <p className="mt-1 text-ink/70">
-                  Локация: {formatLocation(selectedSlab.block, selectedSlab.landmark)}
+                <p className="mt-0.5 text-ink-2">
+                  Локация:{" "}
+                  <span className="font-mono text-ink">
+                    {formatLocation(selectedSlab.block, selectedSlab.landmark)}
+                  </span>
                 </p>
                 {selectedSlab.reserved && (
-                  <p className="mt-1 font-medium text-warning">Есть бронь — менеджер будет уведомлён</p>
+                  <Badge variant="warning" className="mt-1.5">Есть бронь — менеджер будет уведомлён</Badge>
                 )}
               </div>
             </div>
@@ -403,7 +412,7 @@ export default function BreakForm({
             )}
             {/* fixes0809 BUG-A: §3 always −1 free slab per direct piece — no
                 optional checkbox (was a lie). Honest copy only. */}
-            <p className="rounded-field border border-ink/10 bg-paper-2 px-3 py-2 text-sm text-ink/70">
+            <p className="rounded-field border border-line bg-stone-100 px-3 py-2 text-sm text-ink-2">
               Каждый кусок списывает <strong>1 плиту</strong> из свободного
               остатка партии (учёт §3). Чтобы разбить уже выделенную плиту —
               режим «Плита».
@@ -414,8 +423,8 @@ export default function BreakForm({
 
       {/* ── Куски ── */}
       <Card>
-        <h2 className="mb-1 text-lg font-semibold text-ink">Куски</h2>
-        <p className="mb-3 text-sm text-ink/60">
+        <h2 className="mb-1 text-base font-semibold text-ink">Куски</h2>
+        <p className="mb-3 text-sm text-ink-2">
           Обязательны длина и ширина — по ним камень находят в поиске по размеру.
           Длина × ширина — габарит для поиска; стороны — только если кусок
           непрямоугольный (для чертежа).
@@ -428,7 +437,7 @@ export default function BreakForm({
             const row = rows[id] ?? emptyPiece();
             const isRect = row.isRect !== false;
             return (
-            <div key={id} className="rounded-card border border-ink/10 bg-paper p-3">
+            <div key={id} className="rounded-card border border-line bg-marble p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-base font-semibold text-ink">Кусок {idx + 1}</span>
                 {rowIds.length > 1 && (
@@ -436,7 +445,7 @@ export default function BreakForm({
                     variant="ghost"
                     size="sm"
                     onClick={() => removeRow(id)}
-                    className="text-danger hover:bg-danger/10"
+                    className="text-carnelian hover:bg-carnelian-bg"
                   >
                     Убрать
                   </Button>
@@ -457,7 +466,7 @@ export default function BreakForm({
                     <option value="OFFCUT">Остаток</option>
                   </select>
                 </Field>
-                <p className="text-xs text-ink/55">
+                <p className="text-xs text-ink-2">
                   {row.kind === "OFFCUT"
                     ? "Остаток — годный обрезок после распила."
                     : "Бой — повреждённая/битая плита."}
@@ -558,8 +567,8 @@ export default function BreakForm({
 
       {/* TZ §5.6 — причина (короткий список; AuditLog + экран успеха). */}
       <Card>
-        <h2 className="mb-1 text-lg font-semibold text-ink">Причина</h2>
-        <p className="mb-3 text-sm text-ink/60">
+        <h2 className="mb-1 text-base font-semibold text-ink">Причина</h2>
+        <p className="mb-3 text-sm text-ink-2">
           Зачем разбили или распилили — для журнала. Один выбор.
         </p>
         <Field
@@ -615,7 +624,7 @@ export default function BreakForm({
           </label>
           {soldPart && (
             <div className="mt-3 flex flex-col gap-4">
-              <p className="text-sm text-ink/60">
+              <p className="text-sm text-ink-2">
                 Факт попадёт в журнал. Продажу оформляет менеджер в разделе продаж.
               </p>
               <Field
@@ -642,8 +651,7 @@ export default function BreakForm({
           десктопе (md:) возвращается в обычный поток. Реальный submit формы
           (без JS) сохраняется — устойчивость к слабой сети. */}
       <div
-        className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
-                   md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
+        className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 border-t border-line bg-marble px-4 py-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0"
       >
         {confirming ? (
           <div className="flex flex-col gap-3">
@@ -656,14 +664,14 @@ export default function BreakForm({
               <Button
                 variant="secondary"
                 onClick={() => setConfirming(false)}
-                className="min-h-14 flex-1 text-lg"
+                className="flex-1 md:flex-none"
               >
                 Назад
               </Button>
               <Button
                 type="submit"
-                disabled={pending}
-                className="min-h-14 flex-1 text-lg font-bold"
+                pending={pending}
+                className="flex-1 md:flex-none"
               >
                 {pending ? "Запись…" : "Подтвердить"}
               </Button>
@@ -673,7 +681,7 @@ export default function BreakForm({
           <Button
             type="button"
             onClick={() => setConfirming(true)}
-            className="min-h-14 w-full text-lg font-bold"
+            className="w-full md:w-auto"
           >
             Продолжить
           </Button>

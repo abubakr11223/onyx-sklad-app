@@ -102,14 +102,14 @@ function kindLabel(kind: StoneCodeKind, t: PublicDict): string | null {
 function Photos({ ids, name, t }: { ids: string[]; name: string; t: PublicDict }) {
   if (ids.length === 0) {
     return (
-      <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 rounded-card border border-line bg-gold/10 px-4">
+      <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 rounded-card border border-line bg-honey-soft px-4">
         <span
           aria-hidden
-          className="flex h-16 w-16 items-center justify-center rounded-card bg-gold/20 font-serif text-3xl font-bold text-gold-deep"
+          className="flex h-16 w-16 items-center justify-center rounded-card bg-honey-soft text-3xl font-semibold text-gold-deep"
         >
           {name.trim().charAt(0).toUpperCase() || "·"}
         </span>
-        <p className="text-center text-sm font-medium text-ink/70">{t.noPhotos}</p>
+        <p className="text-center text-sm font-medium text-ink-2">{t.noPhotos}</p>
       </div>
     );
   }
@@ -133,7 +133,7 @@ function Photos({ ids, name, t }: { ids: string[]; name: string; t: PublicDict }
             loading={i === 0 ? "eager" : "lazy"}
             className={
               (i === 0 ? "aspect-[4/3]" : "aspect-square") +
-              " w-full rounded-card bg-ink/5 object-cover"
+              " w-full rounded-card bg-stone-100 object-cover"
             }
           />
         </a>
@@ -152,7 +152,7 @@ function Facts({ view, t }: { view: CardView; t: PublicDict }) {
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
-          <dt className="text-ink/55">{k}</dt>
+          <dt className="text-ink-2">{k}</dt>
           <dd className={"font-medium text-ink " + (k === t.code ? "tnum tracking-wide" : "")}>
             {v}
           </dd>
@@ -167,8 +167,8 @@ function StaffBlock({ view }: { view: StaffCardView }) {
   return (
     <>
       <Card className="mt-4">
-        <h2 className="font-serif text-xl font-bold text-ink">Склад</h2>
-        <p className="mt-2 text-sm text-ink/70">
+        <h2 className="text-xl font-semibold text-ink">Склад</h2>
+        <p className="mt-2 text-sm text-ink-2">
           Свободно:{" "}
           <span className="tnum font-semibold text-ink">
             {view.freeSlabs} пл. · {m2Fmt.format(view.freeAreaM2)} м²
@@ -181,8 +181,8 @@ function StaffBlock({ view }: { view: StaffCardView }) {
           )}
         </p>
         {view.location && (
-          <p className="mt-1 text-sm text-ink/70">
-            <span className="text-ink/55">Локация:</span> {view.location}
+          <p className="mt-1 text-sm text-ink-2">
+            <span className="text-ink-2">Локация:</span> {view.location}
           </p>
         )}
 
@@ -203,16 +203,16 @@ function StaffBlock({ view }: { view: StaffCardView }) {
                   <tr key={r.id} className="align-top">
                     <td className="py-2 pl-3">
                       <span className="font-medium text-ink">{r.label}</span>
-                      {r.format && <span className="block text-xs text-ink/55">{r.format}</span>}
+                      {r.format && <span className="block text-xs text-ink-2">{r.format}</span>}
                     </td>
                     <td className="tnum py-2 pl-3 text-right">{r.freeSlabs}</td>
                     <td className="tnum py-2 pl-3 text-right">{m2Fmt.format(r.freeAreaM2)}</td>
-                    <td className="tnum py-2 pl-3 text-right text-ink/70">
+                    <td className="tnum py-2 pl-3 text-right text-ink-2">
                       {r.heldSlabs > 0 || r.heldAreaM2 > 0
                         ? `${r.heldSlabs} пл. / ${m2Fmt.format(r.heldAreaM2)} м²`
                         : "—"}
                     </td>
-                    <td className="py-2 px-3 text-ink/70">{r.location}</td>
+                    <td className="py-2 px-3 text-ink-2">{r.location}</td>
                   </tr>
                 ))}
               </tbody>
@@ -224,7 +224,7 @@ function StaffBlock({ view }: { view: StaffCardView }) {
           Брони: <span className="tnum">{view.activeReservations}</span>
         </h3>
         {view.reservations.length > 0 ? (
-          <ul className="mt-1 space-y-1 text-sm text-ink/70">
+          <ul className="mt-1 space-y-1 text-sm text-ink-2">
             {view.reservations.map((r) => (
               <li key={r.id}>
                 <span className="font-medium text-ink">{r.customerName}</span> · {r.what} · до{" "}
@@ -233,12 +233,12 @@ function StaffBlock({ view }: { view: StaffCardView }) {
             ))}
           </ul>
         ) : view.activeReservations > 0 ? (
-          <p className="mt-1 text-sm text-ink/55">Брони других менеджеров — детали у них.</p>
+          <p className="mt-1 text-sm text-ink-2">Брони других менеджеров — детали у них.</p>
         ) : null}
 
         {view.priceHint && (
-          <p className="mt-4 text-sm text-ink/70">
-            <span className="text-ink/55">Ориентир цены:</span>{" "}
+          <p className="mt-4 text-sm text-ink-2">
+            <span className="text-ink-2">Ориентир цены:</span>{" "}
             <span className="tnum font-semibold text-ink">
               {formatPriceHint(view.priceHint.uzsM2, view.priceHint.usdM2)}
             </span>
@@ -337,8 +337,8 @@ export default async function StoneByCodePage({
           </div>
         )}
         <div className="rounded-card border border-line bg-paper-2 p-6 text-center">
-          <h1 className="font-serif text-xl font-bold text-ink">{t.notFoundTitle}</h1>
-          <p className="mt-2 text-sm text-ink/55">{t.notFoundBody}</p>
+          <h1 className="text-xl font-semibold text-ink">{t.notFoundTitle}</h1>
+          <p className="mt-2 text-sm text-ink-2">{t.notFoundBody}</p>
           {viewer === "staff" && (
             <Link href="/poisk" className={buttonClass("secondary", "md", "mt-4")}>
               Открыть «Поиск»
@@ -373,7 +373,7 @@ export default async function StoneByCodePage({
   return (
     <main lang={htmlLangOf(locale)} className="mx-auto max-w-2xl px-4 pb-12 pt-4 sm:p-8">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        <p className="text-xs font-medium text-ink-2">
           {viewer === "staff" ? "Onyx · карточка по коду" : t.brand}
         </p>
         {viewer !== "staff" && <LocaleSwitch locale={locale} back={back} t={t} />}
@@ -383,13 +383,13 @@ export default async function StoneByCodePage({
 
       <header className="mt-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="font-serif text-display font-bold tracking-tight text-ink">{view.name}</h1>
+          <h1 className="text-display font-semibold text-ink">{view.name}</h1>
           <Badge variant={view.availability === "IN_STOCK" ? "success" : "neutral"}>
             {availabilityLabel(view.availability, t)}
           </Badge>
         </div>
         {(staffKind || kLabel || view.detail) && (
-          <p className="mt-1 text-sm text-ink/60">
+          <p className="mt-1 text-sm text-ink-2">
             {[staffKind ?? kLabel, view.detail].filter(Boolean).join(" · ")}
           </p>
         )}
@@ -408,7 +408,7 @@ export default async function StoneByCodePage({
       <Card className="mt-4">
         <Facts view={view} t={t} />
         {view.description && (
-          <p className="mt-4 border-t border-line pt-3 text-base leading-relaxed text-ink/80">
+          <p className="mt-4 border-t border-line pt-3 text-base leading-relaxed text-ink">
             {view.description}
           </p>
         )}
@@ -422,7 +422,7 @@ export default async function StoneByCodePage({
             {availabilityLabel(view.availability, t)}
           </p>
           {view.viewer === "partner" && view.availability === "IN_STOCK" && (
-            <p className="mt-1 text-sm text-ink/70">
+            <p className="mt-1 text-sm text-ink-2">
               {t.freeNow}:{" "}
               <span className="tnum font-semibold text-ink">
                 {view.freeSlabs} {t.slabsShort} · {m2Fmt.format(view.freeAreaM2)} {t.m2}
@@ -430,10 +430,10 @@ export default async function StoneByCodePage({
             </p>
           )}
           {view.availability === "OUT_OF_STOCK" && (
-            <p className="mt-1 text-sm text-ink/60">{t.outOfStockHint}</p>
+            <p className="mt-1 text-sm text-ink-2">{t.outOfStockHint}</p>
           )}
           {view.availability === "IN_SHOWROOM" && (
-            <p className="mt-1 text-sm text-ink/60">{t.showroomHint}</p>
+            <p className="mt-1 text-sm text-ink-2">{t.showroomHint}</p>
           )}
         </Card>
       )}
@@ -441,7 +441,7 @@ export default async function StoneByCodePage({
       {/* ТЗ №20 J (§11.1) — «В интерьере» (когда основные фото — фото узора). */}
       {view.interiorPhotoIds.length > 0 && (
         <Card className="mt-4">
-          <h2 className="font-serif text-xl font-bold text-ink">{t.interiorTitle}</h2>
+          <h2 className="text-xl font-semibold text-ink">{t.interiorTitle}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {view.interiorPhotoIds.map((id, i) => (
               <a key={id} href={`/api/photo/${id}`} target="_blank" rel="noreferrer" className="block">
@@ -450,7 +450,7 @@ export default async function StoneByCodePage({
                   src={`/api/photo/${id}`}
                   alt={`${view.name} — ${t.interiorTitle} ${i + 1}`}
                   loading="lazy"
-                  className="aspect-square w-full rounded-card bg-ink/5 object-cover"
+                  className="aspect-square w-full rounded-card bg-stone-100 object-cover"
                 />
               </a>
             ))}
@@ -461,8 +461,8 @@ export default async function StoneByCodePage({
       {/* ТЗ №20 J (§11.2) — «Скачать текстуру для 3D»: партнёр и сотрудник. */}
       {view.viewer !== "client" && view.textureDownloads.length > 0 && (
         <Card className="mt-4">
-          <h2 className="font-serif text-xl font-bold text-ink">{t.downloadTexture}</h2>
-          <p className="mt-1 text-sm text-ink/60">{t.downloadTextureHint}</p>
+          <h2 className="text-xl font-semibold text-ink">{t.downloadTexture}</h2>
+          <p className="mt-1 text-sm text-ink-2">{t.downloadTextureHint}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {view.textureDownloads.map((d) => (
               <a key={d.code} href={d.href} className={buttonClass("secondary", "sm")}>
@@ -485,8 +485,8 @@ export default async function StoneByCodePage({
 
       {view.viewer === "client" && (
         <Card className="mt-4" id="zayavka">
-          <h2 className="font-serif text-xl font-bold text-ink">{t.leaveRequest}</h2>
-          <p className="mt-1 text-sm text-ink/60">{t.leaveRequestHint}</p>
+          <h2 className="text-xl font-semibold text-ink">{t.leaveRequest}</h2>
+          <p className="mt-1 text-sm text-ink-2">{t.leaveRequestHint}</p>
           <CardLeadForm
             code={view.code}
             t={{
@@ -512,8 +512,8 @@ export default async function StoneByCodePage({
           расширит его (закреплённый менеджер, «Мои заявки»). */}
       {view.viewer === "partner" && (
         <Card className="mt-4" id="zayavka">
-          <h2 className="font-serif text-xl font-bold text-ink">{t.volumeRequest}</h2>
-          <p className="mt-1 text-sm text-ink/60">{t.volumeRequestHint}</p>
+          <h2 className="text-xl font-semibold text-ink">{t.volumeRequest}</h2>
+          <p className="mt-1 text-sm text-ink-2">{t.volumeRequestHint}</p>
           {leadOk && (
             <Alert variant="success" className="mt-3">
               {t.leadOk}{" "}

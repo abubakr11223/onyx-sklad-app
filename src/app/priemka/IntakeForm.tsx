@@ -106,13 +106,18 @@ const LOC_FIELD_ID: Record<keyof LocValues, (i: number) => string> = {
 
 /** Звёздочка «обязательное поле». */
 function Req() {
-  return <span className="text-danger">*</span>;
+  return <span className="text-carnelian">*</span>;
+}
+
+/** Номер шага в заголовке блока формы (ТЗ №20 §8: «1 · Вид»). */
+function Step({ n }: { n: number }) {
+  return <span className="tnum mr-1.5 font-mono text-ink-2" aria-hidden="true">{n} ·</span>;
 }
 
 /** Кросс-полевая ошибка (не привязана к одному input — quantity/locations). */
 function CrossError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="text-sm font-medium text-danger">{msg}</p>;
+  return <p className="text-sm font-medium text-carnelian">{msg}</p>;
 }
 
 export default function IntakeForm({
@@ -623,7 +628,7 @@ export default function IntakeForm({
 
       {/* ── Вид камня ── */}
       <Card>
-        <h2 className="mb-3 text-lg font-semibold text-ink">Вид камня</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink"><Step n={1} />Вид камня</h2>
         <div className="mb-4 flex gap-2">
           <Button
             variant={isNewType ? "secondary" : "primary"}
@@ -729,8 +734,8 @@ export default function IntakeForm({
 
       {/* ── Количество ── */}
       <Card>
-        <h2 className="mb-1 text-lg font-semibold text-ink">Количество</h2>
-        <p className="mb-4 text-sm text-ink/60">
+        <h2 className="mb-1 text-base font-semibold text-ink"><Step n={2} />Количество</h2>
+        <p className="mb-4 text-sm text-ink-2">
           {patternsEnabled
             ? "Считается из узоров ниже — вводить не нужно."
             : "Плиты и/или площадь — минимум одно."}
@@ -747,7 +752,7 @@ export default function IntakeForm({
                 placeholder="—"
                 readOnly
                 tabIndex={-1}
-                className={inputClass + " tnum bg-ink/[0.04] text-ink/60"}
+                className={inputClass + " tnum bg-stone-100 text-ink-2"}
               />
             </Field>
             <Field id="areaTotalM2" label="Площадь, м² (из узоров)">
@@ -758,7 +763,7 @@ export default function IntakeForm({
                 placeholder="—"
                 readOnly
                 tabIndex={-1}
-                className={inputClass + " tnum bg-ink/[0.04] text-ink/60"}
+                className={inputClass + " tnum bg-stone-100 text-ink-2"}
               />
             </Field>
           </div>
@@ -794,10 +799,10 @@ export default function IntakeForm({
       {/* ── ТЗ №12: размер плиты (см) ── */}
       {!patternsEnabled && (
         <Card>
-          <h2 className="mb-1 text-lg font-semibold text-ink">
-            Размер плиты <span className="text-danger">*</span>
+          <h2 className="mb-1 text-base font-semibold text-ink">
+            <Step n={3} />Размер плиты <span className="text-carnelian">*</span>
           </h2>
-          <p className="mb-4 text-sm text-ink/60">
+          <p className="mb-4 text-sm text-ink-2">
             Длина, ширина и толщина обязательны (см). Без них партию не
             принять — по габариту и толщине ищут и продают плиты.
           </p>
@@ -847,7 +852,7 @@ export default function IntakeForm({
               <p
                 className={
                   "mt-3 text-sm " +
-                  (soft ? "font-medium text-warning" : "text-ink/55")
+                  (soft ? "font-medium text-amber" : "text-ink-2")
                 }
               >
                 По размеру: {L}×{W} см × {N} ≈ {expected.toFixed(1)} м²
@@ -869,15 +874,15 @@ export default function IntakeForm({
             type="checkbox"
             checked={patternsEnabled}
             onChange={(ev) => setPatternsEnabled(ev.target.checked)}
-            className="h-4 w-4 accent-gold"
+            className="h-4 w-4 accent-ink"
           />
-          <span className="text-lg font-semibold text-ink">
-            В партии несколько узоров / толщин
+          <span className="text-base font-semibold text-ink">
+            <Step n={patternsEnabled ? 3 : 4} />В партии несколько узоров / толщин
           </span>
         </label>
 
         {!patternsEnabled ? (
-          <p className="mt-2 text-sm text-ink/55">
+          <p className="mt-2 text-sm text-ink-2">
             Однородная партия — оставьте выключенным (быстрый путь). Если узоров
             несколько — отметьте, заполните таблицу; фото каждого узора запросим у
             складчика в Telegram.
@@ -888,7 +893,7 @@ export default function IntakeForm({
             {/* BUG-02 (ТЗ №4): фото узора не грузится здесь — после приёмки
                 система САМА отправит складчику фотозапрос по каждому узору в
                 Telegram, и фото привяжется к подгруппе (см. карточку камня). */}
-            <p className="rounded-card bg-gold/8 px-3 py-2 text-sm text-ink/70">
+            <p className="rounded-card bg-honey-soft px-3 py-2 text-sm text-ink-2">
               Фото узоров грузить здесь не нужно: после приёмки система
               автоматически запросит у складчика фото каждого узора в Telegram —
               оно привяжется к подгруппе.
@@ -899,7 +904,7 @@ export default function IntakeForm({
             {patRowIds.map((id, idx) => {
               const p = pats[id] ?? emptyPat();
               return (
-                <div key={id} className="rounded-card border border-line bg-paper p-3">
+                <div key={id} className="rounded-card border border-line bg-marble p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-base font-semibold text-ink">Узор {idx + 1}</span>
                     {patRowIds.length > 1 && (
@@ -917,7 +922,7 @@ export default function IntakeForm({
                     onChange={setPat(id, "description")}
                     error={e[`pattern-${idx}-description`]}
                   />
-                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
                     <Field
                       id={`patLength-${idx}`}
                       name="patLength"
@@ -986,9 +991,9 @@ export default function IntakeForm({
                       type="file"
                       accept="image/*"
                       capture="environment"
-                      className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+                      className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
                     />
-                    <p className="text-xs text-ink/50">
+                    <p className="text-xs text-ink-3">
                       Снимок подгруппы — по нему узор покажут клиенту. Можно
                       пропустить: тогда придёт фотозапрос в Telegram.
                     </p>
@@ -1004,9 +1009,9 @@ export default function IntakeForm({
             {/* BUG-03 (ТЗ №4) → ТЗ №19 A1: живой ИТОГО по узорам. Он же —
                 количество партии (поля «Количество» выше только для чтения),
                 поэтому сверки «не сходится с партией» больше нет. */}
-            <div className="flex items-center justify-between rounded-card bg-ink/[0.03] px-3 py-2 text-sm">
+            <div className="flex items-center justify-between rounded-card border border-line bg-stone-100 px-3 py-2 text-sm">
               <span className="font-semibold text-ink">ИТОГО по узорам = партия</span>
-              <span className="tnum text-ink/70">
+              <span className="tnum text-ink-2">
                 {patTotals.slabs} плит · {patTotalArea.toFixed(2).replace(".", ",")} м²
               </span>
             </div>
@@ -1017,8 +1022,8 @@ export default function IntakeForm({
 
       {/* ── Локации ── */}
       <Card>
-        <h2 className="mb-1 text-lg font-semibold text-ink">Локации</h2>
-        <p className="mb-3 text-sm text-ink/60">
+        <h2 className="mb-1 text-base font-semibold text-ink"><Step n={patternsEnabled ? 4 : 5} />Локации</h2>
+        <p className="mb-3 text-sm text-ink-2">
           Куда разгрузили. Одна партия может лежать в нескольких местах — это норма.
         </p>
         <div className="mb-3">
@@ -1028,7 +1033,7 @@ export default function IntakeForm({
           {rowIds.map((id, idx) => {
             const loc = locs[id] ?? emptyLoc();
             return (
-              <div key={id} className="rounded-card border border-ink/10 bg-paper p-3">
+              <div key={id} className="rounded-card border border-line bg-marble p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-base font-semibold text-ink">Локация {idx + 1}</span>
                   {rowIds.length > 1 && (
@@ -1036,7 +1041,7 @@ export default function IntakeForm({
                       variant="ghost"
                       size="sm"
                       onClick={() => removeRow(id)}
-                      className="text-danger hover:bg-danger/10"
+                      className="text-carnelian hover:bg-carnelian-bg"
                     >
                       Убрать
                     </Button>
@@ -1151,7 +1156,7 @@ export default function IntakeForm({
                             value={computed === null ? "" : String(computed)}
                             readOnly
                             tabIndex={-1}
-                            className={inputClass + " bg-ink/[0.04] text-ink/60"}
+                            className={inputClass + " bg-stone-100 text-ink-2"}
                           />
                         </Field>
                       );
@@ -1275,7 +1280,7 @@ export default function IntakeForm({
                 converged ? "bg-success/10" : "bg-warning/12"
               }`}
             >
-              <p className={`font-medium ${converged ? "text-success" : "text-warning"}`}>
+              <p className={`font-medium ${converged ? "text-malachite" : "text-amber"}`}>
                 Разложено: {hasSlabsTgt ? `${placedSlabs} из ${tgtSlabs} плит` : ""}
                 {hasSlabsTgt && hasAreaTgt ? " · " : ""}
                 {hasAreaTgt
@@ -1292,12 +1297,12 @@ export default function IntakeForm({
               </p>
               {!converged &&
                 shortfalls.map((s) => (
-                  <p key={s} className="mt-0.5 text-ink/60">
+                  <p key={s} className="mt-0.5 text-ink-2">
                     {s}
                   </p>
                 ))}
               {hasDup && (
-                <p className="mt-0.5 font-medium text-warning">
+                <p className="mt-0.5 font-medium text-amber">
                   Одинаковые «блок + ориентир + узор» в двух строках — скорее
                   всего опечатка, сложите в одну строку.
                 </p>
@@ -1312,7 +1317,7 @@ export default function IntakeForm({
 
       {/* ── Детали ── */}
       <Card>
-        <h2 className="mb-3 text-lg font-semibold text-ink">Детали</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink"><Step n={patternsEnabled ? 5 : 6} />Детали</h2>
         <div className="flex flex-col gap-4">
           <Field
             id="arrivedAt"
@@ -1350,9 +1355,9 @@ export default function IntakeForm({
               accept="image/*"
               capture="environment"
               multiple
-              className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+              className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
             />
-            <p className="text-xs text-ink/50">
+            <p className="text-xs text-ink-3">
               Общий вид поставки — как камень пришёл. До {MAX_BATCH_PHOTOS} фото.
               Необязательно, но помогает при споре с поставщиком.
             </p>
@@ -1364,13 +1369,12 @@ export default function IntakeForm({
           на десктопе (md:) возвращается в обычный поток. Реальный submit
           формы (action={formAction}) сохраняется — устойчивость к слабой сети. */}
       <div
-        className="sticky bottom-0 z-10 -mx-4 border-t border-ink/10 bg-paper/90 px-4 py-3 backdrop-blur
-                   md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none"
+        className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 border-t border-line bg-marble px-4 py-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0"
       >
         <Button
           type="submit"
-          disabled={pending}
-          className="min-h-14 w-full text-lg font-bold"
+          pending={pending}
+          className="w-full md:w-auto"
         >
           {pending ? "Сохранение…" : "Принять партию"}
         </Button>

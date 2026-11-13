@@ -54,7 +54,7 @@ export default function CancelReservationButton({
       </Button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Снять бронь?">
-        <p className="text-sm text-ink/70">
+        <p className="text-sm text-ink-2">
           Камень <span className="font-medium text-ink">«{label}»</span> вернётся
           «В наличии». Отменить это нельзя.
         </p>

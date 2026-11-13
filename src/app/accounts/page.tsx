@@ -97,7 +97,7 @@ export default async function AccountsPage({
   const me = await getRealSessionUser();
   if (!me || me.role !== "OWNER") {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -160,27 +160,24 @@ export default async function AccountsPage({
   });
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · доступ
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Сотрудники
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Аккаунты для входа по логину: менеджеры и складчики. Владелец —
           корневой аккаунт.
         </p>
         {/* ТЗ №20 L — партнёров (тип, закреплённый менеджер) ведут в «Партнёрах». */}
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Дизайнеров, прорабов и подрядчиков удобнее вести в разделе{" "}
           <a href="/partnery" className="font-semibold text-gold-deep underline">
             «Партнёры»
           </a>{" "}
           — там тип партнёра и закреплённый менеджер.
         </p>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Состояние Telegram-бота (вебхук, нажатия кнопок):{" "}
           <a href="/accounts/bot" className="font-semibold text-gold-deep underline">
             «Бот»
@@ -190,11 +187,11 @@ export default async function AccountsPage({
       </header>
 
       {/* W11-A — who receives photo tasks in Telegram (self-correcting panel). */}
-      <Card className="mb-6 border-gold/40">
-        <h2 className="mb-1 font-serif text-xl font-bold text-ink">
+      <Card className="mb-6 border-honey">
+        <h2 className="mb-1 text-base font-semibold text-ink">
           Telegram → фотозапросы
         </h2>
-        <p className="mb-3 text-sm text-ink/60">
+        <p className="mb-3 text-sm text-ink-2">
           Задачи уходят <strong>всем активным складчикам</strong> с Telegram ID
           (кроме демо-аккаунтов — их рассылка отключена). Если ваш личный чат
           привязан к демо-складчику, отвяжите одним нажатием.
@@ -217,7 +214,7 @@ export default async function AccountsPage({
               return (
                 <li
                   key={`tg-health-${u.id}`}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-ink/10 bg-ink/[0.02] px-3 py-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-line bg-ink/[0.02] px-3 py-2 text-sm"
                 >
                   <div className="min-w-0">
                     <span className="font-medium text-ink">{u.name}</span>
@@ -227,9 +224,9 @@ export default async function AccountsPage({
                       </span>
                     )}
                     {!u.isActive && (
-                      <span className="ml-1.5 text-ink/60">· неактивен</span>
+                      <span className="ml-1.5 text-ink-2">· неактивен</span>
                     )}
-                    <p className="tnum text-ink/60">
+                    <p className="tnum text-ink-2">
                       {linked ? (
                         <>
                           TG: {u.telegramId}
@@ -284,11 +281,11 @@ export default async function AccountsPage({
       </Card>
 
       {/* ── Короткая инструкция для владельца (передача проекта) ── */}
-      <details className="mb-6 rounded-card border border-line bg-paper-2 p-4">
+      <details className="mb-6 rounded-card border border-line bg-marble p-4">
         <summary className="cursor-pointer font-semibold text-ink">
           Как это работает — коротко
         </summary>
-        <div className="mt-3 flex flex-col gap-3 text-sm text-ink/70">
+        <div className="mt-3 flex flex-col gap-3 text-sm text-ink-2">
           <p>
             Здесь вы заводите аккаунты для входа. Каждый сотрудник входит по
             своему <b>логину (email)</b> и <b>паролю</b>, которые задаёте вы.
@@ -334,7 +331,7 @@ export default async function AccountsPage({
               </li>
             </ul>
           </div>
-          <p className="text-ink/50">
+          <p className="text-ink-3">
             Эту страницу видит только владелец. Сотрудники сюда не заходят.
           </p>
         </div>
@@ -353,10 +350,10 @@ export default async function AccountsPage({
 
       {/* ── Мой аккаунт: владелец сам меняет свой логин и пароль (без разработчика) ── */}
       <Card className="mb-6">
-        <h2 className="mb-1 font-serif text-xl font-bold text-ink">
+        <h2 className="mb-1 text-base font-semibold text-ink">
           Мой аккаунт
         </h2>
-        <p className="mb-4 text-sm text-ink/60">
+        <p className="mb-4 text-sm text-ink-2">
           Ваш логин и пароль для входа. Меняйте прямо здесь — терминал и
           разработчик не нужны.
         </p>
@@ -415,7 +412,7 @@ export default async function AccountsPage({
           </form>
           {meRow?.telegramId ? (
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs text-ink/50">
+              <p className="text-xs text-ink-3">
                 Текущий: {meRow.telegramId}. На владельце TG не получает
                 фотозадачи (роль не «Склад»), но менеджер-уведомления — да.
               </p>
@@ -433,7 +430,7 @@ export default async function AccountsPage({
 
       {/* ── Создать аккаунт ── */}
       <Card className="mb-6">
-        <h2 className="mb-4 font-serif text-xl font-bold text-ink">
+        <h2 className="mb-4 text-base font-semibold text-ink">
           Новый аккаунт
         </h2>
         <form action={createAccount} className="flex flex-col gap-4">
@@ -489,11 +486,11 @@ export default async function AccountsPage({
 
       {/* ── Заявки на доступ через Telegram (onboarding) ── */}
       {tgRequests.length > 0 && (
-        <Card className="mb-6 border-gold/40">
-          <h2 className="mb-1 font-serif text-xl font-bold text-ink">
+        <Card className="mb-6 border-honey">
+          <h2 className="mb-1 text-base font-semibold text-ink">
             Заявки на доступ (Telegram)
           </h2>
-          <p className="mb-4 text-sm text-ink/60">
+          <p className="mb-4 text-sm text-ink-2">
             Человек нажал /start в боте и ждёт доступа. Выберите роль и одобрите —
             аккаунт создастся, а ему придёт уведомление в Telegram.{" "}
             <strong className="text-ink">
@@ -505,17 +502,17 @@ export default async function AccountsPage({
             {tgRequests.map((r) => (
               <li
                 key={r.id}
-                className="rounded-card border border-line bg-paper-2 p-3"
+                className="rounded-card border border-line bg-marble p-3"
               >
                 <p className="font-semibold text-ink">
                   {r.name ?? "без имени"}
                   {r.username && (
-                    <span className="ml-2 text-sm font-normal text-ink/50">
+                    <span className="ml-2 text-sm font-normal text-ink-3">
                       @{r.username}
                     </span>
                   )}
                 </p>
-                <p className="tnum text-sm text-ink/60">
+                <p className="tnum text-sm text-ink-2">
                   {r.phone ? <><PhoneIcon className="mr-1 inline align-[-2px]" />{r.phone}</> : "телефон не передан"}
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
@@ -582,28 +579,28 @@ export default async function AccountsPage({
                     <p className="font-semibold text-ink">
                       {u.name}
                       {isSelf && (
-                        <span className="ml-2 text-xs font-normal text-ink/50">
+                        <span className="ml-2 text-xs font-normal text-ink-3">
                           (это вы)
                         </span>
                       )}
                     </p>
-                    <p className="text-sm text-ink/60">
+                    <p className="text-sm text-ink-2">
                       {u.email ?? "— нет логина —"}
                     </p>
                     <p className="text-sm">
                       {u.phone ? (
-                        <span className="tnum text-ink/60"><PhoneIcon className="mr-1 inline align-[-2px]" />{u.phone}</span>
+                        <span className="tnum text-ink-2"><PhoneIcon className="mr-1 inline align-[-2px]" />{u.phone}</span>
                       ) : isWarehouseRole(u.role) ? (
                         <span className="text-warning">
                           телефон не задан — Telegram не привяжется
                         </span>
                       ) : (
-                        <span className="text-ink/60">телефон не задан</span>
+                        <span className="text-ink-2">телефон не задан</span>
                       )}
                     </p>
                     <p className="text-sm">
                       {u.telegramId ? (
-                        <span className="tnum text-ink/60">
+                        <span className="tnum text-ink-2">
                           <SendIcon className="mr-1 inline align-[-2px]" />TG ID: {u.telegramId}
                           {isWarehouseRole(u.role) &&
                             isDemoWarehouseAccount(u) && (
@@ -626,7 +623,7 @@ export default async function AccountsPage({
                           Telegram не привязан — фотозапросы не придут
                         </span>
                       ) : (
-                        <span className="text-ink/60">
+                        <span className="text-ink-2">
                           Telegram не привязан — уведомления (долги, заявки) не
                           придут. Как привязать: укажите телефон, затем напишите
                           боту /start и поделитесь номером.
@@ -657,7 +654,7 @@ export default async function AccountsPage({
                 {/* Действия — только для активных не-владельцев. Свой аккаунт
                     (владелец) управляется в блоке «Мой аккаунт» вверху. */}
                 {u.isActive && isManageable && (
-                  <div className="mt-4 flex flex-col gap-3 border-t border-ink/10 pt-4">
+                  <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
                     {/* Смена роли — выбор из складско-менеджерских ролей.
                         Зав. складом отличается от складчика одним правом:
                         менять количество партии. */}
@@ -804,7 +801,7 @@ export default async function AccountsPage({
                           />
                           <span>
                             Видеть закупочную цену / маржу
-                            <span className="ml-1 text-ink/50">
+                            <span className="ml-1 text-ink-3">
                               (сейчас: {u.canSeePurchasePrice ? "да" : "нет"})
                             </span>
                           </span>
@@ -825,7 +822,7 @@ export default async function AccountsPage({
                         <summary className="cursor-pointer text-sm font-semibold text-danger">
                           Деактивировать…
                         </summary>
-                        <p className="mt-2 text-sm text-ink/70">
+                        <p className="mt-2 text-sm text-ink-2">
                           Деактивировать сотрудника <b>{u.name}</b>? Вход будет
                           закрыт, история сохранится. Позже можно снова
                           активировать.
@@ -845,8 +842,8 @@ export default async function AccountsPage({
                 {/* W3-T3 — деактивированный аккаунт можно вернуть: вход снова
                     откроется по прежнему логину и паролю. */}
                 {!u.isActive && isManageable && (
-                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-ink/10 pt-4">
-                    <p className="text-sm text-ink/60">
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+                    <p className="text-sm text-ink-2">
                       Аккаунт деактивирован — вход закрыт, история цела.
                     </p>
                     <form action={reactivateAccount}>

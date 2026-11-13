@@ -37,7 +37,7 @@ export default async function PriemkaEditBatchPage({
   const caps = await getCapabilities();
   if (!caps.canManageWarehouse) {
     return (
-      <main className="mx-auto max-w-xl p-4 pb-12">
+      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -143,15 +143,12 @@ export default async function PriemkaEditBatchPage({
   );
 
   return (
-    <main className="mx-auto max-w-xl p-4 pb-12">
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · склад
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Правка партии
         </h1>
-        <p className="mt-2 text-base text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           <Link href="/priemka" className="text-gold-deep underline">
             ← К приёмке
           </Link>
@@ -206,7 +203,7 @@ export default async function PriemkaEditBatchPage({
         blocks={blocks}
       />
 
-      <p className="mt-6 text-center text-sm text-ink/50">
+      <p className="mt-6 text-center text-sm text-ink-3">
         <Link href="/priemka" className={buttonClass("ghost", "sm")}>
           Назад к списку
         </Link>

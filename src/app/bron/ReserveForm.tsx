@@ -65,7 +65,7 @@ const m2Fmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 /** Звёздочка «обязательное поле». */
 function Req() {
-  return <span className="text-danger">*</span>;
+  return <span className="text-carnelian">*</span>;
 }
 
 export default function ReserveForm({
@@ -111,7 +111,7 @@ export default function ReserveForm({
 
   if (stones.length === 0) {
     return (
-      <p className="text-ink/70">
+      <p className="text-ink-2">
         Нет камня, доступного для брони: все плиты и остатки заняты, свободного
         объёма в партиях нет.
       </p>
@@ -156,7 +156,7 @@ export default function ReserveForm({
       {/* TZ §7: отказ брони не «глухой» — похожие AVAILABLE (не авто-бронь). */}
       {alternatives.length > 0 && (
         <Alert variant="info" title="Похожие варианты в наличии">
-          <p className="mb-2 text-sm text-ink/70">
+          <p className="mb-2 text-sm text-ink-2">
             Выбранный камень недоступен. Можно предложить клиенту другое — нажмите,
             чтобы подставить в форму (бронь не создаётся сама).
           </p>
@@ -165,7 +165,7 @@ export default function ReserveForm({
               <li key={a.target}>
                 <button
                   type="button"
-                  className="w-full rounded-field border border-line bg-paper-2 px-3 py-2 text-left text-sm font-medium text-ink transition hover:border-gold hover:text-gold-deep"
+                  className="w-full rounded-field border border-line bg-marble px-3 py-2 text-left text-sm font-medium text-ink transition-colors duration-150 hover:border-honey hover:text-honey-ink"
                   onClick={() => {
                     // target = "SLAB:id" | "PIECE:id" | "BATCH:id"
                     const stone = stones.find(
@@ -255,8 +255,8 @@ export default function ReserveForm({
 
       {/* Объём из партии — «требует ввода количества»: янтарный caution-блок. */}
       {isBatch && (
-        <div className="rounded-card border border-warning/40 bg-warning/10 p-4">
-          <p className="mb-3 text-sm text-warning">
+        <div className="rounded-card border border-amber/25 bg-amber-bg p-4">
+          <p className="mb-3 text-sm text-amber">
             Свободно под бронь:{" "}
             {freeParts.length > 0 ? freeParts.join(" · ") : "нет данных"}. Укажите,
             сколько плит бронируете — «свободно» уменьшится, факт остатка нет.
@@ -313,8 +313,9 @@ export default function ReserveForm({
       <div className="mt-2">
         <Button
           type="submit"
-          disabled={pending || !target || !client}
-          className="min-h-14 w-full text-lg font-bold"
+          disabled={!target || !client}
+          pending={pending}
+          className="w-full md:w-auto"
         >
           {pending ? "Бронирование…" : "Забронировать"}
         </Button>

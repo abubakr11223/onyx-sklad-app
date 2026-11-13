@@ -71,11 +71,11 @@ export default async function Stone3DPage({ params }: { params: Promise<{ code: 
         </Link>
         {viewer !== "staff" && <LocaleSwitch locale={locale} back={`/k/${encodeURIComponent(code)}/3d`} t={t} />}
       </div>
-      <h1 className="font-serif text-2xl font-bold text-ink">{t.show3d}</h1>
-      <p className="mb-4 mt-1 text-sm text-ink/60">{t.show3dHint}</p>
+      <h1 className="text-display font-semibold text-ink">{t.show3d}</h1>
+      <p className="mb-4 mt-1 text-sm text-ink-2">{t.show3dHint}</p>
       {own.length === 0 ? (
         <div className="rounded-card border border-line bg-paper-2 p-6 text-center">
-          <p className="text-sm text-ink/70">{hit ? t.scene3dEmpty : t.notFoundBody}</p>
+          <p className="text-sm text-ink-2">{hit ? t.scene3dEmpty : t.notFoundBody}</p>
           <Link href={back} className={buttonClass("secondary", "md", "mt-4")}>
             {t.back}
           </Link>

@@ -107,13 +107,13 @@ export default async function QrStonePage({
   if (!st) {
     return (
       <main className="mx-auto max-w-2xl p-4 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        <p className="text-xs font-medium text-ink-2">
           Onyx
         </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="mt-1 text-display font-semibold text-ink">
           Камень не найден
         </h1>
-        <p className="mt-2 text-base text-ink/70">
+        <p className="mt-2 text-base text-ink-2">
           Возможно, образец снят с каталога или ссылка устарела. Спросите
           менеджера в шоу-руме — подберут похожий камень.
         </p>
@@ -161,11 +161,11 @@ export default async function QrStonePage({
   return (
     <main className="mx-auto max-w-2xl p-4 pb-12 sm:p-8">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        <p className="text-xs font-medium text-ink-2">
           Onyx · натуральный камень
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="font-serif text-display font-bold tracking-tight text-ink">
+          <h1 className="text-display font-semibold text-ink">
             {view.name}
           </h1>
           <Badge variant={hasStock ? "success" : "neutral"}>
@@ -178,7 +178,7 @@ export default async function QrStonePage({
           {view.color && (
             <>
               {" "}
-              <span className="text-ink/40">·</span> {view.color}
+              <span className="text-ink-3">·</span> {view.color}
             </>
           )}
         </p>
@@ -218,17 +218,17 @@ export default async function QrStonePage({
         </div>
       ) : (
         <div className="mt-6 overflow-hidden rounded-card border border-line bg-paper-2">
-          <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 bg-gold/10 px-4">
+          <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 bg-honey-soft px-4">
             <span
               aria-hidden
               className="flex h-16 w-16 items-center justify-center rounded-field bg-stone-100 font-mono text-xl font-medium text-gold-deep"
             >
               {monogram}
             </span>
-            <p className="text-center text-sm font-medium text-ink/70">
+            <p className="text-center text-sm font-medium text-ink-2">
               Фото и интерьеры ещё готовятся
             </p>
-            <p className="max-w-sm text-center text-sm text-ink/55">
+            <p className="max-w-sm text-center text-sm text-ink-2">
               Камень в каталоге есть
               {view.color ? ` — ${view.rockType}, ${view.color}` : ` — ${view.rockType}`}.
               Попросите менеджера в шоу-руме показать образец вживую
@@ -239,7 +239,7 @@ export default async function QrStonePage({
       )}
 
       {view.mediaMode === "warehouse_photos_only" && (
-        <p className="mt-2 text-xs text-ink/50">
+        <p className="mt-2 text-xs text-ink-3">
           Показаны фото со склада. Виды в интерьере появятся, когда менеджер
           сгенерирует их для этого камня.
         </p>
@@ -247,27 +247,27 @@ export default async function QrStonePage({
 
       {/* Always show identity card — not only when description/properties exist. */}
       <Card className="mt-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">
+        <h2 className="text-sm font-semibold text-ink-3">
           О камне
         </h2>
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-ink/50">Порода</dt>
+          <dt className="text-ink-3">Порода</dt>
           <dd className="font-medium text-ink">{view.rockType}</dd>
           {view.color && (
             <>
-              <dt className="text-ink/50">Цвет</dt>
+              <dt className="text-ink-3">Цвет</dt>
               <dd className="font-medium text-ink">{view.color}</dd>
             </>
           )}
-          <dt className="text-ink/50">Наличие</dt>
+          <dt className="text-ink-3">Наличие</dt>
           <dd className="font-medium text-ink">{view.stockLabel}</dd>
         </dl>
         {view.description ? (
-          <p className="mt-4 text-base leading-relaxed text-ink/80">
+          <p className="mt-4 text-base leading-relaxed text-ink">
             {view.description}
           </p>
         ) : (
-          <p className="mt-4 text-sm text-ink/50">
+          <p className="mt-4 text-sm text-ink-3">
             Подробное описание появится позже. Менеджер расскажет о фактуре и
             толщинах на месте.
           </p>
@@ -276,7 +276,7 @@ export default async function QrStonePage({
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-3 text-sm">
             {view.properties.map(([k, v]) => (
               <div key={k} className="contents">
-                <dt className="text-ink/50">{k}</dt>
+                <dt className="text-ink-3">{k}</dt>
                 <dd className="text-ink">{v}</dd>
               </div>
             ))}
@@ -297,11 +297,11 @@ export default async function QrStonePage({
 
       {/* Honest next step when visuals are thin — not a dead end. */}
       {(view.mediaMode === "no_photos" || !view.description) && (
-        <Card className="mt-6 border-gold/30 bg-gold/5">
+        <Card className="mt-6 border-honey bg-honey-soft">
           <h2 className="text-base font-semibold text-ink">
             Хотите увидеть камень вживую?
           </h2>
-          <p className="mt-1 text-sm text-ink/70">
+          <p className="mt-1 text-sm text-ink-2">
             Подойдите к менеджеру в шоу-руме с названием{" "}
             <span className="font-medium text-ink">«{view.name}»</span> — покажут
             образец, наличие и цену.
@@ -321,8 +321,8 @@ export default async function QrStonePage({
 
       {/* Сотрудник по тому же QR — полная складская карточка (остатки/цены). */}
       {staff && (
-        <Card className="mt-6 border-gold/40">
-          <p className="text-sm text-ink/70">
+        <Card className="mt-6 border-honey">
+          <p className="text-sm text-ink-2">
             Вы вошли как сотрудник — доступны остатки, локации и цены.
           </p>
           <Link

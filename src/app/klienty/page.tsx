@@ -16,6 +16,7 @@ import {
 import { formatCurrencySummaryLine } from "@/lib/debts-ui";
 import NoAccess from "@/components/NoAccess";
 import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import Button, { buttonClass } from "@/components/ui/Button";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -39,7 +40,7 @@ export default async function KlientyPage({
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -92,10 +93,10 @@ export default async function KlientyPage({
   };
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-ink">Клиенты</h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <h1 className="text-display font-semibold text-ink">Клиенты</h1>
+        <p className="mt-1 text-sm text-ink-2">
           Справочник: продажи, долги, объекты. Суммы — по валютам отдельно.
         </p>
       </header>
@@ -149,7 +150,58 @@ export default async function KlientyPage({
       {clients.length === 0 ? (
         <AlertEmpty />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <>
+          {/* ТЗ №20 §8: список — таблица; на телефоне — карточки (§9). */}
+          <div className="onyx-table-wrap hidden md:block">
+            <table className="onyx-table">
+              <thead>
+                <tr>
+                  <th className="py-2 pl-3">Клиент</th>
+                  <th className="py-2 pl-3">Тип</th>
+                  <th className="py-2 pl-3">Телефон</th>
+                  <th className="py-2 pl-3 text-right">Продаж</th>
+                  <th className="py-2 pl-3 text-right">Покупки</th>
+                  <th className="py-2 pl-3 text-right">Долг</th>
+                  {caps.canSeeAllClients && <th className="py-2 px-3">Менеджер</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c) => {
+                  const money = formatCurrencySummaryLine(c.purchaseTotals);
+                  const debt = formatCurrencySummaryLine(c.activeDebtTotals);
+                  return (
+                    <tr key={c.id} className="align-top">
+                      <td className="py-2.5 pl-3">
+                        <Link
+                          href={`/klienty/${c.id}`}
+                          className="font-medium text-ink hover:text-honey-ink hover:underline"
+                        >
+                          {c.name}
+                        </Link>
+                      </td>
+                      <td className="py-2.5 pl-3">
+                        <Badge variant="neutral">{CLIENT_TYPE_LABELS[c.type]}</Badge>
+                      </td>
+                      <td className="tnum whitespace-nowrap py-2.5 pl-3 text-ink-2">{c.phone}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{c.saleCount}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{money || <span className="text-ink-3">—</span>}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">
+                        {c.hasActiveDebt ? (
+                          <span className="font-medium text-carnelian">{debt || "долг"}</span>
+                        ) : (
+                          <span className="text-ink-3">—</span>
+                        )}
+                      </td>
+                      {caps.canSeeAllClients && (
+                        <td className="py-2.5 px-3 text-ink-2">{c.managerName}</td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        <ul className="flex flex-col gap-2 md:hidden">
           {clients.map((c) => {
             const money = formatCurrencySummaryLine(c.purchaseTotals);
             const debt = formatCurrencySummaryLine(c.activeDebtTotals);
@@ -157,33 +209,27 @@ export default async function KlientyPage({
               <li key={c.id}>
                 <Link
                   href={`/klienty/${c.id}`}
-                  className="block rounded-card border border-line bg-paper p-3 shadow-card transition hover:border-gold"
+                  className="block rounded-card border border-line bg-marble p-4 transition-colors duration-150 hover:border-line-strong"
                 >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div>
-                      <span className="font-semibold text-ink">{c.name}</span>
-                      <Badge variant="neutral" className="ml-2 align-middle">
-                        {CLIENT_TYPE_LABELS[c.type]}
-                      </Badge>
-                    </div>
-                    <span className="text-sm text-ink/60">{c.phone}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Badge variant="neutral">{CLIENT_TYPE_LABELS[c.type]}</Badge>
+                    {c.hasActiveDebt && (
+                      <Badge variant="danger">долг{debt ? `: ${debt}` : ""}</Badge>
+                    )}
                   </div>
-                  <p className="mt-1 text-sm text-ink/70">
+                  <p className="mt-2 text-base font-medium text-ink">{c.name}</p>
+                  <p className="tnum text-sm text-ink-2">{c.phone}</p>
+                  <p className="mt-1 text-sm text-ink-2">
                     Продаж: {c.saleCount}
                     {money && (
                       <>
                         {" · "}
-                        <span className="tnum font-semibold text-ink">{money}</span>
+                        <span className="tnum font-medium text-ink">{money}</span>
                       </>
-                    )}
-                    {c.hasActiveDebt && (
-                      <Badge variant="warning" className="ml-2 align-middle">
-                        долг{debt ? `: ${debt}` : ""}
-                      </Badge>
                     )}
                   </p>
                   {caps.canSeeAllClients && (
-                    <p className="mt-0.5 text-xs text-ink/45">
+                    <p className="mt-0.5 text-xs text-ink-2">
                       Менеджер: {c.managerName}
                     </p>
                   )}
@@ -192,6 +238,7 @@ export default async function KlientyPage({
             );
           })}
         </ul>
+        </>
       )}
 
       {/* Инвариант /poisk: ссылка есть ровно тогда, когда есть следующая строка. */}
@@ -217,11 +264,8 @@ export default async function KlientyPage({
 
 function AlertEmpty() {
   return (
-    <Card>
-      <p className="text-sm text-ink/65">
-        Клиентов не найдено. Они появятся при продаже (поиск или «+ Новый
-        клиент»).
-      </p>
-    </Card>
+    <EmptyState title="Клиентов не найдено.">
+      Они появятся при продаже (поиск или «+ Новый клиент»).
+    </EmptyState>
   );
 }

@@ -41,7 +41,7 @@ export default async function BotPage({
   const me = await getRealSessionUser();
   if (!me || me.role !== "OWNER") {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -67,14 +67,14 @@ export default async function BotPage({
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="text-sm">
         <Link href="/accounts" className="text-gold-deep underline">
           ← Сотрудники
         </Link>
       </p>
-      <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">Бот</h1>
-      <p className="mt-1 text-sm text-ink/60">
+      <h1 className="mt-1 text-display font-semibold text-ink">Бот</h1>
+      <p className="mt-1 text-sm text-ink-2">
         Куда Telegram присылает сообщения бота и нажатия кнопок. Нужно для «Менеджер связался»
         под уведомлением о заявке.
       </p>
@@ -97,16 +97,16 @@ export default async function BotPage({
           </p>
         ) : (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-ink/55">Адрес вебхука</dt>
+            <dt className="text-ink-2">Адрес вебхука</dt>
             <dd className="break-all text-ink">
               {host || "не задан"}{" "}
               {host && <Badge variant={ours ? "success" : "warning"}>{ours ? "этот сайт" : "не этот сайт"}</Badge>}
             </dd>
-            <dt className="text-ink/55">Типы обновлений</dt>
+            <dt className="text-ink-2">Типы обновлений</dt>
             <dd className="text-ink">
               {w.allowed_updates && w.allowed_updates.length > 0 ? w.allowed_updates.join(", ") : "все обычные (по умолчанию)"}
             </dd>
-            <dt className="text-ink/55">Нажатия кнопок</dt>
+            <dt className="text-ink-2">Нажатия кнопок</dt>
             <dd>
               {missing.includes("callback_query") ? (
                 <Badge variant="warning">не приходят</Badge>
@@ -114,10 +114,10 @@ export default async function BotPage({
                 <Badge variant="success">приходят</Badge>
               )}
             </dd>
-            <dt className="text-ink/55">В очереди</dt>
+            <dt className="text-ink-2">В очереди</dt>
             <dd className="tnum text-ink">{w.pending_update_count ?? 0}</dd>
-            <dt className="text-ink/55">Последняя ошибка</dt>
-            <dd className="text-ink/80">
+            <dt className="text-ink-2">Последняя ошибка</dt>
+            <dd className="text-ink">
               {w.last_error_message
                 ? `${w.last_error_message}${w.last_error_date ? ` · ${formatTashkentDateTime(new Date(w.last_error_date * 1000))}` : ""}`
                 : "нет"}
@@ -127,8 +127,8 @@ export default async function BotPage({
       </Card>
 
       <Card className="mt-4">
-        <h2 className="text-lg font-semibold text-ink">Кто получает заявки и может нажать «Менеджер связался»</h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <h2 className="text-base font-semibold text-ink">Кто получает заявки и может нажать «Менеджер связался»</h2>
+        <p className="mt-1 text-sm text-ink-2">
           Активные менеджеры и владелец с привязанным Telegram. Если человек получает
           уведомления, но кнопка отвечает «Заявки берут менеджеры и владелец», — его Telegram
           привязан к другому (или отключённому) аккаунту: проверьте в «Сотрудниках».
@@ -137,7 +137,7 @@ export default async function BotPage({
           {staff.map((u) => (
             <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
               <span className="text-ink">
-                {u.name} <span className="text-ink/55">· {u.role === "OWNER" ? "владелец" : "менеджер"}</span>
+                {u.name} <span className="text-ink-2">· {u.role === "OWNER" ? "владелец" : "менеджер"}</span>
               </span>
               <span className="flex flex-wrap gap-1.5">
                 {!u.isActive && <Badge variant="neutral">отключён</Badge>}
@@ -154,7 +154,7 @@ export default async function BotPage({
 
       {w && missing.length > 0 && ours && (
         <Card className="mt-4">
-          <p className="text-sm text-ink/70">
+          <p className="text-sm text-ink-2">
             Не хватает: {missing.join(", ")}. Кнопка ниже оставит адрес и секрет как есть и добавит
             недостающие типы ({REQUIRED_UPDATES.join(", ")}).
           </p>

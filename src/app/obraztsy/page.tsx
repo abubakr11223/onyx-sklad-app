@@ -33,7 +33,7 @@ export default async function ObraztsyPage({
   const caps = await getCapabilities();
   if (!caps.canSell) {
     return (
-      <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -84,10 +84,10 @@ export default async function ObraztsyPage({
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-ink">Образцы</h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <h1 className="text-display font-semibold text-ink">Образцы</h1>
+        <p className="mt-1 text-sm text-ink-2">
           Камень на руках у клиента. Не продаётся повторно, пока активен.
         </p>
       </header>
@@ -120,18 +120,25 @@ export default async function ObraztsyPage({
       )}
 
       <Card className="mb-4">
-        <dl className="grid grid-cols-3 gap-2 text-sm">
+        <dl className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-ink/55">Активных</dt>
-            <dd className="text-lg font-bold">{activeAll.length}</dd>
+            <dt className="text-xs font-medium text-ink-2">Активных</dt>
+            <dd className="tnum mt-1 text-[28px] font-medium leading-9 text-ink">{activeAll.length}</dd>
           </div>
           <div>
-            <dt className="text-ink/55">Просроченных</dt>
-            <dd className="text-lg font-bold text-warning">{overdueCount}</dd>
+            <dt className="text-xs font-medium text-ink-2">Просроченных</dt>
+            <dd
+              className={
+                "tnum mt-1 text-[28px] font-medium leading-9 " +
+                (overdueCount > 0 ? "text-carnelian" : "text-ink")
+              }
+            >
+              {overdueCount}
+            </dd>
           </div>
           <div>
-            <dt className="text-ink/55">Залоги на руках</dt>
-            <dd className="tnum text-sm font-semibold">{depositLine ?? "—"}</dd>
+            <dt className="text-xs font-medium text-ink-2">Залоги на руках</dt>
+            <dd className="tnum mt-1 text-sm font-medium text-ink">{depositLine ?? "—"}</dd>
           </div>
         </dl>
       </Card>
@@ -163,11 +170,11 @@ export default async function ObraztsyPage({
               <h2 className="mb-2 text-base font-semibold text-ink">
                 <Link
                   href={`/klienty/${clientId}`}
-                  className="text-gold-deep underline"
+                  className="text-ink hover:text-honey-ink hover:underline"
                 >
                   {list[0].clientName}
                 </Link>{" "}
-                <span className="text-sm font-normal text-ink/55">
+                <span className="text-sm font-normal text-ink-2">
                   {list[0].clientPhone}
                 </span>
               </h2>
@@ -176,10 +183,8 @@ export default async function ObraztsyPage({
                   <li
                     key={s.id}
                     className={
-                      "rounded-card border p-3 text-sm " +
-                      (s.overdue
-                        ? "border-warning/50 bg-warning/5"
-                        : "border-line bg-paper")
+                      "rounded-card border bg-marble p-4 text-sm " +
+                      (s.overdue ? "border-carnelian-line" : "border-line")
                     }
                   >
                     <div className="flex flex-wrap justify-between gap-2">
@@ -191,36 +196,40 @@ export default async function ObraztsyPage({
                           </Badge>
                         )}
                         {s.overdue && (
-                          <Badge variant="warning">просрочен</Badge>
+                          <Badge variant="danger">просрочен</Badge>
                         )}
                         {s.status !== "ACTIVE" && (
                           <Badge variant="neutral">{s.status}</Badge>
                         )}
                       </span>
                     </div>
-                    <p className="mt-1 text-ink/65">
+                    <p className="mt-1 text-ink-2">
                       Выдан {formatTashkentDate(s.issuedAt)} · вернуть до{" "}
-                      {formatTashkentDate(s.returnDueDate)}
+                      <span className={s.overdue ? "font-medium text-carnelian" : "text-ink"}>
+                        {formatTashkentDate(s.returnDueDate)}
+                      </span>
                       {s.depositAmount && s.depositCurrency && (
                         <>
                           {" · залог "}
-                          {formatDebtMoney(s.depositAmount, s.depositCurrency)}
+                          <span className="tnum font-medium text-ink">
+                            {formatDebtMoney(s.depositAmount, s.depositCurrency)}
+                          </span>
                         </>
                       )}
                     </p>
                     {s.locationNote && (
-                      <p className="text-xs text-ink/50">Где: {s.locationNote}</p>
+                      <p className="text-xs text-ink-3">Где: {s.locationNote}</p>
                     )}
                     {s.comment && (
-                      <p className="text-xs text-ink/50">{s.comment}</p>
+                      <p className="text-xs text-ink-3">{s.comment}</p>
                     )}
                     {caps.canSeeAllClients && (
-                      <p className="text-xs text-ink/45">
+                      <p className="text-xs text-ink-3">
                         Менеджер: {s.managerName}
                       </p>
                     )}
                     {s.status === "ACTIVE" && (
-                      <div className="mt-3 flex flex-col gap-2 border-t border-line pt-2">
+                      <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
                         <form action={returnSampleAction} className="inline">
                           <input type="hidden" name="sampleId" value={s.id} />
                           <Button type="submit" size="sm" variant="secondary">
@@ -232,7 +241,7 @@ export default async function ObraztsyPage({
                           className="flex flex-wrap items-end gap-2"
                         >
                           <input type="hidden" name="sampleId" value={s.id} />
-                          <label className="text-xs text-ink/60">
+                          <label className="text-xs text-ink-2">
                             Продлить до
                             <input
                               type="date"
@@ -258,7 +267,7 @@ export default async function ObraztsyPage({
         </div>
       )}
 
-      <p className="mt-6 text-center text-sm text-ink/50">
+      <p className="mt-6 text-center text-sm text-ink-3">
         Выдача образца — в «Продажа» → «Выдать как образец».
       </p>
     </main>

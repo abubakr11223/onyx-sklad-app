@@ -106,12 +106,12 @@ export default function ClientPicker({
 
   if (value) {
     return (
-      <div className="rounded-field border border-gold/40 bg-gold/10 p-3">
+      <div className="rounded-field border border-honey bg-honey-soft p-3">
         <input type="hidden" name="clientId" value={value.id} />
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="font-semibold text-ink">{value.name}</p>
-            <p className="text-sm text-ink/70">
+            <p className="text-sm text-ink-2">
               {CLIENT_TYPE_LABELS[value.type]} · {value.phone}
             </p>
           </div>
@@ -133,8 +133,8 @@ export default function ClientPicker({
         onChange={(ev) => setQuery(ev.target.value)}
         aria-invalid={error ? true : undefined}
       />
-      {error && <p className="text-sm text-danger">{error}</p>}
-      {busy && <p className="text-xs text-ink/55">Поиск…</p>}
+      {error && <p className="text-sm text-carnelian">{error}</p>}
+      {busy && <p className="text-xs text-ink-2">Поиск…</p>}
       {hits.length > 0 && (
         <SearchResults
           items={hits.map((c) => ({
@@ -152,7 +152,7 @@ export default function ClientPicker({
           }))}
         />
       )}
-      {msg && <p className="text-sm text-ink/70">{msg}</p>}
+      {msg && <p className="text-sm text-ink-2">{msg}</p>}
       {similar.map((c) => (
         <Button key={c.id} type="button" variant="secondary" size="sm" onClick={() => pick(c)}>
           Выбрать {c.name} · {c.phone}
@@ -166,7 +166,7 @@ export default function ClientPicker({
       {!creating ? (
         <button
           type="button"
-          className="self-start text-sm text-gold-deep underline"
+          className="self-start text-sm text-honey-ink hover:underline"
           onClick={() => setCreating(true)}
         >
           + Новый клиент

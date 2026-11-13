@@ -14,7 +14,7 @@
 
 import { useActionState, useRef, useState } from "react";
 import { submitBatchEdit, type BatchEditFormState } from "./edit-actions";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
 import Alert from "@/components/ui/Alert";
@@ -261,7 +261,7 @@ export default function BatchEditForm(props: EditBatchProps) {
           <p>Движений нет — правки свободны (в пределах вашей роли).</p>
         )}
         {(props.freeSlabs !== null || props.freeArea !== null) && (
-          <p className="mt-1 text-sm text-ink/70">
+          <p className="mt-1 text-sm text-ink-2">
             Сейчас свободно:{" "}
             {props.freeSlabs !== null && `${props.freeSlabs} плит`}
             {props.freeSlabs !== null && props.freeArea !== null && " / "}
@@ -272,7 +272,7 @@ export default function BatchEditForm(props: EditBatchProps) {
           </p>
         )}
         {!props.canEditQuantity && (
-          <p className="mt-1 text-sm font-medium text-warning">
+          <p className="mt-1 text-sm font-medium text-amber">
             Количество (плиты/м² и счётчики узоров) меняет только владелец.
             Размеры, дата, поставщик, локации — можно.
           </p>
@@ -280,9 +280,9 @@ export default function BatchEditForm(props: EditBatchProps) {
       </Alert>
 
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">Количество</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Количество</h2>
         {hasPatterns && (
-          <p className="-mt-2 mb-3 text-sm text-ink/55">
+          <p className="-mt-2 mb-3 text-sm text-ink-2">
             Партия с узорами: плиты и площадь — сумма узоров. Правьте узоры ниже.
           </p>
         )}
@@ -296,7 +296,7 @@ export default function BatchEditForm(props: EditBatchProps) {
             onChange={setVal("slabsTotal")}
             readOnly={hasPatterns || !props.canEditQuantity}
             tabIndex={hasPatterns ? -1 : undefined}
-            className={hasPatterns ? "tnum bg-ink/[0.04] text-ink/60" : undefined}
+            className={hasPatterns ? "tnum bg-stone-100 text-ink-2" : undefined}
             error={e.slabsTotal}
             hint={
               props.minSlabsHint !== null
@@ -313,14 +313,14 @@ export default function BatchEditForm(props: EditBatchProps) {
             onChange={setVal("areaTotalM2")}
             readOnly={hasPatterns || !props.canEditQuantity}
             tabIndex={hasPatterns ? -1 : undefined}
-            className={hasPatterns ? "tnum bg-ink/[0.04] text-ink/60" : undefined}
+            className={hasPatterns ? "tnum bg-stone-100 text-ink-2" : undefined}
             error={e.areaTotalM2}
           />
         </div>
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">Размеры плиты, см</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Размеры плиты, см</h2>
         <div className="grid grid-cols-3 gap-3">
           <Field
             id="lengthMm"
@@ -350,7 +350,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                 "Толщина, см"
               ) : (
                 <>
-                  Толщина, см <span className="text-danger">*</span>
+                  Толщина, см <span className="text-carnelian">*</span>
                 </>
               )
             }
@@ -363,7 +363,7 @@ export default function BatchEditForm(props: EditBatchProps) {
       </Card>
 
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">Детали</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Детали</h2>
         <div className="flex flex-col gap-3">
           <Field
             id="arrivedAt"
@@ -405,7 +405,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                         src={`/api/photo/${ph.id}`}
                         alt="Фото партии"
                         loading="lazy"
-                        className="h-16 w-16 rounded-lg object-cover"
+                        className="h-16 w-16 rounded-field object-cover"
                       />
                     </a>
                   </li>
@@ -419,9 +419,9 @@ export default function BatchEditForm(props: EditBatchProps) {
               accept="image/*"
               capture="environment"
               multiple
-              className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+              className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
             />
-            <p className="text-xs text-ink/50">
+            <p className="text-xs text-ink-3">
               {props.batchPhotos.length > 0
                 ? "Новые фото добавятся к существующим."
                 : "Общий вид поставки — как камень пришёл."}
@@ -432,12 +432,12 @@ export default function BatchEditForm(props: EditBatchProps) {
 
       {props.patterns.length > 0 && (
         <Card>
-          <h2 className="mb-3 text-lg font-semibold">Узоры / подгруппы</h2>
+          <h2 className="mb-3 text-base font-semibold text-ink">Узоры / подгруппы</h2>
           <div className="flex flex-col gap-4">
             {props.patterns.map((p, i) => (
               <div
                 key={p.id}
-                className="rounded-card border border-ink/10 p-3"
+                className="rounded-card border border-line p-3"
               >
                 <input type="hidden" name="patId" value={p.id} />
                 <Field
@@ -454,7 +454,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                     name="patThickness"
                     label={
                       <>
-                        Толщ., см <span className="text-danger">*</span>
+                        Толщ., см <span className="text-carnelian">*</span>
                       </>
                     }
                     inputMode="decimal"
@@ -505,19 +505,19 @@ export default function BatchEditForm(props: EditBatchProps) {
                 <div className="mt-3 flex flex-col gap-1.5">
                   <p className="text-sm font-semibold text-ink">Фото узора</p>
                   {p.photoId ? (
-                    <p className="text-sm text-ink/70">
+                    <p className="text-sm text-ink-2">
                       Сейчас:{" "}
                       <a
                         href={`/api/photo/${p.photoId}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-medium text-gold-deep underline"
+                        className="font-medium text-honey-ink underline"
                       >
                         открыть
                       </a>
                     </p>
                   ) : (
-                    <p className="text-sm text-ink/50">Фото ещё нет</p>
+                    <p className="text-sm text-ink-3">Фото ещё нет</p>
                   )}
                   <input
                     id={`patPhoto-${i}`}
@@ -525,11 +525,11 @@ export default function BatchEditForm(props: EditBatchProps) {
                     type="file"
                     accept="image/*"
                     capture="environment"
-                    className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-field file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-gold-deep hover:file:bg-gold/25"
+                    className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
                     aria-invalid={e[`pat-${i}-photo`] ? true : undefined}
                   />
                   {e[`pat-${i}-photo`] && (
-                    <p className="text-sm font-medium text-danger">
+                    <p className="text-sm font-medium text-carnelian">
                       {e[`pat-${i}-photo`]}
                     </p>
                   )}
@@ -544,7 +544,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                       Снять фото с узора (строка Photo не удаляется — §1.9)
                     </label>
                   )}
-                  <p className="text-xs text-ink/50">
+                  <p className="text-xs text-ink-3">
                     Новое фото добавляется к узору (старое остаётся в архиве).
                     «Снять» отвязывает SAMPLE-фото от узора, файл в хранилище
                     сохраняется.
@@ -557,12 +557,12 @@ export default function BatchEditForm(props: EditBatchProps) {
       )}
 
       <Card>
-        <h2 className="mb-3 text-lg font-semibold">Локации</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Локации</h2>
         <div className="flex flex-col gap-4">
           {locRows.map((loc, i) => (
             <div
               key={loc.key}
-              className="rounded-card border border-ink/10 p-3"
+              className="rounded-card border border-line p-3"
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-base font-semibold text-ink">
@@ -575,7 +575,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                     onClick={() =>
                       setLocRows((rows) => rows.filter((_, ri) => ri !== i))
                     }
-                    className="text-danger hover:bg-danger/10"
+                    className="text-carnelian hover:bg-carnelian-bg"
                   >
                     Убрать
                   </Button>
@@ -658,11 +658,11 @@ export default function BatchEditForm(props: EditBatchProps) {
         </Button>
       </Card>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending} className="min-h-14 flex-1">
+      <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-4 flex gap-2 border-t border-line bg-marble px-4 py-3 md:static md:mx-0 md:flex-row-reverse md:justify-start md:border-0 md:bg-transparent md:p-0">
+        <Button type="submit" pending={pending} className="flex-1 md:flex-none">
           {pending ? "Сохранение…" : "Сохранить"}
         </Button>
-        <a href="/priemka" className={inputClass + " flex min-h-14 flex-1 items-center justify-center text-center no-underline"}>
+        <a href="/priemka" className={buttonClass("secondary", "md", "flex-1 md:flex-none")}>
           Отмена
         </a>
       </div>

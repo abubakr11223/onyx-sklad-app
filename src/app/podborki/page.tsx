@@ -33,7 +33,7 @@ export default async function CollectionsPage({
   const caps = await getCapabilities();
   if (!caps.canManageCollections) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -52,15 +52,12 @@ export default async function CollectionsPage({
   ]);
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · продажи
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           {caps.canSeeAllCollections ? "Подборки" : "Мои подборки"}
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Подборка — ссылка для клиента с камнями: он ставит «Нравится» и оставляет заявку.
           Камни добавляются кнопкой «В подборку» в{" "}
           <Link href="/katalog" className="font-semibold text-gold-deep underline">
@@ -82,7 +79,7 @@ export default async function CollectionsPage({
       )}
 
       <Card className="mb-4">
-        <h2 className="font-serif text-xl font-bold text-ink">Новая подборка</h2>
+        <h2 className="text-base font-semibold text-ink">Новая подборка</h2>
         <form action={createCollectionAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
             Название <span className="sr-only">(обязательно)</span>
@@ -148,7 +145,7 @@ export default async function CollectionsPage({
                       </Badge>
                     )}
                   </td>
-                  <td className="py-2 pl-3 text-ink/70">
+                  <td className="py-2 pl-3 text-ink-2">
                     {r.clientId ? (
                       <Link href={`/klienty/${r.clientId}`} className="underline">
                         {r.clientName}
@@ -157,10 +154,10 @@ export default async function CollectionsPage({
                       "—"
                     )}
                   </td>
-                  {caps.canSeeAllCollections && <td className="py-2 pl-3 text-ink/70">{r.managerName}</td>}
+                  {caps.canSeeAllCollections && <td className="py-2 pl-3 text-ink-2">{r.managerName}</td>}
                   <td className="tnum py-2 pl-3 text-right">{r.items}</td>
                   <td className="tnum py-2 pl-3 text-right">{r.likes}</td>
-                  <td className="tnum py-2 pl-3 text-ink/70">{formatTashkentDate(r.createdAt)}</td>
+                  <td className="tnum py-2 pl-3 text-ink-2">{formatTashkentDate(r.createdAt)}</td>
                   <td className="py-2 px-3">
                     <Link href={collectionPath(r.code)} className={buttonClass("ghost", "sm")}>
                       Открыть

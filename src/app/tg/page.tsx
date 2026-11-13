@@ -95,14 +95,14 @@ export default function TgMiniApp() {
           void runTgAuth(setState, router, signal);
         }}
       />
-      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+      <p className="text-xs font-medium text-ink-2">
         Onyx
       </p>
       {state.kind === "loading" && (
-        <p className="text-base text-ink/70">Входим через Telegram…</p>
+        <p className="text-base text-ink-2">Входим через Telegram…</p>
       )}
       {state.kind === "outside" && (
-        <p className="text-base text-ink/70">
+        <p className="text-base text-ink-2">
           Откройте эту страницу через бота Onyx в Telegram (кнопка меню
           «Открыть склад»).
         </p>

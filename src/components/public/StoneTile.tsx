@@ -60,11 +60,11 @@ export default function StoneTile({
             src={`/api/photo/${item.photoId}`}
             alt={`${item.name} — ${t.photoAlt}`}
             loading="lazy"
-            className="aspect-[4/3] w-full bg-ink/5 object-cover"
+            className="aspect-[4/3] w-full bg-stone-100 object-cover"
           />
         ) : (
-          <div className="flex aspect-[4/3] w-full items-center justify-center border-b border-dashed border-gold/40 bg-gold/10 px-3">
-            <span className="text-center text-sm font-medium text-ink/60">{t.noPhotos}</span>
+          <div className="flex aspect-[4/3] w-full items-center justify-center border-b border-dashed border-honey bg-honey-soft px-3">
+            <span className="text-center text-sm font-medium text-ink-2">{t.noPhotos}</span>
           </div>
         )}
       </Link>
@@ -72,7 +72,7 @@ export default function StoneTile({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <Link
             href={to}
-            className="font-serif text-lg font-bold leading-tight text-ink hover:text-gold-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            className="text-lg font-semibold leading-tight text-ink hover:text-gold-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
           >
             {item.name}
           </Link>
@@ -80,23 +80,23 @@ export default function StoneTile({
             {availability}
           </Badge>
         </div>
-        <p className="text-sm text-ink/60">
+        <p className="text-sm text-ink-2">
           {[item.rockType, item.color].filter(Boolean).join(" · ")}
         </p>
         {!compact && item.sizes.length > 0 && (
-          <p className="text-sm text-ink/70">
-            <span className="text-ink/55">{t.slabSizes}: </span>
+          <p className="text-sm text-ink-2">
+            <span className="text-ink-2">{t.slabSizes}: </span>
             <span className="tnum">{item.sizes.join(", ")}</span>
           </p>
         )}
         {!compact && item.thicknesses.length > 0 && (
-          <p className="text-sm text-ink/70">
-            <span className="text-ink/55">{t.thicknesses}: </span>
+          <p className="text-sm text-ink-2">
+            <span className="text-ink-2">{t.thicknesses}: </span>
             <span className="tnum">{item.thicknesses.join(", ")}</span>
           </p>
         )}
         {item.viewer !== "client" && item.availability === "IN_STOCK" && (
-          <p className="text-sm text-ink/70">
+          <p className="text-sm text-ink-2">
             {t.freeNow}:{" "}
             <span className="tnum font-semibold text-ink">
               {item.freeSlabs} {t.slabsShort} · {m2Fmt.format(item.freeAreaM2)} {t.m2}

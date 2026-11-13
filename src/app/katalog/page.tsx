@@ -119,7 +119,7 @@ export default async function CatalogPage({
     <main lang={htmlLangOf(locale)} className="mx-auto max-w-5xl px-4 pb-12 pt-4 sm:p-8">
       <header className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          <p className="text-xs font-medium text-ink-2">
             {viewer === "staff" ? "Onyx · каталог" : t.brand}
           </p>
           {viewer !== "staff" && <LocaleSwitch locale={locale} back={back} t={t} />}
@@ -129,10 +129,10 @@ export default async function CatalogPage({
             </Link>
           )}
         </div>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="mt-1 text-display font-semibold text-ink">
           {t.catalogTitle}
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           {viewer === "staff"
             ? "Так каталог видят клиенты — плюс виды без фото и скрытые (с пометкой). Ссылка для клиента: /katalog."
             : t.catalogSubtitle}
@@ -154,7 +154,7 @@ export default async function CatalogPage({
       />
 
       {/* Фильтры: GET-форма — состояние в адресе, кнопка «назад» работает. */}
-      <form method="get" action="/katalog" className="rounded-card border border-line bg-paper-2 p-4">
+      <form method="get" action="/katalog" className="rounded-card border border-line bg-marble p-4">
         {/* ТЗ №20 K — правка фильтров не теряет признаки ИИ-запроса. */}
         {["ai", "tone", "pat", "vein", "tcolor"].map((k) =>
           one(k) ? <input key={k} type="hidden" name={k} value={one(k)} /> : null,
@@ -227,7 +227,7 @@ export default async function CatalogPage({
                 className={inputClass + " tnum"}
               />
             </div>
-            <p className="text-sm font-normal text-ink/55">
+            <p className="text-sm font-normal text-ink-2">
               {viewer === "staff"
                 ? `Как в «Поиске»: запас на рез ${CUTTING_MARGIN_CM} см, поворот заготовки учитывается.`
                 : t.sizeHint}
@@ -253,16 +253,16 @@ export default async function CatalogPage({
       )}
 
       {aiMode && (
-        <div id="results" className="mt-4 scroll-mt-4 rounded-card border border-line bg-paper-2 p-3">
+        <div id="results" className="mt-4 scroll-mt-4 rounded-card border border-line bg-marble p-3">
           <p className="text-sm font-semibold text-ink">
             {aiPhoto ? t.aiByPhoto : t.aiUnderstood}
-            {aiQuery && <span className="font-normal text-ink/70"> — «{aiQuery}»</span>}
+            {aiQuery && <span className="font-normal text-ink-2"> — «{aiQuery}»</span>}
           </p>
           {(aiPhoto === "0" || aiPhoto === "bad" || aiPhoto === "big") && (
-            <p className="mt-1 text-sm text-ink/60">{aiPhoto === "0" ? t.aiPhotoFail : t.aiPhotoBad}</p>
+            <p className="mt-1 text-sm text-ink-2">{aiPhoto === "0" ? t.aiPhotoFail : t.aiPhotoBad}</p>
           )}
           {aiQuery && one("aiFail") === "1" && (
-            <p className="mt-1 text-sm text-ink/60">{t.aiFallback}</p>
+            <p className="mt-1 text-sm text-ink-2">{t.aiFallback}</p>
           )}
           {chipDefs.length > 0 && (
             <>
@@ -274,17 +274,17 @@ export default async function CatalogPage({
                     className="inline-flex min-h-9 items-center gap-1.5 rounded-field border border-line-strong bg-marble px-3 text-sm text-ink hover:bg-stone-100"
                   >
                     {c.label}
-                    <span aria-hidden className="text-ink/50">✕</span>
+                    <span aria-hidden className="text-ink-3">✕</span>
                   </Link>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-ink/50">{t.aiChipHint}</p>
+              <p className="mt-2 text-xs text-ink-3">{t.aiChipHint}</p>
             </>
           )}
         </div>
       )}
 
-      <p className="mt-4 text-sm text-ink/60">
+      <p className="mt-4 text-sm text-ink-2">
         {t.catalogFound}: <span className="tnum font-semibold text-ink">{result.total}</span>
         {hasSizeFilter(filters) && (
           <span className="tnum">
@@ -300,8 +300,8 @@ export default async function CatalogPage({
       )}
 
       {result.items.length === 0 ? (
-        <div className="mt-4 rounded-card border border-line bg-paper-2 p-6 text-center">
-          <p className="text-sm text-ink/60">{t.catalogEmpty}</p>
+        <div className="mt-4 rounded-card border border-line bg-marble p-6 text-center">
+          <p className="text-sm text-ink-2">{t.catalogEmpty}</p>
         </div>
       ) : (
         <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

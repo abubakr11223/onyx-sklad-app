@@ -140,7 +140,7 @@ export default async function BronPage({
   ]);
   if (!caps.canReserve) {
     return (
-      <main className="mx-auto max-w-3xl p-4 sm:p-8">
+      <main className="mx-auto max-w-3xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -437,15 +437,12 @@ export default async function BronPage({
   const err = firstParam(params.err);
 
   return (
-    <main className="mx-auto max-w-3xl p-4 sm:p-8">
+    <main className="mx-auto max-w-3xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · менеджер
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Брони
         </h1>
-        <p className="mt-2 text-base text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Срок брони по умолчанию — {defaultDays} дн.; по истечении камень
           автоматически возвращается «В наличии».
         </p>
@@ -469,7 +466,7 @@ export default async function BronPage({
 
       {/* ── Faol bronlar (keyset page) ── */}
       <section className="mt-6">
-        <h2 className="text-lg font-semibold text-ink">Активные брони</h2>
+        <h2 className="text-base font-semibold text-ink">Активные брони</h2>
         {afterCursor === "malformed" && (
           <Alert variant="warning" className="mt-3">
             Ссылка на страницу броней устарела или повреждена. Показан пустой
@@ -477,9 +474,9 @@ export default async function BronPage({
           </Alert>
         )}
         {active.length === 0 && afterCursor !== "malformed" ? (
-          <p className="mt-3 text-ink/70">Активных броней нет.</p>
+          <p className="mt-3 text-ink-2">Активных броней нет.</p>
         ) : active.length === 0 ? (
-          <p className="mt-3 text-ink/70">Нет записей на этой странице.</p>
+          <p className="mt-3 text-ink-2">Нет записей на этой странице.</p>
         ) : (
           <ul className="mt-3 space-y-3">
             {active.map((r) => {
@@ -488,11 +485,11 @@ export default async function BronPage({
                 <li key={r.id}>
                   <Card>
                     <div className="font-medium text-ink">{stoneLabel(r)}</div>
-                    <div className="mt-1 text-sm text-ink/70">
+                    <div className="mt-1 text-sm text-ink-2">
                       Клиент: {r.customerName}
                       {r.customerContact && <> · {r.customerContact}</>}
                     </div>
-                    <div className="text-sm text-ink/70">
+                    <div className="text-sm text-ink-2">
                       Менеджер: {r.manager.name}
                     </div>
                     <div className="mt-1.5 text-sm">
@@ -501,7 +498,7 @@ export default async function BronPage({
                           до {formatTashkentDateTime(r.expiresAt)} — истекает сегодня
                         </Badge>
                       ) : (
-                        <span className="text-ink/70">
+                        <span className="text-ink-2">
                           до {formatTashkentDateTime(r.expiresAt)}
                         </span>
                       )}
@@ -520,7 +517,7 @@ export default async function BronPage({
         )}
         {activeHasMore && activeNextCursor && (
           <div className="mt-3">
-            <p className="mb-2 text-sm text-ink/60">
+            <p className="mb-2 text-sm text-ink-2">
               {catalogCapNoticeRu({
                 what: "активных броней (на странице)",
                 shown: active.length,
@@ -539,7 +536,7 @@ export default async function BronPage({
           activeTotal > active.length &&
           afterCursor &&
           afterCursor !== "malformed" && (
-            <p className="mt-2 text-sm text-ink/55">
+            <p className="mt-2 text-sm text-ink-2">
               Показано {active.length} на этой странице (всего активных:{" "}
               {activeTotal}).
             </p>
@@ -547,14 +544,14 @@ export default async function BronPage({
       </section>
 
       {/* ── Yangi bron ── */}
-      <section className="mt-8 rounded-card border border-line bg-paper-2 p-4 shadow-card">
-        <h2 className="mb-3 text-lg font-semibold text-ink">Новая бронь</h2>
+      <section className="mt-8 rounded-card border border-line bg-marble p-4">
+        <h2 className="mb-3 text-base font-semibold text-ink">Новая бронь</h2>
         <form
           method="get"
           action="/bron"
           className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end"
         >
-          <label className="min-w-0 flex-1 text-sm text-ink/70">
+          <label className="min-w-0 flex-1 text-sm text-ink-2">
             Фильтр каталога (вид)
             <input
               name="catalogQ"
@@ -589,15 +586,15 @@ export default async function BronPage({
 
       {/* ── Tarix ── */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-ink">История (последние 20)</h2>
+        <h2 className="text-base font-semibold text-ink">История (последние 20)</h2>
         {history.length === 0 ? (
-          <p className="mt-3 text-ink/70">Пока пусто.</p>
+          <p className="mt-3 text-ink-2">Пока пусто.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {history.map((r) => (
               <li
                 key={r.id}
-                className="rounded-card border border-line bg-paper-2 p-3 text-sm text-ink/80"
+                className="rounded-card border border-line bg-marble p-3 text-sm text-ink"
               >
                 <span className="font-medium text-ink">{stoneLabel(r)}</span> ·
                 клиент {r.customerName} · менеджер {r.manager.name} ·{" "}

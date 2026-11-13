@@ -24,7 +24,6 @@ import Card from "@/components/ui/Card";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
-import { CameraIcon } from "@/components/ui/Icons";
 import { formatTashkentDateTime } from "@/lib/datetime";
 import { formatLocation } from "@/lib/locations";
 
@@ -97,7 +96,7 @@ export default async function FotozaprosPage({
   ]);
   if (!caps.canViewPhotoTasks) {
     return (
-      <main className="mx-auto max-w-3xl p-4 sm:p-8">
+      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -226,16 +225,12 @@ export default async function FotozaprosPage({
   );
 
   return (
-    <main className="mx-auto max-w-3xl p-4 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          <CameraIcon className="h-4 w-4" />
-          Onyx · фото
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           {canManageRequests ? "Запросы на фото" : "Задачи на фото"}
         </h1>
-        <p className="mt-2 text-base text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           {canManageRequests
             ? "Задачи уходят всем активным складчикам с привязанным Telegram (общая очередь). Фото приходят в бот."
             : "Ваши открытые задачи. Сфотографируйте камень и отправьте фото в Telegram-бот — на сайте загрузка не нужна (§5.3)."}
@@ -275,10 +270,10 @@ export default async function FotozaprosPage({
 
       {canManageRequests && (
         <Card className="mb-6">
-          <h2 className="text-base font-bold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             Складчики и Telegram
           </h2>
-          <p className="mt-1 text-sm text-ink/60">
+          <p className="mt-1 text-sm text-ink-2">
             Фотозапрос уходит каждому <strong>активному реальному</strong>{" "}
             складчику с Telegram ID. Демо-аккаунты в рассылку{" "}
             <strong>не входят</strong> (W11-A) — даже если у них ваш личный ID.
@@ -318,7 +313,7 @@ export default async function FotozaprosPage({
               return (
                 <li
                   key={u.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-ink/10 bg-ink/[0.02] px-3 py-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-field border border-line bg-ink/[0.02] px-3 py-2 text-sm"
                 >
                   <div className="min-w-0">
                     <span className="font-medium text-ink">
@@ -329,10 +324,10 @@ export default async function FotozaprosPage({
                         </span>
                       )}
                       {!u.isActive && (
-                        <span className="ml-1.5 text-ink/60">· неактивен</span>
+                        <span className="ml-1.5 text-ink-2">· неактивен</span>
                       )}
                     </span>
-                    <p className="tnum text-ink/60">
+                    <p className="tnum text-ink-2">
                       {linked ? (
                         <>
                           TG: {u.telegramId}
@@ -382,7 +377,7 @@ export default async function FotozaprosPage({
             </Alert>
           )}
           {unlinkedActive.length > 0 && (
-            <p className="mt-2 text-xs text-ink/50">
+            <p className="mt-2 text-xs text-ink-3">
               Без Telegram ({unlinkedActive.length}):{" "}
               {unlinkedActive.map((u) => u.name).join(", ")} — им задачи не
               приходят. Нужен телефон в карточке + /start в боте.
@@ -409,7 +404,7 @@ export default async function FotozaprosPage({
               <li key={r.id}>
                 <Card>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                    <h3 className="text-base font-bold text-ink">{stoneName}</h3>
+                    <h3 className="text-base font-semibold text-ink">{stoneName}</h3>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {r.status === "PENDING" && canManageRequests && (
                         <Badge variant={DELIVERY_VARIANT[delivery]}>
@@ -421,21 +416,21 @@ export default async function FotozaprosPage({
                       </Badge>
                     </div>
                   </div>
-                  <p className="mt-1 text-sm text-ink/70">{loc}</p>
+                  <p className="mt-1 text-sm text-ink-2">{loc}</p>
                   {r.comment && (
-                    <p className="mt-1 text-sm text-ink/70">
+                    <p className="mt-1 text-sm text-ink-2">
                       Комментарий: {r.comment}
                     </p>
                   )}
-                  <p className="mt-1 text-xs text-ink/50">
+                  <p className="mt-1 text-xs text-ink-3">
                     {formatTashkentDateTime(r.createdAt)}
                     {r.assignee ? ` · ${r.assignee.name}` : " · общая очередь"}
                   </p>
 
                   {/* W9-A: who was targeted in Telegram (by chatId → user). */}
                   {canManageRequests && r.dispatches.length > 0 && (
-                    <div className="mt-2 rounded-field border border-ink/10 bg-paper px-3 py-2 text-sm">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                    <div className="mt-2 rounded-field border border-line bg-paper px-3 py-2 text-sm">
+                      <p className="text-xs font-semibold text-ink-3">
                         Кому ушло в Telegram
                       </p>
                       <ul className="mt-1 space-y-0.5">
@@ -452,12 +447,12 @@ export default async function FotozaprosPage({
                                 ? "ошибка"
                                 : d.status;
                           return (
-                            <li key={`${r.id}-${d.chatId}`} className="text-ink/80">
+                            <li key={`${r.id}-${d.chatId}`} className="text-ink">
                               <span className="font-medium">{label}</span>
                               {demo && (
                                 <span className="text-warning"> · демо</span>
                               )}
-                              <span className="text-ink/50">
+                              <span className="text-ink-3">
                                 {" "}
                                 · {st}
                                 {d.lastError ? ` (${d.lastError})` : ""}
@@ -484,7 +479,7 @@ export default async function FotozaprosPage({
                         <img
                           key={photo.id}
                           src={`/api/photo/${photo.id}`}
-                          className="h-20 w-20 rounded-field border border-ink/10 object-cover"
+                          className="h-20 w-20 rounded-field border border-line object-cover"
                           alt="фото"
                           loading="lazy"
                         />
@@ -496,7 +491,7 @@ export default async function FotozaprosPage({
                       <input type="hidden" name="id" value={r.id} />
                       <button
                         type="submit"
-                        className="rounded-field border border-ink/15 bg-ink/[0.03] px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-ink/[0.06]"
+                        className="rounded-field border border-line bg-ink/[0.03] px-3 py-1.5 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-ink/[0.06]"
                       >
                         Готово
                       </button>

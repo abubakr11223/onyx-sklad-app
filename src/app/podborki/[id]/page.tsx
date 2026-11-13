@@ -32,7 +32,7 @@ export default async function CollectionStaffPage({
   const caps = await getCapabilities();
   if (!caps.canManageCollections) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -45,21 +45,21 @@ export default async function CollectionStaffPage({
   const open = !c.closedAt;
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="mb-2 text-sm">
         <Link href="/podborki" className="text-gold-deep underline">
           ← Все подборки
         </Link>
       </p>
       <header className="mb-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        <p className="text-xs font-medium text-ink-2">
           Подборка для клиента
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="font-serif text-display font-bold tracking-tight text-ink">{c.title}</h1>
+          <h1 className="text-display font-semibold text-ink">{c.title}</h1>
           <Badge variant={open ? "success" : "neutral"}>{open ? "открыта" : "закрыта"}</Badge>
         </div>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           {c.clientId ? (
             <>
               Клиент:{" "}
@@ -86,8 +86,8 @@ export default async function CollectionStaffPage({
       )}
 
       <Card className="mb-4">
-        <h2 className="font-serif text-xl font-bold text-ink">Ссылка для клиента</h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <h2 className="text-base font-semibold text-ink">Ссылка для клиента</h2>
+        <p className="mt-1 text-sm text-ink-2">
           Бессрочная, без входа. Клиент видит камни без цен и остатков, ставит «Нравится» и
           оставляет заявку.{" "}
           <Link href={path} className="font-semibold text-gold-deep underline">
@@ -106,16 +106,16 @@ export default async function CollectionStaffPage({
 
       <section className="mb-4">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-serif text-xl font-bold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             Камни <span className="tnum">({c.items.length})</span>
           </h2>
-          <p className="text-sm text-ink/60">
+          <p className="text-sm text-ink-2">
             Нравится клиенту: <span className="tnum font-semibold text-ink">{likes}</span>
           </p>
         </div>
         {c.items.length === 0 ? (
-          <div className="rounded-card border border-line bg-paper-2 p-6 text-center">
-            <p className="text-sm text-ink/60">
+          <div className="rounded-card border border-line bg-marble p-6 text-center">
+            <p className="text-sm text-ink-2">
               Камней пока нет.{" "}
               <Link href="/katalog" className="font-semibold text-gold-deep underline">
                 Открыть каталог
@@ -142,19 +142,19 @@ export default async function CollectionStaffPage({
                       <Link href={`/k/${i.stoneCode}`} className="font-semibold text-ink underline decoration-gold/50">
                         {i.stoneName}
                       </Link>
-                      <span className="block text-xs text-ink/55">
+                      <span className="block text-xs text-ink-2">
                         {[i.rockType, i.color].filter(Boolean).join(" · ")}
                       </span>
                     </td>
                     <td className="tnum py-2 pl-3 tracking-wide">{i.stoneCode}</td>
-                    <td className="py-2 pl-3 text-ink/70">{i.comment ?? "—"}</td>
+                    <td className="py-2 pl-3 text-ink-2">{i.comment ?? "—"}</td>
                     <td className="py-2 pl-3">
                       {i.likedAt ? (
                         <Badge variant="success">
                           да · <span className="tnum">{formatTashkentDateTime(i.likedAt)}</span>
                         </Badge>
                       ) : (
-                        <span className="text-ink/40">—</span>
+                        <span className="text-ink-3">—</span>
                       )}
                     </td>
                     {open && (
@@ -180,10 +180,10 @@ export default async function CollectionStaffPage({
       </section>
 
       <Card>
-        <h2 className="font-serif text-xl font-bold text-ink">
+        <h2 className="text-base font-semibold text-ink">
           {open ? "Закрыть подборку" : "Подборка закрыта"}
         </h2>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           {open
             ? "Клиент по ссылке увидит «Подборка закрыта, свяжитесь с менеджером». Открыть снова можно в любой момент."
             : "Клиент видит «Подборка закрыта, свяжитесь с менеджером». Можно открыть снова — ссылка та же."}

@@ -171,13 +171,13 @@ const initialState: SaleFormState = { errors: {}, conflict: null };
 // Крупная кликабельная карточка выбора (плита / кусок / вид камня) — не обычная
 // Button: левое выравнивание, две строки. Стиль ввода/касания — бренд-токены.
 const cardBtnCls =
-  "w-full rounded-card border border-line bg-paper-2 p-3 text-left shadow-card " +
-  "transition hover:-translate-y-0.5 hover:border-gold active:translate-y-0 " +
+  "w-full rounded-card border border-line bg-marble p-3 text-left " +
+  "transition-colors duration-150 hover:-translate-y-0.5 hover:border-honey active:translate-y-0 " +
   "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0";
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <p className="mt-1 text-sm font-medium text-danger">{msg}</p>;
+  return <p className="mt-1 text-sm font-medium text-carnelian">{msg}</p>;
 }
 
 // «требует проверки» — предупреждение (ЯНТАРНЫЙ), а не ошибка (TZ §7.1, аудит).
@@ -312,12 +312,12 @@ export default function SaleForm({
 
   // ТЗ №20 L — плашка «продажа по заявке партнёра» (шаги 2–4).
   const leadBanner = leadPrefill ? (
-    <div className="mb-3 rounded-card border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-ink">
+    <div className="mb-3 rounded-card border border-honey bg-honey-soft px-3 py-2 text-sm text-ink">
       <p className="font-semibold">
         Продажа по заявке партнёра: {leadPrefill.partnerName}
         {leadPrefill.partnerType ? ` (${PARTNER_TYPE_RU[leadPrefill.partnerType].toLowerCase()})` : ""}
       </p>
-      <p className="text-ink/70">
+      <p className="text-ink-2">
         {[
           leadPrefill.stoneName,
           [leadPrefill.qtySlabs && `${leadPrefill.qtySlabs} плит`, leadPrefill.qtyAreaM2 && `${leadPrefill.qtyAreaM2} м²`]
@@ -329,7 +329,7 @@ export default function SaleForm({
           .join(" · ")}
       </p>
       {leadPrefill.siteText && (
-        <p className="text-ink/70">
+        <p className="text-ink-2">
           Объект из заявки: «{leadPrefill.siteText}» — выберите его у клиента в «Объект» или создайте новый.
         </p>
       )}
@@ -563,9 +563,9 @@ export default function SaleForm({
   if (!stone) {
     return (
       <Card>
-        <h2 className="mb-3 text-lg font-semibold text-ink">1. Вид камня</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">1. Вид камня</h2>
         {stoneTypes.length === 0 ? (
-          <p className="text-ink/60">Продавать нечего — нет камня в наличии.</p>
+          <p className="text-ink-2">Продавать нечего — нет камня в наличии.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {stoneTypes.map((st) => {
@@ -582,14 +582,14 @@ export default function SaleForm({
                     <span className="flex items-center gap-3">
                       <span
                         aria-hidden="true"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gold/12 font-serif text-base font-bold text-gold-deep"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-honey-soft text-base font-semibold text-honey-ink"
                       >
                         {(st.rockType || st.name).trim().charAt(0).toUpperCase()}
                       </span>
                       <span className="min-w-0">
                         <span className="block text-base font-semibold text-ink">
                           {st.name}{" "}
-                          <span className="font-normal text-ink/60">({st.rockType})</span>
+                          <span className="font-normal text-ink-2">({st.rockType})</span>
                           {st.lowStock && (
                             <>
                               {" "}
@@ -602,7 +602,7 @@ export default function SaleForm({
                             </>
                           )}
                         </span>
-                        <span className="block text-sm text-ink/70">{parts}</span>
+                        <span className="block text-sm text-ink-2">{parts}</span>
                       </span>
                     </span>
                   </button>
@@ -621,7 +621,7 @@ export default function SaleForm({
       <Card>
         {leadBanner}
         <BackButton onClick={() => setStone(null)} label="Вид камня" />
-        <h2 className="mb-3 text-lg font-semibold text-ink">
+        <h2 className="mb-3 text-base font-semibold text-ink">
           2. Что продаём — {stone.name}
           {stone.lowStock && (
             <>
@@ -635,7 +635,7 @@ export default function SaleForm({
 
         {stone.slabs.length > 0 && (
           <>
-            <h3 className="mb-2 text-base font-semibold text-ink/70">Плиты</h3>
+            <h3 className="mb-2 text-base font-semibold text-ink-2">Плиты</h3>
             <ul className="mb-4 flex flex-col gap-2">
               {stone.slabs.map((s) => (
                 <li key={s.id}>
@@ -661,7 +661,7 @@ export default function SaleForm({
                       )}
                       {s.needsCheck && <NeedsCheckBadge />}
                     </span>
-                    <span className="block text-sm text-ink/70">
+                    <span className="block text-sm text-ink-2">
                       {s.detail} · {s.place}
                     </span>
                   </button>
@@ -673,7 +673,7 @@ export default function SaleForm({
 
         {stone.pieces.length > 0 && (
           <>
-            <h3 className="mb-2 text-base font-semibold text-ink/70">Бой и остатки</h3>
+            <h3 className="mb-2 text-base font-semibold text-ink-2">Бой и остатки</h3>
             <ul className="mb-4 flex flex-col gap-2">
               {stone.pieces.map((p) => (
                 <li key={p.id}>
@@ -699,7 +699,7 @@ export default function SaleForm({
                       )}
                       {p.needsCheck && <NeedsCheckBadge />}
                     </span>
-                    <span className="block text-sm text-ink/70">
+                    <span className="block text-sm text-ink-2">
                       {p.detail} · {p.place}
                     </span>
                   </button>
@@ -711,20 +711,20 @@ export default function SaleForm({
 
         {stone.batches.length > 0 && (
           <>
-            <h3 className="mb-2 text-base font-semibold text-ink/70">
+            <h3 className="mb-2 text-base font-semibold text-ink-2">
               Объём из партии (B2B, без выделения плит)
             </h3>
             <ul className="flex flex-col gap-2">
               {stone.batches.map((b) => (
                 <li
                   key={b.id}
-                  className="rounded-card border border-ink/10 bg-paper p-3"
+                  className="rounded-card border border-line bg-marble p-3"
                 >
                   <div className="text-base font-semibold text-ink">
                     {b.title}
                     {b.needsCheck && <NeedsCheckBadge />}
                   </div>
-                  <div className="text-sm text-ink/70">{b.freeText}</div>
+                  <div className="text-sm text-ink-2">{b.freeText}</div>
                   <div className="mt-2 flex gap-2">
                     {/* ТЗ №19 B1 — у партии с узорами «объём из партии» нет:
                         продажа не может обойти узор. */}
@@ -770,7 +770,7 @@ export default function SaleForm({
                   {/* ТЗ №3 — продажа из узора (B2C: клиент выбрал конкретный узор). */}
                   {b.patterns.length > 0 && (
                     <div className="mt-2 border-t border-line pt-2">
-                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-gold-deep">
+                      <p className="mb-1.5 text-xs font-semibold text-honey-ink">
                         Продать узор
                       </p>
                       <ul className="flex flex-col gap-1.5">
@@ -778,7 +778,7 @@ export default function SaleForm({
                           <li key={pat.id} className="flex items-center gap-2">
                             <span className="min-w-0 flex-1 text-sm">
                               <span className="font-medium text-ink">{pat.description}</span>
-                              <span className="tnum text-ink/60"> · {pat.remainText}</span>
+                              <span className="tnum text-ink-2"> · {pat.remainText}</span>
                             </span>
                             <Button
                               variant="secondary"
@@ -809,7 +809,7 @@ export default function SaleForm({
         )}
 
         {stone.slabs.length === 0 && stone.pieces.length === 0 && stone.batches.length === 0 && (
-          <p className="text-ink/60">По этому виду продавать нечего.</p>
+          <p className="text-ink-2">По этому виду продавать нечего.</p>
         )}
       </Card>
     );
@@ -843,8 +843,8 @@ export default function SaleForm({
       <Card>
         {leadBanner}
         <BackButton onClick={() => setTarget(null)} label="Выбор камня" />
-        <h2 className="mb-1 text-lg font-semibold text-ink">3. Клиент и оплата</h2>
-        <p className="mb-3 text-sm text-ink/70">
+        <h2 className="mb-1 text-base font-semibold text-ink">3. Клиент и оплата</h2>
+        <p className="mb-3 text-sm text-ink-2">
           {target.title} · {target.subtitle}
         </p>
 
@@ -893,7 +893,7 @@ export default function SaleForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-ink/55">
+            <p className="mt-1 text-xs text-ink-2">
               Если здесь меньше плит, чем продаёте, остаток возьмётся из других мест узора.
             </p>
           </div>
@@ -902,7 +902,7 @@ export default function SaleForm({
         {/* W1-T1: явное закрытие СВОЕЙ volume-брони этой продажей. Без галочки
             бронь остаётся hold'ом и её объём в продажу не входит. */}
         {myReservations.length > 0 && (
-          <div className="mb-3 rounded-card border border-gold/40 bg-gold/5 p-3">
+          <div className="mb-3 rounded-card border border-honey bg-honey-soft p-3">
             <p className="mb-1.5 text-sm font-semibold text-ink">
               У вас есть бронь на эту партию
             </p>
@@ -925,7 +925,7 @@ export default function SaleForm({
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-ink/55">
+            <p className="mt-1 text-xs text-ink-2">
               Без галочки бронь остаётся в силе, и её объём не участвует в этой
               продаже.
             </p>
@@ -936,14 +936,14 @@ export default function SaleForm({
         <div className="flex flex-col gap-3">
           <div>
             <p className="mb-1.5 text-sm font-semibold text-ink">
-              Клиент <span className="text-danger">*</span>
+              Клиент <span className="text-carnelian">*</span>
             </p>
             {selectedClient ? (
-              <div className="rounded-field border border-gold/40 bg-gold/10 p-3">
+              <div className="rounded-field border border-honey bg-honey-soft p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-ink">{selectedClient.name}</p>
-                    <p className="text-sm text-ink/70">
+                    <p className="text-sm text-ink-2">
                       {CLIENT_TYPE_LABELS[selectedClient.type]} · {selectedClient.phone}
                     </p>
                   </div>
@@ -1022,8 +1022,8 @@ export default function SaleForm({
           </div>
 
           {showNewClient && !selectedClient && (
-            <div className="rounded-card border border-line bg-paper-2 p-3">
-              <p className="mb-2 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+            <div className="rounded-card border border-line bg-marble p-3">
+              <p className="mb-2 text-base font-semibold text-ink">
                 Новый клиент
               </p>
               <div className="flex flex-col gap-2">
@@ -1047,8 +1047,8 @@ export default function SaleForm({
                         className={
                           "flex min-h-11 cursor-pointer items-center justify-center rounded-field border text-sm font-semibold " +
                           (newClientType === tp
-                            ? "border-gold bg-gold/15"
-                            : "border-line bg-paper")
+                            ? "border-honey bg-honey-soft"
+                            : "border-line bg-marble")
                         }
                       >
                         <input
@@ -1130,9 +1130,9 @@ export default function SaleForm({
           )}
 
           {selectedClient && (
-            <div className="rounded-card border border-line bg-paper p-3">
-              <p className="mb-2 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
-                Объект <span className="font-normal normal-case tracking-normal text-ink/50">(необязательно)</span>
+            <div className="rounded-card border border-line bg-marble p-3">
+              <p className="mb-2 text-base font-semibold text-ink">
+                Объект <span className="font-normal normal-case tracking-normal text-ink-3">(необязательно)</span>
               </p>
               <div className="flex flex-col gap-2">
                 <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border border-line px-3">
@@ -1219,8 +1219,8 @@ export default function SaleForm({
                             className={
                               "flex min-h-11 cursor-pointer items-center justify-center rounded-field border px-1 text-center text-xs font-semibold " +
                               (newSiteType === tp
-                                ? "border-gold bg-gold/15"
-                                : "border-line bg-paper")
+                                ? "border-honey bg-honey-soft"
+                                : "border-line bg-marble")
                             }
                           >
                             <input
@@ -1266,8 +1266,8 @@ export default function SaleForm({
         {/* ТЗ №20 B — плановая отгрузка: складчик готовит камень заранее.
             Пусто = «как можно скорее», как раньше. */}
         {!issueAsSample && (
-          <fieldset className="mt-4 rounded-card border border-line bg-paper p-3">
-            <legend className="px-1 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+          <fieldset className="mt-4 rounded-card border border-line bg-marble p-3">
+            <legend className="px-1 text-base font-semibold text-ink">
               Отгрузка
             </legend>
             <div className="grid grid-cols-2 gap-2">
@@ -1311,8 +1311,8 @@ export default function SaleForm({
         )}
 
         {/* TZ9-A — блок «Оплата»: способ + цена + валюта; долг → срок/коммент. */}
-        <fieldset className="mt-4 rounded-card border border-line bg-paper p-3">
-          <legend className="px-1 text-sm font-bold uppercase tracking-[0.06em] text-gold-deep">
+        <fieldset className="mt-4 rounded-card border border-line bg-marble p-3">
+          <legend className="px-1 text-base font-semibold text-ink">
             Оплата
           </legend>
 
@@ -1321,7 +1321,7 @@ export default function SaleForm({
               id="f-price"
               label={
                 <>
-                  Цена продажи <span className="text-danger">*</span>
+                  Цена продажи <span className="text-carnelian">*</span>
                 </>
               }
               error={e.price}
@@ -1341,7 +1341,7 @@ export default function SaleForm({
             </Field>
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-semibold text-ink">
-                Валюта <span className="text-danger">*</span>
+                Валюта <span className="text-carnelian">*</span>
               </span>
               <div className="flex min-h-11 gap-1">
                 {(
@@ -1355,10 +1355,10 @@ export default function SaleForm({
                     <label
                       key={value}
                       className={
-                        "flex min-h-11 min-w-12 cursor-pointer items-center justify-center rounded-field border px-2 text-sm font-bold transition " +
+                        "flex min-h-11 min-w-12 cursor-pointer items-center justify-center rounded-field border px-2 text-sm font-semibold transition-colors duration-150 " +
                         (selected
-                          ? "border-gold bg-gold/15 text-ink"
-                          : "border-line bg-paper-2 text-ink/70")
+                          ? "border-honey bg-honey-soft text-ink"
+                          : "border-line bg-marble text-ink-2")
                       }
                     >
                       <input
@@ -1380,15 +1380,15 @@ export default function SaleForm({
           {/* ТЗ №20 H — ориентир владельца. Поле цены НЕ заполняем: цену
               менеджер вводит сам, ориентир — только подсказка. */}
           {stone?.priceHint && (
-            <p className="mt-2 text-sm text-ink/55">
-              Ориентир цены: <span className="tnum font-semibold text-ink/80">{stone.priceHint}</span>
+            <p className="mt-2 text-sm text-ink-2">
+              Ориентир цены: <span className="tnum font-semibold text-ink">{stone.priceHint}</span>
             </p>
           )}
 
           {/* ТЗ №20 A — «Оплата сейчас»: несколько способов (50/50, 70/30),
               меньше цены → остаток уходит в долг, 0 → вся продажа в долг. */}
           <div className="mt-3 border-t border-line pt-3">
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.06em] text-gold-deep">
+            <p className="mb-2 text-xs font-semibold text-honey-ink">
               Оплата сейчас
             </p>
             <div className="flex flex-col gap-2">
@@ -1431,7 +1431,7 @@ export default function SaleForm({
                   <button
                     type="button"
                     aria-label="Убрать строку оплаты"
-                    className="min-h-11 min-w-11 rounded-field text-ink/50 hover:text-danger"
+                    className="min-h-11 min-w-11 rounded-field text-ink-3 hover:text-carnelian"
                     onClick={() =>
                       setPayRows((rows) =>
                         rows.length === 1
@@ -1447,7 +1447,7 @@ export default function SaleForm({
             </div>
             <button
               type="button"
-              className="mt-2 text-sm font-semibold text-gold-deep underline"
+              className="mt-2 text-sm font-semibold text-honey-ink hover:underline"
               onClick={() =>
                 setPayRows((rows) => [
                   // первая строка перестаёт «следовать за ценой» — дальше суммы ручные
@@ -1458,7 +1458,7 @@ export default function SaleForm({
             >
               + Добавить способ оплаты
             </button>
-            <p className={`tnum mt-2 text-sm ${overpaid ? "text-danger" : "text-ink/80"}`}>
+            <p className={`tnum mt-2 text-sm ${overpaid ? "text-carnelian" : "text-ink"}`}>
               Оплачено: {formatMoneyGrouped(String(paidTotal))} {CURRENCY_LABEL[currency]} ·{" "}
               {overpaid
                 ? "оплачено больше цены — исправьте суммы"
@@ -1490,7 +1490,7 @@ export default function SaleForm({
           )}
         </fieldset>
 
-        <div className="mt-4 rounded-card border border-line bg-paper-2 p-3">
+        <div className="mt-4 rounded-card border border-line bg-marble p-3">
           <label className="flex min-h-11 cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -1508,7 +1508,7 @@ export default function SaleForm({
                 type="date"
                 label={
                   <>
-                    Срок возврата образца <span className="text-danger">*</span>
+                    Срок возврата образца <span className="text-carnelian">*</span>
                   </>
                 }
                 value={returnDueDateSample}
@@ -1529,13 +1529,14 @@ export default function SaleForm({
                 value={sampleComment}
                 onChange={(ev) => setSampleComment(ev.target.value)}
               />
-              <p className="text-xs text-ink/55">
+              <p className="text-xs text-ink-2">
                 Камень спишется со склада как «образец» и исчезнет из поиска.
               </p>
             </div>
           )}
         </div>
 
+        <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-5 mt-4 border-t border-line bg-marble px-5 py-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
         <Button
           type="button"
           onClick={() => setConfirming(true)}
@@ -1548,10 +1549,11 @@ export default function SaleForm({
                 )
               : !canProceed
           }
-          className="mt-4 min-h-14 w-full text-lg font-bold"
+          className="w-full md:w-auto"
         >
           {issueAsSample ? "Далее — выдача образца" : "Далее — подтверждение"}
         </Button>
+        </div>
       </Card>
     );
   }
@@ -1565,7 +1567,7 @@ export default function SaleForm({
         onClick={() => setConfirming(false)}
         label="Изменить данные"
       />
-      <h2 className="mb-3 text-lg font-semibold text-ink">
+      <h2 className="mb-3 text-base font-semibold text-ink">
         {issueAsSample
           ? "4. Подтверждение выдачи образца"
           : "4. Подтверждение продажи"}
@@ -1615,24 +1617,24 @@ export default function SaleForm({
         </Alert>
       )}
 
-      <dl className="rounded-card border border-ink/10 bg-paper p-4 text-base">
+      <dl className="rounded-card border border-line bg-marble p-4 text-base">
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-ink/60">Что</dt>
+          <dt className="text-ink-2">Что</dt>
           <dd className="text-right font-semibold text-ink">{target.title}</dd>
         </div>
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-ink/60">Детали</dt>
-          <dd className="text-right text-sm text-ink/70">{target.subtitle}</dd>
+          <dt className="text-ink-2">Детали</dt>
+          <dd className="text-right text-sm text-ink-2">{target.subtitle}</dd>
         </div>
         {isVolume && qtyText && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Объём</dt>
+            <dt className="text-ink-2">Объём</dt>
             <dd className="text-right font-semibold text-ink">{qtyText}</dd>
           </div>
         )}
         {isVolume && (target.locations?.length ?? 0) > 0 && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Откуда</dt>
+            <dt className="text-ink-2">Откуда</dt>
             <dd className="text-right text-sm text-ink">
               {(target.locations!.find((l) => l.id === batchLocationId) ??
                 target.locations![0]).label}
@@ -1641,32 +1643,32 @@ export default function SaleForm({
         )}
         {target.mode === "WHOLE_BATCH" && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Объём</dt>
+            <dt className="text-ink-2">Объём</dt>
             <dd className="text-right font-semibold text-ink">весь свободный остаток</dd>
           </div>
         )}
         {consumedReservation && !issueAsSample && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Закрыть бронь</dt>
+            <dt className="text-ink-2">Закрыть бронь</dt>
             <dd className="text-right font-semibold text-ink">
               {consumedReservation.label}
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-ink/60">Клиент</dt>
+          <dt className="text-ink-2">Клиент</dt>
           <dd className="text-right font-semibold text-ink">
             {selectedClient ? selectedClient.name : "—"}
           </dd>
         </div>
         {selectedClient && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Телефон</dt>
+            <dt className="text-ink-2">Телефон</dt>
             <dd className="text-right text-ink">{selectedClient.phone}</dd>
           </div>
         )}
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-ink/60">Объект</dt>
+          <dt className="text-ink-2">Объект</dt>
           <dd className="text-right text-ink">
             {siteMode === "existing" && selectedSiteId
               ? (sites.find((s) => s.id === selectedSiteId)?.name ?? "—")
@@ -1674,7 +1676,7 @@ export default function SaleForm({
           </dd>
         </div>
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-ink/60">Оплата</dt>
+          <dt className="text-ink-2">Оплата</dt>
           <dd className="text-right font-semibold text-ink">
             {payRowsResolved.filter((r) => r.amount > 0).length === 0
               ? "всё в долг"
@@ -1686,7 +1688,7 @@ export default function SaleForm({
           </dd>
         </div>
         <div className="flex justify-between gap-3 py-1">
-          <dt className="text-ink/60">Цена</dt>
+          <dt className="text-ink-2">Цена</dt>
           <dd className="tnum text-right font-semibold text-ink">
             {priceDisplay.trim()
               ? formatMoneyGrouped(priceDisplay)
@@ -1696,7 +1698,7 @@ export default function SaleForm({
         </div>
         {(plannedDate || deliveryMode) && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Заберут</dt>
+            <dt className="text-ink-2">Заберут</dt>
             <dd className="text-right text-ink">
               {[
                 plannedDate && `${plannedDate}${plannedTime ? `, ${plannedTime}` : ""}`,
@@ -1710,24 +1712,24 @@ export default function SaleForm({
         )}
         {isCredit && debtDueDate.trim() && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Срок долга</dt>
+            <dt className="text-ink-2">Срок долга</dt>
             <dd className="text-right text-ink">{debtDueDate}</dd>
           </div>
         )}
         {isCredit && debtComment.trim() && (
           <div className="flex justify-between gap-3 py-1">
-            <dt className="text-ink/60">Коммент. к долгу</dt>
-            <dd className="text-right text-sm text-ink/80">{debtComment}</dd>
+            <dt className="text-ink-2">Коммент. к долгу</dt>
+            <dd className="text-right text-sm text-ink">{debtComment}</dd>
           </div>
         )}
         {issueAsSample && (
           <>
             <div className="flex justify-between gap-3 py-1">
-              <dt className="text-ink/60">Тип</dt>
+              <dt className="text-ink-2">Тип</dt>
               <dd className="text-right font-semibold text-ink">Образец</dd>
             </div>
             <div className="flex justify-between gap-3 py-1">
-              <dt className="text-ink/60">Срок возврата</dt>
+              <dt className="text-ink-2">Срок возврата</dt>
               <dd className="text-right text-ink">
                 {returnDueDateSample || "—"}
               </dd>
@@ -1799,10 +1801,11 @@ export default function SaleForm({
         )}
         {isVolume && <input type="hidden" name="qtySlabs" value={qtySlabs} />}
         {isVolume && <input type="hidden" name="qtyAreaM2" value={qtyAreaM2} />}
+        <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-30 -mx-5 mt-4 border-t border-line bg-marble px-5 py-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
         <Button
           type="submit"
-          disabled={issueAsSample ? samplePending : pending}
-          className="mt-4 min-h-16 w-full text-xl font-bold"
+          pending={issueAsSample ? samplePending : pending}
+          className="w-full md:w-auto"
         >
           {issueAsSample
             ? samplePending
@@ -1812,8 +1815,9 @@ export default function SaleForm({
               ? "Оформление…"
               : "Подтвердить продажу"}
         </Button>
+        </div>
       </form>
-      <p className="mt-2 text-center text-sm text-ink/60">
+      <p className="mt-2 text-sm text-ink-2">
         {issueAsSample
           ? "После подтверждения образец появится в разделе «Образцы» (активные)."
           : "Камень списывается из наличия сразу в момент продажи (TZ §5.4). Способ оплаты на списание не влияет."}

@@ -149,23 +149,23 @@ export default async function Home() {
     });
 
   const cardClass =
-    "group flex items-start gap-3 rounded-card border border-ink/10 bg-paper-2/50 p-5 " +
-    "transition hover:border-gold hover:bg-paper-2 " +
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
+    "group flex items-start gap-3 rounded-card border border-line bg-marble p-5 " +
+    "transition-colors duration-150 hover:border-line-strong " +
+    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-honey-soft";
 
   const inner = (section: NavItem) => (
     <>
       <span
         aria-hidden="true"
-        className="flex size-11 shrink-0 items-center justify-center rounded-field bg-gold/12 text-gold-deep transition group-hover:bg-gold group-hover:text-on-gold"
+        className="flex size-10 shrink-0 items-center justify-center rounded-field bg-stone-100 text-ink-2"
       >
-        <section.Icon width={22} height={22} />
+        <section.Icon width={18} height={18} strokeWidth={1.5} />
       </span>
       <span className="min-w-0">
-        <span className="block text-lg font-semibold text-ink">
+        <span className="block text-sm font-semibold text-ink">
           {section.label}
         </span>
-        <span className="mt-1 block text-sm text-ink/60">
+        <span className="mt-1 block text-sm text-ink-2">
           {section.description}
         </span>
       </span>
@@ -173,15 +173,12 @@ export default async function Home() {
   );
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · склад
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink sm:text-4xl">
+        <h1 className="text-display font-semibold text-ink">
           Складская система
         </h1>
-        <p className="mt-2 text-lg text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           Учёт натурального камня: партии, плиты, остатки, брони.
         </p>
       </header>
@@ -192,28 +189,29 @@ export default async function Home() {
             <Link
               key={t.key}
               href={t.href}
-              className="rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+              className="rounded-card focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-honey-soft"
             >
               <Card
                 className={
-                  "h-full transition hover:border-gold " +
-                  (t.warning ? "border-warning/30" : "")
+                  "h-full transition-colors duration-150 hover:border-line-strong " +
+                  (t.warning && t.value > 0 ? "border-amber/30" : "")
                 }
               >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span
-                    className={
-                      "font-serif text-3xl font-bold tabular-nums " +
-                      (t.warning ? "text-warning" : "text-ink")
-                    }
-                  >
-                    {t.value}
-                  </span>
+                {/* ТЗ №20 §7.5: подпись 12px сверху, цифра 28px Medium. */}
+                <div className="flex items-start justify-between gap-2">
+                  <span className="block text-xs font-medium text-ink-2">{t.label}</span>
                   {t.warning && t.value > 0 ? (
                     <Badge variant="warning">проверить</Badge>
                   ) : null}
                 </div>
-                <span className="mt-1 block text-sm text-ink/60">{t.label}</span>
+                <span
+                  className={
+                    "mt-1 block text-[28px] font-medium leading-9 tabular-nums " +
+                    (t.warning && t.value > 0 ? "text-amber" : "text-ink")
+                  }
+                >
+                  {t.value}
+                </span>
               </Card>
             </Link>
           ))}
@@ -221,12 +219,12 @@ export default async function Home() {
       )}
 
       {lowStock.length > 0 && (
-        <Card className="mb-8 border-warning/35">
+        <Card className="mb-8">
           <div className="flex items-baseline justify-between gap-2">
-            <h2 className="font-serif text-xl font-bold text-ink">Заканчивается</h2>
+            <h2 className="text-base font-semibold text-ink">Заканчивается</h2>
             <Badge variant="warning">пора заказывать</Badge>
           </div>
-          <p className="mt-1 text-sm text-ink/55">
+          <p className="mt-1 text-sm text-ink-2">
             Свободный остаток вида ниже минимального (без броней, шоу-рума и образцов).
           </p>
           <div className="onyx-table-wrap mt-3">
@@ -252,7 +250,7 @@ export default async function Home() {
                   <td className="tnum py-2 pr-2 text-right font-semibold text-warning">
                     {formatStockQty(item.free, item.threshold.unit)}
                   </td>
-                  <td className="tnum py-2 pr-3 text-right text-ink/70">
+                  <td className="tnum py-2 pr-3 text-right text-ink-2">
                     {formatThreshold(item.threshold)}
                     {item.threshold.unit === "SLABS" ? " пл." : ""}
                   </td>

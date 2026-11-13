@@ -50,10 +50,10 @@ export default async function Collection3DPage({ params }: { params: Promise<{ c
   if (!c || c.closedAt) {
     body = (
       <div className="rounded-card border border-line bg-paper-2 p-6 text-center">
-        <h1 className="font-serif text-xl font-bold text-ink">
+        <h1 className="text-xl font-semibold text-ink">
           {!c ? t.collectionNotFoundTitle : t.collectionClosedTitle}
         </h1>
-        <p className="mt-2 text-sm text-ink/60">
+        <p className="mt-2 text-sm text-ink-2">
           {!c ? t.collectionNotFoundBody : t.collectionClosedBody}
         </p>
       </div>
@@ -66,7 +66,7 @@ export default async function Collection3DPage({ params }: { params: Promise<{ c
     body =
       stones.length === 0 ? (
         <div className="rounded-card border border-line bg-paper-2 p-6 text-center">
-          <p className="text-sm text-ink/70">{t.scene3dEmpty}</p>
+          <p className="text-sm text-ink-2">{t.scene3dEmpty}</p>
           <Link href={back} className={buttonClass("secondary", "md", "mt-4")}>
             {t.back}
           </Link>
@@ -81,7 +81,7 @@ export default async function Collection3DPage({ params }: { params: Promise<{ c
       <Link href={back} className="text-sm font-semibold text-gold-deep underline">
         ← {t.back}
       </Link>
-      <h1 className="mb-4 mt-3 font-serif text-2xl font-bold text-ink">{t.show3d}</h1>
+      <h1 className="mb-4 mt-3 text-display font-semibold text-ink">{t.show3d}</h1>
       {body}
     </main>
   );

@@ -33,7 +33,7 @@ export default async function AddToCollectionPage({
   const caps = await getCapabilities();
   if (!caps.canManageCollections) {
     return (
-      <main className="mx-auto max-w-2xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -42,7 +42,7 @@ export default async function AddToCollectionPage({
   const hit = await findByCode(db, sp.code ?? "");
   if (!hit) {
     return (
-      <main className="mx-auto max-w-2xl p-4 pb-12 sm:p-8">
+      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <Alert variant="danger">Камень с таким кодом не найден.</Alert>
         <Link href="/katalog" className={buttonClass("secondary", "md", "mt-4")}>
           Открыть каталог
@@ -66,15 +66,15 @@ export default async function AddToCollectionPage({
   const kind = hit.kind !== "STONE_TYPE" ? STONE_CODE_KIND_RU[hit.kind] : null;
 
   return (
-    <main className="mx-auto max-w-2xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+        <p className="text-xs font-medium text-ink-2">
           В подборку
         </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="mt-1 text-display font-semibold text-ink">
           {stone?.name ?? "Камень"}
         </h1>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-ink-2">
           {[kind, stone?.rockType, stone?.color].filter(Boolean).join(" · ")} ·{" "}
           <span className="tnum tracking-wide">{hit.code}</span> ·{" "}
           <Link href={`/k/${hit.code}`} className="text-gold-deep underline">
@@ -93,7 +93,7 @@ export default async function AddToCollectionPage({
         <input type="hidden" name="code" value={hit.code} />
         <Card>
           <fieldset>
-            <legend className="font-serif text-xl font-bold text-ink">Подборка</legend>
+            <legend className="text-base font-semibold text-ink">Подборка</legend>
             <div className="mt-3 flex flex-col gap-2">
               {open.map((c, i) => (
                 <label
@@ -109,7 +109,7 @@ export default async function AddToCollectionPage({
                   />
                   <span>
                     <span className="font-semibold text-ink">{c.title}</span>
-                    <span className="block text-ink/55">
+                    <span className="block text-ink-2">
                       {[c.clientName, `камней: ${c.items}`].filter(Boolean).join(" · ")}
                     </span>
                   </span>
@@ -148,7 +148,7 @@ export default async function AddToCollectionPage({
                 </select>
               </label>
             </div>
-            <p className="mt-1 text-sm text-ink/55">
+            <p className="mt-1 text-sm text-ink-2">
               Название и клиент нужны только для новой подборки.
             </p>
           </fieldset>

@@ -28,8 +28,8 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           padding: "1.5rem",
-          background: "#0a0806",
-          color: "#f4ebda",
+          background: "#f4f1ec",
+          color: "#1c1915",
           fontFamily:
             "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
           textAlign: "center",
@@ -38,15 +38,14 @@ export default function GlobalError({
         <div style={{ maxWidth: "24rem" }}>
           <h1
             style={{
-              fontFamily: "ui-serif, Georgia, 'Times New Roman', serif",
-              fontSize: "1.5rem",
-              fontWeight: 700,
+                            fontSize: "1.5rem",
+              fontWeight: 600,
               margin: 0,
             }}
           >
             Что-то пошло не так
           </h1>
-          <p style={{ marginTop: "0.5rem", color: "#b3a894" }}>
+          <p style={{ marginTop: "0.5rem", color: "#6b6359" }}>
             Приложение временно недоступно. Попробуйте ещё раз.
           </p>
           <button
@@ -56,12 +55,12 @@ export default function GlobalError({
               marginTop: "1.5rem",
               minHeight: "44px",
               padding: "0 1.25rem",
-              borderRadius: "10px",
+              borderRadius: "6px",
               border: "none",
-              background: "#e0a94a",
-              color: "#221503",
-              fontSize: "1rem",
-              fontWeight: 600,
+              background: "#1c1915",
+              color: "#ffffff",
+              fontSize: "0.875rem",
+              fontWeight: 500,
               cursor: "pointer",
             }}
           >

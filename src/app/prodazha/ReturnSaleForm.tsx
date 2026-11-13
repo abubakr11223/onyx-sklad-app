@@ -66,13 +66,13 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
 
   return (
     <details className="mt-2">
-      <summary className="cursor-pointer text-sm font-semibold text-gold-deep underline">
+      <summary className="cursor-pointer text-sm font-semibold text-honey-ink hover:underline">
         Оформить возврат
       </summary>
       <form action={returnSalePartialAction} className="mt-2 space-y-2 rounded-card border border-line p-3">
         <input type="hidden" name="saleRecordId" value={p.saleId} />
         <input type="hidden" name="currency" value={p.currency ?? ""} />
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink/60">
+        <p className="text-xs font-semibold text-ink-2">
           Возврат · {p.title} · продано{" "}
           {[
             p.soldSlabs !== null && `${p.soldSlabs} плит`,
@@ -83,7 +83,7 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
         </p>
         <div className="grid grid-cols-2 gap-2">
           {p.soldSlabs !== null && (
-            <label className="block text-sm text-ink/70">
+            <label className="block text-sm text-ink-2">
               Вернуть плит (пусто = всё, ост. {p.remSlabs})
               <input
                 name="qtySlabs"
@@ -96,7 +96,7 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
             </label>
           )}
           {p.soldAreaM2 !== null && (
-            <label className="block text-sm text-ink/70">
+            <label className="block text-sm text-ink-2">
               м² (пусто = {bySlabs ? "по плитам" : "всё"}, ост. {m2Fmt.format(p.remAreaM2 ?? 0)})
               <input
                 name="qtyAreaM2"
@@ -110,7 +110,7 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
         </div>
         {leftCents !== null && (
           <div className="grid grid-cols-2 gap-2">
-            <label className="block text-sm text-ink/70">
+            <label className="block text-sm text-ink-2">
               Сумма возврата клиенту{p.currency === "USD" ? ", $" : ", сум"}
               <input
                 inputMode="decimal"
@@ -122,11 +122,11 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
                 className={inputClass + " mt-1"}
               />
               <input type="hidden" name="refund" value={normalizeMoneyForSubmit(shownRefund)} />
-              <span className="mt-1 block text-xs text-ink/50">
+              <span className="mt-1 block text-xs text-ink-3">
                 не больше {money(leftCents)}; при долге сначала уменьшается долг
               </span>
             </label>
-            <label className="block text-sm text-ink/70">
+            <label className="block text-sm text-ink-2">
               Способ
               <select name="method" defaultValue="CASH" className={inputClass + " mt-1"}>
                 {PAY_METHODS.map((m) => (
@@ -138,8 +138,8 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
             </label>
           </div>
         )}
-        <fieldset className="text-sm text-ink/80">
-          <legend className="mb-1 text-ink/70">Куда камень</legend>
+        <fieldset className="text-sm text-ink">
+          <legend className="mb-1 text-ink-2">Куда камень</legend>
           <label className="mr-4 inline-flex items-center gap-1">
             <input type="radio" name="destination" value="SAME_PATTERN" defaultChecked /> в тот же
             узор/локацию
@@ -150,11 +150,11 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
             </label>
           )}
         </fieldset>
-        <label className="block text-sm text-ink/70">
+        <label className="block text-sm text-ink-2">
           Причина
           <input name="reason" maxLength={500} className={inputClass + " mt-1"} />
         </label>
-        <p className="text-xs text-ink/55">
+        <p className="text-xs text-ink-2">
           Не отгруженный камень вернётся в остаток сразу; отгруженный — после приёма
           складом в «Отгрузках».
         </p>

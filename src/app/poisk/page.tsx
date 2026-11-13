@@ -617,12 +617,9 @@ export default async function PoiskPage({
     showroomSlabsMatched.length + showroomPiecesMatched.length;
 
   return (
-    <main className="mx-auto max-w-3xl p-4 pb-12 sm:p-8">
+    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
-          Onyx · склад
-        </p>
-        <h1 className="mt-2 font-serif text-display font-bold tracking-tight text-ink">
+        <h1 className="text-display font-semibold text-ink">
           Поиск камня
         </h1>
       </header>
@@ -673,7 +670,7 @@ export default async function PoiskPage({
                 placeholder="Длина"
                 className={inputClass}
               />
-              <span className="text-ink/50">×</span>
+              <span className="text-ink-3">×</span>
               <input
                 name="w"
                 type="text"
@@ -683,7 +680,7 @@ export default async function PoiskPage({
                 className={inputClass}
               />
             </div>
-            <p className="mt-1.5 text-xs text-ink/60">
+            <p className="mt-1.5 text-xs text-ink-2">
               Подбор с запасом на рез {CUTTING_MARGIN_MM} см; поворот заготовки
               учитывается.
             </p>
@@ -699,18 +696,18 @@ export default async function PoiskPage({
       {/* ТЗ №20 G — находка по коду ONX-…. */}
       {codeHit && (
         <Card className="mt-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-deep">
+          <p className="text-xs font-medium text-ink-2">
             Найдено по коду
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-bold text-ink">
+              <p className="font-semibold text-ink">
                 {codeHitName ?? "Камень"}
-                <span className="ml-2 text-sm font-normal text-ink/60">
+                <span className="ml-2 text-sm font-normal text-ink-2">
                   {STONE_CODE_KIND_RU[codeHit.kind]}
                 </span>
               </p>
-              <p className="tnum text-sm font-semibold tracking-wide text-ink/70">
+              <p className="tnum text-sm font-semibold tracking-wide text-ink-2">
                 {codeHit.code}
               </p>
             </div>
@@ -761,15 +758,15 @@ export default async function PoiskPage({
       {hasDims && showroomHits > 0 && (
         <section
           id="shourum"
-          className="mt-6 scroll-mt-4 rounded-card border border-gold/40 bg-gold/10 p-4"
+          className="mt-6 scroll-mt-4 rounded-card border border-honey bg-honey-soft p-4"
         >
-          <h2 className="text-lg font-bold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             В шоу-руме{" "}
-            <span className="text-sm font-normal text-ink/60">
+            <span className="text-sm font-normal text-ink-2">
               (не обычное наличие)
             </span>
           </h2>
-          <p className="text-sm text-ink/70">
+          <p className="text-sm text-ink-2">
             Подходит по размеру, но выставлен на витрине — продажа/образец через
             раздел «Шоу-рум».
           </p>
@@ -777,7 +774,7 @@ export default async function PoiskPage({
             {showroomSlabsMatched.map((s) => (
               <li
                 key={s.id}
-                className="rounded-card border border-ink/10 bg-paper p-3"
+                className="rounded-field border border-line bg-marble p-3"
               >
                 <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
                   <span>
@@ -785,12 +782,12 @@ export default async function PoiskPage({
                   </span>
                   <Badge variant="warning">в шоу-руме</Badge>
                 </div>
-                <div className="text-sm text-ink/70">
-                  {s.lengthMm}×{s.widthMm} см
+                <div className="text-sm text-ink-2">
+                  <span className="font-mono text-base text-ink">{s.lengthMm}×{s.widthMm} см</span>
                   {canSeeExact && (
                     <>
                       {" "}
-                      · {formatLocation(s.block, s.landmark)}
+                      · <span className="font-mono text-ink">{formatLocation(s.block, s.landmark)}</span>
                     </>
                   )}
                 </div>
@@ -805,18 +802,18 @@ export default async function PoiskPage({
             {showroomPiecesMatched.map((p) => (
               <li
                 key={p.id}
-                className="rounded-card border border-ink/10 bg-paper p-3"
+                className="rounded-field border border-line bg-marble p-3"
               >
                 <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
                   <span>{p.stoneType.name}</span>
                   <Badge variant="warning">в шоу-руме</Badge>
                 </div>
-                <div className="text-sm text-ink/70">
-                  Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
+                <div className="text-sm text-ink-2">
+                  Габарит <span className="font-mono text-base text-ink">{p.boundingLengthMm}×{p.boundingWidthMm} см</span>
                   {canSeeExact && (
                     <>
                       {" "}
-                      · {formatLocation(p.block, p.landmark)}
+                      · <span className="font-mono text-ink">{formatLocation(p.block, p.landmark)}</span>
                     </>
                   )}
                 </div>
@@ -835,12 +832,12 @@ export default async function PoiskPage({
       {hasDims && (
         <section
           id="ostatki"
-          className="mt-6 scroll-mt-4 rounded-card border border-warning/40 bg-warning/10 p-4"
+          className="mt-6 scroll-mt-4 rounded-card border border-line bg-marble p-4 shadow-[inset_3px_0_0_var(--color-amber)]"
         >
-          <h2 className="text-lg font-bold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             Бой и остатки — предложить первыми
           </h2>
-          <p className="text-sm text-ink/70">
+          <p className="text-sm text-ink-2">
             Под размер {lenMm}×{widMm} см (с запасом на рез)
             {/* Aniq «N из M» — qoldiq inventar soni; PARTNER ga yopiq. */}
             {canSeeExact && fittingPieces.length > 0 && (
@@ -852,7 +849,7 @@ export default async function PoiskPage({
             )}
           </p>
           {fittingPieces.length === 0 ? (
-            <p className="mt-3 text-sm text-ink/70">
+            <p className="mt-3 text-sm text-ink-2">
               Подходящих остатков и боя нет — ниже целые плиты и партии.
             </p>
           ) : (
@@ -860,7 +857,7 @@ export default async function PoiskPage({
               {visiblePieces.map((p) => (
                 <li
                   key={p.id}
-                  className="rounded-card border border-ink/10 bg-paper p-3"
+                  className="rounded-field border border-line bg-marble p-3"
                 >
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-ink">
                     <span>{p.stoneType.name}</span>
@@ -871,8 +868,8 @@ export default async function PoiskPage({
                       <Badge variant="warning">требует проверки</Badge>
                     )}
                   </div>
-                  <div className="text-sm text-ink/70">
-                    Габарит {p.boundingLengthMm}×{p.boundingWidthMm} см
+                  <div className="text-sm text-ink-2">
+                    Габарит <span className="font-mono text-base text-ink">{p.boundingLengthMm}×{p.boundingWidthMm} см</span>
                     {canSeeExact && p.thicknessMm !== null && (
                       <> · толщина {formatThicknessCm(p.thicknessMm)} см</>
                     )}
@@ -882,7 +879,7 @@ export default async function PoiskPage({
                   </div>
                   {/* §4.6 — lokatsiya faqat canSeeExactRemainder. */}
                   {canSeeExact && (
-                    <div className="text-sm text-ink">
+                    <div className="font-mono text-base text-ink">
                       {formatLocation(p.block, p.landmark)}
                     </div>
                   )}
@@ -920,16 +917,16 @@ export default async function PoiskPage({
 
       {/* ТЗ №12: именованные плиты под размер */}
       {hasDims && (
-        <section className="mt-6 rounded-card border border-gold/30 bg-gold/5 p-4">
-          <h2 className="text-lg font-bold text-ink">Целые плиты под размер</h2>
-          <p className="text-sm text-ink/70">
+        <section className="mt-6 rounded-card border border-line bg-marble p-4">
+          <h2 className="text-base font-semibold text-ink">Целые плиты под размер</h2>
+          <p className="text-sm text-ink-2">
             Именованные плиты {lenMm}×{widMm} см (с запасом на рез)
             {canSeeExact && fittingSlabs.length > 0 && (
               <> · показано {fittingSlabs.length}{slabsCapped ? "+" : ""}</>
             )}
           </p>
           {fittingSlabs.length === 0 ? (
-            <p className="mt-3 text-sm text-ink/70">
+            <p className="mt-3 text-sm text-ink-2">
               Именованных плит под размер нет — ниже партии с форматом плиты, если есть.
             </p>
           ) : (
@@ -937,7 +934,7 @@ export default async function PoiskPage({
               {fittingSlabs.map((s) => (
                 <li
                   key={s.id}
-                  className="rounded-card border border-ink/10 bg-paper p-3"
+                  className="rounded-field border border-line bg-marble p-3"
                 >
                   <div className="flex flex-wrap items-center gap-x-2 font-medium text-ink">
                     <Link
@@ -948,8 +945,8 @@ export default async function PoiskPage({
                     </Link>
                     <Badge variant="neutral">{s.label}</Badge>
                   </div>
-                  <div className="text-sm text-ink/70">
-                    Габарит {s.lengthMm}×{s.widthMm} см
+                  <div className="text-sm text-ink-2">
+                    Габарит <span className="font-mono text-base text-ink">{s.lengthMm}×{s.widthMm} см</span>
                     {canSeeExact && s.thicknessMm != null && (
                       <> · толщина {formatThicknessCm(s.thicknessMm)} см</>
                     )}
@@ -958,7 +955,7 @@ export default async function PoiskPage({
                     )}
                   </div>
                   {canSeeExact && (
-                    <div className="text-sm text-ink">
+                    <div className="font-mono text-base text-ink">
                       {formatLocation(s.block, s.landmark)}
                     </div>
                   )}
@@ -977,9 +974,9 @@ export default async function PoiskPage({
       {/* ТЗ №12 / №19 C2: партии и узоры с форматом плиты под размер.
           Строка на УЗОР (не на партию): «… · 280×160×2 см · 3 плиты · Блок A1». */}
       {hasDims && batchHits.length > 0 && (
-        <section className="mt-6 rounded-card border border-line bg-paper-2 p-4">
-          <h2 className="text-lg font-bold text-ink">Партии — формат плиты под размер</h2>
-          <p className="text-sm text-ink/70">
+        <section className="mt-6 rounded-card border border-line bg-marble p-4">
+          <h2 className="text-base font-semibold text-ink">Партии — формат плиты под размер</h2>
+          <p className="text-sm text-ink-2">
             Узоры и партии, где длина×ширина плиты подходит под запрос (см)
             {canSeeExact && (
               <> · показано {batchHits.length}{batchesCapped ? "+" : ""}</>
@@ -991,7 +988,7 @@ export default async function PoiskPage({
               return (
                 <li
                   key={h.key}
-                  className="rounded-card border border-ink/10 bg-paper p-3"
+                  className="rounded-field border border-line bg-marble p-3"
                 >
                   <Link
                     href={"/kamen/" + h.stoneTypeId}
@@ -999,7 +996,7 @@ export default async function PoiskPage({
                   >
                     {h.stoneName}
                   </Link>
-                  <div className="tnum text-sm text-ink/70">
+                  <div className="tnum text-sm text-ink-2">
                     {formatSizeHitLine(h, { includeStone: false, exact: false })}
                     {qty && <> · {qty}</>}
                     {/* E3 — нет локации подсвечиваем, а не молчим. */}
@@ -1010,7 +1007,7 @@ export default async function PoiskPage({
                           className={
                             h.locationMissing
                               ? "font-medium text-warning"
-                              : "text-ink"
+                              : "font-mono text-ink"
                           }
                         >
                           {h.locationText}
@@ -1032,7 +1029,7 @@ export default async function PoiskPage({
 
       <section className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-bold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             {hasDims ? "Целые плиты и партии" : "В наличии"}
           </h2>
           {/* ТЗ №20 G (§8.3) — «отметить несколько → Печать QR». Галочки у
@@ -1085,7 +1082,7 @@ export default async function PoiskPage({
               </p>
             </Alert>
           ) : (
-            <p className="mt-3 text-ink/70">
+            <p className="mt-3 text-ink-2">
               {hasDims
                 ? "Подходящих целых плит и партий под этот размер нет (см. бой/остатки выше, если есть)."
                 : "Ничего не найдено."}
@@ -1155,7 +1152,7 @@ export default async function PoiskPage({
                 <li key={t.st.id} className="flex items-stretch gap-2">
                   {/* ТЗ №20 G — галочка для пакетной печати QR (вне ссылки). */}
                   {caps.canPrintQr && t.st.code && (
-                    <label className="flex w-11 shrink-0 cursor-pointer items-center justify-center rounded-card border border-line bg-paper-2">
+                    <label className="flex w-11 shrink-0 cursor-pointer items-center justify-center rounded-card border border-line bg-marble">
                       <span className="sr-only">Отметить {t.st.name} для печати QR</span>
                       <input
                         type="checkbox"
@@ -1170,26 +1167,26 @@ export default async function PoiskPage({
                       hover-lift). Внутри нет других интерактивных элементов. */}
                   <Link
                     href={"/kamen/" + t.st.id}
-                    className="group flex min-w-0 flex-1 items-start gap-3.5 rounded-card border border-line bg-paper-2 p-4 shadow-card transition hover:-translate-y-0.5 hover:border-gold/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper sm:gap-4"
+                    className="group flex min-w-0 flex-1 items-start gap-3.5 rounded-card border border-line bg-marble p-4 transition-colors duration-150 hover:-translate-y-0.5 hover:border-honey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-travertine sm:gap-4"
                   >
                     <span
                       aria-hidden="true"
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-sm font-medium text-gold-deep sm:h-12 sm:w-12"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-sm font-medium text-ink-2 sm:h-12 sm:w-12"
                     >
                       {monogram}
                     </span>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
-                        <h3 className="font-bold text-ink transition group-hover:text-gold-deep">
+                        <h3 className="font-semibold text-ink transition group-hover:text-gold-deep">
                           {t.st.name}
                         </h3>
-                        <span className="text-sm text-ink/55">
+                        <span className="text-sm text-ink-2">
                           {t.st.rockType}
                           {t.st.color && <> · {t.st.color}</>}
                         </span>
                         {t.st.code && (
-                          <span className="tnum text-xs font-semibold tracking-wide text-ink/55">
+                          <span className="tnum text-xs font-semibold tracking-wide text-ink-2">
                             {t.st.code}
                           </span>
                         )}
@@ -1202,7 +1199,7 @@ export default async function PoiskPage({
                           </Badge>
                         )}
                       </div>
-                      <p className="tnum mt-1.5 text-sm text-ink/70">
+                      <p className="tnum mt-1.5 text-sm text-ink-2">
                         {stockLine}
                         {canSeeExact && t.hasAvailability && t.countedSlabs > 0 && (
                           <> · отдельных плит: {t.countedSlabs}</>
@@ -1224,12 +1221,12 @@ export default async function PoiskPage({
                       {/* W5-A / §5.2 — menejer joyini shu yerda ko'radi (kamen'ga
                           o'tmasdan). PARTNER ga chiqmaydi. */}
                       {formatsLine && (
-                        <p className="tnum mt-1 text-sm text-ink/70">
+                        <p className="tnum mt-1 text-sm text-ink-2">
                           {formatsLine}
                         </p>
                       )}
                       {(locLine || unlocatedBatches > 0) && (
-                        <p className="mt-1 text-sm text-ink/60">
+                        <p className="mt-1 text-sm text-ink-2">
                           {locLine}
                           {unlocatedBatches > 0 && (
                             <span className="font-medium text-warning">
@@ -1256,7 +1253,7 @@ export default async function PoiskPage({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         aria-hidden="true"
-                        className="hidden text-ink/25 transition group-hover:translate-x-0.5 group-hover:text-gold-deep sm:block"
+                        className="hidden text-ink-3 transition group-hover:translate-x-0.5 group-hover:text-gold-deep sm:block"
                       >
                         <path d="M9 6l6 6-6 6" />
                       </svg>

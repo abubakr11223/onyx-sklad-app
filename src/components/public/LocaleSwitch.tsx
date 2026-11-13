@@ -32,8 +32,8 @@ export default function LocaleSwitch({
             "min-h-11 rounded-field border px-3 text-sm font-semibold transition " +
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold " +
             (l === locale
-              ? "border-gold bg-gold/15 text-ink"
-              : "border-line bg-paper-2 text-ink/70 hover:border-gold")
+              ? "border-gold bg-honey-soft text-ink"
+              : "border-line bg-paper-2 text-ink-2 hover:border-gold")
           }
         >
           {PUBLIC_LOCALE_LABEL[l]}
