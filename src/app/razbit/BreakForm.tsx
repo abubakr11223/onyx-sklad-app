@@ -11,6 +11,7 @@ import {
   useState,
   type ChangeEvent,
 } from "react";
+import type { ReactNode } from "react";
 import { submitBreak, type BreakFormState } from "./actions";
 import {
   breakLeftoverItems,
@@ -121,10 +122,16 @@ export default function BreakForm({
   slabs,
   batches,
   blocks = [],
+  before,
+  aside,
 }: {
   slabs: SlabOption[];
   batches: BatchOption[];
   blocks?: BlockOption[];
+  /** Содержимое над формой в левой колонке (фильтр, баннеры) — вне <form>. */
+  before?: ReactNode;
+  /** Правая колонка на широком экране (≥1280px) — над сводкой. */
+  aside?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(submitBreak, initialState);
   const [mode, setMode] = useState<"slab" | "direct">("slab");
@@ -234,7 +241,27 @@ export default function BreakForm({
     ...new Set([...(e.form ? [e.form] : []), ...leftovers]),
   ];
 
+  // ТЗ №20 §8 — сводка справа (≥1280px): только чтение из состояния формы.
+  const parseNum = (v: string) => {
+    const n = Number(v.replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const summaryArea = rowIds.reduce((sum, id) => sum + parseNum(rows[id]?.area ?? ""), 0);
+  const summaryBroken = rowIds.filter((id) => (rows[id]?.kind ?? "BROKEN") === "BROKEN").length;
+  const summaryWhat =
+    mode === "slab"
+      ? selectedSlab
+        ? `${selectedSlab.stoneName} · ${selectedSlab.label}`
+        : null
+      : selectedBatch
+        ? `${selectedBatch.stoneName} · ${selectedBatch.arrived}`
+        : null;
+  const summaryCause = BREAK_CAUSES.find((c) => c.code === breakCause)?.labelRu ?? null;
+
   return (
+    <div className="xl:grid xl:grid-cols-[minmax(0,760px)_320px] xl:items-start xl:gap-6">
+    <div className="min-w-0">
+    {before}
     <form action={formAction} className="flex flex-col gap-6">
       {topMessages.length > 0 && (
         <Alert variant="danger" title="Проверьте данные">
@@ -688,5 +715,48 @@ export default function BreakForm({
         )}
       </div>
     </form>
+    </div>
+    <aside className="sticky top-6 hidden flex-col gap-4 xl:flex">
+      {aside}
+      <Card>
+        <h2 className="text-base font-semibold text-ink">Сводка</h2>
+        <dl className="mt-3 flex flex-col gap-3 text-sm">
+          <div>
+            <dt className="text-xs font-medium text-ink-2">Что разбиваем</dt>
+            <dd className="mt-0.5 text-ink">
+              {mode === "slab" ? "Плита" : "Бой в партии"}
+              {summaryWhat ? (
+                <span className="block font-mono text-sm">{summaryWhat}</span>
+              ) : (
+                <span className="block text-ink-2">ещё не выбрано</span>
+              )}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-xs font-medium text-ink-2">Кусков</dt>
+            <dd className="tnum text-ink">
+              {rowIds.length}
+              {rowIds.length > 0 && (
+                <span className="text-ink-2">
+                  {" "}
+                  · бой {summaryBroken}, остаток {rowIds.length - summaryBroken}
+                </span>
+              )}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-xs font-medium text-ink-2">Площадь, м²</dt>
+            <dd className="tnum text-ink">
+              {summaryArea > 0 ? summaryArea.toFixed(3).replace(".", ",") : "—"}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-xs font-medium text-ink-2">Причина</dt>
+            <dd className="text-right text-ink">{summaryCause ?? "—"}</dd>
+          </div>
+        </dl>
+      </Card>
+    </aside>
+    </div>
   );
 }

@@ -234,19 +234,11 @@ export default async function RazbitPage({
     batchesCap.shown,
   );
 
-  return (
-    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
-      <header className="mb-6">
-        <h1 className="text-display font-semibold text-ink">
-          Разбить камень
-        </h1>
-        <p className="mt-1 text-sm text-ink-2">
-          Бой или распил: система всегда отражает реальное состояние склада.
-        </p>
-      </header>
-
-      {/* W10-A — two doors for §6.4 (photo+AI stays in Telegram; form below = manual). */}
-      <Card className="mb-6 border-honey">
+  // W10-A — two doors for §6.4 (photo+AI stays in Telegram; form below = manual).
+  // ТЗ №20 §8: на телефоне/планшете — сверху страницы; на широком экране
+  // (≥1280px) — в правой колонке над сводкой формы.
+  const twoWays = (
+      <Card className="border-honey">
         <h2 className="text-base font-semibold text-ink">Два пути (сценарий 6.4)</h2>
         <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink">
           <li>
@@ -285,7 +277,28 @@ export default async function RazbitPage({
           </li>
         </ol>
       </Card>
+  );
 
+  return (
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:max-w-[1104px] xl:p-8">
+      <header className="mb-6">
+        <h1 className="text-display font-semibold text-ink">
+          Разбить камень
+        </h1>
+        <p className="mt-1 text-sm text-ink-2">
+          Бой или распил: система всегда отражает реальное состояние склада.
+        </p>
+      </header>
+
+      <div className="mb-6 xl:hidden">{twoWays}</div>
+
+      <BreakForm
+        slabs={slabs}
+        batches={batches}
+        blocks={blocks}
+        aside={twoWays}
+        before={
+          <>
       {ok && okText && (
         <Alert variant="success" title={okText} className="mb-6">
           <p>
@@ -356,7 +369,9 @@ export default async function RazbitPage({
         </Alert>
       )}
 
-      <BreakForm slabs={slabs} batches={batches} blocks={blocks} />
+          </>
+        }
+      />
     </main>
   );
 }
