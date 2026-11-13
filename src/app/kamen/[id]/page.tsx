@@ -581,7 +581,7 @@ export default async function KamenPage({
 
   if (!st) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <h1 className="text-display font-semibold text-ink">
           Камень не найден
         </h1>
@@ -739,7 +739,7 @@ export default async function KamenPage({
   }));
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <Link
         href="/poisk"
         className="text-sm font-medium text-gold-deep hover:underline"

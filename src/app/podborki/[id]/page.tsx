@@ -32,7 +32,7 @@ export default async function CollectionStaffPage({
   const caps = await getCapabilities();
   if (!caps.canManageCollections) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -45,7 +45,7 @@ export default async function CollectionStaffPage({
   const open = !c.closedAt;
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="mb-2 text-sm">
         <Link href="/podborki" className="text-gold-deep underline">
           ← Все подборки

@@ -24,7 +24,7 @@ export default async function ShipmentDocPage({
   const caps = await getCapabilities();
   if (!caps.canSeeShipments) {
     return (
-      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -42,7 +42,7 @@ export default async function ShipmentDocPage({
   if (!doc) notFound();
 
   return (
-    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       {/* Экранная шапка — при печати скрыта. */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
         <Link href="/otgruzki" className="text-sm text-ink-2 underline">

@@ -29,7 +29,7 @@ export default function LocaleSwitch({
           value={l}
           aria-pressed={l === locale}
           className={
-            "min-h-11 rounded-field border px-3 text-sm font-semibold transition " +
+            "min-h-11 rounded-field border px-3 text-sm font-medium transition-colors duration-150 " +
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold " +
             (l === locale
               ? "border-gold bg-honey-soft text-ink"

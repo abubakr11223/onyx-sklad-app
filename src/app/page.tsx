@@ -173,7 +173,7 @@ export default async function Home() {
   );
 
   return (
-    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-8">
         <h1 className="text-display font-semibold text-ink">
           Складская система

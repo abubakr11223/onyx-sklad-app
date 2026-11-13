@@ -45,7 +45,7 @@ export default async function ShourumPage({
   const caps = await getCapabilities();
   if (!caps.canSeeShowroom) {
     return (
-      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -220,7 +220,7 @@ export default async function ShourumPage({
       : "";
 
   return (
-    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">

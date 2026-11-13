@@ -37,7 +37,7 @@ export default async function PriemkaEditBatchPage({
   const caps = await getCapabilities();
   if (!caps.canManageWarehouse) {
     return (
-      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -143,7 +143,7 @@ export default async function PriemkaEditBatchPage({
   );
 
   return (
-    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">
           Правка партии

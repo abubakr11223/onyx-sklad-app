@@ -28,7 +28,7 @@ export default async function MyLeadsPage() {
   const [caps, me] = await Promise.all([getCapabilities(), getCurrentUser()]);
   if (!caps.requestsRouteToManager || !me) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -36,7 +36,7 @@ export default async function MyLeadsPage() {
   const leads = await loadMyLeads(db, me.id);
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">Мои заявки</h1>
         <p className="mt-1 text-sm text-ink-2">

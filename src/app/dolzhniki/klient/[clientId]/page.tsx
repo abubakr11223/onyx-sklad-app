@@ -40,7 +40,7 @@ export default async function ClientPaymentPage({
   const actorId = await currentActorId();
   if (!actorId || (!caps.canSeeDebts && !caps.canSell)) {
     return (
-      <main className="mx-auto max-w-xl p-4">
+      <main className="max-w-xl p-4 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -72,7 +72,7 @@ export default async function ClientPaymentPage({
   );
 
   return (
-    <main className="mx-auto max-w-xl p-4 pb-12">
+    <main className="max-w-xl p-4 pb-12 md:p-6 xl:p-8">
       <Link href="/dolzhniki" className="text-sm text-honey-ink hover:underline">
         ← Должники
       </Link>

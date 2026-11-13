@@ -635,7 +635,7 @@ export default async function PoiskPage({
     showroomSlabsMatched.length + showroomPiecesMatched.length;
 
   return (
-    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">
           Поиск камня
@@ -1206,7 +1206,7 @@ export default async function PoiskPage({
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
-                        <h3 className="font-semibold text-ink transition group-hover:text-gold-deep">
+                        <h3 className="font-semibold text-ink transition-colors duration-150 group-hover:text-honey-ink">
                           {t.st.name}
                         </h3>
                         <span className="text-sm text-ink-2">
@@ -1281,7 +1281,7 @@ export default async function PoiskPage({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         aria-hidden="true"
-                        className="hidden text-ink-3 transition group-hover:translate-x-0.5 group-hover:text-gold-deep sm:block"
+                        className="hidden text-ink-3 transition-colors duration-150 group-hover:text-honey-ink sm:block"
                       >
                         <path d="M9 6l6 6-6 6" />
                       </svg>

@@ -49,7 +49,7 @@ export default function StoneTile({
         ? t.inShowroom
         : t.outOfStockOrder;
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-paper-2 shadow-card transition hover:border-gold">
+    <article className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-marble transition-colors duration-150 hover:border-line-strong">
       <Link
         href={to}
         className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"

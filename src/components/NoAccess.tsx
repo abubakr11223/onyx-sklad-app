@@ -22,7 +22,7 @@ export default async function NoAccess() {
       <ul className="mx-auto mt-5 flex max-w-md flex-col gap-2">
         {sections.map((section) => {
           const cls =
-            "flex min-h-11 items-center gap-2.5 rounded-field border border-line bg-paper px-4 text-left text-ink transition hover:border-gold hover:text-gold-deep";
+            "flex min-h-11 items-center gap-2.5 rounded-field border border-line bg-marble px-4 text-left text-ink transition-colors duration-150 hover:border-honey hover:text-honey-ink";
           const body = (
             <>
               <section.Icon

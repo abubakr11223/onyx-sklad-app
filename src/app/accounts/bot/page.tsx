@@ -41,7 +41,7 @@ export default async function BotPage({
   const me = await getRealSessionUser();
   if (!me || me.role !== "OWNER") {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -67,7 +67,7 @@ export default async function BotPage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="text-sm">
         <Link href="/accounts" className="text-gold-deep underline">
           ← Сотрудники

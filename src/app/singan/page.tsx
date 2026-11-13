@@ -63,7 +63,7 @@ export default async function SinganPage({
   const caps = await getCapabilities();
   if (!caps.canManageWarehouse) {
     return (
-      <main className="mx-auto max-w-xl p-4 pb-12">
+      <main className="max-w-xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -78,7 +78,7 @@ export default async function SinganPage({
   // ── Yakuniy panel: sof muvaffaqiyat yoki piece OK + photo yo'q (photoWarn) ──
   if (ok) {
     return (
-      <main className="mx-auto max-w-xl p-4 pb-12">
+      <main className="max-w-xl p-4 pb-12 md:p-6 xl:p-8">
         <PageHeader />
         <Alert
           variant={photoWarn ? "warning" : "success"}
@@ -129,7 +129,7 @@ export default async function SinganPage({
   if (!draft) {
     const hadD = Boolean(first(sp.d));
     return (
-      <main className="mx-auto max-w-xl p-4 pb-12">
+      <main className="max-w-xl p-4 pb-12 md:p-6 xl:p-8">
         <PageHeader subtitle="Чертёж ИИ и ввод размеров по фото" />
         <Alert
           variant={hadD ? "warning" : "info"}
@@ -239,7 +239,7 @@ export default async function SinganPage({
   );
 
   return (
-    <main className="mx-auto max-w-xl p-4 pb-12">
+    <main className="max-w-xl p-4 pb-12 md:p-6 xl:p-8">
       <PageHeader subtitle="AI распознал форму куска. Измерьте каждую сторону рулеткой и введите размеры в см — номера сторон совпадают с чертежом." />
 
       {/* W3-T2 — ошибки больше не редиректят на ?err= (введённое стиралось):

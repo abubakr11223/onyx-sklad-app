@@ -11,7 +11,7 @@ export default function Loading() {
     <main
       aria-busy="true"
       aria-label="Загрузка"
-      className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12"
+      className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8"
     >
       <div className="mb-8">
         <Skeleton className="h-8 w-72 max-w-full" />

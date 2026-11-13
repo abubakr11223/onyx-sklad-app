@@ -173,8 +173,8 @@ const initialState: SaleFormState = { errors: {}, conflict: null };
 // Button: левое выравнивание, две строки. Стиль ввода/касания — бренд-токены.
 const cardBtnCls =
   "w-full rounded-card border border-line bg-marble p-3 text-left " +
-  "transition-colors duration-150 hover:-translate-y-0.5 hover:border-honey active:translate-y-0 " +
-  "disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none disabled:translate-y-0";
+  "transition-colors duration-150 hover:border-honey hover:bg-row-hover " +
+  "disabled:opacity-40 disabled:pointer-events-none";
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;

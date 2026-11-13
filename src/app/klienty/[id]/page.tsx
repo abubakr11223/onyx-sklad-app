@@ -46,7 +46,7 @@ export default async function ClientCardPage({
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -90,7 +90,7 @@ export default async function ClientCardPage({
   const volLine = formatVolumeLine(card.volume);
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="mb-3">
         <Link href="/klienty" className="text-sm font-medium text-honey-ink hover:underline">
           ← Клиенты

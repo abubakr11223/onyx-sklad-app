@@ -136,7 +136,7 @@ export default async function ProdazhaPage({
   const caps = await getCapabilities();
   if (!caps.canSell) {
     return (
-      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -701,7 +701,7 @@ export default async function ProdazhaPage({
     .map((st) => ({ ...st, batches: st.batches.filter((b) => b.hasFree || b.needsCheck) }));
 
   return (
-    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:max-w-[1168px] xl:p-8 xl:[&>*]:max-w-[760px]">
+    <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:max-w-[1168px] xl:p-8 xl:[&>*]:max-w-[760px]">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">
           Продажа и списание

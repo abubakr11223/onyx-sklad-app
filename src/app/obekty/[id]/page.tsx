@@ -54,7 +54,7 @@ export default async function SiteCardPage({
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -77,7 +77,7 @@ export default async function SiteCardPage({
   const err = first(sp.err);
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
       <p className="mb-3">
         <Link href="/obekty" className="text-sm font-medium text-honey-ink hover:underline">
           ← Объекты

@@ -198,7 +198,7 @@ export default async function IstoriyaPage() {
   const caps = await getCapabilities();
   if (!caps.canSeeHistory) {
     return (
-      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -222,7 +222,7 @@ export default async function IstoriyaPage() {
   const lookups = await loadHistoryLookups(entries);
 
   return (
-    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">
           История

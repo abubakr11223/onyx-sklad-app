@@ -41,7 +41,7 @@ export default async function ObektyPage({
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
     return (
-      <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -86,7 +86,7 @@ export default async function ObektyPage({
   ]);
 
   return (
-    <main className="mx-auto max-w-6xl p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[1440px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
         <h1 className="text-display font-semibold text-ink">Объекты</h1>
         <p className="mt-1 text-sm text-ink-2">

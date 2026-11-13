@@ -33,7 +33,7 @@ export default async function AddToCollectionPage({
   const caps = await getCapabilities();
   if (!caps.canManageCollections) {
     return (
-      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -42,7 +42,7 @@ export default async function AddToCollectionPage({
   const hit = await findByCode(db, sp.code ?? "");
   if (!hit) {
     return (
-      <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+      <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
         <Alert variant="danger">Камень с таким кодом не найден.</Alert>
         <Link href="/katalog" className={buttonClass("secondary", "md", "mt-4")}>
           Открыть каталог
@@ -66,7 +66,7 @@ export default async function AddToCollectionPage({
   const kind = hit.kind !== "STONE_TYPE" ? STONE_CODE_KIND_RU[hit.kind] : null;
 
   return (
-    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+    <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       <header className="mb-4">
         <p className="text-xs font-medium text-ink-2">
           В подборку

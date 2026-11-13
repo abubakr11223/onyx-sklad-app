@@ -82,7 +82,7 @@ export default async function QrPrintPage({ searchParams }: Props) {
   const caps = await getCapabilities();
   if (!caps.canPrintQr) {
     return (
-      <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8">
+      <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8">
         <NoAccess />
       </main>
     );
@@ -107,7 +107,7 @@ export default async function QrPrintPage({ searchParams }: Props) {
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-4 pb-12 sm:p-8 print:m-0 print:max-w-none print:p-0">
+    <main className="max-w-5xl p-4 pb-12 md:p-6 xl:p-8 print:m-0 print:max-w-none print:p-0">
       <style>{LABEL_CSS + (single ? PRINT_LABEL_CSS : PRINT_A4_CSS)}</style>
 
       <div className="mb-6 print:hidden">
