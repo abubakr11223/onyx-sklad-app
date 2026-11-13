@@ -244,7 +244,36 @@ export default async function IstoriyaPage() {
         // ТЗ №20 §8: плотная таблица (строка ~36px, 13px) — дата, кто,
         // действие, объект, было → стало (моно, «было» зачёркнуто ink-3).
         // На телефоне — карточки (§9), таблица прокручивается внутри рамки.
-        <div className="onyx-table-wrap">
+        <>
+        {/* Телефон (<768px): карточки — таблица не помещается по ширине. */}
+        <ul className="flex flex-col gap-2 md:hidden">
+          {entries.map((e) => {
+            const d = describeHistoryEntry(e, lookups);
+            const actor = e.user
+              ? `${e.user.name} · ${roleLabel(e.user.role as Role)}`
+              : "Система";
+            return (
+              <li key={e.id} className="rounded-card border border-line bg-marble p-3 text-[13px] leading-[18px]">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={actionVariant(e.action)}>{actionLabelRu(e.action)}</Badge>
+                  <span className="tnum text-ink-2">{formatTashkentDateTime(e.createdAt)}</span>
+                </div>
+                <p className="mt-2 font-medium text-ink">{d.summary}</p>
+                {d.changes.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {d.changes.map((c, i) => (
+                      <li key={i}>
+                        <ChangeLine text={c} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-1 text-ink-2">{actor}</p>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="onyx-table-wrap hidden md:block">
           <table className="onyx-table text-[13px] leading-[18px]">
             <thead>
               <tr>
@@ -264,7 +293,6 @@ export default async function IstoriyaPage() {
                   <tr key={e.id} className="align-top">
                     <td className="tnum whitespace-nowrap py-2 pl-3 pr-2 text-ink-2">
                       {formatTashkentDateTime(e.createdAt)}
-                      <span className="mt-0.5 block text-ink-2 md:hidden">{actor}</span>
                     </td>
                     <td className="hidden py-2 pr-2 text-ink-2 md:table-cell">{actor}</td>
                     <td className="py-2 pr-2">
@@ -290,6 +318,7 @@ export default async function IstoriyaPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </main>
   );

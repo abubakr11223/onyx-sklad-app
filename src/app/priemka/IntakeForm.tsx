@@ -22,6 +22,7 @@ import {
   type IntakeInput,
 } from "@/lib/validators/intake";
 import { parseMutationId } from "@/lib/intake-receipt";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field, { inputClass } from "@/components/ui/Field";
@@ -710,22 +711,16 @@ export default function IntakeForm({
       {/* ── Вид камня ── */}
       <Card>
         <h2 className="mb-3 text-base font-semibold text-ink"><Step n={1} />Вид камня</h2>
-        <div className="mb-4 flex gap-2">
-          <Button
-            variant={isNewType ? "secondary" : "primary"}
-            onClick={() => setIsNewType(false)}
-            className="flex-1"
-          >
-            Из каталога
-          </Button>
-          <Button
-            variant={isNewType ? "primary" : "secondary"}
-            onClick={() => setIsNewType(true)}
-            className="flex-1"
-          >
-            Новый вид
-          </Button>
-        </div>
+        <SegmentedControl
+          className="mb-4"
+          label="Вид камня"
+          value={isNewType ? "new" : "catalog"}
+          onChange={(v) => setIsNewType(v === "new")}
+          options={[
+            { value: "catalog", label: "Из каталога" },
+            { value: "new", label: "Новый вид" },
+          ]}
+        />
 
         {isNewType ? (
           <div className="flex flex-col gap-4">

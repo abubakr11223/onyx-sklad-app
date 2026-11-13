@@ -278,7 +278,7 @@ describe("IntakeForm — черновик и hydrated-гейт", () => {
     await flushDraftGate();
 
     // Пользователь переключается на «Новый вид» и вводит название.
-    fireEvent.click(screen.getByRole("button", { name: "Новый вид" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Новый вид" }));
     const name = await screen.findByPlaceholderText(/травертин noce/i);
     fireEvent.change(name, { target: { value: "Оникс Round-Trip" } });
 

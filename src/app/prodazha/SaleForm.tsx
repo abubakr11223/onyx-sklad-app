@@ -667,13 +667,9 @@ export default function SaleForm({
               return (
                 <li key={st.id}>
                   <button type="button" className={cardBtnCls} onClick={() => setStone(st)}>
+                    {/* Буква-монограмма вместо фото убрана (unslop / ТЗ №20 §2:
+                        без декоративных плашек) — фото у вида здесь нет. */}
                     <span className="flex items-center gap-3">
-                      <span
-                        aria-hidden="true"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-honey-soft text-base font-semibold text-honey-ink"
-                      >
-                        {(st.rockType || st.name).trim().charAt(0).toUpperCase()}
-                      </span>
                       <span className="min-w-0">
                         <span className="block text-base font-semibold text-ink">
                           {st.name}{" "}
