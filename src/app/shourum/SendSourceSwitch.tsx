@@ -1,22 +1,24 @@
 "use client";
 
 // ТЗ №20 §8 «Шоу-рум»: источник отправки — сегмент-контрол «Из партии /
-// Готовая плита · бой». Переключатель только показывает одну из двух
-// существующих серверных форм; сами формы (поля, action) приходят пропами
-// без изменений. Обе остаются в DOM (скрытая — атрибутом hidden).
+// Готовая плита / Бой». Переключатель только показывает одну из трёх
+// серверных форм (поля, action приходят пропами; все шлют то же действие
+// sendToShowroomAction). Все остаются в DOM (скрытые — атрибутом hidden).
 
 import { useState, type ReactNode } from "react";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 
-type Source = "batch" | "unit";
+type Source = "batch" | "slab" | "piece";
 
 export default function SendSourceSwitch({
   batchForm,
-  unitForm,
+  slabForm,
+  pieceForm,
   initial = "batch",
 }: {
   batchForm: ReactNode;
-  unitForm: ReactNode;
+  slabForm: ReactNode;
+  pieceForm: ReactNode;
   initial?: Source;
 }) {
   const [source, setSource] = useState<Source>(initial);
@@ -29,16 +31,20 @@ export default function SendSourceSwitch({
         onChange={setSource}
         options={[
           { value: "batch", label: "Из партии" },
-          { value: "unit", label: "Готовая плита / бой" },
+          { value: "slab", label: "Готовая плита" },
+          { value: "piece", label: "Бой" },
         ]}
         hint={
           source === "batch"
             ? "Плита выделяется из партии и сразу уходит на витрину."
-            : "Уже выделенная плита или кусок боя / остатка."
+            : source === "slab"
+              ? "Уже выделенная плита."
+              : "Кусок боя или остаток."
         }
       />
       <div hidden={source !== "batch"}>{batchForm}</div>
-      <div hidden={source !== "unit"}>{unitForm}</div>
+      <div hidden={source !== "slab"}>{slabForm}</div>
+      <div hidden={source !== "piece"}>{pieceForm}</div>
     </>
   );
 }

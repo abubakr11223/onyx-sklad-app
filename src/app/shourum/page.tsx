@@ -279,7 +279,7 @@ export default async function ShourumPage({
               было написано: «если форма не разобрала выбор…»). Теперь значение
               разбирает сервер. */}
           <SendSourceSwitch
-            initial={preUnit ? "unit" : "batch"}
+            initial={preUnit.startsWith("PIECE:") ? "piece" : preUnit ? "slab" : "batch"}
             batchForm={
             <form action={sendToShowroomAction} className="flex flex-col gap-3">
               <input type="hidden" name="source" value="BATCH" />
@@ -330,18 +330,15 @@ export default async function ShourumPage({
               </Button>
             </form>
             }
-            unitForm={
-            <form
-              action={sendToShowroomAction}
-              className="flex flex-col gap-3"
-            >
+            slabForm={
+            <form action={sendToShowroomAction} className="flex flex-col gap-3">
               <input type="hidden" name="source" value="UNIT" />
-              <Field id="unitPick" label="Готовая плита / бой-остаток">
+              <Field id="unitPickSlab" label="Готовая плита">
                 <select
                   name="unitPick"
                   required
                   className={inputClass}
-                  defaultValue={preUnit}
+                  defaultValue={preUnit.startsWith("SLAB:") ? preUnit : ""}
                 >
                   <option value="" disabled>
                     Выберите…
@@ -352,6 +349,41 @@ export default async function ShourumPage({
                       {s.landmark})
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field
+                id="standNoteSlab"
+                name="standNote"
+                label="Стенд / комментарий"
+                placeholder="Витрина у входа"
+                className={inputClass}
+              />
+              {availSlabs.length === 0 && (
+                <p className="text-xs text-ink-2">Готовых плит на складе нет.</p>
+              )}
+              <Button
+                type="submit"
+                variant="secondary"
+                className="w-full sm:w-auto sm:self-start"
+                disabled={availSlabs.length === 0}
+              >
+                Отправить в шоу-рум
+              </Button>
+            </form>
+            }
+            pieceForm={
+            <form action={sendToShowroomAction} className="flex flex-col gap-3">
+              <input type="hidden" name="source" value="UNIT" />
+              <Field id="unitPickPiece" label="Бой / остаток">
+                <select
+                  name="unitPick"
+                  required
+                  className={inputClass}
+                  defaultValue={preUnit.startsWith("PIECE:") ? preUnit : ""}
+                >
+                  <option value="" disabled>
+                    Выберите…
+                  </option>
                   {availPieces.map((p) => (
                     <option key={p.id} value={`PIECE:${p.id}`}>
                       [{p.kind === "BROKEN" ? "бой" : "ост."}]{" "}
@@ -361,16 +393,20 @@ export default async function ShourumPage({
                 </select>
               </Field>
               <Field
-                id="standNote"
+                id="standNotePiece"
                 name="standNote"
                 label="Стенд / комментарий"
                 placeholder="Витрина у входа"
                 className={inputClass}
               />
+              {availPieces.length === 0 && (
+                <p className="text-xs text-ink-2">Боя и остатков на складе нет.</p>
+              )}
               <Button
                 type="submit"
                 variant="secondary"
                 className="w-full sm:w-auto sm:self-start"
+                disabled={availPieces.length === 0}
               >
                 Отправить в шоу-рум
               </Button>
