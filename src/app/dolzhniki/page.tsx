@@ -481,8 +481,9 @@ export default async function DolzhnikiPage({
 
       {/* Filters §9.1 */}
       <Card className="mb-6">
-        <form method="get" className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <form method="get" className="grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap sm:items-end">
           {tab === "repaid" && <input type="hidden" name="tab" value="repaid" />}
+          <div className="col-span-2 sm:contents">
           <Field id="q" label="Клиент">
             <input
               id="q"
@@ -493,6 +494,7 @@ export default async function DolzhnikiPage({
               className={inputClass}
             />
           </Field>
+          </div>
           <Field id="managerId" label="Менеджер">
             <select
               id="managerId"
@@ -521,7 +523,7 @@ export default async function DolzhnikiPage({
             </select>
           </Field>
           {tab === "active" && (
-            <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
+            <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
                 name="overdue"
@@ -532,7 +534,7 @@ export default async function DolzhnikiPage({
               Только просроченные
             </label>
           )}
-          <Button type="submit" size="sm" variant="secondary">
+          <Button type="submit" size="sm" variant="secondary" className="col-span-2">
             Применить
           </Button>
         </form>

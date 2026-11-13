@@ -237,9 +237,8 @@ export default async function RazbitPage({
   // W10-A — two doors for §6.4 (photo+AI stays in Telegram; form below = manual).
   // ТЗ №20 §8: на телефоне/планшете — сверху страницы; на широком экране
   // (≥1280px) — в правой колонке над сводкой формы.
-  const twoWays = (
-      <Card className="border-honey">
-        <h2 className="text-base font-semibold text-ink">Два пути (сценарий 6.4)</h2>
+  const twoWaysTitle = "Два пути (сценарий 6.4)";
+  const twoWaysList = (
         <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink">
           <li>
             <span className="font-semibold text-ink">
@@ -276,6 +275,11 @@ export default async function RazbitPage({
             </p>
           </li>
         </ol>
+  );
+  const twoWays = (
+      <Card className="border-honey">
+        <h2 className="text-base font-semibold text-ink">{twoWaysTitle}</h2>
+        {twoWaysList}
       </Card>
   );
 
@@ -290,7 +294,13 @@ export default async function RazbitPage({
         </p>
       </header>
 
-      <div className="mb-6 xl:hidden">{twoWays}</div>
+      {/* Телефон/планшет: подсказка свёрнута — форма видна сразу (ТЗ №20 §9). */}
+      <details className="mb-6 rounded-card border border-honey bg-marble p-4 xl:hidden">
+        <summary className="min-h-6 cursor-pointer text-base font-semibold text-ink">
+          {twoWaysTitle}
+        </summary>
+        {twoWaysList}
+      </details>
 
       <BreakForm
         slabs={slabs}

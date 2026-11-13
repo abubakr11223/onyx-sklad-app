@@ -287,7 +287,7 @@ export default function ReserveForm({
       )}
 
       <div>
-        <p className="mb-1.5 text-sm font-semibold text-ink">
+        <p className="mb-1 text-xs font-medium text-ink-2">
           Клиент <Req />
         </p>
         <ClientPicker value={client} onChange={setClient} error={e.customerName} />

@@ -183,14 +183,18 @@ export default async function OtgruzkiPage({
           GET-форма: фильтр остаётся в ссылке — её можно сохранить и переслать. */}
       <form method="get" className="mb-4">
         <input type="hidden" name="tab" value={tab} />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Field
-            id="f-client"
-            name="client"
-            label="Клиент"
-            placeholder="имя содержит…"
-            defaultValue={filters.client ?? ""}
-          />
+        {/* Телефон: две колонки, клиент — на всю ширину (фильтры не
+            занимают весь экран над списком задач). */}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <div className="col-span-2 lg:col-span-1">
+            <Field
+              id="f-client"
+              name="client"
+              label="Клиент"
+              placeholder="имя содержит…"
+              defaultValue={filters.client ?? ""}
+            />
+          </div>
           <div>
             <label htmlFor="f-kind" className="mb-1 block text-xs font-medium text-ink-2">
               Тип

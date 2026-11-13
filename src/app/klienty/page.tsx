@@ -102,8 +102,9 @@ export default async function KlientyPage({
       </header>
 
       <Card className="mb-4">
-        <form className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <Field id="q" label="Поиск" className="sm:min-w-[12rem] sm:flex-1">
+        <form className="grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="col-span-2 sm:min-w-[12rem] sm:flex-1">
+          <Field id="q" label="Поиск">
             <input
               id="q"
               name="q"
@@ -112,6 +113,7 @@ export default async function KlientyPage({
               className={inputClass}
             />
           </Field>
+          </div>
           <Field id="type" label="Тип">
             <select
               id="type"
@@ -141,7 +143,7 @@ export default async function KlientyPage({
               </select>
             </Field>
           )}
-          <Button type="submit" className="sm:mb-0.5">
+          <Button type="submit" className="col-span-2 sm:mb-0.5">
             Найти
           </Button>
         </form>

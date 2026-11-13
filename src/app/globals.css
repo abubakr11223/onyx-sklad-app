@@ -176,7 +176,14 @@
   .onyx-table tbody tr:hover {
     background: var(--color-row-hover);
   }
-  /* Выбранная строка — honey-soft + полоса мёда 3px слева. */
+  /* Много колонок: на телефоне не сжимаем — таблица прокручивается
+     внутри рамки (.onyx-table-wrap), страница не уезжает вбок. */
+  @media (max-width: 767px) {
+    .onyx-table-wide {
+      min-width: 640px;
+    }
+  }
+    /* Выбранная строка — honey-soft + полоса мёда 3px слева. */
   .onyx-table tr[aria-selected="true"],
   .onyx-table tr[data-selected="true"] {
     background: var(--color-honey-soft);

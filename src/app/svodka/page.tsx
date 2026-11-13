@@ -243,7 +243,7 @@ function RatingSection({
       ) : (
         <>
           <div className="onyx-table-wrap">
-            <table className="onyx-table">
+            <table className="onyx-table onyx-table-wide">
               <thead>
                 <tr>
                   <th className="py-2 pl-3 text-right font-medium">#</th>
@@ -315,7 +315,7 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
         <p className="text-sm text-ink-2">Нет продаж и платежей за период.</p>
       ) : (
         <div className="onyx-table-wrap">
-          <table className="onyx-table">
+          <table className="onyx-table onyx-table-wide">
             <thead>
               <tr>
                 <th className="py-2 pl-3 font-medium">Менеджер</th>
@@ -433,7 +433,7 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
         </p>
       ) : (
         <div className="onyx-table-wrap">
-          <table className="onyx-table">
+          <table className="onyx-table onyx-table-wide">
             <thead>
               <tr>
                 <th className="py-2 pl-3 font-medium">Партнёр</th>
@@ -494,7 +494,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
         <p className="text-sm text-ink-2">За период карточки по QR не открывали.</p>
       ) : (
         <div className="onyx-table-wrap">
-          <table className="onyx-table">
+          <table className="onyx-table onyx-table-wide">
             <thead>
               <tr>
                 <th className="py-2 pl-3 font-medium">#</th>
@@ -744,7 +744,7 @@ export default async function SvodkaPage({
           </p>
         ) : (
           <div className="onyx-table-wrap">
-            <table className="onyx-table">
+            <table className="onyx-table onyx-table-wide">
               <thead>
                 <tr>
                   <th className="py-2 pl-3 text-right">#</th>
