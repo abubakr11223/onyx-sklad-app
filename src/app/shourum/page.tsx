@@ -27,6 +27,7 @@ import {
   sampleFromShowroomAction,
 } from "./actions";
 import ShowroomSellDialog from "./ShowroomSellDialog";
+import SendSourceSwitch from "./SendSourceSwitch";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Шоу-рум — Onyx" };
@@ -271,104 +272,111 @@ export default async function ShourumPage({
               почти нет (ADR-004), поэтому раньше в списке была одна плита и
               отправлять было нечего. Здесь плита выделяется из партии и уходит
               на витрину одной транзакцией. */}
-          <form action={sendToShowroomAction} className="flex flex-col gap-3">
-            <input type="hidden" name="source" value="BATCH" />
-            <Field id="batchId" label="Из партии">
-              <select
-                name="batchId"
-                required
-                className={inputClass}
-                defaultValue={preBatch}
-              >
-                <option value="" disabled>
-                  Выберите партию…
-                </option>
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field
-              id="qty"
-              name="qty"
-              label="Сколько плит"
-              inputMode="numeric"
-              placeholder="1"
-              defaultValue="1"
-              className={inputClass}
-            />
-            <Field
-              id="standNoteBatch"
-              name="standNote"
-              label="Стенд / комментарий"
-              placeholder="Витрина у входа"
-              className={inputClass}
-            />
-            {batches.length === 0 && (
-              <p className="text-xs text-ink-3">
-                Партий со свободными плитами нет.
-              </p>
-            )}
-            <Button
-              type="submit"
-              className="w-full sm:w-auto sm:self-start"
-              disabled={batches.length === 0}
-            >
-              Выделить и отправить
-            </Button>
-          </form>
 
           {/* ТЗ №16 §4 — «Готовая плита» и «Бой / остаток»: уже выделенные
               единицы. Раньше здесь стоял select `unitPick`, а действие ждало
               targetType/unitId, которые никто не заполнял (в подсказке так и
               было написано: «если форма не разобрала выбор…»). Теперь значение
               разбирает сервер. */}
-          <form
-            action={sendToShowroomAction}
-            className="mt-5 flex flex-col gap-3 border-t border-line pt-4"
-          >
-            <input type="hidden" name="source" value="UNIT" />
-            <Field id="unitPick" label="Готовая плита / бой-остаток">
-              <select
-                name="unitPick"
-                required
+          <SendSourceSwitch
+            initial={preUnit ? "unit" : "batch"}
+            batchForm={
+            <form action={sendToShowroomAction} className="flex flex-col gap-3">
+              <input type="hidden" name="source" value="BATCH" />
+              <Field id="batchId" label="Из партии">
+                <select
+                  name="batchId"
+                  required
+                  className={inputClass}
+                  defaultValue={preBatch}
+                >
+                  <option value="" disabled>
+                    Выберите партию…
+                  </option>
+                  {batches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                id="qty"
+                name="qty"
+                label="Сколько плит"
+                inputMode="numeric"
+                placeholder="1"
+                defaultValue="1"
                 className={inputClass}
-                defaultValue={preUnit}
+              />
+              <Field
+                id="standNoteBatch"
+                name="standNote"
+                label="Стенд / комментарий"
+                placeholder="Витрина у входа"
+                className={inputClass}
+              />
+              {batches.length === 0 && (
+                <p className="text-xs text-ink-3">
+                  Партий со свободными плитами нет.
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full sm:w-auto sm:self-start"
+                disabled={batches.length === 0}
               >
-                <option value="" disabled>
-                  Выберите…
-                </option>
-                {availSlabs.map((s) => (
-                  <option key={s.id} value={`SLAB:${s.id}`}>
-                    [Плита] {s.stoneType.name} — {s.label} (Бл. {s.block}/
-                    {s.landmark})
-                  </option>
-                ))}
-                {availPieces.map((p) => (
-                  <option key={p.id} value={`PIECE:${p.id}`}>
-                    [{p.kind === "BROKEN" ? "бой" : "ост."}]{" "}
-                    {p.stoneType.name} (Бл. {p.block}/{p.landmark})
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field
-              id="standNote"
-              name="standNote"
-              label="Стенд / комментарий"
-              placeholder="Витрина у входа"
-              className={inputClass}
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              className="w-full sm:w-auto sm:self-start"
+                Выделить и отправить
+              </Button>
+            </form>
+            }
+            unitForm={
+            <form
+              action={sendToShowroomAction}
+              className="flex flex-col gap-3"
             >
-              Отправить в шоу-рум
-            </Button>
-          </form>
+              <input type="hidden" name="source" value="UNIT" />
+              <Field id="unitPick" label="Готовая плита / бой-остаток">
+                <select
+                  name="unitPick"
+                  required
+                  className={inputClass}
+                  defaultValue={preUnit}
+                >
+                  <option value="" disabled>
+                    Выберите…
+                  </option>
+                  {availSlabs.map((s) => (
+                    <option key={s.id} value={`SLAB:${s.id}`}>
+                      [Плита] {s.stoneType.name} — {s.label} (Бл. {s.block}/
+                      {s.landmark})
+                    </option>
+                  ))}
+                  {availPieces.map((p) => (
+                    <option key={p.id} value={`PIECE:${p.id}`}>
+                      [{p.kind === "BROKEN" ? "бой" : "ост."}]{" "}
+                      {p.stoneType.name} (Бл. {p.block}/{p.landmark})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                id="standNote"
+                name="standNote"
+                label="Стенд / комментарий"
+                placeholder="Витрина у входа"
+                className={inputClass}
+              />
+              <Button
+                type="submit"
+                variant="secondary"
+                className="w-full sm:w-auto sm:self-start"
+              >
+                Отправить в шоу-рум
+              </Button>
+            </form>
+            }
+          />
           {/* Explicit per-unit send forms — reliable without client JS. */}
           <div className="mt-4 border-t border-line pt-3">
             <p className="mb-2 text-xs font-medium text-ink-2">
@@ -435,7 +443,22 @@ export default async function ShourumPage({
             <li key={it.placementId}>
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+                  <div className="flex min-w-0 gap-3">
+                  {/* ТЗ №20 §7.5 — фото 72×72; нет фото — плашка с кодом. */}
+                  {it.photoId ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={"/api/photo/" + it.photoId}
+                      alt={it.stoneLabel}
+                      loading="lazy"
+                      className="h-[72px] w-[72px] shrink-0 rounded-field object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-field bg-stone-100 px-1 text-center font-mono text-xs text-ink-2">
+                      {codeOf(it) ?? "нет фото"}
+                    </div>
+                  )}
+                  <div className="min-w-0">
                     <p className="font-semibold text-ink">{it.stoneLabel}</p>
                     {codeOf(it) && (
                       <p className="font-mono text-xs text-ink-2">
@@ -452,6 +475,7 @@ export default async function ShourumPage({
                     <p className="mt-1 text-xs text-ink-2">
                       {it.sentByName} · {formatTashkentDateTime(it.sentAt)}
                     </p>
+                  </div>
                   </div>
                   {caps.canPrintQr && codeOf(it) && (
                     <Link
@@ -488,6 +512,7 @@ export default async function ShourumPage({
                           targetType={it.targetType}
                           unitId={it.unitId}
                           stoneLabel={it.stoneLabel}
+                          photoId={it.photoId ?? null}
                         />
                       </div>
 

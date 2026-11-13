@@ -22,6 +22,8 @@ import { formatCurrencySummaryLine, formatDebtMoney } from "@/lib/debts-ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/validators/sale-payment";
 import NoAccess from "@/components/NoAccess";
 import Badge from "@/components/ui/Badge";
+import Kpi from "@/components/ui/Kpi";
+import Tabs from "@/components/ui/Tabs";
 import { buttonClass } from "@/components/ui/Button";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +32,16 @@ export const metadata: Metadata = {
   title: "Клиент — Onyx",
 };
 
+// ТЗ №20 §8 — разделы карточки по вкладкам (?tab=), по умолчанию «Продажи».
+const CLIENT_TABS = ["prodazhi", "obekty", "dolgi", "broni", "obraztsy", "podborki"] as const;
+type ClientTab = (typeof CLIENT_TABS)[number];
+
 export default async function ClientCardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ tab?: string | string[] }>;
 }) {
   const caps = await getCapabilities();
   if (!caps.canSeeClients) {
@@ -45,6 +53,8 @@ export default async function ClientCardPage({
   }
 
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const rawTab = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
   const actorId = await currentActorId();
   const card = await getClientDirectoryCard(db, {
     clientId: id,
@@ -65,6 +75,15 @@ export default async function ClientCardPage({
       ? listCollections(db, { caps, actorId, clientId: card.id, take: 50 })
       : Promise.resolve([]),
   ]);
+
+  const tab: ClientTab =
+    rawTab && (CLIENT_TABS as readonly string[]).includes(rawTab) &&
+    (rawTab !== "podborki" || caps.canManageCollections)
+      ? (rawTab as ClientTab)
+      : "prodazhi";
+  const tabHref = (t: ClientTab) =>
+    t === "prodazhi" ? `/klienty/${card.id}` : `/klienty/${card.id}?tab=${t}`;
+  const activeDebtCount = card.debts.filter((d) => d.status === "ACTIVE").length;
 
   const purchaseLine = formatCurrencySummaryLine(card.purchaseTotals);
   const debtLine = formatCurrencySummaryLine(card.debtTotals);
@@ -107,6 +126,22 @@ export default async function ClientCardPage({
         </p>
       </section>
 
+      <Tabs
+        className="mb-4"
+        label="Разделы карточки клиента"
+        items={[
+          { href: tabHref("prodazhi"), label: "Продажи", active: tab === "prodazhi", count: card.sales.length },
+          { href: tabHref("obekty"), label: "Объекты", active: tab === "obekty", count: card.sites.length },
+          { href: tabHref("dolgi"), label: "Долги", active: tab === "dolgi", count: activeDebtCount },
+          { href: tabHref("broni"), label: "Брони", active: tab === "broni", count: card.reservations.length },
+          { href: tabHref("obraztsy"), label: "Образцы", active: tab === "obraztsy", count: samples.length },
+          ...(caps.canManageCollections
+            ? [{ href: tabHref("podborki"), label: "Подборки", active: tab === "podborki", count: collections.length }]
+            : []),
+        ]}
+      />
+
+      {tab === "obekty" && (
       <section className="mb-4">
         <h2 className="mb-2 text-base font-semibold text-ink">
           Объекты ({card.sites.length})
@@ -150,7 +185,9 @@ export default async function ClientCardPage({
           </ul>
         )}
       </section>
+      )}
 
+      {tab === "prodazhi" && (
       <section className="mb-4">
         <h2 className="mb-2 text-base font-semibold text-ink">
           Продажи ({card.sales.length})
@@ -206,7 +243,9 @@ export default async function ClientCardPage({
           </ul>
         )}
       </section>
+      )}
 
+      {tab === "dolgi" && (
       <section className="mb-4">
         <h2 className="mb-2 text-base font-semibold text-ink">
           Активные долги ({card.debts.filter((d) => d.status === "ACTIVE").length})
@@ -219,7 +258,7 @@ export default async function ClientCardPage({
               <Link
                 key={c}
                 href={`/dolzhniki/klient/${card.id}?currency=${c}`}
-                className="mb-2 mr-3 inline-block text-sm font-semibold text-gold-deep underline"
+                className="mb-2 mr-3 inline-block text-sm font-semibold text-honey-ink hover:underline"
               >
                 Внести платёж клиента ({c === "UZS" ? "сум" : "$"})
               </Link>
@@ -246,7 +285,7 @@ export default async function ClientCardPage({
                   {caps.canSeeDebts && (
                     <Link
                       href="/dolzhniki"
-                      className="ml-2 text-gold-deep underline"
+                      className="ml-2 text-honey-ink hover:underline"
                     >
                       к должникам
                     </Link>
@@ -256,7 +295,9 @@ export default async function ClientCardPage({
           </ul>
         )}
       </section>
+      )}
 
+      {tab === "broni" && (
       <section className="mb-4">
         <h2 className="mb-2 text-base font-semibold text-ink">
           Активные брони ({card.reservations.length})
@@ -276,7 +317,9 @@ export default async function ClientCardPage({
           </ul>
         )}
       </section>
+      )}
 
+      {tab === "obraztsy" && (
       <section className="mb-4">
         <h2 className="mb-2 text-base font-semibold text-ink">
           Активные образцы ({samples.length})
@@ -290,12 +333,12 @@ export default async function ClientCardPage({
                 key={s.id}
                 className={
                   "rounded-card border p-3 text-sm " +
-                  (s.overdue ? "border-warning/50 bg-warning/5" : "border-line bg-paper")
+                  (s.overdue ? "border-carnelian-line bg-carnelian-bg" : "border-line bg-marble")
                 }
               >
                 <span className="font-semibold">{s.stoneLabel}</span>
                 {s.overdue && (
-                  <span className="ml-2 text-warning">просрочен</span>
+                  <Badge variant="danger" className="ml-2">просрочен</Badge>
                 )}
                 <p className="text-ink-2">
                   до {formatTashkentDate(s.returnDueDate)}
@@ -305,13 +348,14 @@ export default async function ClientCardPage({
           </ul>
         )}
         <p className="mt-2 text-sm">
-          <a href="/obraztsy" className="text-gold-deep underline">
+          <a href="/obraztsy" className="text-honey-ink hover:underline">
             Все образцы →
           </a>
         </p>
       </section>
+      )}
 
-      {caps.canManageCollections && (
+      {caps.canManageCollections && tab === "podborki" && (
         <section className="mb-4">
           <h2 className="mb-2 text-base font-semibold text-ink">
             Подборки камней ({collections.length})
@@ -319,7 +363,7 @@ export default async function ClientCardPage({
           {collections.length === 0 ? (
             <p className="text-sm text-ink-2">
               Подборок для клиента нет. Соберите в{" "}
-              <Link href="/podborki" className="text-gold-deep underline">
+              <Link href="/podborki" className="text-honey-ink hover:underline">
                 «Подборках»
               </Link>{" "}
               или кнопкой «В подборку» в каталоге.
@@ -341,7 +385,7 @@ export default async function ClientCardPage({
                       <span className="tnum">{c.likes}</span> · {formatTashkentDate(c.createdAt)}
                     </span>
                   </span>
-                  <Link href={collectionPath(c.code)} className="text-gold-deep underline">
+                  <Link href={collectionPath(c.code)} className="text-honey-ink hover:underline">
                     Ссылка клиента
                   </Link>
                 </li>
@@ -351,44 +395,5 @@ export default async function ClientCardPage({
         </section>
       )}
     </main>
-  );
-}
-
-/**
- * Итог-KPI (ТЗ №20 §7.5): подпись 12px ink-2 сверху, цифра 28px Medium,
- * вторая валюта — отдельной строкой 14px. Валюты не складываются: строка
- * formatCurrencySummaryLine уже разделена по валютам («  ·  »).
- */
-function Kpi({
-  label,
-  line,
-  danger = false,
-}: {
-  label: string;
-  line: string | number | null;
-  danger?: boolean;
-}) {
-  const parts = line == null ? [] : String(line).split("  ·  ");
-  const tone = danger && parts.length > 0 ? "text-carnelian" : "text-ink";
-  return (
-    <div className="rounded-card border border-line bg-marble p-4">
-      <p className="text-xs font-medium text-ink-2">{label}</p>
-      {parts.length === 0 ? (
-        <p className="mt-1 text-[28px] font-medium leading-9 text-ink-3">—</p>
-      ) : (
-        parts.map((p, i) => (
-          <p
-            key={i}
-            className={
-              i === 0
-                ? `tnum mt-1 text-[28px] font-medium leading-9 ${tone}`
-                : `tnum text-sm ${tone}`
-            }
-          >
-            {p}
-          </p>
-        ))
-      )}
-    </div>
   );
 }

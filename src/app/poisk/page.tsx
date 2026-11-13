@@ -539,7 +539,7 @@ export default async function PoiskPage({
         ]),
       ]
     : [];
-  const [patternStock, homogeneousFree, lowStockItems] = await Promise.all([
+  const [patternStock, homogeneousFree, lowStockItems, coverPhotos] = await Promise.all([
     loadPatternStock(db, patternBatchIds),
     canSeeExact
       ? loadBatchAvailability(
@@ -555,7 +555,25 @@ export default async function PoiskPage({
           visibleTypes.map((t) => t.st.id),
         ).catch(() => [])
       : Promise.resolve([]),
+    // ТЗ №20 §8 — миниатюра вида в результатах: последнее фото камня (вид /
+    // плита / бой). Только чтение id — картинку отдаёт /api/photo/[id].
+    visibleTypes.length > 0
+      ? db.photo
+          .findMany({
+            where: {
+              stoneTypeId: { in: visibleTypes.map((t) => t.st.id) },
+              kind: { in: ["SAMPLE", "SLAB", "PIECE"] },
+            },
+            select: { id: true, stoneTypeId: true },
+            orderBy: [{ stoneTypeId: "asc" }, { takenAt: "desc" }],
+            distinct: ["stoneTypeId"],
+          })
+          .catch(() => [])
+      : Promise.resolve([] as { id: string; stoneTypeId: string | null }[]),
   ]);
+  const coverPhotoById = new Map(
+    coverPhotos.flatMap((ph) => (ph.stoneTypeId ? [[ph.stoneTypeId, ph.id] as const] : [])),
+  );
   const lowStockById = new Map(lowStockItems.map((x) => [x.stoneTypeId, x]));
   const patternFree = canSeeExact
     ? new Map<string, SizeSearchFree>(
@@ -1167,14 +1185,24 @@ export default async function PoiskPage({
                       hover-lift). Внутри нет других интерактивных элементов. */}
                   <Link
                     href={"/kamen/" + t.st.id}
-                    className="group flex min-w-0 flex-1 items-start gap-3.5 rounded-card border border-line bg-marble p-4 transition-colors duration-150 hover:-translate-y-0.5 hover:border-honey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-travertine sm:gap-4"
+                    className="group flex min-w-0 flex-1 items-start gap-3.5 rounded-card border border-line bg-marble p-4 transition-colors duration-150 hover:border-honey focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-travertine sm:gap-4"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-field bg-stone-100 font-mono text-sm font-medium text-ink-2 sm:h-12 sm:w-12"
-                    >
-                      {monogram}
-                    </span>
+                    {coverPhotoById.has(t.st.id) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={"/api/photo/" + coverPhotoById.get(t.st.id)}
+                        alt=""
+                        loading="lazy"
+                        className="h-14 w-14 shrink-0 rounded-field border border-line bg-stone-100 object-cover sm:h-16 sm:w-16"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-field bg-stone-100 px-1 text-center font-mono text-[11px] font-medium leading-tight text-ink-2 sm:h-16 sm:w-16"
+                      >
+                        {t.st.code ?? monogram}
+                      </span>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">

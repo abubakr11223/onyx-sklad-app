@@ -18,6 +18,7 @@ import { formatCurrencySummaryLine, formatDebtMoney } from "@/lib/debts-ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/validators/sale-payment";
 import NoAccess from "@/components/NoAccess";
 import Badge from "@/components/ui/Badge";
+import Kpi from "@/components/ui/Kpi";
 import Button from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import { completeSiteAction } from "../actions";
@@ -207,44 +208,5 @@ export default async function SiteCardPage({
         )}
       </section>
     </main>
-  );
-}
-
-/**
- * Итог-KPI (ТЗ №20 §7.5): подпись 12px ink-2 сверху, цифра 28px Medium,
- * вторая валюта — отдельной строкой 14px. Валюты не складываются: строка
- * formatCurrencySummaryLine уже разделена по валютам («  ·  »).
- */
-function Kpi({
-  label,
-  line,
-  danger = false,
-}: {
-  label: string;
-  line: string | number | null;
-  danger?: boolean;
-}) {
-  const parts = line == null ? [] : String(line).split("  ·  ");
-  const tone = danger && parts.length > 0 ? "text-carnelian" : "text-ink";
-  return (
-    <div className="rounded-card border border-line bg-marble p-4">
-      <p className="text-xs font-medium text-ink-2">{label}</p>
-      {parts.length === 0 ? (
-        <p className="mt-1 text-[28px] font-medium leading-9 text-ink-3">—</p>
-      ) : (
-        parts.map((p, i) => (
-          <p
-            key={i}
-            className={
-              i === 0
-                ? `tnum mt-1 text-[28px] font-medium leading-9 ${tone}`
-                : `tnum text-sm ${tone}`
-            }
-          >
-            {p}
-          </p>
-        ))
-      )}
-    </div>
   );
 }

@@ -116,7 +116,7 @@ export default async function PriemkaPage({
   }));
 
   return (
-    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
+    <main className="mx-auto max-w-[760px] p-4 pb-12 md:p-6 xl:max-w-[1084px] xl:p-8">
       <header className="mb-6">
         <h1 className="text-display font-semibold text-ink">
           Приёмка партии

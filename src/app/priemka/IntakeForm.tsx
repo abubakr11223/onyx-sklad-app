@@ -581,13 +581,94 @@ export default function IntakeForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
+  // ТЗ №18 §4.4 — расчёт раскладки (сколько плит/м² уже разложено по
+  // локациям). Чистое производное от состояния формы: им пользуются живой
+  // счётчик под локациями и сводка справа (ТЗ №20 §8, ≥1280px).
+  const placement = (() => {
+      const rows = rowIds.map((id) => locs[id] ?? emptyLoc());
+      const tgtSlabs = Number.parseInt(effSlabsTotal, 10);
+      const tgtArea = Number.parseFloat(effAreaTotal.replace(",", "."));
+      const hasSlabsTgt = Number.isFinite(tgtSlabs) && tgtSlabs > 0;
+      const hasAreaTgt = Number.isFinite(tgtArea) && tgtArea > 0;
+      if (!hasSlabsTgt && !hasAreaTgt) return null;
+
+      const rowArea = (loc: LocValues, idx: number): number => {
+        const patRow =
+          patternsEnabled && loc.pattern !== ""
+            ? pats[Number(loc.pattern)]
+            : null;
+        if (patRow) {
+          const pa = Number.parseFloat(patRow.areaM2.replace(",", "."));
+          const ps = Number.parseInt(patRow.slabs, 10);
+          const n = effectiveLocSlabs(loc, idx);
+          return pa > 0 && ps > 0 && n > 0 ? (pa * n) / ps : 0;
+        }
+        const a = Number.parseFloat(loc.areaHereM2.replace(",", "."));
+        if (Number.isFinite(a)) return a;
+        // Единственная строка «весь приход» — сервер подставит всю площадь.
+        return rows.length === 1 && hasAreaTgt ? tgtArea : 0;
+      };
+      const placedSlabs = rows.reduce(
+        (s, l, i) => s + effectiveLocSlabs(l, i),
+        0,
+      );
+      const placedArea = rows.reduce((s, l, i) => s + rowArea(l, i), 0);
+      const slabsOk = !hasSlabsTgt || placedSlabs === tgtSlabs;
+      const areaOk = !hasAreaTgt || Math.abs(placedArea - tgtArea) <= 0.01;
+      const converged = slabsOk && areaOk;
+
+      // Недобор по узорам — только когда складчик реально раскладывает
+      // по узорам (есть строки с конкретным узором).
+      const anyPatternRow =
+        patternsEnabled && rows.some((l) => l.pattern !== "");
+      const shortfalls = anyPatternRow
+        ? patRowIds
+            .map((pid, pidx) => {
+              const p = pats[pid] ?? emptyPat();
+              const total = Number.parseInt(p.slabs, 10);
+              if (!Number.isFinite(total) || total <= 0) return null;
+              const placed = rows.reduce(
+                (s, l, i) =>
+                  l.pattern === String(pid) ? s + effectiveLocSlabs(l, i) : s,
+                0,
+              );
+              if (placed === total) return null;
+              const desc = p.description.trim();
+              return `Узор ${pidx + 1}${desc ? ` «${desc}»` : ""}: размещено ${placed} из ${total} плит`;
+            })
+            .filter((x): x is string => x !== null)
+        : [];
+
+      // ТЗ №18 §4.5 — дубль «блок + ориентир + узор»: скорее всего опечатка.
+      const seen = new Map<string, number>();
+      rows.forEach((l) => {
+        if (!l.block || !l.landmark) return;
+        const k = `${l.block}|${l.landmark}|${l.pattern}`;
+        seen.set(k, (seen.get(k) ?? 0) + 1);
+      });
+      const hasDup = [...seen.values()].some((n) => n > 1);
+
+    return {
+      tgtSlabs,
+      tgtArea,
+      hasSlabsTgt,
+      hasAreaTgt,
+      placedSlabs,
+      placedArea,
+      converged,
+      shortfalls,
+      hasDup,
+    };
+  })();
+
   return (
     <form
       ref={formRef}
       action={formAction}
       onSubmit={handleSubmit}
-      className="flex flex-col gap-6"
+      className="xl:grid xl:grid-cols-[minmax(0,760px)_300px] xl:items-start xl:gap-6"
     >
+      <div className="flex min-w-0 flex-col gap-6">
       {/* W7-A2 — same logical intake → same mutationId (de-dupe on server). */}
       <input type="hidden" name="mutationId" value={mutationId} />
       {(() => {
@@ -1210,74 +1291,22 @@ export default function IntakeForm({
 
         {/* ТЗ №18 §4.4 — живой счётчик раскладки: сошлось/не сошлось видно
             ПОКА складчик стоит у камня, а не через месяц в «Отгрузках». */}
-        {(() => {
-          const rows = rowIds.map((id) => locs[id] ?? emptyLoc());
-          const tgtSlabs = Number.parseInt(effSlabsTotal, 10);
-          const tgtArea = Number.parseFloat(effAreaTotal.replace(",", "."));
-          const hasSlabsTgt = Number.isFinite(tgtSlabs) && tgtSlabs > 0;
-          const hasAreaTgt = Number.isFinite(tgtArea) && tgtArea > 0;
-          if (!hasSlabsTgt && !hasAreaTgt) return null;
-
-          const rowArea = (loc: LocValues, idx: number): number => {
-            const patRow =
-              patternsEnabled && loc.pattern !== ""
-                ? pats[Number(loc.pattern)]
-                : null;
-            if (patRow) {
-              const pa = Number.parseFloat(patRow.areaM2.replace(",", "."));
-              const ps = Number.parseInt(patRow.slabs, 10);
-              const n = effectiveLocSlabs(loc, idx);
-              return pa > 0 && ps > 0 && n > 0 ? (pa * n) / ps : 0;
-            }
-            const a = Number.parseFloat(loc.areaHereM2.replace(",", "."));
-            if (Number.isFinite(a)) return a;
-            // Единственная строка «весь приход» — сервер подставит всю площадь.
-            return rows.length === 1 && hasAreaTgt ? tgtArea : 0;
-          };
-          const placedSlabs = rows.reduce(
-            (s, l, i) => s + effectiveLocSlabs(l, i),
-            0,
-          );
-          const placedArea = rows.reduce((s, l, i) => s + rowArea(l, i), 0);
-          const slabsOk = !hasSlabsTgt || placedSlabs === tgtSlabs;
-          const areaOk = !hasAreaTgt || Math.abs(placedArea - tgtArea) <= 0.01;
-          const converged = slabsOk && areaOk;
-
-          // Недобор по узорам — только когда складчик реально раскладывает
-          // по узорам (есть строки с конкретным узором).
-          const anyPatternRow =
-            patternsEnabled && rows.some((l) => l.pattern !== "");
-          const shortfalls = anyPatternRow
-            ? patRowIds
-                .map((pid, pidx) => {
-                  const p = pats[pid] ?? emptyPat();
-                  const total = Number.parseInt(p.slabs, 10);
-                  if (!Number.isFinite(total) || total <= 0) return null;
-                  const placed = rows.reduce(
-                    (s, l, i) =>
-                      l.pattern === String(pid) ? s + effectiveLocSlabs(l, i) : s,
-                    0,
-                  );
-                  if (placed === total) return null;
-                  const desc = p.description.trim();
-                  return `Узор ${pidx + 1}${desc ? ` «${desc}»` : ""}: размещено ${placed} из ${total} плит`;
-                })
-                .filter((x): x is string => x !== null)
-            : [];
-
-          // ТЗ №18 §4.5 — дубль «блок + ориентир + узор»: скорее всего опечатка.
-          const seen = new Map<string, number>();
-          rows.forEach((l) => {
-            if (!l.block || !l.landmark) return;
-            const k = `${l.block}|${l.landmark}|${l.pattern}`;
-            seen.set(k, (seen.get(k) ?? 0) + 1);
-          });
-          const hasDup = [...seen.values()].some((n) => n > 1);
-
+        {placement && (() => {
+          const {
+            tgtSlabs,
+            tgtArea,
+            hasSlabsTgt,
+            hasAreaTgt,
+            placedSlabs,
+            placedArea,
+            converged,
+            shortfalls,
+            hasDup,
+          } = placement;
           return (
             <div
               className={`mt-3 rounded-card px-3 py-2 text-sm ${
-                converged ? "bg-success/10" : "bg-warning/12"
+                converged ? "bg-malachite-bg" : "bg-amber-bg"
               }`}
             >
               <p className={`font-medium ${converged ? "text-malachite" : "text-amber"}`}>
@@ -1379,6 +1408,69 @@ export default function IntakeForm({
           {pending ? "Сохранение…" : "Принять партию"}
         </Button>
       </div>
+      </div>
+
+      {/* ТЗ №20 §8 — липкая сводка справа (≥1280px): вид, плит, м², узоры,
+          локации. Только показ уже введённых значений — отправка, проверки
+          и кнопка «Принять партию» остаются в форме, одна. */}
+      <aside
+        aria-label="Сводка приёмки"
+        className="sticky top-6 hidden self-start xl:block"
+      >
+        <Card className="text-sm">
+          <h2 className="mb-3 text-base font-semibold text-ink">Сводка</h2>
+          <dl className="flex flex-col gap-2.5">
+            <div>
+              <dt className="text-xs font-medium text-ink-2">Вид</dt>
+              <dd className="mt-0.5 text-ink">
+                {isNewType
+                  ? values.newName.trim() || "—"
+                  : (stoneTypes.find((st) => st.id === values.stoneTypeId)?.name ?? "—")}
+              </dd>
+            </div>
+            <div className="flex gap-6">
+              <div>
+                <dt className="text-xs font-medium text-ink-2">Плит</dt>
+                <dd className="tnum mt-0.5 text-ink">{effSlabsTotal || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-ink-2">Площадь, м²</dt>
+                <dd className="tnum mt-0.5 text-ink">{effAreaTotal || "—"}</dd>
+              </div>
+            </div>
+            {patternsEnabled && (
+              <div>
+                <dt className="text-xs font-medium text-ink-2">Узоры</dt>
+                <dd className="tnum mt-0.5 text-ink">{patRowIds.length}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs font-medium text-ink-2">Локации</dt>
+              <dd className="tnum mt-0.5 text-ink">
+                {rowIds.length}
+                {placement && (
+                  <span
+                    className={`mt-0.5 block ${
+                      placement.converged ? "text-malachite" : "text-amber"
+                    }`}
+                  >
+                    Разложено:{" "}
+                    {placement.hasSlabsTgt
+                      ? `${placement.placedSlabs} из ${placement.tgtSlabs} плит`
+                      : ""}
+                    {placement.hasSlabsTgt && placement.hasAreaTgt ? " · " : ""}
+                    {placement.hasAreaTgt
+                      ? `${placement.placedArea.toFixed(1).replace(".", ",")} из ${placement.tgtArea
+                          .toFixed(1)
+                          .replace(".", ",")} м²`
+                      : ""}
+                  </span>
+                )}
+              </dd>
+            </div>
+          </dl>
+        </Card>
+      </aside>
     </form>
   );
 }

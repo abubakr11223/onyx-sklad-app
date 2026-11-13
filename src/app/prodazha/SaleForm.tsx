@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 import { submitSale, type SaleFormState, type SaleMode } from "./actions";
 import {
@@ -338,6 +339,18 @@ export default function SaleForm({
   // W1-T1: id СВОЕЙ брони, которую менеджер ЯВНО закрывает этой продажей.
   // По умолчанию пусто (галочка снята) — бронь остаётся в силе.
   const [consumeReservationId, setConsumeReservationId] = useState("");
+  // ТЗ №20 §8: на широком экране (≥1280px) справа — липкая колонка «Итого».
+  // Только отображение уже введённых значений; на отправку не влияет.
+  // До монтирования (SSR, тесты в jsdom) — false: колонка не рисуется.
+  const [isXl, setIsXl] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(min-width: 1280px)");
+    const sync = () => setIsXl(mq.matches);
+    sync();
+    mq.addEventListener?.("change", sync);
+    return () => mq.removeEventListener?.("change", sync);
+  }, []);
   const e = state.errors;
   const priceNum = Number(priceSubmit || normalizeMoneyForSubmit(priceDisplay)) || 0;
   const payRowsResolved = payRows.map((r) => ({
@@ -559,9 +572,84 @@ export default function SaleForm({
     }
   };
 
+  // ── Колонка «Итого» (≥1280px) ──
+  const summaryRows: { label: string; value: string; strong?: boolean }[] = [];
+  if (stone) summaryRows.push({ label: "Камень", value: stone.name, strong: true });
+  if (target) {
+    summaryRows.push({ label: "Что", value: target.title });
+    const volumeMode =
+      target.mode === "BATCH_VOLUME" || target.mode === "PATTERN_VOLUME";
+    summaryRows.push({
+      label: "Объём",
+      value: volumeMode
+        ? formatVolumeQtyDisplay(qtySlabs, qtyAreaM2) || "—"
+        : target.mode === "WHOLE_BATCH"
+          ? "весь свободный остаток"
+          : target.subtitle || "—",
+    });
+    summaryRows.push({ label: "Клиент", value: selectedClient?.name ?? "—" });
+    if (issueAsSample) {
+      summaryRows.push({ label: "Тип", value: "Образец", strong: true });
+      summaryRows.push({ label: "Срок возврата", value: returnDueDateSample || "—" });
+    } else {
+      summaryRows.push({
+        label: "Сумма",
+        value: priceDisplay.trim()
+          ? `${formatMoneyGrouped(priceDisplay)} ${CURRENCY_LABEL[currency]}`
+          : "—",
+        strong: true,
+      });
+      const paidRows = payRowsResolved.filter((r) => r.amount > 0);
+      summaryRows.push({
+        label: "Оплата",
+        value:
+          priceNum <= 0
+            ? "—"
+            : (paidRows.length === 0
+                ? "всё в долг"
+                : paidRows
+                    .map((r) => `${formatMoneyGrouped(String(r.amount))} ${PAY_METHOD_LABEL[r.method]}`)
+                    .join(" + ")) +
+              (isCredit ? ` · в долг ${formatMoneyGrouped(String(debtLeft))}` : ""),
+      });
+    }
+  }
+  const withSummary = (node: ReactNode) =>
+    isXl ? (
+      <div className="grid !max-w-none grid-cols-[minmax(0,760px)_320px] items-start gap-6">
+        <div className="min-w-0">{node}</div>
+        <aside aria-label="Итого" className="sticky top-6 self-start">
+          <Card>
+            <h2 className="mb-3 text-base font-semibold text-ink">Итого</h2>
+            {summaryRows.length === 0 ? (
+              <p className="text-sm text-ink-2">Выберите камень — здесь появится сводка.</p>
+            ) : (
+              <dl className="flex flex-col gap-3">
+                {summaryRows.map((r) => (
+                  <div key={r.label}>
+                    <dt className="text-xs font-medium text-ink-2">{r.label}</dt>
+                    <dd
+                      className={
+                        "tnum mt-0.5 text-sm " +
+                        (r.strong ? "font-semibold text-ink" : "text-ink")
+                      }
+                    >
+                      {r.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </Card>
+        </aside>
+      </div>
+    ) : (
+      node
+    );
+
   // ── Шаг 1: вид камня ──
   if (!stone) {
-    return (
+    return withSummary(
       <Card>
         <h2 className="mb-3 text-base font-semibold text-ink">1. Вид камня</h2>
         {stoneTypes.length === 0 ? (
@@ -611,13 +699,13 @@ export default function SaleForm({
             })}
           </ul>
         )}
-      </Card>
+      </Card>,
     );
   }
 
   // ── Шаг 2: цель продажи ──
   if (!target) {
-    return (
+    return withSummary(
       <Card>
         {leadBanner}
         <BackButton onClick={() => setStone(null)} label="Вид камня" />
@@ -811,7 +899,7 @@ export default function SaleForm({
         {stone.slabs.length === 0 && stone.pieces.length === 0 && stone.batches.length === 0 && (
           <p className="text-ink-2">По этому виду продавать нечего.</p>
         )}
-      </Card>
+      </Card>,
     );
   }
 
@@ -839,7 +927,7 @@ export default function SaleForm({
       !(isVolume && !qtySlabs.trim() && !qtyAreaM2.trim()) &&
       !(siteMode === "existing" && !selectedSiteId);
 
-    return (
+    return withSummary(
       <Card>
         {leadBanner}
         <BackButton onClick={() => setTarget(null)} label="Выбор камня" />
@@ -1554,14 +1642,14 @@ export default function SaleForm({
           {issueAsSample ? "Далее — выдача образца" : "Далее — подтверждение"}
         </Button>
         </div>
-      </Card>
+      </Card>,
     );
   }
 
   // ── Шаг 4: подтверждение ──
   const fieldErrorItems = buildFieldErrorItems(e);
 
-  return (
+  return withSummary(
     <Card>
       <BackButton
         onClick={() => setConfirming(false)}
@@ -1822,6 +1910,6 @@ export default function SaleForm({
           ? "После подтверждения образец появится в разделе «Образцы» (активные)."
           : "Камень списывается из наличия сразу в момент продажи (TZ §5.4). Способ оплаты на списание не влияет."}
       </p>
-    </Card>
+    </Card>,
   );
 }

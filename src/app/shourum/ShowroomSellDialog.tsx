@@ -64,10 +64,13 @@ export default function ShowroomSellDialog({
   targetType,
   unitId,
   stoneLabel,
+  photoId = null,
 }: {
   targetType: "SLAB" | "PIECE";
   unitId: string;
   stoneLabel: string;
+  /** ТЗ №20 §7.5 — миниатюра камня в шапке диалога (если есть фото). */
+  photoId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(
@@ -239,6 +242,14 @@ export default function ShowroomSellDialog({
         labelledById={`showroom-sell-${unitId}`}
         size="lg"
       >
+        {photoId && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={"/api/photo/" + photoId}
+            alt={stoneLabel}
+            className="mb-3 h-[72px] w-[72px] rounded-field object-cover"
+          />
+        )}
         <form action={formAction} className="flex flex-col gap-3">
           <input type="hidden" name="targetType" value={targetType} />
           <input type="hidden" name="unitId" value={unitId} />

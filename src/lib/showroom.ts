@@ -499,6 +499,8 @@ export type ShowroomListItem = {
   location: string;
   block: string;
   landmark: string;
+  /** ТЗ №20 §8 — последнее фото единицы (если есть) для миниатюры 72×72. */
+  photoId?: string | null;
 };
 
 /** Bounded list of units currently in showroom (status SHOWROOM + open placement). */
@@ -527,6 +529,11 @@ export async function listShowroom(
           block: true,
           landmark: true,
           stoneType: { select: { name: true } },
+          photos: {
+            select: { id: true },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       },
       piece: {
@@ -537,6 +544,11 @@ export async function listShowroom(
           block: true,
           landmark: true,
           stoneType: { select: { name: true } },
+          photos: {
+            select: { id: true },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       },
     },
@@ -558,6 +570,7 @@ export async function listShowroom(
         location: formatLocation(r.slab.block, r.slab.landmark),
         block: r.slab.block,
         landmark: r.slab.landmark,
+        photoId: r.slab.photos?.[0]?.id ?? null,
       });
     } else if (r.piece) {
       if (r.piece.status !== "SHOWROOM") continue;
@@ -573,6 +586,7 @@ export async function listShowroom(
         location: formatLocation(r.piece.block, r.piece.landmark),
         block: r.piece.block,
         landmark: r.piece.landmark,
+        photoId: r.piece.photos?.[0]?.id ?? null,
       });
     }
   }
