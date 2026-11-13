@@ -246,7 +246,7 @@ export default async function IstoriyaPage() {
         // На телефоне — карточки (§9), таблица прокручивается внутри рамки.
         <>
         {/* Телефон (<768px): карточки — таблица не помещается по ширине. */}
-        <ul className="flex flex-col gap-2 md:hidden">
+        <ul className="flex flex-col gap-2 lg:hidden">
           {entries.map((e) => {
             const d = describeHistoryEntry(e, lookups);
             const actor = e.user
@@ -273,12 +273,12 @@ export default async function IstoriyaPage() {
             );
           })}
         </ul>
-        <div className="onyx-table-wrap hidden md:block">
+        <div className="onyx-table-wrap hidden lg:block">
           <table className="onyx-table text-[13px] leading-[18px]">
             <thead>
               <tr>
                 <th className="py-2 pl-3 pr-2">Когда</th>
-                <th className="hidden py-2 pr-2 md:table-cell">Кто</th>
+                <th className="hidden py-2 pr-2 lg:table-cell">Кто</th>
                 <th className="py-2 pr-2">Действие</th>
                 <th className="py-2 pr-3">Объект и изменения</th>
               </tr>
@@ -294,7 +294,7 @@ export default async function IstoriyaPage() {
                     <td className="tnum whitespace-nowrap py-2 pl-3 pr-2 text-ink-2">
                       {formatTashkentDateTime(e.createdAt)}
                     </td>
-                    <td className="hidden py-2 pr-2 text-ink-2 md:table-cell">{actor}</td>
+                    <td className="hidden py-2 pr-2 text-ink-2 lg:table-cell">{actor}</td>
                     <td className="py-2 pr-2">
                       <Badge variant={actionVariant(e.action)}>
                         {actionLabelRu(e.action)}

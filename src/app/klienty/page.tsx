@@ -154,7 +154,7 @@ export default async function KlientyPage({
       ) : (
         <>
           {/* ТЗ №20 §8: список — таблица; на телефоне — карточки (§9). */}
-          <div className="onyx-table-wrap hidden md:block">
+          <div className="onyx-table-wrap hidden lg:block">
             <table className="onyx-table">
               <thead>
                 <tr>
@@ -203,7 +203,7 @@ export default async function KlientyPage({
               </tbody>
             </table>
           </div>
-        <ul className="flex flex-col gap-2 md:hidden">
+        <ul className="flex flex-col gap-2 lg:hidden">
           {clients.map((c) => {
             const money = formatCurrencySummaryLine(c.purchaseTotals);
             const debt = formatCurrencySummaryLine(c.activeDebtTotals);

@@ -176,9 +176,9 @@
   .onyx-table tbody tr:hover {
     background: var(--color-row-hover);
   }
-  /* Много колонок: на телефоне не сжимаем — таблица прокручивается
+  /* Много колонок: на телефоне и планшете (боковое меню 240px) не сжимаем — таблица прокручивается
      внутри рамки (.onyx-table-wrap), страница не уезжает вбок. */
-  @media (max-width: 767px) {
+  @media (max-width: 1023px) {
     .onyx-table-wide {
       min-width: 640px;
     }

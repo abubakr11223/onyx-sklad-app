@@ -149,7 +149,7 @@ export default async function ObektyPage({
       ) : (
         <>
           {/* ТЗ №20 §8: список — таблица; на телефоне — карточки (§9). */}
-          <div className="onyx-table-wrap hidden md:block">
+          <div className="onyx-table-wrap hidden lg:block">
             <table className="onyx-table">
               <thead>
                 <tr>
@@ -190,7 +190,7 @@ export default async function ObektyPage({
               </tbody>
             </table>
           </div>
-        <ul className="flex flex-col gap-2 md:hidden">
+        <ul className="flex flex-col gap-2 lg:hidden">
           {sites.map((s) => {
             const money = formatCurrencySummaryLine(s.purchaseTotals);
             const vol = formatVolumeLine(s.volume);

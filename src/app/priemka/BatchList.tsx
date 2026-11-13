@@ -76,7 +76,7 @@ export default function BatchList({
       ) : (
         <>
           {/* ≥768px — плотная таблица (ТЗ №20 §8); телефон — карточки (§9). */}
-          <div className="onyx-table-wrap hidden md:block">
+          <div className="onyx-table-wrap hidden lg:block">
             <table className="onyx-table">
               <thead>
                 <tr>
@@ -123,7 +123,7 @@ export default function BatchList({
               </tbody>
             </table>
           </div>
-        <ul className="flex flex-col gap-3 md:hidden">
+        <ul className="flex flex-col gap-3 lg:hidden">
           {batches.map((b) => {
             const qty = [
               b.slabsTotal !== null && `${b.slabsTotal} плит`,
