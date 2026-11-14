@@ -688,7 +688,7 @@ export default async function PoiskPage({
                 placeholder="Длина"
                 className={inputClass}
               />
-              <span className="text-ink-3">×</span>
+              <span className="text-ink-2">×</span>
               <input
                 name="w"
                 type="text"
@@ -1281,7 +1281,7 @@ export default async function PoiskPage({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         aria-hidden="true"
-                        className="hidden text-ink-3 transition-colors duration-150 group-hover:text-honey-ink sm:block"
+                        className="hidden text-ink-2 transition-colors duration-150 group-hover:text-honey-ink sm:block"
                       >
                         <path d="M9 6l6 6-6 6" />
                       </svg>

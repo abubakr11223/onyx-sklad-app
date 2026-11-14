@@ -234,7 +234,7 @@ function DebtCard({
           {d.sale.managerName}
         </p>
         {d.comment && (
-          <p className="mt-1 text-xs text-ink-3">Комментарий: {d.comment}</p>
+          <p className="mt-1 text-xs text-ink-2">Комментарий: {d.comment}</p>
         )}
         <DebtPayments d={d} />
         {tab === "active" && d.status === "ACTIVE" && (
@@ -264,7 +264,7 @@ function DebtCard({
           {formatDebtPurchase(d.sale)}
           <span className="block text-xs">Продажа {formatTashkentDate(d.sale.soldAt)}</span>
           {d.comment && (
-            <span className="block text-xs text-ink-3">Комментарий: {d.comment}</span>
+            <span className="block text-xs text-ink-2">Комментарий: {d.comment}</span>
           )}
         </div>
         <div className="text-right">
@@ -456,7 +456,7 @@ export default async function DolzhnikiPage({
           <h2 className="text-sm font-semibold text-ink">
             Выручка по способам оплаты
           </h2>
-          <p className="mt-0.5 text-xs text-ink-3">
+          <p className="mt-0.5 text-xs text-ink-2">
             Все невозвращённые продажи с указанным способом. По валютам
             отдельно.
           </p>

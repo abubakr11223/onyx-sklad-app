@@ -68,6 +68,9 @@ export default function Field({
         className={[labelClass, inputProps.required ? requiredMark : ""].filter(Boolean).join(" ")}
       >
         {label}
+        {/* Единица видна суффиксом в поле; в подписи — только для
+            скринридера (доступное имя «Длина, см» сохраняется). */}
+        {typeof suffix === "string" && <span className="sr-only">, {suffix}</span>}
       </label>
 
       {children ?? (

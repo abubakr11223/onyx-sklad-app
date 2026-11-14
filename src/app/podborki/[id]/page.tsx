@@ -154,7 +154,7 @@ export default async function CollectionStaffPage({
                           да · <span className="tnum">{formatTashkentDateTime(i.likedAt)}</span>
                         </Badge>
                       ) : (
-                        <span className="text-ink-3">—</span>
+                        <span className="text-ink-2">—</span>
                       )}
                     </td>
                     {open && (

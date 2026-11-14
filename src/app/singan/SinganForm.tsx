@@ -175,7 +175,7 @@ export default function SinganForm({
             id="boundingLengthMm"
             name="boundingLengthMm"
             inputMode="numeric"
-            label="Длина, см"
+            label="Длина" suffix="см"
             required
             value={boundingLengthMm}
             onChange={(ev) => setBoundingLengthMm(ev.target.value)}
@@ -185,7 +185,7 @@ export default function SinganForm({
             id="boundingWidthMm"
             name="boundingWidthMm"
             inputMode="numeric"
-            label="Ширина, см"
+            label="Ширина" suffix="см"
             required
             value={boundingWidthMm}
             onChange={(ev) => setBoundingWidthMm(ev.target.value)}
@@ -196,7 +196,7 @@ export default function SinganForm({
             id="thicknessMm"
             name="thicknessMm"
             inputMode="decimal"
-            label="Толщина, см"
+            label="Толщина" suffix="см"
             placeholder="напр. 1,8"
             value={thicknessMm}
             onChange={(ev) => setThicknessMm(ev.target.value)}
@@ -207,7 +207,7 @@ export default function SinganForm({
             id="areaM2"
             name="areaM2"
             inputMode="decimal"
-            label="Площадь, м²"
+            label="Площадь" suffix="м²"
             placeholder="необязательно"
             value={areaM2}
             onChange={(ev) => setAreaM2(ev.target.value)}

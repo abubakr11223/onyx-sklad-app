@@ -128,7 +128,7 @@ export default async function SiteCardPage({
           <p className="mt-1 text-sm text-ink-2">{card.comment}</p>
         )}
         {caps.canSeeAllClients && (
-          <p className="mt-1 text-xs text-ink-3">Менеджер: {card.managerName}</p>
+          <p className="mt-1 text-xs text-ink-2">Менеджер: {card.managerName}</p>
         )}
       </header>
 
@@ -200,7 +200,7 @@ export default async function SiteCardPage({
                     {" · "}
                     {pay}
                   </p>
-                  <p className="text-xs text-ink-3">Менеджер: {s.managerName}</p>
+                  <p className="text-xs text-ink-2">Менеджер: {s.managerName}</p>
                 </li>
               );
             })}

@@ -326,7 +326,7 @@ export default async function KartaSkladaPage({
                   <span className="font-mono text-xl font-medium leading-none text-ink">
                     {blk.letter}
                   </span>
-                  <span className="text-xs font-semibold text-ink-3">
+                  <span className="text-xs font-semibold text-ink-2">
                     блок
                   </span>
                 </div>
@@ -348,7 +348,7 @@ export default async function KartaSkladaPage({
               {editMode && (
                 <div className="mb-3 flex flex-col gap-2 rounded-field border border-honey bg-travertine p-3">
                   {!blk.blockId && (
-                    <p className="text-xs text-ink-3">
+                    <p className="text-xs text-ink-2">
                       Блок из приёмки. Любая правка внесёт его в сетку склада.
                     </p>
                   )}
@@ -410,7 +410,7 @@ export default async function KartaSkladaPage({
                       Удалить блок
                     </ConfirmSubmitButton>
                     {stonesInBlock > 0 && (
-                      <p className="text-xs text-ink-3">
+                      <p className="text-xs text-ink-2">
                         В блоке есть камень — сначала переместите его.
                       </p>
                     )}

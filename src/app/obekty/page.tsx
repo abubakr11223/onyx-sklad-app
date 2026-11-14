@@ -177,8 +177,8 @@ export default async function ObektyPage({
                       </td>
                       <td className="py-2.5 pl-3 text-ink-2">{SITE_TYPE_LABELS[s.type]}</td>
                       <td className="py-2.5 pl-3 text-ink-2">{s.clientName}</td>
-                      <td className="tnum py-2.5 pl-3 text-right">{vol ?? <span className="text-ink-3">—</span>}</td>
-                      <td className="tnum py-2.5 pl-3 text-right">{money || <span className="text-ink-3">—</span>}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{vol ?? <span className="text-ink-2">—</span>}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{money || <span className="text-ink-2">—</span>}</td>
                       <td className="py-2.5 px-3">
                         <Badge variant={s.status === "ACTIVE" ? "success" : "neutral"}>
                           {SITE_STATUS_LABELS[s.status]}

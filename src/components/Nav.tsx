@@ -86,7 +86,7 @@ export default function Nav({
         title="Onyx — главная"
         className="block px-5 pb-5 pt-6 nav-collapsed:px-0 nav-collapsed:text-center"
       >
-        <span className="block text-xl font-semibold leading-6 tracking-[0.08em] text-white">
+        <span className="block text-2xl font-semibold leading-6 tracking-[0.08em] text-white">
           <span className="nav-collapsed:hidden">ONYX</span>
           <span className="hidden nav-collapsed:inline">O</span>
         </span>

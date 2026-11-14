@@ -377,7 +377,7 @@ export default async function FotozaprosPage({
             </Alert>
           )}
           {unlinkedActive.length > 0 && (
-            <p className="mt-2 text-xs text-ink-3">
+            <p className="mt-2 text-xs text-ink-2">
               Без Telegram ({unlinkedActive.length}):{" "}
               {unlinkedActive.map((u) => u.name).join(", ")} — им задачи не
               приходят. Нужен телефон в карточке + /start в боте.
@@ -422,7 +422,7 @@ export default async function FotozaprosPage({
                       Комментарий: {r.comment}
                     </p>
                   )}
-                  <p className="mt-1 text-xs text-ink-3">
+                  <p className="mt-1 text-xs text-ink-2">
                     {formatTashkentDateTime(r.createdAt)}
                     {r.assignee ? ` · ${r.assignee.name}` : " · общая очередь"}
                   </p>
@@ -430,7 +430,7 @@ export default async function FotozaprosPage({
                   {/* W9-A: who was targeted in Telegram (by chatId → user). */}
                   {canManageRequests && r.dispatches.length > 0 && (
                     <div className="mt-2 rounded-field border border-line bg-paper px-3 py-2 text-sm">
-                      <p className="text-xs font-semibold text-ink-3">
+                      <p className="text-xs font-semibold text-ink-2">
                         Кому ушло в Telegram
                       </p>
                       <ul className="mt-1 space-y-0.5">
@@ -452,7 +452,7 @@ export default async function FotozaprosPage({
                               {demo && (
                                 <span className="text-warning"> · демо</span>
                               )}
-                              <span className="text-ink-3">
+                              <span className="text-ink-2">
                                 {" "}
                                 · {st}
                                 {d.lastError ? ` (${d.lastError})` : ""}

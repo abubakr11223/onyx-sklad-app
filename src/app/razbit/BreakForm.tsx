@@ -503,7 +503,7 @@ export default function BreakForm({
                     id={`pBoundLen-${idx}`}
                     name="pBoundLen"
                     inputMode="numeric"
-                    label={<>Длина, см <Req /></>}
+                    label={<>Длина <Req /></>} suffix="см"
                     placeholder="118"
                     value={row.len}
                     onChange={setPiece(id, "len")}
@@ -513,7 +513,7 @@ export default function BreakForm({
                     id={`pBoundWidth-${idx}`}
                     name="pBoundWidth"
                     inputMode="numeric"
-                    label={<>Ширина, см <Req /></>}
+                    label={<>Ширина <Req /></>} suffix="см"
                     placeholder="64"
                     value={row.width}
                     onChange={setPiece(id, "width")}
@@ -523,7 +523,7 @@ export default function BreakForm({
                     id={`pThickness-${idx}`}
                     name="pThickness"
                     inputMode="decimal"
-                    label="Толщина, см"
+                    label="Толщина" suffix="см"
                     placeholder="2 или 1,8"
                     value={row.thickness}
                     onChange={setPiece(id, "thickness")}
@@ -533,7 +533,7 @@ export default function BreakForm({
                     id={`pArea-${idx}`}
                     name="pArea"
                     inputMode="decimal"
-                    label={isRect ? "Площадь, м² (авто)" : "Площадь, м²"}
+                    label={isRect ? "Площадь (авто)" : "Площадь"} suffix="м²"
                     placeholder="0,6"
                     value={row.area}
                     onChange={setPiece(id, "area")}
@@ -569,7 +569,7 @@ export default function BreakForm({
                     id={`pSides-${idx}`}
                     name="pSides"
                     inputMode="numeric"
-                    label="Стороны, см"
+                    label="Стороны" suffix="см"
                     placeholder="118, 64, 95"
                     value={row.sides}
                     onChange={setPiece(id, "sides")}

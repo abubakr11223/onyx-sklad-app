@@ -27,7 +27,7 @@ export default function Kpi({
     <div className={["rounded-card border border-line bg-marble p-4", className].filter(Boolean).join(" ")}>
       <p className="text-xs font-medium text-ink-2">{label}</p>
       {parts.length === 0 ? (
-        <p className="mt-1 text-[28px] font-medium leading-9 text-ink-3">—</p>
+        <p className="mt-1 text-[28px] font-medium leading-9 text-ink-2">—</p>
       ) : (
         parts.map((p, i) => (
           <p

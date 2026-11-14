@@ -203,7 +203,7 @@ export default async function PriemkaEditBatchPage({
         blocks={blocks}
       />
 
-      <p className="mt-6 text-center text-sm text-ink-3">
+      <p className="mt-6 text-center text-sm text-ink-2">
         <Link href="/priemka" className={buttonClass("ghost", "sm")}>
           Назад к списку
         </Link>

@@ -142,7 +142,7 @@ export default async function ShipmentDocPage({
 
         {doc.note && (
           <p className="mt-3 text-sm text-ink-2">
-            <span className="text-ink-3">Комментарий:</span> {doc.note}
+            <span className="text-ink-2">Комментарий:</span> {doc.note}
           </p>
         )}
 
@@ -150,13 +150,13 @@ export default async function ShipmentDocPage({
         <div className="mt-8 grid gap-6 text-sm sm:grid-cols-2">
           <div>
             <p className="mb-6 text-ink-2">Выдал (склад)</p>
-            <div className="border-t border-line-strong pt-1 text-xs text-ink-3">
+            <div className="border-t border-line-strong pt-1 text-xs text-ink-2">
               подпись / ФИО
             </div>
           </div>
           <div>
             <p className="mb-6 text-ink-2">Получил</p>
-            <div className="border-t border-line-strong pt-1 text-xs text-ink-3">
+            <div className="border-t border-line-strong pt-1 text-xs text-ink-2">
               подпись / ФИО
             </div>
           </div>

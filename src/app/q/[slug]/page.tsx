@@ -178,7 +178,7 @@ export default async function QrStonePage({
           {view.color && (
             <>
               {" "}
-              <span className="text-ink-3">·</span> {view.color}
+              <span className="text-ink-2">·</span> {view.color}
             </>
           )}
         </p>
@@ -239,7 +239,7 @@ export default async function QrStonePage({
       )}
 
       {view.mediaMode === "warehouse_photos_only" && (
-        <p className="mt-2 text-xs text-ink-3">
+        <p className="mt-2 text-xs text-ink-2">
           Показаны фото со склада. Виды в интерьере появятся, когда менеджер
           сгенерирует их для этого камня.
         </p>
@@ -247,19 +247,19 @@ export default async function QrStonePage({
 
       {/* Always show identity card — not only when description/properties exist. */}
       <Card className="mt-6">
-        <h2 className="text-sm font-semibold text-ink-3">
+        <h2 className="text-sm font-semibold text-ink-2">
           О камне
         </h2>
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-ink-3">Порода</dt>
+          <dt className="text-ink-2">Порода</dt>
           <dd className="font-medium text-ink">{view.rockType}</dd>
           {view.color && (
             <>
-              <dt className="text-ink-3">Цвет</dt>
+              <dt className="text-ink-2">Цвет</dt>
               <dd className="font-medium text-ink">{view.color}</dd>
             </>
           )}
-          <dt className="text-ink-3">Наличие</dt>
+          <dt className="text-ink-2">Наличие</dt>
           <dd className="font-medium text-ink">{view.stockLabel}</dd>
         </dl>
         {view.description ? (
@@ -267,7 +267,7 @@ export default async function QrStonePage({
             {view.description}
           </p>
         ) : (
-          <p className="mt-4 text-sm text-ink-3">
+          <p className="mt-4 text-sm text-ink-2">
             Подробное описание появится позже. Менеджер расскажет о фактуре и
             толщинах на месте.
           </p>
@@ -276,7 +276,7 @@ export default async function QrStonePage({
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-3 text-sm">
             {view.properties.map(([k, v]) => (
               <div key={k} className="contents">
-                <dt className="text-ink-3">{k}</dt>
+                <dt className="text-ink-2">{k}</dt>
                 <dd className="text-ink">{v}</dd>
               </div>
             ))}

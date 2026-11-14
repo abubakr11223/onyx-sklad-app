@@ -304,7 +304,7 @@ export default async function OtgruzkiPage({
                         </p>
                         {r.reason && (
                           <p className="text-sm text-ink-2">
-                            <span className="text-ink-3">Причина:</span> {r.reason}
+                            <span className="text-ink-2">Причина:</span> {r.reason}
                           </p>
                         )}
                         <p className="mt-1 text-xs text-ink-2">
@@ -384,7 +384,7 @@ export default async function OtgruzkiPage({
                     {/* ТЗ №15 §3.1 — комментарий менеджера к задаче. */}
                     {s.note && (
                       <p className="mt-1 text-sm text-ink-2">
-                        <span className="text-ink-3">Комментарий:</span>{" "}
+                        <span className="text-ink-2">Комментарий:</span>{" "}
                         {s.note}
                       </p>
                     )}

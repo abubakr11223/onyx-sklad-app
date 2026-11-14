@@ -1016,7 +1016,7 @@ export default async function KamenPage({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-ink-3">Интерьеры ещё не созданы.</p>
+          <p className="mt-3 text-sm text-ink-2">Интерьеры ещё не созданы.</p>
         )}
         {canGenAI && (
           <form action={generateInteriors} className="mt-3">
@@ -1075,7 +1075,7 @@ export default async function KamenPage({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-ink-3">Фото готовых работ ещё нет.</p>
+          <p className="mt-3 text-sm text-ink-2">Фото готовых работ ещё нет.</p>
         )}
         {caps.canUploadInterior && (
           <InteriorUploader stoneTypeId={st.id} remaining={INTERIOR_MAX - ownInteriors.length} />
@@ -1127,7 +1127,7 @@ export default async function KamenPage({
               в 3D-интерьере.
             </p>
             {rows.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-3">Партий нет — текстуру загрузить некуда.</p>
+              <p className="mt-3 text-sm text-ink-2">Партий нет — текстуру загрузить некуда.</p>
             ) : (
               <ul className="mt-3 divide-y divide-line rounded-card border border-line">
                 {rows.map((r) => (
@@ -1149,7 +1149,7 @@ export default async function KamenPage({
                           )}
                         </p>
                       ) : (
-                        <p className="mt-1 text-xs text-ink-3">Текстуры нет</p>
+                        <p className="mt-1 text-xs text-ink-2">Текстуры нет</p>
                       )}
                     </div>
                     <div className="flex flex-wrap items-start gap-2">
@@ -1308,7 +1308,7 @@ export default async function KamenPage({
             {hasStock ? (
               <span className="font-semibold text-success">В наличии</span>
             ) : (
-              <span className="text-ink-3">Нет в наличии</span>
+              <span className="text-ink-2">Нет в наличии</span>
             )}
           </p>
         ) : (
@@ -1325,7 +1325,7 @@ export default async function KamenPage({
               ) : null}
             </>
           ) : (
-            <span className="text-ink-3">Нет в наличии (по объёму партий)</span>
+            <span className="text-ink-2">Нет в наличии (по объёму партий)</span>
           )}
         </p>
         {remainderNegative && (
@@ -1752,7 +1752,7 @@ export default async function KamenPage({
       <Card className="mt-4">
         <h2 className="text-base font-semibold text-ink">Локации</h2>
         {st.batches.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-3">Партий нет.</p>
+          <p className="mt-2 text-sm text-ink-2">Партий нет.</p>
         ) : (
           <ul className="mt-2 space-y-3">
             {st.batches.map((b) => (
@@ -1900,7 +1900,7 @@ export default async function KamenPage({
                               className="aspect-square w-full rounded-lg object-cover"
                             />
                           </a>
-                          <p className="mt-1 text-[11px] text-ink-3">
+                          <p className="mt-1 text-[11px] text-ink-2">
                             {formatTashkentDate(ph.takenAt)}
                           </p>
                         </li>
@@ -1968,7 +1968,7 @@ export default async function KamenPage({
                                 />
                               </a>
                               {/* TZ §5.3 — дата съёмки узора + «свежесть». */}
-                              <p className="mb-1.5 text-[11px] text-ink-3">
+                              <p className="mb-1.5 text-[11px] text-ink-2">
                                 Снято {formatTashkentDate(pat.photos[0].takenAt)}
                               </p>
                               {isPhotoStale(
@@ -1982,7 +1982,7 @@ export default async function KamenPage({
                               )}
                             </>
                           ) : (
-                            <div className="mb-1.5 flex aspect-square w-full items-center justify-center rounded-lg bg-ink/[0.04] text-center text-xs text-ink-3">
+                            <div className="mb-1.5 flex aspect-square w-full items-center justify-center rounded-lg bg-ink/[0.04] text-center text-xs text-ink-2">
                               фото ожидается
                             </div>
                           )}
@@ -2083,7 +2083,7 @@ export default async function KamenPage({
       <Card className="mt-4">
         <h2 className="text-base font-semibold text-ink">Фото</h2>
         {photoItems.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-3">Фото пока нет.</p>
+          <p className="mt-2 text-sm text-ink-2">Фото пока нет.</p>
         ) : (
           <>
             <p className="mt-1 text-xs text-ink-2">

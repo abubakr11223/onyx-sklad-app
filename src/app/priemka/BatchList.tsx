@@ -149,7 +149,7 @@ export default function BatchList({
                       : ""}
                   </p>
                   {b.supplierNote && (
-                    <p className="mt-0.5 truncate text-xs text-ink-3">
+                    <p className="mt-0.5 truncate text-xs text-ink-2">
                       {b.supplierNote}
                     </p>
                   )}

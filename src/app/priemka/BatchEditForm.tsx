@@ -325,7 +325,7 @@ export default function BatchEditForm(props: EditBatchProps) {
           <Field
             id="lengthMm"
             name="lengthMm"
-            label="Длина, см"
+            label="Длина" suffix="см"
             inputMode="numeric"
             value={vals.lengthMm}
             onChange={setVal("lengthMm")}
@@ -334,7 +334,7 @@ export default function BatchEditForm(props: EditBatchProps) {
           <Field
             id="widthMm"
             name="widthMm"
-            label="Ширина, см"
+            label="Ширина" suffix="см"
             inputMode="numeric"
             value={vals.widthMm}
             onChange={setVal("widthMm")}
@@ -421,7 +421,7 @@ export default function BatchEditForm(props: EditBatchProps) {
               multiple
               className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
             />
-            <p className="text-xs text-ink-3">
+            <p className="text-xs text-ink-2">
               {props.batchPhotos.length > 0
                 ? "Новые фото добавятся к существующим."
                 : "Общий вид поставки — как камень пришёл."}
@@ -465,7 +465,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                   <Field
                     id={`patLen-${i}`}
                     name="patLength"
-                    label="Длина, см"
+                    label="Длина" suffix="см"
                     inputMode="numeric"
                     value={patRows[i]?.lengthMm ?? ""}
                     onChange={setPat(i, "lengthMm")}
@@ -474,7 +474,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                   <Field
                     id={`patWid-${i}`}
                     name="patWidth"
-                    label="Ширина, см"
+                    label="Ширина" suffix="см"
                     inputMode="numeric"
                     value={patRows[i]?.widthMm ?? ""}
                     onChange={setPat(i, "widthMm")}
@@ -517,7 +517,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                       </a>
                     </p>
                   ) : (
-                    <p className="text-sm text-ink-3">Фото ещё нет</p>
+                    <p className="text-sm text-ink-2">Фото ещё нет</p>
                   )}
                   <input
                     id={`patPhoto-${i}`}
@@ -544,7 +544,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                       Снять фото с узора (строка Photo не удаляется — §1.9)
                     </label>
                   )}
-                  <p className="text-xs text-ink-3">
+                  <p className="text-xs text-ink-2">
                     Новое фото добавляется к узору (старое остаётся в архиве).
                     «Снять» отвязывает SAMPLE-фото от узора, файл в хранилище
                     сохраняется.

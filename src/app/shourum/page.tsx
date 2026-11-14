@@ -317,7 +317,7 @@ export default async function ShourumPage({
                 className={inputClass}
               />
               {batches.length === 0 && (
-                <p className="text-xs text-ink-3">
+                <p className="text-xs text-ink-2">
                   Партий со свободными плитами нет.
                 </p>
               )}
@@ -605,7 +605,7 @@ export default async function ShourumPage({
         </ul>
       )}
 
-      <p className="mt-6 text-sm text-ink-3">
+      <p className="mt-6 text-sm text-ink-2">
         <Link href="/otgruzki" className="text-honey-ink hover:underline">
           Отгрузки
         </Link>

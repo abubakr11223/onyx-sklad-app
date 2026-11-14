@@ -859,7 +859,7 @@ export default function IntakeForm({
               id="areaTotalM2"
               name="areaTotalM2"
               inputMode="decimal"
-              label="Площадь, м²"
+              label="Площадь" suffix="м²"
               placeholder="220 или 12,5"
               value={values.areaTotalM2}
               onChange={setField("areaTotalM2")}
@@ -887,7 +887,7 @@ export default function IntakeForm({
               id="lengthMm"
               name="lengthMm"
               inputMode="numeric"
-              label={<>Длина, см <Req /></>}
+              label={<>Длина <Req /></>} suffix="см"
               placeholder="280"
               value={values.lengthMm}
               onChange={setField("lengthMm")}
@@ -897,7 +897,7 @@ export default function IntakeForm({
               id="widthMm"
               name="widthMm"
               inputMode="numeric"
-              label={<>Ширина, см <Req /></>}
+              label={<>Ширина <Req /></>} suffix="см"
               placeholder="160"
               value={values.widthMm}
               onChange={setField("widthMm")}
@@ -907,7 +907,7 @@ export default function IntakeForm({
               id="thicknessMm"
               name="thicknessMm"
               inputMode="decimal"
-              label={<>Толщина, см <Req /></>}
+              label={<>Толщина <Req /></>} suffix="см"
               placeholder="2 или 1,8"
               value={values.thicknessMm}
               onChange={setField("thicknessMm")}
@@ -1003,7 +1003,7 @@ export default function IntakeForm({
                       id={`patLength-${idx}`}
                       name="patLength"
                       inputMode="numeric"
-                      label={<>Длина, см <Req /></>}
+                      label={<>Длина <Req /></>} suffix="см"
                       placeholder="280"
                       value={p.lengthMm}
                       onChange={setPat(id, "lengthMm")}
@@ -1013,7 +1013,7 @@ export default function IntakeForm({
                       id={`patWidth-${idx}`}
                       name="patWidth"
                       inputMode="numeric"
-                      label={<>Ширина, см <Req /></>}
+                      label={<>Ширина <Req /></>} suffix="см"
                       placeholder="160"
                       value={p.widthMm}
                       onChange={setPat(id, "widthMm")}
@@ -1023,7 +1023,7 @@ export default function IntakeForm({
                       id={`patThickness-${idx}`}
                       name="patThickness"
                       inputMode="decimal"
-                      label={<>Толщина, см <Req /></>}
+                      label={<>Толщина <Req /></>} suffix="см"
                       placeholder="2 или 1,8"
                       value={p.thicknessMm}
                       onChange={setPat(id, "thicknessMm")}
@@ -1069,7 +1069,7 @@ export default function IntakeForm({
                       capture="environment"
                       className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
                     />
-                    <p className="text-xs text-ink-3">
+                    <p className="text-xs text-ink-2">
                       Снимок подгруппы — по нему узор покажут клиенту. Можно
                       пропустить: тогда придёт фотозапрос в Telegram.
                     </p>
@@ -1381,7 +1381,7 @@ export default function IntakeForm({
               multiple
               className="block w-full rounded-card border border-dashed border-line-strong bg-marble p-3 text-sm text-ink-2 file:mr-3 file:rounded-field file:border file:border-line-strong file:bg-marble file:px-3 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-stone-100"
             />
-            <p className="text-xs text-ink-3">
+            <p className="text-xs text-ink-2">
               Общий вид поставки — как камень пришёл. До {MAX_BATCH_PHOTOS} фото.
               Необязательно, но помогает при споре с поставщиком.
             </p>

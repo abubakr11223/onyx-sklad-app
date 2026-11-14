@@ -946,7 +946,7 @@ export default function SaleForm({
             <Field
               id="f-qtyArea"
               inputMode="decimal"
-              label="Площадь, м²"
+              label="Площадь" suffix="м²"
               placeholder="12,5"
               value={qtyAreaM2}
               onChange={(ev) => setQtyAreaM2(ev.target.value)}
@@ -1216,7 +1216,7 @@ export default function SaleForm({
           {selectedClient && (
             <div className="rounded-card border border-line bg-marble p-3">
               <p className="mb-2 text-base font-semibold text-ink">
-                Объект <span className="font-normal normal-case tracking-normal text-ink-3">(необязательно)</span>
+                Объект <span className="font-normal normal-case tracking-normal text-ink-2">(необязательно)</span>
               </p>
               <div className="flex flex-col gap-2">
                 <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border border-line px-3">
@@ -1515,7 +1515,7 @@ export default function SaleForm({
                   <button
                     type="button"
                     aria-label="Убрать строку оплаты"
-                    className="min-h-11 min-w-11 rounded-field text-ink-3 hover:text-carnelian"
+                    className="min-h-11 min-w-11 rounded-field text-ink-2 hover:text-carnelian"
                     onClick={() =>
                       setPayRows((rows) =>
                         rows.length === 1

@@ -186,12 +186,12 @@ export default async function KlientyPage({
                       </td>
                       <td className="tnum whitespace-nowrap py-2.5 pl-3 text-ink-2">{c.phone}</td>
                       <td className="tnum py-2.5 pl-3 text-right">{c.saleCount}</td>
-                      <td className="tnum py-2.5 pl-3 text-right">{money || <span className="text-ink-3">—</span>}</td>
+                      <td className="tnum py-2.5 pl-3 text-right">{money || <span className="text-ink-2">—</span>}</td>
                       <td className="tnum py-2.5 pl-3 text-right">
                         {c.hasActiveDebt ? (
                           <span className="font-medium text-carnelian">{debt || "долг"}</span>
                         ) : (
-                          <span className="text-ink-3">—</span>
+                          <span className="text-ink-2">—</span>
                         )}
                       </td>
                       {caps.canSeeAllClients && (

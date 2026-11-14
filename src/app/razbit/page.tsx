@@ -258,7 +258,7 @@ export default async function RazbitPage({
               >
                 Открыть «Бой по фото»
               </Link>
-              <span className="text-ink-3">
+              <span className="text-ink-2">
                 {" "}
                 — без ссылки из бота форма размеров не откроется; страница
                 напомнит шаги.

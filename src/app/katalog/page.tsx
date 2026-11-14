@@ -274,11 +274,11 @@ export default async function CatalogPage({
                     className="inline-flex min-h-9 items-center gap-1.5 rounded-field border border-line-strong bg-marble px-3 text-sm text-ink hover:bg-stone-100"
                   >
                     {c.label}
-                    <span aria-hidden className="text-ink-3">✕</span>
+                    <span aria-hidden className="text-ink-2">✕</span>
                   </Link>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-ink-3">{t.aiChipHint}</p>
+              <p className="mt-2 text-xs text-ink-2">{t.aiChipHint}</p>
             </>
           )}
         </div>

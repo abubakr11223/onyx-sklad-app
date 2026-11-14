@@ -218,13 +218,13 @@ export default async function ObraztsyPage({
                       )}
                     </p>
                     {s.locationNote && (
-                      <p className="text-xs text-ink-3">Где: {s.locationNote}</p>
+                      <p className="text-xs text-ink-2">Где: {s.locationNote}</p>
                     )}
                     {s.comment && (
-                      <p className="text-xs text-ink-3">{s.comment}</p>
+                      <p className="text-xs text-ink-2">{s.comment}</p>
                     )}
                     {caps.canSeeAllClients && (
-                      <p className="text-xs text-ink-3">
+                      <p className="text-xs text-ink-2">
                         Менеджер: {s.managerName}
                       </p>
                     )}
@@ -267,7 +267,7 @@ export default async function ObraztsyPage({
         </div>
       )}
 
-      <p className="mt-6 text-center text-sm text-ink-3">
+      <p className="mt-6 text-center text-sm text-ink-2">
         Выдача образца — в «Продажа» → «Выдать как образец».
       </p>
     </main>

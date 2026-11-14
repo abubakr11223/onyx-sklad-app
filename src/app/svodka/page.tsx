@@ -52,7 +52,7 @@ function MoneyLines({
 }: {
   rows: ReadonlyArray<{ currency: "UZS" | "USD"; amount: string; count: number }>;
 }) {
-  if (rows.length === 0) return <span className="text-ink-3">—</span>;
+  if (rows.length === 0) return <span className="text-ink-2">—</span>;
   return (
     <span className="tnum font-semibold text-ink">
       {rows.map((r, i) => (
@@ -67,13 +67,64 @@ function MoneyLines({
 
 /** Итог-KPI: первая валюта 28px Medium, следующая — отдельной строкой 14px.
  *  Валюты не складываются. */
+/**
+ * ТЗ №20 §8 / §3.4 — «B2B / B2C» горизонтальной полосой долей. По каждой
+ * валюте отдельно (сумы и доллары не складываются); доли — из уже
+ * посчитанных сумм сегментов. Цвета серий: оникс (B2B) → мёд (B2C).
+ */
+function SegmentShareBar({
+  b2b,
+  b2c,
+}: {
+  b2b: ReadonlyArray<{ currency: "UZS" | "USD"; amount: string }>;
+  b2c: ReadonlyArray<{ currency: "UZS" | "USD"; amount: string }>;
+}) {
+  const num = (rows: typeof b2b, cur: "UZS" | "USD") => {
+    const r = rows.find((x) => x.currency === cur);
+    const n = r ? Number(r.amount.replace(",", ".")) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const lines = (["UZS", "USD"] as const)
+    .map((cur) => ({ cur, a: num(b2b, cur), c: num(b2c, cur) }))
+    .filter((l) => l.a + l.c > 0);
+  if (lines.length === 0) return null;
+  return (
+    <Card className="mb-6">
+      <h2 className="text-base font-semibold text-ink">B2B / B2C</h2>
+      <div className="mt-3 flex flex-col gap-4">
+        {lines.map((l) => {
+          const pa = Math.round((l.a / (l.a + l.c)) * 100);
+          const pc = 100 - pa;
+          return (
+            <div key={l.cur}>
+              <div className="mb-1.5 flex justify-between text-xs font-medium text-ink-2">
+                <span>
+                  B2B <span className="tnum text-ink">{pa}%</span>
+                </span>
+                <span>{l.cur === "UZS" ? "сум" : "$"}</span>
+                <span>
+                  B2C <span className="tnum text-ink">{pc}%</span>
+                </span>
+              </div>
+              <div className="flex h-3 overflow-hidden rounded-badge bg-stone-100" aria-hidden="true">
+                <div className="bg-onyx-800" style={{ width: `${pa}%` }} />
+                <div className="bg-honey" style={{ width: `${pc}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function KpiMoney({
   rows,
 }: {
   rows: ReadonlyArray<{ currency: "UZS" | "USD"; amount: string; count: number }>;
 }) {
   if (rows.length === 0) {
-    return <p className="mt-1 text-[28px] font-medium leading-9 text-ink-3">—</p>;
+    return <p className="mt-1 text-[28px] font-medium leading-9 text-ink-2">—</p>;
   }
   return (
     <div className="mt-1">
@@ -99,7 +150,7 @@ function MoneyCell({ amount, currency }: { amount: string; currency: MoneyCurren
   const zero = Number(amount) === 0;
   return (
     <td className="tnum whitespace-nowrap py-2 pl-3 text-right">
-      {zero ? <span className="text-ink-3">—</span> : formatDebtMoney(amount, currency)}
+      {zero ? <span className="text-ink-2">—</span> : formatDebtMoney(amount, currency)}
     </td>
   );
 }
@@ -111,7 +162,7 @@ function AreaCell({ areaM2 }: { areaM2: string }) {
       {n > 0 ? (
         n.toFixed(3).replace(/\.?0+$/, "").replace(".", ",")
       ) : (
-        <span className="text-ink-3">—</span>
+        <span className="text-ink-2">—</span>
       )}
     </td>
   );
@@ -123,7 +174,7 @@ function DebtCell({ debt }: { debt: PerCurrency }) {
   return (
     <td className="tnum whitespace-nowrap py-2 pl-3 text-right">
       {parts.length === 0 ? (
-        <span className="text-ink-3">—</span>
+        <span className="text-ink-2">—</span>
       ) : (
         parts.map((c) => (
           <span key={c} className="block font-semibold text-danger">
@@ -233,7 +284,7 @@ function RatingSection({
             </div>
           </div>
         )}
-        <p className="text-xs text-ink-3">
+        <p className="text-xs text-ink-2">
           Период: {periodCaption(period)}.{scopeOwn ? " Только ваши клиенты." : ""} Возвраты
           не входят; сум и $ не складываются. Долг — текущий остаток.
         </p>
@@ -259,7 +310,7 @@ function RatingSection({
               <tbody>
                 {visible.map((r) => (
                   <tr key={r.clientId} className="align-top">
-                    <td className="tnum py-2 pl-3 text-right text-ink-3">{r.place}</td>
+                    <td className="tnum py-2 pl-3 text-right text-ink-2">{r.place}</td>
                     <td className="py-2 pl-3">
                       <Link
                         href={`/klienty/${r.clientId}`}
@@ -306,7 +357,7 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
   return (
     <section className="mb-6">
       <h2 className="mb-1 text-base font-semibold text-ink">Продажи по менеджерам</h2>
-      <p className="mb-2 text-xs text-ink-3">
+      <p className="mb-2 text-xs text-ink-2">
         Период: {periodCaption(period)} (переключатель — в рейтинге выше). «Сумма» — продажи
         периода без возвратов; «Собрано» — платежи за период минус возвраты денег, по продажам
         менеджера; продажа в долг попадает в «собрано» по мере оплаты.
@@ -367,7 +418,7 @@ function AiQueriesSection({
   return (
     <section className="mb-6">
       <h2 className="mb-1 text-base font-semibold text-ink">ИИ-поиск: что ищут</h2>
-      <p className="mb-2 text-xs text-ink-3">
+      <p className="mb-2 text-xs text-ink-2">
         Период: {periodCaption(period)} (переключатель — в рейтинге выше). Запросов: {data.total}, из
         них по фото: {data.photoCount}. «Нет на складе» — в последний раз по запросу не нашлось
         камня в наличии.
@@ -418,7 +469,7 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
   return (
     <section className="mb-6">
       <h2 className="mb-1 text-base font-semibold text-ink">Партнёры</h2>
-      <p className="mb-2 text-xs text-ink-3">
+      <p className="mb-2 text-xs text-ink-2">
         Период: {periodCaption(period)} (переключатель — в рейтинге выше). «Заявки» — заявки на
         объём; «Интересы» — просмотры карточек и скачанные текстуры; «Продажи» — оформленные из
         заявок партнёра (сумма без возвратов, сум и $ отдельно).
@@ -466,7 +517,7 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
                   <MoneyCell amount={r.amountUzs.toFixed(2)} currency="UZS" />
                   <td className="tnum whitespace-nowrap py-2 px-3 text-right">
                     {r.amountUsd === 0 ? (
-                      <span className="text-ink-3">—</span>
+                      <span className="text-ink-2">—</span>
                     ) : (
                       formatDebtMoney(r.amountUsd.toFixed(2), "USD")
                     )}
@@ -486,7 +537,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
   return (
     <section className="mb-6">
       <h2 className="mb-1 text-base font-semibold text-ink">Чаще всего сканируют</h2>
-      <p className="mb-2 text-xs text-ink-3">
+      <p className="mb-2 text-xs text-ink-2">
         Период: {periodCaption(period)} (переключатель — в рейтинге выше). Открытия
         карточки по QR клиентами и партнёрами; сотрудники не считаются.
       </p>
@@ -506,7 +557,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.code}>
-                  <td className="tnum py-2 pl-3 text-ink-3">{i + 1}</td>
+                  <td className="tnum py-2 pl-3 text-ink-2">{i + 1}</td>
                   <td className="py-2 pl-3">
                     <Link
                       href={`/kamen/${r.stoneTypeId}`}
@@ -671,7 +722,7 @@ export default async function SvodkaPage({
           {currency !== "UZS" && <input type="hidden" name="cur" value={currency} />}
           <Button type="submit">Показать</Button>
         </form>
-        <p className="mt-2 text-xs text-ink-3">
+        <p className="mt-2 text-xs text-ink-2">
           Период: {period.fromISO} — {period.toISO} (Asia/Tashkent). По
           умолчанию — текущий месяц.
         </p>
@@ -721,6 +772,8 @@ export default async function SvodkaPage({
         )}
       </section>
 
+      <SegmentShareBar b2b={segments.b2b.totals} b2c={segments.b2c.totals} />
+
       <RatingSection {...ratingProps} />
 
       <ManagersSection rows={managerRows} period={ratingPeriod} />
@@ -757,7 +810,7 @@ export default async function SvodkaPage({
               <tbody>
                 {topSites.map((s, i) => (
                   <tr key={s.siteId} className="align-top">
-                    <td className="tnum py-2 pl-3 text-right text-ink-3">{i + 1}</td>
+                    <td className="tnum py-2 pl-3 text-right text-ink-2">{i + 1}</td>
                     <td className="py-2 pl-3">
                       <Link
                         href={`/obekty/${s.siteId}`}
@@ -784,7 +837,7 @@ export default async function SvodkaPage({
         )}
       </section>
 
-      <p className="text-center text-xs text-ink-3">
+      <p className="text-center text-xs text-ink-2">
         {formatCurrencySummaryLine(grandTotals)
           ? "Суммы пересчитываются из продаж; возврат уменьшает итоги."
           : "Нет данных за выбранный период."}

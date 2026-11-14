@@ -331,7 +331,7 @@ export default async function AccountsPage({
               </li>
             </ul>
           </div>
-          <p className="text-ink-3">
+          <p className="text-ink-2">
             Эту страницу видит только владелец. Сотрудники сюда не заходят.
           </p>
         </div>
@@ -412,7 +412,7 @@ export default async function AccountsPage({
           </form>
           {meRow?.telegramId ? (
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs text-ink-3">
+              <p className="text-xs text-ink-2">
                 Текущий: {meRow.telegramId}. На владельце TG не получает
                 фотозадачи (роль не «Склад»), но менеджер-уведомления — да.
               </p>
@@ -507,7 +507,7 @@ export default async function AccountsPage({
                 <p className="font-semibold text-ink">
                   {r.name ?? "без имени"}
                   {r.username && (
-                    <span className="ml-2 text-sm font-normal text-ink-3">
+                    <span className="ml-2 text-sm font-normal text-ink-2">
                       @{r.username}
                     </span>
                   )}
@@ -579,7 +579,7 @@ export default async function AccountsPage({
                     <p className="font-semibold text-ink">
                       {u.name}
                       {isSelf && (
-                        <span className="ml-2 text-xs font-normal text-ink-3">
+                        <span className="ml-2 text-xs font-normal text-ink-2">
                           (это вы)
                         </span>
                       )}
@@ -801,7 +801,7 @@ export default async function AccountsPage({
                           />
                           <span>
                             Видеть закупочную цену / маржу
-                            <span className="ml-1 text-ink-3">
+                            <span className="ml-1 text-ink-2">
                               (сейчас: {u.canSeePurchasePrice ? "да" : "нет"})
                             </span>
                           </span>

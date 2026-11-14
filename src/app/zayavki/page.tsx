@@ -278,7 +278,7 @@ export default async function ZayavkiPage({
                         <span className="text-ink-2">Запрос:</span>{" "}
                         {l.requestedSlabs === null &&
                         l.requestedAreaM2 === null ? (
-                          <span className="text-ink-3">объём не указан</span>
+                          <span className="text-ink-2">объём не указан</span>
                         ) : (
                           [
                             l.requestedSlabs !== null
@@ -337,7 +337,7 @@ export default async function ZayavkiPage({
                         <span className="text-ink-2">Комментарий:</span> {l.note}
                       </p>
                     )}
-                    <p className="text-xs text-ink-3">
+                    <p className="text-xs text-ink-2">
                       {formatTashkentDateTime(l.createdAt)}
                     </p>
                   </div>

@@ -122,7 +122,7 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
                 className={inputClass + " mt-1"}
               />
               <input type="hidden" name="refund" value={normalizeMoneyForSubmit(shownRefund)} />
-              <span className="mt-1 block text-xs text-ink-3">
+              <span className="mt-1 block text-xs text-ink-2">
                 не больше {money(leftCents)}; при долге сначала уменьшается долг
               </span>
             </label>
