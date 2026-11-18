@@ -127,7 +127,7 @@ export default async function AddToCollectionPage({
               </label>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+              <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
                 Название новой подборки
                 <input
                   name="title"
@@ -136,7 +136,7 @@ export default async function AddToCollectionPage({
                   className={inputClass}
                 />
               </label>
-              <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+              <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
                 Клиент (необязательно)
                 <select name="clientId" defaultValue="" className={inputClass}>
                   <option value="">— без клиента —</option>
@@ -154,7 +154,7 @@ export default async function AddToCollectionPage({
           </fieldset>
         </Card>
         <Card>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Комментарий к камню (клиент увидит)
             <textarea
               name="comment"

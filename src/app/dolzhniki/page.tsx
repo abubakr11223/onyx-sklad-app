@@ -31,6 +31,7 @@ import Button, { buttonClass } from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import Field, { inputClass } from "@/components/ui/Field";
 import { addDebtPaymentAction } from "./actions";
+import { DisclosureChevron, summaryClass } from "@/components/ui/Icons";
 
 export const dynamic = "force-dynamic";
 
@@ -294,8 +295,9 @@ function DebtCard({
         <div className="min-w-0 truncate text-ink-2">{d.sale.managerName}</div>
         {(d.payments.length > 0 || (tab === "active" && d.status === "ACTIVE")) && (
           <details className="col-span-full mt-1">
-            <summary className="w-fit cursor-pointer text-sm text-honey-ink hover:underline">
+            <summary className={`${summaryClass} w-fit text-sm text-honey-ink hover:underline`}>
               {tab === "active" && d.status === "ACTIVE" ? "Принять оплату" : "Платежи"}
+              <DisclosureChevron />
             </summary>
             <DebtPayments d={d} />
             {tab === "active" && d.status === "ACTIVE" && (

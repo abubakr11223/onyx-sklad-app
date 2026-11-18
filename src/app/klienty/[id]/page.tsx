@@ -1,6 +1,7 @@
 // TZ №10+11 §7 — карточка клиента.
 // Образцы (этап 4) не показываем — в разметке только место-комментарий.
 
+import { targetTypeRu } from "@/lib/sale-target-labels";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -25,6 +26,7 @@ import Badge from "@/components/ui/Badge";
 import Kpi from "@/components/ui/Kpi";
 import Tabs from "@/components/ui/Tabs";
 import { buttonClass } from "@/components/ui/Button";
+
 
 export const dynamic = "force-dynamic";
 
@@ -229,7 +231,7 @@ export default async function ClientCardPage({
                     </span>
                   </div>
                   <p className="mt-1 text-ink-2">
-                    {s.targetType}
+                    {targetTypeRu(s.targetType)}
                     {s.qtySlabs != null && s.qtySlabs > 0 && ` · ${s.qtySlabs} плит`}
                     {s.qtyAreaM2 && s.qtyAreaM2 !== "0" && ` · ${s.qtyAreaM2} м²`}
                     {" · "}
@@ -311,7 +313,7 @@ export default async function ClientCardPage({
                 key={r.id}
                 className="rounded-card border border-line bg-marble p-3 text-sm"
               >
-                {r.targetType} · до {formatTashkentDate(r.expiresAt)}
+                {targetTypeRu(r.targetType)} · до {formatTashkentDate(r.expiresAt)}
               </li>
             ))}
           </ul>

@@ -185,14 +185,14 @@ describe("История — отгрузка", () => {
     );
   });
 
-  it("неизвестная отгрузка — прежний откат на сущность+id", () => {
+  it("неизвестная отгрузка — откат на название сущности, без служебного id (ТЗ №21 А8)", () => {
     const d = describeHistoryEntry({
       action: "SHIPMENT_CONFIRM",
       entityType: "Shipment",
       entityId: "cmvhvsy1xyz",
       payload: { lineId: "zz", addSlabs: 0, addArea: 0 },
     });
-    expect(d.summary).toBe("Отгрузка #cmvhvsy1");
+    expect(d.summary).toBe("Отгрузка");
   });
 });
 
@@ -275,7 +275,7 @@ describe("История — прочее", () => {
         entityId: "abcdef123456",
         payload,
       });
-      expect(d.summary).toBe("Партия #abcdef12");
+      expect(d.summary).toBe("Партия");
     }
   });
 

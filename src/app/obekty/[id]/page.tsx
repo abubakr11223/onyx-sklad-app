@@ -1,5 +1,6 @@
 // TZ №10+11 §7 — карточка объекта + «отметить завершённым».
 
+import { targetTypeRu } from "@/lib/sale-target-labels";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -194,7 +195,7 @@ export default async function SiteCardPage({
                     </span>
                   </div>
                   <p className="mt-1 text-ink-2">
-                    {s.targetType}
+                    {targetTypeRu(s.targetType)}
                     {s.qtySlabs != null && s.qtySlabs > 0 && ` · ${s.qtySlabs} плит`}
                     {s.qtyAreaM2 && s.qtyAreaM2 !== "0" && ` · ${s.qtyAreaM2} м²`}
                     {" · "}

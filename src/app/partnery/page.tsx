@@ -16,6 +16,7 @@ import Alert from "@/components/ui/Alert";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
+import { DisclosureChevron, summaryClass } from "@/components/ui/Icons";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Партнёры — Onyx" };
@@ -129,13 +130,16 @@ export default async function PartnersPage({
       )}
 
       <details className="mb-6 rounded-card border border-line bg-marble p-4" open={partners.length === 0}>
-        <summary className="cursor-pointer font-semibold text-ink">+ Завести партнёра</summary>
+        <summary className={`${summaryClass} font-semibold text-ink`}>
+          + Завести партнёра
+          <DisclosureChevron />
+        </summary>
         <form action={createPartner} className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Имя / компания
             <input name="name" required maxLength={120} className={inputClass} />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Тип
             <select name="partnerType" defaultValue="DESIGNER" className={inputClass}>
               {PARTNER_TYPES.map((t) => (
@@ -145,11 +149,11 @@ export default async function PartnersPage({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Логин (email)
             <input name="email" type="email" required autoComplete="off" className={inputClass} />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Пароль (не короче {MIN_PASSWORD_LENGTH})
             <input
               name="password"
@@ -160,11 +164,11 @@ export default async function PartnersPage({
               className={inputClass}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Телефон (необязательно)
             <input name="phone" inputMode="tel" className={inputClass} />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Закреплённый менеджер
             <select name="managerId" defaultValue="" className={inputClass}>
               {managerOptions}
@@ -264,8 +268,9 @@ export default async function PartnersPage({
                     </Button>
                   </form>
                   <details>
-                    <summary className="cursor-pointer py-1.5 text-sm font-semibold text-gold-deep">
+                    <summary className={`${summaryClass} w-fit py-1.5 text-sm font-semibold text-honey-ink`}>
                       Новый пароль
+                      <DisclosureChevron />
                     </summary>
                     <form action={resetPartnerPassword} className="mt-2 flex flex-wrap gap-2">
                       <input type="hidden" name="id" value={p.id} />

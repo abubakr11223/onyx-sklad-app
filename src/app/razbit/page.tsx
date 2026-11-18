@@ -43,6 +43,7 @@ import {
   patternsOfBatch,
 } from "@/lib/pattern-stock";
 import { sortBlockOptions, sortLandmarks } from "@/lib/warehouse-grid";
+import { DisclosureChevron, summaryClass } from "@/components/ui/Icons";
 
 export const metadata: Metadata = {
   title: "Разбить камень — Onyx",
@@ -237,7 +238,7 @@ export default async function RazbitPage({
   // W10-A — two doors for §6.4 (photo+AI stays in Telegram; form below = manual).
   // ТЗ №20 §8: на телефоне/планшете — сверху страницы; на широком экране
   // (≥1280px) — в правой колонке над сводкой формы.
-  const twoWaysTitle = "Два пути (сценарий 6.4)";
+  const twoWaysTitle = "Два пути";
   const twoWaysList = (
         <ol className="mt-3 list-decimal space-y-3 pl-5 text-sm text-ink">
           <li>
@@ -296,8 +297,9 @@ export default async function RazbitPage({
 
       {/* Телефон/планшет: подсказка свёрнута — форма видна сразу (ТЗ №20 §9). */}
       <details className="mb-6 rounded-card border border-honey bg-marble p-4 xl:hidden">
-        <summary className="min-h-6 cursor-pointer text-base font-semibold text-ink">
+        <summary className={`${summaryClass} min-h-6 text-base font-semibold text-ink`}>
           {twoWaysTitle}
+          <DisclosureChevron />
         </summary>
         {twoWaysList}
       </details>

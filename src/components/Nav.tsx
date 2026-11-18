@@ -15,6 +15,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { logoutSession } from "@/app/login/actions";
 import { groupedNavItems, type NavItem } from "@/components/nav-items";
 import { roleLabel } from "@/lib/role-labels";
@@ -28,7 +29,9 @@ function toggleCollapsed() {
   if (collapsed) root.dataset.nav = "collapsed";
   else delete root.dataset.nav;
   try {
-    localStorage.setItem(NAV_KEY, collapsed ? "collapsed" : "open");
+    // ТЗ №21 А9: планшет (<1024px) помнит свой выбор отдельно от десктопа.
+    const key = window.innerWidth < 1024 ? `${NAV_KEY}-tablet` : NAV_KEY;
+    localStorage.setItem(key, collapsed ? "collapsed" : "open");
   } catch {
     // приватный режим — просто не запоминаем
   }
@@ -43,6 +46,19 @@ export default function Nav({
 }) {
   const pathname = usePathname();
   const groups = groupedNavItems(caps);
+  const navRef = useRef<HTMLElement>(null);
+
+  // ТЗ №21 А5: меню выше окна — прокручиваем его так, чтобы активный пункт
+  // был виден (при загрузке и при переходе). Только сам список меню, не страница.
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !active) return;
+    const navBox = nav.getBoundingClientRect();
+    const box = active.getBoundingClientRect();
+    if (box.top < navBox.top) nav.scrollTop -= navBox.top - box.top + 8;
+    else if (box.bottom > navBox.bottom) nav.scrollTop += box.bottom - navBox.bottom + 8;
+  }, [pathname]);
 
   const isActive = (href: string) => href !== "/" && !!pathname?.startsWith(href);
 
@@ -98,7 +114,7 @@ export default function Nav({
       </Link>
 
       {/* Навигация по группам */}
-      <nav aria-label="Основная навигация" className="flex-1 overflow-y-auto pb-2">
+      <nav ref={navRef} aria-label="Основная навигация" className="flex-1 overflow-y-auto pb-2">
         {groups.map((g, i) => (
           <div key={g.title} className={i === 0 ? "" : "mt-4"}>
             <p className="px-5 pb-1 text-[11px] font-medium uppercase tracking-[0.06em] text-side-muted nav-collapsed:sr-only">

@@ -39,7 +39,7 @@ export default function BulkClosePanel({
 
   return (
     <details className="mb-6 rounded-card border border-warning/40 bg-warning/5 open:bg-warning/[0.07]">
-      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink marker:content-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center px-4 py-3 text-sm font-semibold text-ink marker:content-none [&::-webkit-details-marker]:hidden">
         <span className="underline decoration-warning/50 underline-offset-2">
           Закрыть зависшие запросы…
         </span>

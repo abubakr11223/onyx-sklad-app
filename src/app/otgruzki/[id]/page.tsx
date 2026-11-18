@@ -45,7 +45,7 @@ export default async function ShipmentDocPage({
     <main className="max-w-[760px] p-4 pb-12 md:p-6 xl:p-8">
       {/* Экранная шапка — при печати скрыта. */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
-        <Link href="/otgruzki" className="text-sm text-ink-2 underline">
+        <Link href="/otgruzki" className="inline-flex min-h-11 items-center text-sm text-ink-2 underline md:min-h-0">
           ← К отгрузкам
         </Link>
         <span className="text-sm text-ink-2">

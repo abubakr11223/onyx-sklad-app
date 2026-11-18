@@ -699,7 +699,7 @@ export default function IntakeForm({
           <button
             type="button"
             onClick={clearDraft}
-            className="font-semibold underline"
+            className="inline-flex min-h-11 items-center font-semibold underline md:min-h-0"
           >
             Очистить и начать заново
           </button>

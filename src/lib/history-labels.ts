@@ -58,6 +58,8 @@ export const ENTITY_RU: Record<string, string> = {
   StoneType: "Вид камня",
   StoneTexture: "Текстура 3D",
   StoneTraits: "Признаки камня",
+  // ТЗ №21 А8 — служебное имя сущности не показываем пользователю.
+  PhotoRequest: "Фотозапрос",
   // ТЗ №9/№10/№11/№15 — сущности, появившиеся после первой версии Истории.
   Sample: "Образец",
   Shipment: "Отгрузка",
@@ -162,6 +164,11 @@ export type HistoryLookups = {
   >;
   shipments?: Map<string, HistoryShipmentInfo>;
   samples?: Map<string, HistorySampleInfo>;
+  /**
+   * ТЗ №21 А8 — вид камня для записей без собственного формата
+   * (Фотозапрос, Текстура 3D): entityId → название вида.
+   */
+  entityStones?: Map<string, string>;
 };
 
 export type HistoryRow = {
@@ -706,15 +713,22 @@ function describeStatusChange(row: HistoryRow, p: Rec, lk: HistoryLookups): Hist
   };
 }
 
-/** Прежнее поведение — для действий без собственного формата. */
-function fallbackTarget(row: HistoryRow, p: Rec): string {
+/**
+ * Для действий без собственного формата. ТЗ №21 А8: служебный id
+ * («#cmvhvqkr») пользователю не показываем — «Фотозапрос · Травертин»,
+ * а если вид камня неизвестен — просто «Фотозапрос».
+ */
+function fallbackTarget(row: HistoryRow, p: Rec, lk: HistoryLookups = {}): string {
   const stone = str(p.stoneName);
   if (stone) return stone;
   const slab = str(p.slabLabel);
   if (slab) return slab;
   const customer = str(p.customerName);
   if (customer) return `клиент ${customer}`;
-  return `${entityLabelRu(row.entityType)} #${row.entityId.slice(0, 8)}`;
+  const entityStone = lk.entityStones?.get(row.entityId);
+  return entityStone
+    ? `${entityLabelRu(row.entityType)} · ${entityStone}`
+    : entityLabelRu(row.entityType);
 }
 
 /**
@@ -807,7 +821,7 @@ export function describeHistoryEntry(
       d = { summary: join([stoneName, unitLabel]), changes: [] };
     }
   }
-  if (!d.summary) d = { ...d, summary: fallbackTarget(row, p) };
+  if (!d.summary) d = { ...d, summary: fallbackTarget(row, p, lk) };
   return d;
 }
 

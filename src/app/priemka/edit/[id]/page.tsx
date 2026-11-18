@@ -149,7 +149,7 @@ export default async function PriemkaEditBatchPage({
           Правка партии
         </h1>
         <p className="mt-1 text-sm text-ink-2">
-          <Link href="/priemka" className="text-gold-deep underline">
+          <Link href="/priemka" className="inline-flex min-h-11 items-center text-honey-ink underline md:min-h-0">
             ← К приёмке
           </Link>
         </p>

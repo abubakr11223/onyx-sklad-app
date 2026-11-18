@@ -256,7 +256,7 @@ export default async function OtgruzkiPage({
           {filtersOn && (
             <Link
               href={tab === "archive" ? "/otgruzki?tab=archive" : "/otgruzki"}
-              className="text-sm text-ink-2 underline"
+              className="inline-flex min-h-11 items-center text-sm text-ink-2 underline md:min-h-0"
             >
               Сбросить фильтр
             </Link>
@@ -455,7 +455,7 @@ export default async function OtgruzkiPage({
                   {/* ТЗ №20 B — менеджер может перенести дату отгрузки. */}
                   {caps.canSell && tab === "open" && s.kind === "SALE" && s.status !== "CANCELLED" && (
                     <details className="text-sm">
-                      <summary className="cursor-pointer text-ink-2 underline">
+                      <summary className="flex min-h-11 cursor-pointer items-center text-ink-2 underline md:min-h-0">
                         {s.plannedAt ? "Изменить дату" : "Указать дату"}
                       </summary>
                       <form action={updateShipmentPlanAction} className="mt-2 flex flex-wrap items-end gap-2">
@@ -484,7 +484,7 @@ export default async function OtgruzkiPage({
                       />
                       <button
                         type="submit"
-                        className="text-sm text-ink-2 underline"
+                        className="inline-flex min-h-11 items-center text-sm text-ink-2 underline md:min-h-0"
                       >
                         {s.isUrgent ? "Снять «срочно»" : "Отметить срочной"}
                       </button>

@@ -962,7 +962,7 @@ export default function SaleForm({
         {/* ТЗ №19 B1 — «если локаций несколько — спросить, из какой». */}
         {isVolume && (target.locations?.length ?? 0) > 1 && (
           <div className="mb-3">
-            <label htmlFor="f-batchLocation" className="mb-1.5 block text-sm font-semibold text-ink">
+            <label htmlFor="f-batchLocation" className="mb-1 block text-xs font-medium text-ink-2">
               Откуда брать
             </label>
             <select
@@ -1019,7 +1019,7 @@ export default function SaleForm({
         {/* TZ №10+11 §6 — клиент из справочника + объект (опц.) */}
         <div className="flex flex-col gap-3">
           <div>
-            <p className="mb-1.5 text-sm font-semibold text-ink">
+            <p className="mb-1 text-xs font-medium text-ink-2">
               Клиент <span className="text-carnelian">*</span>
             </p>
             {selectedClient ? (
@@ -1123,7 +1123,7 @@ export default function SaleForm({
                   error={e.newClientName}
                 />
                 <div>
-                  <p className="mb-1.5 text-sm font-semibold text-ink">Тип</p>
+                  <p className="mb-1 text-xs font-medium text-ink-2">Тип</p>
                   <div className="grid grid-cols-2 gap-2">
                     {(["B2C", "B2B"] as const).map((tp) => (
                       <label
@@ -1289,7 +1289,7 @@ export default function SaleForm({
                       error={e.newSiteName}
                     />
                     <div>
-                      <p className="mb-1.5 text-sm font-semibold text-ink">Тип</p>
+                      <p className="mb-1 text-xs font-medium text-ink-2">Тип</p>
                       <div className="grid grid-cols-3 gap-1">
                         {(
                           [
@@ -1424,7 +1424,7 @@ export default function SaleForm({
               />
             </Field>
             <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-semibold text-ink">
+              <span className="text-xs font-medium text-ink-2">
                 Валюта <span className="text-carnelian">*</span>
               </span>
               <div className="flex min-h-11 gap-1">
@@ -1904,7 +1904,7 @@ export default function SaleForm({
       <p className="mt-2 text-sm text-ink-2">
         {issueAsSample
           ? "После подтверждения образец появится в разделе «Образцы» (активные)."
-          : "Камень списывается из наличия сразу в момент продажи (TZ §5.4). Способ оплаты на списание не влияет."}
+          : "Камень списывается из наличия сразу в момент продажи. Способ оплаты на списание не влияет."}
       </p>
     </Card>,
   );

@@ -75,10 +75,11 @@ export default function AiSearchBox({
     }
   }
 
+  // ТЗ №21 А12 — обычная карточка marble, акцент не заливкой.
   return (
-    <section className="mb-4 rounded-card border border-honey bg-honey-soft p-4" aria-label={labels.title}>
+    <section className="mb-4 rounded-card border border-line bg-marble p-4" aria-label={labels.title}>
       <form action={aiTextSearchAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-semibold text-ink">
+        <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-medium text-ink-2">
           {labels.title}
           <input
             name="ai"

@@ -177,7 +177,7 @@ function DebtCell({ debt }: { debt: PerCurrency }) {
         <span className="text-ink-2">—</span>
       ) : (
         parts.map((c) => (
-          <span key={c} className="block font-semibold text-danger">
+          <span key={c} className="block font-semibold text-carnelian">
             {formatDebtMoney(debt[c], c)}
           </span>
         ))
@@ -186,9 +186,68 @@ function DebtCell({ debt }: { debt: PerCurrency }) {
   );
 }
 
+/** Деньги одной валюты для карточки телефона; ноль — прочерк. */
+function moneyText(amount: string, currency: MoneyCurrency): string {
+  return Number(amount) === 0 ? "—" : formatDebtMoney(amount, currency);
+}
+
+function areaText(areaM2: string): string {
+  const n = Number(areaM2);
+  return n > 0 ? n.toFixed(3).replace(/\.?0+$/, "").replace(".", ",") : "—";
+}
+
+function debtText(debt: PerCurrency): ReactNode {
+  const parts = (["UZS", "USD"] as const).filter((c) => Number(debt[c]) > 0);
+  if (parts.length === 0) return "—";
+  return (
+    <span className="font-semibold text-carnelian">
+      {parts.map((c) => formatDebtMoney(debt[c], c)).join(" · ")}
+    </span>
+  );
+}
+
+/**
+ * ТЗ №21 А11 — на телефоне (<768px) строки таблиц Сводки — карточками
+ * (как «Клиенты» и «Должники»), без прокрутки вбок. Те же данные, что в таблице.
+ */
+function PhoneCards({ children }: { children: ReactNode }) {
+  return <ul className="flex flex-col gap-2 md:hidden">{children}</ul>;
+}
+
+function PhoneCard({
+  title,
+  meta,
+  rows,
+}: {
+  title: ReactNode;
+  meta?: ReactNode;
+  rows: [string, ReactNode][];
+}) {
+  return (
+    <li className="rounded-card border border-line bg-marble p-4 text-sm">
+      <div className="font-semibold text-ink">{title}</div>
+      {meta && <div className="mt-0.5 text-xs text-ink-2">{meta}</div>}
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-ink-2">{label}</dt>
+            <dd className="tnum text-right text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </li>
+  );
+}
+
+/** «2026-11-01» → «01.11.2026» (ТЗ №21 А8: без служебного формата и часового пояса). */
+function ruDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
 function periodCaption(p: RatingPeriod): string {
   if (!p.fromISO || !p.toISO) return "за всё время";
-  return `${p.fromISO} — ${p.toISO} (Asia/Tashkent)`;
+  return `${ruDate(p.fromISO)} — ${ruDate(p.toISO)}`;
 }
 
 /** Переключатель периода/сортировки — дорожка stone-100, выбранный сегмент
@@ -258,7 +317,7 @@ function RatingSection({
     <section id="reyting" className="mb-6 scroll-mt-4">
       <h2 className="mb-2 text-base font-semibold text-ink">
         Рейтинг клиентов{" "}
-        <Link href="/klienty" className="text-sm font-normal text-gold-deep underline">
+        <Link href="/klienty" className="text-sm font-normal text-honey-ink underline">
           справочник →
         </Link>
       </h2>
@@ -293,8 +352,31 @@ function RatingSection({
         <p className="text-sm text-ink-2">Нет продаж клиентам за период.</p>
       ) : (
         <>
-          <div className="onyx-table-wrap">
-            <table className="onyx-table onyx-table-wide">
+          <PhoneCards>
+            {visible.map((r) => (
+              <PhoneCard
+                key={r.clientId}
+                title={
+                  <>
+                    <span className="tnum mr-1.5 text-ink-2">{r.place}.</span>
+                    <Link href={`/klienty/${r.clientId}`} className="text-honey-ink underline">
+                      {r.name}
+                    </Link>
+                  </>
+                }
+                meta={r.type ? CLIENT_TYPE_LABELS[r.type] : undefined}
+                rows={[
+                  ["Сумма, сум", moneyText(r.sold.UZS, "UZS")],
+                  ["Сумма, $", moneyText(r.sold.USD, "USD")],
+                  ["м²", areaText(r.areaM2)],
+                  ["Продаж", r.saleCount],
+                  ["Долг", debtText(r.debt)],
+                ]}
+              />
+            ))}
+          </PhoneCards>
+          <div className="onyx-table-wrap hidden md:block">
+            <table className="onyx-table">
               <thead>
                 <tr>
                   <th className="py-2 pl-3 text-right font-medium">#</th>
@@ -314,7 +396,7 @@ function RatingSection({
                     <td className="py-2 pl-3">
                       <Link
                         href={`/klienty/${r.clientId}`}
-                        className="font-semibold text-gold-deep underline"
+                        className="font-semibold text-honey-ink underline"
                       >
                         {r.name}
                       </Link>
@@ -341,7 +423,7 @@ function RatingSection({
             {!showAll && rows.length > RATING_PAGE && (
               <>
                 {" · "}
-                <Link href={hrefWith({ all: "1" })} className="text-gold-deep underline">
+                <Link href={hrefWith({ all: "1" })} className="text-honey-ink underline">
                   показать всех
                 </Link>
               </>
@@ -365,8 +447,27 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
       {rows.length === 0 ? (
         <p className="text-sm text-ink-2">Нет продаж и платежей за период.</p>
       ) : (
-        <div className="onyx-table-wrap">
-          <table className="onyx-table onyx-table-wide">
+        <>
+        <PhoneCards>
+          {rows.map((r) => (
+            <PhoneCard
+              key={r.managerId}
+              title={r.name}
+              meta={r.isActive ? undefined : "неактивен"}
+              rows={[
+                ["Продаж", r.saleCount],
+                ["Сумма, сум", moneyText(r.sold.UZS, "UZS")],
+                ["Сумма, $", moneyText(r.sold.USD, "USD")],
+                ["Собрано, сум", moneyText(r.collected.UZS, "UZS")],
+                ["Собрано, $", moneyText(r.collected.USD, "USD")],
+                ["м²", areaText(r.areaM2)],
+                ["Долг клиентов", debtText(r.debt)],
+              ]}
+            />
+          ))}
+        </PhoneCards>
+        <div className="onyx-table-wrap hidden md:block">
+          <table className="onyx-table">
             <thead>
               <tr>
                 <th className="py-2 pl-3 font-medium">Менеджер</th>
@@ -402,6 +503,7 @@ function ManagersSection({ rows, period }: { rows: ManagerSalesRow[]; period: Ra
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );
@@ -426,7 +528,30 @@ function AiQueriesSection({
       {data.rows.length === 0 ? (
         <p className="text-sm text-ink-2">За период текстовых ИИ-запросов не было.</p>
       ) : (
-        <div className="onyx-table-wrap">
+        <>
+        <PhoneCards>
+          {data.rows.map((r) => (
+            <PhoneCard
+              key={r.query}
+              title={
+                <Link
+                  href={`/katalog?ai=${encodeURIComponent(r.query)}`}
+                  className="text-ink underline"
+                >
+                  {r.query}
+                </Link>
+              }
+              rows={[
+                ["Раз", r.count],
+                [
+                  "В наличии",
+                  r.lastInStock > 0 ? r.lastInStock : <Badge variant="warning">нет на складе</Badge>,
+                ],
+              ]}
+            />
+          ))}
+        </PhoneCards>
+        <div className="onyx-table-wrap hidden md:block">
           <table className="onyx-table">
             <thead>
               <tr>
@@ -459,6 +584,7 @@ function AiQueriesSection({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );
@@ -477,14 +603,42 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
       {rows.length === 0 ? (
         <p className="text-sm text-ink-2">
           Партнёров пока нет —{" "}
-          <Link href="/partnery" className="text-gold-deep underline">
+          <Link href="/partnery" className="text-honey-ink underline">
             завести
           </Link>
           .
         </p>
       ) : (
-        <div className="onyx-table-wrap">
-          <table className="onyx-table onyx-table-wide">
+        <>
+        <PhoneCards>
+          {rows.map((r) => (
+            <PhoneCard
+              key={r.partnerId}
+              title={
+                <Link
+                  href={`/zayavki?partner=${encodeURIComponent(r.partnerId)}`}
+                  className="text-ink underline"
+                >
+                  {r.name}
+                </Link>
+              }
+              meta={
+                [r.type ? PARTNER_TYPE_RU[r.type] : null, r.managerName ? `менеджер: ${r.managerName}` : null]
+                  .filter(Boolean)
+                  .join(" · ") || undefined
+              }
+              rows={[
+                ["Заявки", r.requests],
+                ["Интересы", r.interests],
+                ["Продажи", r.sales],
+                ["Сумма, сум", moneyText(r.amountUzs.toFixed(2), "UZS")],
+                ["Сумма, $", moneyText(r.amountUsd.toFixed(2), "USD")],
+              ]}
+            />
+          ))}
+        </PhoneCards>
+        <div className="onyx-table-wrap hidden md:block">
+          <table className="onyx-table">
             <thead>
               <tr>
                 <th className="py-2 pl-3 font-medium">Партнёр</th>
@@ -527,6 +681,7 @@ function PartnersSection({ rows, period }: { rows: PartnerSummaryRow[]; period: 
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );
@@ -544,8 +699,34 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
       {rows.length === 0 ? (
         <p className="text-sm text-ink-2">За период карточки по QR не открывали.</p>
       ) : (
-        <div className="onyx-table-wrap">
-          <table className="onyx-table onyx-table-wide">
+        <>
+        <PhoneCards>
+          {rows.map((r, i) => (
+            <PhoneCard
+              key={r.code}
+              title={
+                <>
+                  <span className="tnum mr-1.5 text-ink-2">{i + 1}.</span>
+                  <Link href={`/kamen/${r.stoneTypeId}`} className="text-honey-ink underline">
+                    {r.stoneName}
+                  </Link>
+                </>
+              }
+              meta={r.kind && r.kind !== "STONE_TYPE" ? STONE_CODE_KIND_RU[r.kind] : undefined}
+              rows={[
+                [
+                  "Код",
+                  <Link key="c" href={`/k/${r.code}`} className="font-mono text-honey-ink underline">
+                    {r.code}
+                  </Link>,
+                ],
+                ["Открытий", <span key="s" className="font-semibold">{r.scans}</span>],
+              ]}
+            />
+          ))}
+        </PhoneCards>
+        <div className="onyx-table-wrap hidden md:block">
+          <table className="onyx-table">
             <thead>
               <tr>
                 <th className="py-2 pl-3 font-medium">#</th>
@@ -561,7 +742,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
                   <td className="py-2 pl-3">
                     <Link
                       href={`/kamen/${r.stoneTypeId}`}
-                      className="font-semibold text-gold-deep underline"
+                      className="font-semibold text-honey-ink underline"
                     >
                       {r.stoneName}
                     </Link>
@@ -570,7 +751,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
                     )}
                   </td>
                   <td className="tnum py-2 pl-3">
-                    <Link href={`/k/${r.code}`} className="text-gold-deep underline">
+                    <Link href={`/k/${r.code}`} className="text-honey-ink underline">
                       {r.code}
                     </Link>
                   </td>
@@ -580,6 +761,7 @@ function TopScansSection({ rows, period }: { rows: TopScanRow[]; period: RatingP
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );
@@ -723,7 +905,7 @@ export default async function SvodkaPage({
           <Button type="submit">Показать</Button>
         </form>
         <p className="mt-2 text-xs text-ink-2">
-          Период: {period.fromISO} — {period.toISO} (Asia/Tashkent). По
+          Период: {ruDate(period.fromISO)} — {ruDate(period.toISO)}. По
           умолчанию — текущий месяц.
         </p>
       </Card>
@@ -787,7 +969,7 @@ export default async function SvodkaPage({
       <section className="mb-6">
         <h2 className="mb-2 text-base font-semibold text-ink">
           Топ объектов{" "}
-          <Link href="/obekty" className="text-sm font-normal text-gold-deep underline">
+          <Link href="/obekty" className="text-sm font-normal text-honey-ink underline">
             все →
           </Link>
         </h2>
@@ -796,8 +978,29 @@ export default async function SvodkaPage({
             Нет продаж с привязкой к объекту за период.
           </p>
         ) : (
-          <div className="onyx-table-wrap">
-            <table className="onyx-table onyx-table-wide">
+          <>
+          <PhoneCards>
+            {topSites.map((s, i) => (
+              <PhoneCard
+                key={s.siteId}
+                title={
+                  <>
+                    <span className="tnum mr-1.5 text-ink-2">{i + 1}.</span>
+                    <Link href={`/obekty/${s.siteId}`} className="text-honey-ink underline">
+                      {s.name}
+                    </Link>
+                  </>
+                }
+                meta={[s.clientName, formatVolumeLine(s.volume)].filter(Boolean).join(" · ") || undefined}
+                rows={[
+                  ["Сумма", <MoneyLines key="m" rows={s.totals} />],
+                  ["Продаж", s.saleCount],
+                ]}
+              />
+            ))}
+          </PhoneCards>
+          <div className="onyx-table-wrap hidden md:block">
+            <table className="onyx-table">
               <thead>
                 <tr>
                   <th className="py-2 pl-3 text-right">#</th>
@@ -814,7 +1017,7 @@ export default async function SvodkaPage({
                     <td className="py-2 pl-3">
                       <Link
                         href={`/obekty/${s.siteId}`}
-                        className="font-semibold text-gold-deep underline"
+                        className="font-semibold text-honey-ink underline"
                       >
                         {s.name}
                       </Link>
@@ -834,6 +1037,7 @@ export default async function SvodkaPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 

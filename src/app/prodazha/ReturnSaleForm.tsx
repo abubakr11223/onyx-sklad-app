@@ -11,6 +11,7 @@ import { inputClass } from "@/components/ui/Field";
 import { PAY_METHODS, PAY_METHOD_LABEL } from "@/lib/payment-rows";
 import { returnSalePartialAction } from "./actions";
 import { normalizeMoneyForSubmit } from "./money-input";
+import { DisclosureChevron, summaryClass } from "@/components/ui/Icons";
 
 export interface ReturnSaleFormProps {
   saleId: string;
@@ -66,8 +67,9 @@ export default function ReturnSaleForm(p: ReturnSaleFormProps) {
 
   return (
     <details className="mt-2">
-      <summary className="cursor-pointer text-sm font-semibold text-honey-ink hover:underline">
+      <summary className={`${summaryClass} w-fit text-sm font-semibold text-honey-ink hover:underline`}>
         Оформить возврат
+        <DisclosureChevron />
       </summary>
       <form action={returnSalePartialAction} className="mt-2 space-y-2 rounded-card border border-line p-3">
         <input type="hidden" name="saleRecordId" value={p.saleId} />

@@ -35,8 +35,10 @@ const plexMono = IBM_Plex_Mono({
 
 // Свёрнутое боковое меню (ТЗ №20 §6.1) — выставить ДО первой отрисовки,
 // иначе меню «прыгает» из широкого в узкое. Только чтение localStorage.
+// ТЗ №21 А9: на планшете (768–1023px) меню по умолчанию свёрнуто до 64px;
+// выбор пользователя запоминается отдельно для планшета и для десктопа.
 const NAV_STATE_SCRIPT =
-  "try{if(localStorage.getItem('onyx-nav')==='collapsed')document.documentElement.dataset.nav='collapsed'}catch(e){}";
+  "try{var t=window.innerWidth<1024,v=localStorage.getItem(t?'onyx-nav-tablet':'onyx-nav');if(t?v!=='open':v==='collapsed')document.documentElement.dataset.nav='collapsed'}catch(e){}";
 
 export const metadata: Metadata = {
   title: "Onyx — складская система",

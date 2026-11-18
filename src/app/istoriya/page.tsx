@@ -58,6 +58,23 @@ async function loadHistoryLookups(
 ): Promise<HistoryLookups> {
   const r = collectHistoryRefs(rows);
   const stone = { select: { stoneType: { select: { name: true } } } };
+  // ТЗ №21 А8 — вид камня для «Фотозапрос» и «Текстура 3D» (вместо id).
+  const photoRequestIds = rows.filter((x) => x.entityType === "PhotoRequest").map((x) => x.entityId);
+  const textureIds = rows.filter((x) => x.entityType === "StoneTexture").map((x) => x.entityId);
+  const [photoReqs, textures] = await Promise.all([
+    photoRequestIds.length
+      ? db.photoRequest.findMany({
+          where: { id: { in: [...new Set(photoRequestIds)] } },
+          select: { id: true, batch: stone },
+        })
+      : [],
+    textureIds.length
+      ? db.stoneTexture.findMany({
+          where: { id: { in: [...new Set(textureIds)] } },
+          select: { id: true, stoneType: { select: { name: true } } },
+        })
+      : [],
+  ]);
   const [batches, slabs, pieces, patterns, clients, sales, locations, shipments, samples] =
     await Promise.all([
       r.batchIds.size
@@ -140,6 +157,10 @@ async function loadHistoryLookups(
     ]);
 
   return {
+    entityStones: new Map([
+      ...photoReqs.map((x) => [x.id, x.batch.stoneType.name] as [string, string]),
+      ...textures.map((x) => [x.id, x.stoneType.name] as [string, string]),
+    ]),
     batches: new Map(batches.map((b) => [b.id, { stoneName: b.stoneType.name }])),
     slabs: new Map(
       slabs.map((s) => [s.id, { stoneName: s.stoneType.name, label: s.label }]),

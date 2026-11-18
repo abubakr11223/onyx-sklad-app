@@ -1453,6 +1453,22 @@ export function planVolumeLines(args: {
 }
 
 /** Площадь одной плиты однородной партии: габарит, иначе средняя по приёмке. */
+/**
+ * ТЗ №21 А1 — площадь, уходящая вместе с N плитами однородной партии.
+ * null — площадь не считается (нет учёта м² или площади плиты).
+ */
+export function areaForHomogeneousSlabs(
+  qtySlabs: number,
+  unitAreaM2: number,
+  areaFreeM2: number | null,
+): number | null {
+  if (areaFreeM2 === null || unitAreaM2 <= 0 || qtySlabs <= 0) return null;
+  const raw = Math.floor(qtySlabs * unitAreaM2 * 1000) / 1000;
+  const cap = Math.floor(Math.max(0, areaFreeM2) * 1000) / 1000;
+  const v = Math.min(raw, cap);
+  return v > 0 ? v : null;
+}
+
 function homogeneousUnitAreaM2(batch: BatchForVolume): number {
   if (batch.lengthMm && batch.widthMm) return (batch.lengthMm * batch.widthMm) / 10_000;
   const area = toNum(batch.areaTotalM2);
@@ -1534,8 +1550,15 @@ export async function sellBatchVolume(
         });
       }
       const qtySlabs = input.qtySlabs ?? null;
-      const qtyAreaM2 = input.qtyAreaM2 ?? null;
       const unitAreaM2 = homogeneousUnitAreaM2(batch);
+      // ТЗ №21 А1 — продажа плитами списывает и площадь (как у узора, §2 п.4):
+      // N × площадь плиты, усечение до 3 знаков, не больше свободной площади.
+      // Раньше площадь партии при продаже плитами не уменьшалась.
+      const qtyAreaM2 =
+        input.qtyAreaM2 ??
+        (qtySlabs !== null && qtySlabs > 0
+          ? areaForHomogeneousSlabs(qtySlabs, unitAreaM2, free.areaFreeM2)
+          : null);
       const plan = planVolumeLines({
         batchPatternId: null,
         patternLabel: null,

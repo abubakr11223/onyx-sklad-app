@@ -791,7 +791,7 @@ export default async function ProdazhaPage({
           {caps.canSeeHistory
             ? "Все продажи склада (вы — владелец)."
             : "Только ваши продажи."}{" "}
-          Фильтр по дате и клиенту; страницы без пропусков (keyset).
+          Фильтр по дате и клиенту.
         </p>
 
         <form

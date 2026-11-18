@@ -365,7 +365,15 @@ export default async function KartaSkladaPage({
                       Переименовать
                     </Button>
                   </form>
-                  <form action={setBlockMeta} className="flex flex-col gap-1.5">
+                  {/* ТЗ №21 А13: поля формы неуправляемые (defaultValue) — после
+                      сохранения React сбрасывает их к СТАРОМУ значению, и блок
+                      показывал прежнюю заметку при баннере «Сохранено». key из
+                      сохранённых значений пересоздаёт форму со свежими данными. */}
+                  <form
+                    key={`${blk.letter}|${blk.note ?? ""}|${blk.areaM2 ?? ""}|${blk.isFull ? 1 : 0}`}
+                    action={setBlockMeta}
+                    className="flex flex-col gap-1.5"
+                  >
                     {idField}
                     <input
                       name="areaM2"

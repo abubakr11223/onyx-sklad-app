@@ -233,7 +233,7 @@ export default async function FotozaprosPage({
         <p className="mt-1 text-sm text-ink-2">
           {canManageRequests
             ? "Задачи уходят всем активным складчикам с привязанным Telegram (общая очередь). Фото приходят в бот."
-            : "Ваши открытые задачи. Сфотографируйте камень и отправьте фото в Telegram-бот — на сайте загрузка не нужна (§5.3)."}
+            : "Ваши открытые задачи. Сфотографируйте камень и отправьте фото в Telegram-бот — на сайте загрузка не нужна."}
         </p>
       </header>
 
@@ -276,7 +276,7 @@ export default async function FotozaprosPage({
           <p className="mt-1 text-sm text-ink-2">
             Фотозапрос уходит каждому <strong>активному реальному</strong>{" "}
             складчику с Telegram ID. Демо-аккаунты в рассылку{" "}
-            <strong>не входят</strong> (W11-A) — даже если у них ваш личный ID.
+            <strong>не входят</strong> — даже если у них ваш личный ID.
           </p>
           {sp.tgUnlink === "ok" && (
             <Alert variant="success" className="mt-3">

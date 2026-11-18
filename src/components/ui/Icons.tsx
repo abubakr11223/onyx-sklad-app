@@ -150,3 +150,27 @@ export function SendIcon(props: IconProps) {
     </Base>
   );
 }
+
+/** Шеврон вниз — маркер раскрывающегося блока <details> (ТЗ №21 А7). */
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </Base>
+  );
+}
+
+/**
+ * ТЗ №21 А7 — <summary> без системного треугольника ▶. Ставится на
+ * <summary>; внутрь — <DisclosureChevron />, который поворачивается, когда
+ * ЕГО <details> открыт (селектор по прямому родителю — вложенные блоки не
+ * переворачивают чужой шеврон).
+ */
+export const summaryClass =
+  "flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden";
+
+export function DisclosureChevron() {
+  return (
+    <ChevronDownIcon className="shrink-0 transition-transform duration-150 [details[open]>summary>&]:rotate-180" />
+  );
+}

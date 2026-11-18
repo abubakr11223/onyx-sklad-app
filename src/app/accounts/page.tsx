@@ -8,7 +8,7 @@
 // (soft). OWNER — корневой аккаунт: его нельзя удалить/сменить роль; сам владелец
 // может сменить СВОЙ пароль (после seed-дефолта).
 
-import { PhoneIcon, SendIcon } from "@/components/ui/Icons";
+import { PhoneIcon, SendIcon, DisclosureChevron, summaryClass } from "@/components/ui/Icons";
 import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { getRealSessionUser } from "@/lib/session";
@@ -282,8 +282,9 @@ export default async function AccountsPage({
 
       {/* ── Короткая инструкция для владельца (передача проекта) ── */}
       <details className="mb-6 rounded-card border border-line bg-marble p-4">
-        <summary className="cursor-pointer font-semibold text-ink">
+        <summary className={`${summaryClass} font-semibold text-ink`}>
           Как это работает — коротко
+          <DisclosureChevron />
         </summary>
         <div className="mt-3 flex flex-col gap-3 text-sm text-ink-2">
           <p>
@@ -326,7 +327,7 @@ export default async function AccountsPage({
               </li>
               <li>
                 <b>Закупочная цена / маржа</b> — в карточке сотрудника чекбокс
-                «Видеть закупочную цену». Нужен менеджеру (§5.8); складчик и
+                «Видеть закупочную цену». Нужен менеджеру; складчик и
                 партнёр цены закупа не видят.
               </li>
             </ul>
@@ -429,7 +430,8 @@ export default async function AccountsPage({
       </Card>
 
       {/* ── Создать аккаунт ── */}
-      <Card className="mb-6">
+      {/* ТЗ №21 А4 — форма в колонке до 760 px, кнопка по ширине текста. */}
+      <Card className="mb-6 max-w-[760px]">
         <h2 className="mb-4 text-base font-semibold text-ink">
           Новый аккаунт
         </h2>
@@ -478,7 +480,7 @@ export default async function AccountsPage({
             hint="Для роли «Склад» — обязательно: бот связывает аккаунт по этому номеру (/start → контакт). Без телефона складчик не привяжется к этой учётке."
             autoComplete="off"
           />
-          <Button type="submit" className="w-full sm:w-auto">
+          <Button type="submit" className="self-start">
             Создать аккаунт
           </Button>
         </form>
@@ -640,21 +642,27 @@ export default async function AccountsPage({
                     )}
                   </div>
                 </div>
-                {/* W11-A one-click unlink on every linked non-owner card. */}
-                {u.isActive && isManageable && u.telegramId && (
-                  <form action={unlinkTelegram} className="mt-3">
-                    <input type="hidden" name="userId" value={u.id} />
-                    <input type="hidden" name="next" value="/accounts" />
-                    <Button type="submit" variant="danger" size="sm">
-                      Отвязать Telegram
-                    </Button>
-                  </form>
-                )}
-
                 {/* Действия — только для активных не-владельцев. Свой аккаунт
                     (владелец) управляется в блоке «Мой аккаунт» вверху. */}
+                {/* ТЗ №21 А4 — формы сотрудника свёрнуты, открываются
+                    по «Изменить». Состав действий прежний. */}
                 {u.isActive && isManageable && (
-                  <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
+                  <details className="mt-3 border-t border-line pt-3">
+                    <summary className={`${summaryClass} min-h-11 w-fit text-sm font-medium text-honey-ink md:min-h-9`}>
+                      Изменить
+                      <DisclosureChevron />
+                    </summary>
+                  <div className="mt-3 flex flex-col gap-3">
+                    {/* W11-A one-click unlink on every linked non-owner card. */}
+                    {u.telegramId && (
+                      <form action={unlinkTelegram}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input type="hidden" name="next" value="/accounts" />
+                        <Button type="submit" variant="danger" size="sm">
+                          Отвязать Telegram
+                        </Button>
+                      </form>
+                    )}
                     {/* Смена роли — выбор из складско-менеджерских ролей.
                         Зав. складом отличается от складчика одним правом:
                         менять количество партии. */}
@@ -819,8 +827,9 @@ export default async function AccountsPage({
                         Server action без confirm=yes всё равно откажет. */}
                     {isManageable && !isSelf && (
                       <details className="rounded-field border border-danger/30 bg-danger/[0.04] p-3">
-                        <summary className="cursor-pointer text-sm font-semibold text-danger">
+                        <summary className={`${summaryClass} text-sm font-semibold text-danger`}>
                           Деактивировать…
+                          <DisclosureChevron />
                         </summary>
                         <p className="mt-2 text-sm text-ink-2">
                           Деактивировать сотрудника <b>{u.name}</b>? Вход будет
@@ -837,6 +846,7 @@ export default async function AccountsPage({
                       </details>
                     )}
                   </div>
+                  </details>
                 )}
 
                 {/* W3-T3 — деактивированный аккаунт можно вернуть: вход снова

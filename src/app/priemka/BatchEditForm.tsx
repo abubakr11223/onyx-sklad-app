@@ -511,7 +511,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                         href={`/api/photo/${p.photoId}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-medium text-honey-ink underline"
+                        className="inline-flex min-h-11 items-center font-medium text-honey-ink underline md:min-h-0"
                       >
                         открыть
                       </a>
@@ -541,7 +541,7 @@ export default function BatchEditForm(props: EditBatchProps) {
                         value="1"
                         className="h-5 w-5 accent-ink"
                       />
-                      Снять фото с узора (строка Photo не удаляется — §1.9)
+                      Снять фото с узора (само фото не удаляется)
                     </label>
                   )}
                   <p className="text-xs text-ink-2">

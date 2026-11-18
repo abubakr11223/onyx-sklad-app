@@ -81,7 +81,7 @@ export default async function CollectionsPage({
       <Card className="mb-4">
         <h2 className="text-base font-semibold text-ink">Новая подборка</h2>
         <form action={createCollectionAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Название <span className="sr-only">(обязательно)</span>
             <input
               name="title"
@@ -91,7 +91,7 @@ export default async function CollectionsPage({
               className={inputClass}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             Клиент (необязательно)
             <select name="clientId" defaultValue="" className={inputClass}>
               <option value="">— без клиента —</option>

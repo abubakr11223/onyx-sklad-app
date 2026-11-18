@@ -53,6 +53,7 @@ import {
   loadBatchAvailability,
   typeFormatSummary,
   formatTypeFormatsLine,
+  reconcileTypeWithPatterns,
 } from "@/lib/poisk-query";
 import { loadPatternStock } from "@/lib/pattern-stock";
 import { formatLowStockShort, loadLowStock } from "@/lib/min-stock";
@@ -1108,7 +1109,9 @@ export default async function PoiskPage({
           )
         ) : (
           <ul className="mt-3 space-y-2.5">
-            {visibleTypesForDims.map((t) => {
+            {visibleTypesForDims.map((t0) => {
+              // ТЗ №21 А1 — итог вида = сумма узоров (как разбивка по размерам).
+              const t = canSeeExact ? reconcileTypeWithPatterns(t0, patternStock) : t0;
               // BUG-03: bron bo'lsa — всего/свободно/бронь ajratib ko'rsatiladi;
               // bronsiz — oldingidek bitta son (свободно = всего).
               // Faqat canSeeExact — PARTNER ga aniq sonlar yopiq (§3 / §4.6).

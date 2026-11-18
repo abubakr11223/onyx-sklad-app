@@ -160,7 +160,7 @@ export default async function CatalogPage({
           one(k) ? <input key={k} type="hidden" name={k} value={one(k)} /> : null,
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink sm:col-span-2">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2 sm:col-span-2">
             {t.searchLabel}
             <input
               name="q"
@@ -170,7 +170,7 @@ export default async function CatalogPage({
               className={inputClass}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             {t.rockType}
             <select name="rock" defaultValue={filters.rock} className={selectClass}>
               <option value="">{t.filterAny}</option>
@@ -181,7 +181,7 @@ export default async function CatalogPage({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             {t.color}
             <select name="color" defaultValue={filters.color} className={selectClass}>
               <option value="">{t.filterAny}</option>
@@ -192,7 +192,7 @@ export default async function CatalogPage({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
+          <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
             {t.thicknesses}
             <select
               name="t"

@@ -52,7 +52,7 @@ export default function StoneTile({
     <article className="flex h-full flex-col overflow-hidden rounded-card border border-line bg-marble transition-colors duration-150 hover:border-line-strong">
       <Link
         href={to}
-        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
+        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-honey"
       >
         {item.photoId ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -63,8 +63,10 @@ export default function StoneTile({
             className="aspect-[4/3] w-full bg-stone-100 object-cover"
           />
         ) : (
-          <div className="flex aspect-[4/3] w-full items-center justify-center border-b border-dashed border-honey bg-honey-soft px-3">
-            <span className="text-center text-sm font-medium text-ink-2">{t.noPhotos}</span>
+          // ТЗ №21 А12 / ТЗ №20 §7.5 — нет фото: плашка stone-100 с кодом вида.
+          <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 border-b border-line bg-stone-100 px-3">
+            <span className="font-mono text-base font-medium text-ink">{item.code}</span>
+            <span className="text-center text-xs text-ink-2">{t.noPhotos}</span>
           </div>
         )}
       </Link>
@@ -72,7 +74,7 @@ export default function StoneTile({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <Link
             href={to}
-            className="text-lg font-semibold leading-tight text-ink hover:text-gold-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            className="text-lg font-semibold leading-tight text-ink hover:text-honey-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-honey"
           >
             {item.name}
           </Link>

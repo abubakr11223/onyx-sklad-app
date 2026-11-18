@@ -421,6 +421,54 @@ export type FormatPatternStock = Pick<
   "batchId" | "lengthMm" | "widthMm" | "thicknessMm" | "availableSlabs"
 >;
 
+/**
+ * ТЗ №21 А1 — у партии с узорами остаток = сумма узоров (ТЗ №19 §D).
+ * Итог вида в карточке Поиска («плит ~N», «≈ M м²») пересчитывается из
+ * свободного остатка узоров — тем же числом, что и разбивка по размерам
+ * (typeFormatSummary), поэтому общая цифра и разбивка совпадают.
+ * Партии без узоров не меняются.
+ */
+export type ReconcilePatternStock = Pick<
+  PatternStock,
+  "batchId" | "availableSlabs" | "availableAreaM2"
+>;
+
+export function reconcileTypeWithPatterns<
+  T extends Pick<
+    PoiskTypeRow,
+    | "batchStock"
+    | "slabsFreeSum"
+    | "areaFreeSum"
+    | "slabsTotalSum"
+    | "areaTotalSum"
+    | "reservedSlabsSum"
+    | "reservedAreaSum"
+  >,
+>(t: T, patternStock: ReadonlyMap<string, ReconcilePatternStock>): T {
+  const byBatch = new Map<string, { slabs: number; areaM2: number }>();
+  for (const p of patternStock.values()) {
+    const cur = byBatch.get(p.batchId) ?? { slabs: 0, areaM2: 0 };
+    cur.slabs += Math.max(0, p.availableSlabs);
+    cur.areaM2 += Math.max(0, p.availableAreaM2);
+    byBatch.set(p.batchId, cur);
+  }
+  if (!t.batchStock.some((s) => byBatch.has(s.batchId))) return t;
+  const batchStock = t.batchStock.map((s) => {
+    const pat = byBatch.get(s.batchId);
+    return pat ? { batchId: s.batchId, slabs: pat.slabs, areaM2: pat.areaM2 } : s;
+  });
+  const slabsFreeSum = batchStock.reduce((n, s) => n + (s.slabs ?? 0), 0);
+  const areaFreeSum = batchStock.reduce((n, s) => n + (s.areaM2 ?? 0), 0);
+  return {
+    ...t,
+    batchStock,
+    slabsFreeSum,
+    areaFreeSum,
+    slabsTotalSum: slabsFreeSum + t.reservedSlabsSum,
+    areaTotalSum: areaFreeSum + t.reservedAreaSum,
+  };
+}
+
 /** Один формат плиты вида: L×W×T (null — не указан) и свободных плит. */
 export interface TypeFormatEntry {
   lengthMm: number | null;

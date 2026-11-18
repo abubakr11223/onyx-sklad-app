@@ -58,7 +58,7 @@ import {
 import { sortNeedsCheckLast } from "@/lib/checks";
 import Button, { buttonClass } from "@/components/ui/Button";
 import { inputClass } from "@/components/ui/Field";
-import { CameraIcon } from "@/components/ui/Icons";
+import { CameraIcon, DisclosureChevron, summaryClass } from "@/components/ui/Icons";
 import SharePhotoButton from "@/components/SharePhotoButton";
 import PhotoLightbox, { type LightboxPhoto } from "./PhotoLightbox";
 import TextureUploader from "./TextureUploader";
@@ -101,9 +101,13 @@ const PIECE_KIND_RU: Record<string, string> = {
 // Стиль узкого инлайн-поля склада (SK-1) — бренд-токены, но фиксированная
 // ширина под горизонтальную форму (Field даёт w-full/столбец). min-h-11 —
 // зона касания 44px (складчик работает с телефона).
+// ТЗ №21 А3 — компактное поле в строке «Локаций»: тот же вид, что общее поле
+// ТЗ №20 §7.2 (marble, рамка line-strong, фокус honey), только по ширине.
 const inlineInput =
-  "min-h-11 rounded-field border border-line bg-paper px-2 text-sm text-ink " +
-  "placeholder:text-ink-3 focus:border-gold focus:outline-none focus:ring-2 focus:ring-honey-soft";
+  "min-h-11 md:min-h-9 rounded-field border border-line-strong bg-marble px-2 " +
+  "text-base md:text-sm text-ink placeholder:text-ink-3 " +
+  "transition-[border-color,box-shadow] duration-150 " +
+  "focus:border-honey focus:outline-none focus:ring-[3px] focus:ring-honey-soft";
 
 // ТЗ №20 G (§8.1) — постоянный код ONX-… рядом с названием записи.
 function CodeTag({ code }: { code: string }) {
@@ -866,8 +870,9 @@ export default async function KamenPage({
           чтобы не мешать обычному просмотру. */}
       {isOwner && (
         <details className="mt-4 rounded-card border border-line bg-marble p-4">
-          <summary className="cursor-pointer font-semibold text-ink">
+          <summary className={`${summaryClass} font-semibold text-ink`}>
             Редактировать карточку
+            <DisclosureChevron />
           </summary>
           <form
             action={editStoneType}
@@ -876,7 +881,7 @@ export default async function KamenPage({
             <input type="hidden" name="stoneTypeId" value={st.id} />
             <input type="hidden" name="next" value={`/kamen/${st.id}`} />
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink-2">Название</span>
+              <span className="text-xs font-medium text-ink-2">Название</span>
               <input
                 name="name"
                 defaultValue={st.name}
@@ -886,7 +891,7 @@ export default async function KamenPage({
             </label>
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink-2">Порода</span>
+                <span className="text-xs font-medium text-ink-2">Порода</span>
                 <input
                   name="rockType"
                   defaultValue={st.rockType}
@@ -895,7 +900,7 @@ export default async function KamenPage({
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink-2">Цвет</span>
+                <span className="text-xs font-medium text-ink-2">Цвет</span>
                 <input
                   name="color"
                   defaultValue={st.color ?? ""}
@@ -905,7 +910,7 @@ export default async function KamenPage({
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink-2">Цена продажи (за м²)</span>
+                <span className="text-xs font-medium text-ink-2">Цена продажи (за м²)</span>
                 <input
                   name="basePrice"
                   inputMode="decimal"
@@ -915,7 +920,7 @@ export default async function KamenPage({
                 />
               </label>
               <label className="flex flex-1 flex-col gap-1 text-sm">
-                <span className="text-ink-2">Закупочная цена (за м²)</span>
+                <span className="text-xs font-medium text-ink-2">Закупочная цена (за м²)</span>
                 <input
                   name="purchasePrice"
                   inputMode="decimal"
@@ -926,7 +931,7 @@ export default async function KamenPage({
               </label>
             </div>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink-2">Описание</span>
+              <span className="text-xs font-medium text-ink-2">Описание</span>
               <textarea
                 name="description"
                 defaultValue={st.description ?? ""}
@@ -935,7 +940,7 @@ export default async function KamenPage({
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink-2">
+              <span className="text-xs font-medium text-ink-2">
                 Свойства — по строке «ключ: значение»
               </span>
               <textarea
@@ -1545,7 +1550,7 @@ export default async function KamenPage({
               <input type="hidden" name="stoneTypeId" value={st.id} />
               <input type="hidden" name="next" value={`/kamen/${st.id}`} />
               <label htmlFor="minStockQty" className="flex flex-col gap-1 text-sm sm:w-40">
-                <span className="font-semibold text-ink">Порог</span>
+                <span className="text-xs font-medium text-ink-2">Порог</span>
                 <input
                   id="minStockQty"
                   name="minStockQty"
@@ -1556,7 +1561,7 @@ export default async function KamenPage({
                 />
               </label>
               <label htmlFor="minStockUnit" className="flex flex-col gap-1 text-sm sm:w-40">
-                <span className="font-semibold text-ink">Единица</span>
+                <span className="text-xs font-medium text-ink-2">Единица</span>
                 <select
                   id="minStockUnit"
                   name="minStockUnit"
@@ -1659,7 +1664,7 @@ export default async function KamenPage({
               <input type="hidden" name="stoneTypeId" value={st.id} />
               <input type="hidden" name="next" value={`/kamen/${st.id}`} />
               <label htmlFor="priceHintUzsM2" className="flex flex-col gap-1 text-sm sm:w-44">
-                <span className="font-semibold text-ink">сум за м²</span>
+                <span className="text-xs font-medium text-ink-2">сум за м²</span>
                 <input
                   id="priceHintUzsM2"
                   name="priceHintUzsM2"
@@ -1670,7 +1675,7 @@ export default async function KamenPage({
                 />
               </label>
               <label htmlFor="priceHintUsdM2" className="flex flex-col gap-1 text-sm sm:w-36">
-                <span className="font-semibold text-ink">$ за м²</span>
+                <span className="text-xs font-medium text-ink-2">$ за м²</span>
                 <input
                   id="priceHintUsdM2"
                   name="priceHintUsdM2"

@@ -23,7 +23,8 @@
     "restore": "tsx prisma/restore-cli.ts",
     "postinstall": "prisma generate",
     "tg:menu": "tsx prisma/set-tg-menu-cli.ts",
-    "backup:photos": "tsx prisma/photos-export-cli.ts"
+    "backup:photos": "tsx prisma/photos-export-cli.ts",
+    "repair:slab-area": "tsx prisma/repair-slab-area-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
