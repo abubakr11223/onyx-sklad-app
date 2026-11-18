@@ -1,0 +1,630 @@
+{
+  "lang": "uz-Latn",
+  "videos": {
+    "vladelets": {
+      "intro": {
+        "title": "Onyx — Ega uchun qo'llanma",
+        "subtitle": "Ombor, sotuv va xodimlarni bir joydan nazorat qilish"
+      },
+      "scenes": [
+        {
+          "id": "glavnaya",
+          "title": "Bosh sahifa: to'rtta hisoblagich",
+          "result": "Bosh sahifa ochiq, to'rtta raqam ko'rinadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Bosh sahifa — butun ombor bir qarashda",
+              "voice": "Har kuni ishni bosh sahifadan boshlang. Bu yerda ombordagi asosiy raqamlar turadi."
+            },
+            {
+              "n": 2,
+              "caption": "To'rtta raqam — omborning holati",
+              "voice": "«Партии» — ombordagi partiyalar soni. «Фото в очереди» — omborchi hali javob bermagan foto so'rovlar. «Активные брони» — hozir band qilingan toshlar."
+            },
+            {
+              "n": 3,
+              "caption": "«Требует проверки» — qoldiq tekshirilishi kerak",
+              "voice": "«Требует проверки» — omborchi shubha bilan belgilagan partiyalar yoki hisobi to'g'ri kelmagan qoldiq. Bunday partiya tekshirilmaguncha sotilmaydi."
+            },
+            {
+              "n": 4,
+              "caption": "Har bir bo'limga shu yerdan ham o'tish mumkin",
+              "voice": "Pastdagi kartochkalar chap menyudagi bo'limlarning o'zi, faqat qisqa izoh bilan."
+            }
+          ]
+        },
+        {
+          "id": "svodka",
+          "title": "«Сводка»: davr bo'yicha natija",
+          "result": "Tanlangan davr uchun kartochkalar va jadvallar yangilangan.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "«Сводка» — sotuv natijalari",
+              "voice": "Ega uchun asosiy hisobot — «Сводка»."
+            },
+            {
+              "n": 2,
+              "caption": "Davrni tanlaymiz",
+              "voice": "Avval davrni tanlang. Odatda joriy oy ochiladi."
+            },
+            {
+              "n": 3,
+              "caption": "So'm va dollar alohida",
+              "voice": "Tushum so'mda va dollarda alohida ko'rsatiladi, ular hech qachon qo'shilmaydi. B2B — kompaniya yoki obekt, B2C — xususiy mijoz."
+            },
+            {
+              "n": 4,
+              "caption": "Kim ko'proq sotib olyapti",
+              "voice": "Chiziq har bir valyutada B2B va B2C ulushini ko'rsatadi."
+            },
+            {
+              "n": 5,
+              "caption": "Eng katta mijozlar",
+              "voice": "Mijozlar reytingini davr va saralash bo'yicha almashtirish mumkin."
+            },
+            {
+              "n": 6,
+              "caption": "Har bir menejer natijasi",
+              "voice": "Bu jadvalda har bir menejer qancha sotgani va qancha pul yig'gani turadi. Bu ham so'm va dollarda alohida."
+            }
+          ]
+        },
+        {
+          "id": "dolzhniki",
+          "title": "«Должники»: qarzlar",
+          "result": "Qarz qoldig'i kamaygan, to'lov qator ostidagi «Платежи» ro'yxatida ko'rinadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Kim qarzdor",
+              "voice": "Qarzga sotilgan hamma narsa shu yerda."
+            },
+            {
+              "n": 2,
+              "caption": "Qarz valyuta bo'yicha alohida",
+              "voice": "So'mdagi va dollardagi qarz alohida hisoblanadi."
+            },
+            {
+              "n": 3,
+              "caption": "Muddati o'tganlarni ajratamiz",
+              "voice": "Muddati o'tgan qarz «просрочен» yorlig'i bilan qizil rangda chiqadi."
+            },
+            {
+              "n": 4,
+              "caption": "To'lovni qabul qilamiz",
+              "voice": "Mijoz pul olib kelsa, «Принять оплату»ni oching, summani yozing va saqlang."
+            }
+          ]
+        },
+        {
+          "id": "istoriya",
+          "title": "«История»: kim nima qildi",
+          "result": "Oxirgi 100 ta harakat ro'yxati ochiq.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Har bir harakat yozib boriladi",
+              "voice": "Omborda va sotuvda bo'lgan har bir harakat shu jurnalda yoziladi."
+            },
+            {
+              "n": 2,
+              "caption": "Eski qiymat chizilgan, yangisi yonida",
+              "voice": "O'zgarishlarda eski qiymat chizib qo'yilgan, yangisi yonida turadi."
+            },
+            {
+              "n": 3,
+              "caption": "Sotuv arxivi alohida",
+              "voice": "Sotuvlarni sana va mijoz bo'yicha qidirish uchun «Архив продаж»ga o'ting."
+            }
+          ]
+        },
+        {
+          "id": "sotrudniki",
+          "title": "«Сотрудники»: xodimlar",
+          "result": "Yangi akkaunt ro'yxatda, deaktivatsiya qilingan xodim nofaol holatda.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Xodimlar va ularning kirishi",
+              "voice": "Xodimlarning akkauntlari faqat ega tomonidan boshqariladi."
+            },
+            {
+              "n": 2,
+              "caption": "Yangi xodim qo'shamiz",
+              "voice": "Ismni, login va parolni yozing, rolni tanlang: menejer, zav. sklad yoki omborchi. Keyin «Создать аккаунт»."
+            },
+            {
+              "n": 3,
+              "caption": "Telegram arizasini tasdiqlaymiz",
+              "voice": "Xodim Telegram botga yozsa, ariza shu yerda chiqadi. «Одобрить» bosilsa, unga vazifalar botga kela boshlaydi."
+            },
+            {
+              "n": 4,
+              "caption": "Ketgan xodimni o'chiramiz",
+              "voice": "Xodim ishdan ketsa, «Деактивировать» bosing. Kirish yopiladi, lekin uning tarixi saqlanib qoladi."
+            }
+          ]
+        },
+        {
+          "id": "partnery-zayavki",
+          "title": "«Партнёры» va «Заявки»",
+          "result": "Partnyor ro'yxatda, ariza holati yangilangan.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Dizaynerni qo'shamiz",
+              "voice": "Dizayner, prorab yoki pudratchini shu yerda qo'shing."
+            },
+            {
+              "n": 2,
+              "caption": "Partnyor turi — «Дизайнер»",
+              "voice": "Partnyor katalogni qoldiqlar bilan ko'radi, lekin narx va mijozlarni ko'rmaydi."
+            },
+            {
+              "n": 3,
+              "caption": "Menejer biriktiramiz",
+              "voice": "Partnyorga menejer biriktiring — uning arizalari to'g'ri shu menejerga boradi."
+            },
+            {
+              "n": 4,
+              "caption": "Arizani qayta ishlaymiz",
+              "voice": "Mijoz bilan bog'langandan keyin «Связался»ni bosing. Ish tugasa — «Закрыть»."
+            }
+          ]
+        },
+        {
+          "id": "katalog-qr",
+          "title": "«Каталог» va QR: mijoz nimani ko'radi",
+          "result": "Chop etish uchun QR yorliqlar sahifasi ochilgan.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Mijozlar uchun vitrina",
+              "voice": "Katalog — mijoz ko'radigan sahifa: toshlar, rasmlar va mavjudligi."
+            },
+            {
+              "n": 2,
+              "caption": "Mijoz shu kartochkani ko'radi",
+              "voice": "Mijoz toshni ochib, rasmini va o'xshash toshlarni ko'radi va ariza qoldiradi."
+            },
+            {
+              "n": 3,
+              "caption": "Plitalarga QR yorliq",
+              "voice": "QR yorliqni chop etib plitaga yopishtiring. Mijoz telefon bilan skanerlasa, shu toshning sahifasi ochiladi."
+            }
+          ]
+        }
+      ]
+    },
+    "menedzher": {
+      "intro": {
+        "title": "Onyx — Menejer uchun qo'llanma",
+        "subtitle": "Tosh topish, band qilish, sotish va mijozlar"
+      },
+      "scenes": [
+        {
+          "id": "poisk",
+          "title": "«Поиск»: toshni topish",
+          "result": "Natijalar ro'yxatida tosh, o'lchami, joyi va qoldig'i ko'rinadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Toshni nomi bo'yicha qidiramiz",
+              "voice": "«Название / порода / цвет / код ONX» maydoniga nomini yozing, masalan «Оникс»."
+            },
+            {
+              "n": 2,
+              "caption": "Kerakli o'lchamga mos tosh",
+              "voice": "Mijozga kerakli bo'lak o'lchamini yozing. Kesish uchun 2 sm zaxira hisobga olinadi."
+            },
+            {
+              "n": 3,
+              "caption": "Oddiy so'z bilan so'raymiz",
+              "voice": "Sun'iy intellektga oddiy so'z bilan yozing — u mos toshlarni katalogda ko'rsatadi."
+            },
+            {
+              "n": 4,
+              "caption": "Rasm bo'yicha qidiruv",
+              "voice": "Mijoz rasm yuborgan bo'lsa, «Найти по фото» orqali o'xshash toshni toping."
+            }
+          ]
+        },
+        {
+          "id": "kartochka",
+          "title": "Tosh kartochkasi",
+          "result": "«Фотозапросы» bo'limida yangi so'rov paydo bo'ladi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Toshning to'liq ma'lumoti",
+              "voice": "Tosh nomini bosing — kartochka ochiladi."
+            },
+            {
+              "n": 2,
+              "caption": "Qancha bor va qayerda yotibdi",
+              "voice": "Bu yerda nechta plita va necha kvadrat bo'sh qolgani, uzorlar va qaysi blokda yotgani ko'rinadi."
+            },
+            {
+              "n": 3,
+              "caption": "Ombordan yangi rasm so'raymiz",
+              "voice": "Mijozga yangi rasm kerak bo'lsa, «Запросить фото» bosing — vazifa omborchiga Telegramda boradi."
+            }
+          ]
+        },
+        {
+          "id": "bron",
+          "title": "«Бронь»: toshni band qilish",
+          "result": "«Бронь оформлена» xabari, bron «Активные брони» ro'yxatida.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Toshni mijozga band qilamiz",
+              "voice": "Mijoz o'ylab ko'rayotgan bo'lsa, toshni band qiling."
+            },
+            {
+              "n": 2,
+              "caption": "Tosh va mijozni tanlaymiz",
+              "voice": "Tosh turini, nimani band qilishni va mijozni tanlang."
+            },
+            {
+              "n": 3,
+              "caption": "Muddat — 3 kun",
+              "voice": "Odatda bron 3 kunga qilinadi. Muddat tugasa, tosh o'zi «В наличии»ga qaytadi."
+            }
+          ]
+        },
+        {
+          "id": "prodazha",
+          "title": "«Продажа»: boshidan oxirigacha",
+          "result": "«Продажа оформлена» xabari; omborchiga «К отгрузке» vazifasi tushadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "1-qadam: tosh turi",
+              "voice": "Avval tosh turini tanlang."
+            },
+            {
+              "n": 2,
+              "caption": "2-qadam: partiya yoki uzor",
+              "voice": "Partiyadan yoki aniq uzordan sotish mumkin. Plita sonini yozsangiz, kvadrat o'zi hisoblanadi."
+            },
+            {
+              "n": 3,
+              "caption": "3-qadam: mijoz",
+              "voice": "Mijozni ismi yoki telefoni bo'yicha toping. Yangi bo'lsa — shu yerda qo'shing."
+            },
+            {
+              "n": 4,
+              "caption": "Qanday olib ketadi",
+              "voice": "Mijoz o'zi olib ketadimi yoki obektga yetkaziladimi — tanlang."
+            },
+            {
+              "n": 5,
+              "caption": "To'lov: so'm yoki dollar",
+              "voice": "Narxni va valyutani yozing. Mijoz bir qismini keyin to'lasa, qolgani qarzga yoziladi."
+            },
+            {
+              "n": 6,
+              "caption": "4-qadam: tekshirib tasdiqlaymiz",
+              "voice": "Hammasini yana bir bor tekshiring va tasdiqlang."
+            }
+          ]
+        },
+        {
+          "id": "obrazets",
+          "title": "Namuna: «Выдать как образец»",
+          "result": "Namuna «Активные» vkladkasida.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Mijozga namuna beramiz",
+              "voice": "Mijozga namunani olib ko'rish uchun berish mumkin — bu sotuv emas."
+            },
+            {
+              "n": 2,
+              "caption": "Qaytarish muddati",
+              "voice": "Qachon qaytarishini va zalog bo'lsa summasini yozing."
+            },
+            {
+              "n": 3,
+              "caption": "Kimda qaysi namuna",
+              "voice": "Hamma berilgan namunalar shu yerda. Muddati o'tgani qizil rangda ko'rinadi."
+            }
+          ]
+        },
+        {
+          "id": "klienty",
+          "title": "«Клиенты» va «Объекты»",
+          "result": "Qarz kamaygan, to'lov kartochkada ko'rinadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Mijoz kartochkasi",
+              "voice": "Mijoz kartochkasida aloqa ma'lumotlari va asosiy raqamlar turadi."
+            },
+            {
+              "n": 2,
+              "caption": "Mijozning qarzi",
+              "voice": "«Долги» vkladkasida mijozning qarzi ko'rinadi."
+            },
+            {
+              "n": 3,
+              "caption": "To'lovni qabul qilamiz",
+              "voice": "Mijoz pul olib kelsa — «Внести платёж клиента» orqali yozing."
+            },
+            {
+              "n": 4,
+              "caption": "Obekt bo'yicha sotuvlar",
+              "voice": "Obekt — qurilish joyi. Bu yerda unga ketgan barcha sotuvlar ko'rinadi."
+            }
+          ]
+        },
+        {
+          "id": "shourum",
+          "title": "«Шоу-рум»: vitrinadan sotish",
+          "result": "«Продажа из шоу-рума оформлена» xabari.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Zaldagi toshlar",
+              "voice": "«Сейчас в шоу-руме» ro'yxatida zaldagi toshlar turadi."
+            },
+            {
+              "n": 2,
+              "caption": "Vitrinadan sotamiz",
+              "voice": "Mijoz zalda toshni tanlasa — «Продать из шоу-рума»."
+            }
+          ]
+        },
+        {
+          "id": "podborki",
+          "title": "«Подборки»: mijozga tanlov yuborish",
+          "result": "Havola nusxalangan; mijoz belgilagani «Нравится» ustunida ko'rinadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Mijozga to'plam yasaymiz",
+              "voice": "Mijozga bir nechta toshni bitta havolada yuborish uchun tanlov yarating."
+            },
+            {
+              "n": 2,
+              "caption": "Toshlarni qo'shamiz",
+              "voice": "Katalogda toshni ochib «В подборку» bosing."
+            },
+            {
+              "n": 3,
+              "caption": "Havolani yuboramiz",
+              "voice": "Havolani nusxa olib, mijozga Telegramda yuboring. Mijoz yoqqan toshini belgilaydi."
+            }
+          ]
+        },
+        {
+          "id": "vozvrat",
+          "title": "Sotuvni qaytarish",
+          "result": "Sotuv yonida «возврат» yorlig'i; plitalar va kvadrat omborga qaytadi.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Qaytariladigan sotuvni topamiz",
+              "voice": "Sotuvni sana yoki mijoz bo'yicha toping."
+            },
+            {
+              "n": 2,
+              "caption": "Qaytarishni yozamiz",
+              "voice": "Qancha qaytganini va qancha pul qaytarilishini yozing."
+            }
+          ]
+        }
+      ]
+    },
+    "zavsklad": {
+      "intro": {
+        "title": "Onyx — Ombor uchun qo'llanma",
+        "subtitle": "Qabul, karta, jo'natish va bo'lish telefondan"
+      },
+      "scenes": [
+        {
+          "id": "priemka",
+          "title": "«Приёмка»: partiyani qabul qilish",
+          "result": "«Партия принята» xabari; partiya «Ранее принятые партии»da.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Yangi partiyani kiritamiz",
+              "voice": "Mashina kelganda partiyani shu yerda qabul qiling."
+            },
+            {
+              "n": 2,
+              "caption": "Tosh turini tanlaymiz",
+              "voice": "Tosh turi ro'yxatda bo'lsa — «Из каталога», bo'lmasa — «Новый вид»."
+            },
+            {
+              "n": 3,
+              "caption": "Nechta plita keldi",
+              "voice": "Plita sonini yoki kvadratni yozing — kamida bittasini."
+            },
+            {
+              "n": 4,
+              "caption": "Plita o'lchami",
+              "voice": "Uzunlik, eni va qalinlikni santimetrda yozing. Ular bo'lmasa, tosh qidiruvda topilmaydi."
+            },
+            {
+              "n": 5,
+              "caption": "Bir nechta uzor bo'lsa",
+              "voice": "Partiyada har xil uzor yoki qalinlik bo'lsa, har birini alohida qo'shing."
+            },
+            {
+              "n": 6,
+              "caption": "Qayerga qo'ydik",
+              "voice": "Plitalar qaysi blokka qo'yilganini belgilang. Bitta partiya bir necha joyda bo'lishi mumkin."
+            },
+            {
+              "n": 7,
+              "caption": "Partiyaning rasmi",
+              "voice": "Partiyani rasmga oling — menejer mijozga shu rasmni ko'rsatadi."
+            },
+            {
+              "n": 8,
+              "caption": "Saqlaymiz",
+              "voice": "Pastdagi «Принять партию» tugmasini bosing."
+            }
+          ]
+        },
+        {
+          "id": "karta",
+          "title": "«Карта склада»",
+          "result": "Blok kartochkasida «заполнен» yorlig'i.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Ombor xaritasi",
+              "voice": "Xaritada har bir blok va undagi toshlar ko'rinadi."
+            },
+            {
+              "n": 2,
+              "caption": "Blok va ориентир",
+              "voice": "Blok — omborning zonasi, ориентир — undagi belgi, masalan ustun yoki bayroqcha."
+            },
+            {
+              "n": 3,
+              "caption": "To'lgan blokni belgilaymiz",
+              "voice": "Blok to'lsa, «Заполнен» deb belgilang — boshqa partiya u yerga qo'yilmaydi."
+            }
+          ]
+        },
+        {
+          "id": "otgruzki",
+          "title": "«Отгрузки»: jo'natish",
+          "result": "«Готово — Отгрузка подтверждена» xabari; topshiriq «Архив»da «Отгружено».",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Bugun nimani berish kerak",
+              "voice": "«К отгрузке» — mijozga berilishi kerak bo'lgan toshlar. Shoshilinchlari tepada «Срочно» yorlig'i bilan."
+            },
+            {
+              "n": 2,
+              "caption": "Qaysi blokdan olinadi",
+              "voice": "Har bir topshiriqda tosh qaysi blokda yotgani katta yozilgan."
+            },
+            {
+              "n": 3,
+              "caption": "To'liq yoki qisman",
+              "voice": "Hammasini bersangiz maydonni bo'sh qoldiring. Qismini bersangiz — sonini yozing."
+            },
+            {
+              "n": 4,
+              "caption": "Berilganini rasmga olamiz",
+              "voice": "Berilgan toshni rasmga olsangiz, keyin tortishuv bo'lmaydi."
+            },
+            {
+              "n": 5,
+              "caption": "Berildi deb belgilaymiz",
+              "voice": "«Отгрузить» bosing."
+            },
+            {
+              "n": 6,
+              "caption": "Nakladnoy",
+              "voice": "Mijozga nakladnoy kerak bo'lsa — «Накладная»ni oching."
+            }
+          ]
+        },
+        {
+          "id": "razbit",
+          "title": "«Разбить»: singan tosh",
+          "result": "«Бой записан в партию» xabari.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Partiyadan singan plita",
+              "voice": "Plita singan bo'lsa, «Бой в партии»ni tanlang."
+            },
+            {
+              "n": 2,
+              "caption": "Bo'laklarni yozamiz",
+              "voice": "Har bir qolgan bo'lakni o'lchab yozing va qaysi blokka qo'yganingizni belgilang."
+            },
+            {
+              "n": 3,
+              "caption": "Nega singan",
+              "voice": "Sababini tanlang — u jurnalga yoziladi."
+            },
+            {
+              "n": 4,
+              "caption": "Saqlaymiz",
+              "voice": "«Продолжить», keyin «Подтвердить» bosing."
+            },
+            {
+              "n": 5,
+              "caption": "Rasm orqali — Telegram botda",
+              "voice": "Rasm bilan ham mumkin: singan toshni botga rasmga olib yuboring va izohga «бой» deb yozing. Bot havola yuboradi, o'lchamlarni o'sha yerda yozasiz."
+            }
+          ]
+        },
+        {
+          "id": "fotozapros",
+          "title": "«Фотозапросы»",
+          "result": "So'rov yonida «доставлено» yorlig'i.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Menejer rasm so'radi",
+              "voice": "Menejer rasm so'rasa, vazifa sizga Telegramda keladi: qaysi tosh va qaysi blokda."
+            },
+            {
+              "n": 2,
+              "caption": "Rasmni javob qilib yuboramiz",
+              "voice": "Toshni rasmga oling va shu xabarga javob qilib yuboring."
+            },
+            {
+              "n": 3,
+              "caption": "Hamma so'rovlar saytda ham",
+              "voice": "Saytda ham hamma so'rovlar va holati ko'rinadi."
+            }
+          ]
+        },
+        {
+          "id": "peremeshchenie",
+          "title": "Partiyani ko'chirish va «требует проверки»",
+          "result": "Kartochkada yangi blok va «требует проверки» yorlig'i.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Partiya qayerda",
+              "voice": "Tosh kartochkasida partiya qaysi blokda yotgani ko'rinadi."
+            },
+            {
+              "n": 2,
+              "caption": "Boshqa blokka ko'chiramiz",
+              "voice": "Plitalarni boshqa joyga ko'chirsangiz — shu yerda belgilang."
+            },
+            {
+              "n": 3,
+              "caption": "Shubhali partiyani belgilaymiz",
+              "voice": "Sanaganda soni to'g'ri kelmasa — «требует проверки» deb belgilang. Tekshirilmaguncha sotilmaydi."
+            }
+          ]
+        },
+        {
+          "id": "shourum",
+          "title": "«Шоу-рум»",
+          "result": "«Готово» xabari; vazifa «Отгрузки»da.",
+          "steps": [
+            {
+              "n": 1,
+              "caption": "Vitrinaga plita yuboramiz",
+              "voice": "Zalga plita kerak bo'lsa — partiyani tanlab «Выделить и отправить»."
+            },
+            {
+              "n": 2,
+              "caption": "Omborga qaytaramiz",
+              "voice": "Plita zaldan qaytsa — «Вернуть на склад»."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
