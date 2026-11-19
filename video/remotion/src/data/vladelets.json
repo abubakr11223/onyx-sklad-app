@@ -1,0 +1,930 @@
+{
+  "role": "vladelets",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "device": "browser",
+  "viewport": {
+    "w": 1440,
+    "h": 900,
+    "scale": 2
+  },
+  "stones": [
+    "stones/mramor-calacatta.jpg",
+    "stones/oniks-medovyy.jpg",
+    "stones/oniks-zelenyy.jpg",
+    "stones/travertin-klassik.jpg"
+  ],
+  "segments": [
+    {
+      "type": "intro",
+      "title": "Onyx — Ega uchun qo'llanma",
+      "subtitle": "Ombor, sotuv va xodimlarni bir joydan nazorat qilish",
+      "audio": "audio/vladelets/intro.mp3",
+      "frames": 302
+    },
+    {
+      "type": "scene",
+      "n": 1,
+      "total": 7,
+      "title": "Bosh sahifa: to'rtta hisoblagich",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "1-1",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "Bosh sahifa: to'rtta hisoblagich",
+      "caption": "Bosh sahifa — butun ombor bir qarashda",
+      "audio": "audio/vladelets/1-1.mp3",
+      "frames": 193,
+      "image": "captures/vladelets/1-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 240,
+          "h": 88
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 44
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-2",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "Bosh sahifa: to'rtta hisoblagich",
+      "caption": "To'rtta raqam — omborning holati",
+      "audio": "audio/vladelets/1-2.mp3",
+      "frames": 359,
+      "image": "captures/vladelets/1-2.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 120,
+          "w": 272,
+          "h": 104
+        },
+        {
+          "x": 560,
+          "y": 120,
+          "w": 272,
+          "h": 104
+        },
+        {
+          "x": 848,
+          "y": 120,
+          "w": 272,
+          "h": 104
+        },
+        {
+          "x": 1136,
+          "y": 120,
+          "w": 272,
+          "h": 104
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-3",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "Bosh sahifa: to'rtta hisoblagich",
+      "caption": "«Требует проверки» — qoldiq tekshirilishi kerak",
+      "audio": "audio/vladelets/1-3.mp3",
+      "frames": 308,
+      "image": "captures/vladelets/1-3.png",
+      "highlights": [
+        {
+          "x": 560,
+          "y": 120,
+          "w": 272,
+          "h": 104
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-4",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "Bosh sahifa: to'rtta hisoblagich",
+      "caption": "Har bir bo'limga shu yerdan ham o'tish mumkin",
+      "audio": "audio/vladelets/1-4.mp3",
+      "frames": 179,
+      "image": "captures/vladelets/1-4.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 410,
+          "w": 1136,
+          "h": 758
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 2,
+      "total": 7,
+      "title": "«Сводка»: davr bo'yicha natija",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "2-1",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сводка»: davr bo'yicha natija",
+      "caption": "«Сводка» — sotuv natijalari",
+      "audio": "audio/vladelets/2-1.mp3",
+      "frames": 116,
+      "image": "captures/vladelets/2-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 755,
+          "w": 240,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 773
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-2",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сводка»: davr bo'yicha natija",
+      "caption": "Davrni tanlaymiz",
+      "audio": "audio/vladelets/2-2.mp3",
+      "frames": 148,
+      "image": "captures/vladelets/2-2.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 145,
+          "w": 159,
+          "h": 36
+        },
+        {
+          "x": 464,
+          "y": 145,
+          "w": 159,
+          "h": 36
+        },
+        {
+          "x": 635,
+          "y": 145,
+          "w": 96,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 683,
+        "y": 163
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-3",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сводка»: davr bo'yicha natija",
+      "caption": "So'm va dollar alohida",
+      "audio": "audio/vladelets/2-3.mp3",
+      "frames": 359,
+      "image": "captures/vladelets/2-3.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 242,
+          "w": 371,
+          "h": 142
+        },
+        {
+          "x": 655,
+          "y": 242,
+          "w": 371,
+          "h": 142
+        },
+        {
+          "x": 1037,
+          "y": 242,
+          "w": 371,
+          "h": 142
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-4",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сводка»: davr bo'yicha natija",
+      "caption": "Kim ko'proq sotib olyapti",
+      "audio": "audio/vladelets/2-4.mp3",
+      "frames": 203,
+      "image": "captures/vladelets/2-4.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 160,
+          "w": 1136,
+          "h": 162
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-5",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сводка»: davr bo'yicha natija",
+      "caption": "Eng katta mijozlar",
+      "audio": "audio/vladelets/2-5.mp3",
+      "frames": 155,
+      "image": "captures/vladelets/2-5.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 96,
+          "w": 1136,
+          "h": 439
+        },
+        {
+          "x": 541,
+          "y": 153,
+          "w": 82,
+          "h": 32
+        }
+      ],
+      "click": {
+        "x": 582,
+        "y": 169
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-6",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сводка»: davr bo'yicha natija",
+      "caption": "Har bir menejer natijasi",
+      "audio": "audio/vladelets/2-6.mp3",
+      "frames": 248,
+      "image": "captures/vladelets/2-6.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 164,
+          "w": 1136,
+          "h": 180
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 3,
+      "total": 7,
+      "title": "«Должники»: qarzlar",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "3-1",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Должники»: qarzlar",
+      "caption": "Kim qarzdor",
+      "audio": "audio/vladelets/3-1.mp3",
+      "frames": 109,
+      "image": "captures/vladelets/3-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 505,
+          "w": 240,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 523
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-2",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Должники»: qarzlar",
+      "caption": "Qarz valyuta bo'yicha alohida",
+      "audio": "audio/vladelets/3-2.mp3",
+      "frames": 138,
+      "image": "captures/vladelets/3-2.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 112,
+          "w": 275,
+          "h": 100
+        },
+        {
+          "x": 559,
+          "y": 112,
+          "w": 275,
+          "h": 100
+        },
+        {
+          "x": 846,
+          "y": 112,
+          "w": 275,
+          "h": 100
+        },
+        {
+          "x": 1133,
+          "y": 112,
+          "w": 275,
+          "h": 100
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-3",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Должники»: qarzlar",
+      "caption": "Muddati o'tganlarni ajratamiz",
+      "audio": "audio/vladelets/3-3.mp3",
+      "frames": 167,
+      "image": "captures/vladelets/3-3.png",
+      "highlights": [
+        {
+          "x": 273,
+          "y": 627,
+          "w": 1134,
+          "h": 113
+        },
+        {
+          "x": 776,
+          "y": 505,
+          "w": 169,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 1008,
+        "y": 531
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-4",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Должники»: qarzlar",
+      "caption": "To'lovni qabul qilamiz",
+      "audio": "audio/vladelets/3-4.mp3",
+      "frames": 188,
+      "image": "captures/vladelets/3-4.png",
+      "highlights": [
+        {
+          "x": 285,
+          "y": 760,
+          "w": 175,
+          "h": 36
+        },
+        {
+          "x": 785,
+          "y": 760,
+          "w": 74,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 822,
+        "y": 778
+      },
+      "after": {
+        "image": "captures/vladelets/3-4-after.png",
+        "highlights": [
+          {
+            "x": 273,
+            "y": 689,
+            "w": 1134,
+            "h": 227
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 4,
+      "total": 7,
+      "title": "«История»: kim nima qildi",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "4-1",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«История»: kim nima qildi",
+      "caption": "Har bir harakat yozib boriladi",
+      "audio": "audio/vladelets/4-1.mp3",
+      "frames": 164,
+      "image": "captures/vladelets/4-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 755,
+          "w": 240,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 773
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-2",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«История»: kim nima qildi",
+      "caption": "Eski qiymat chizilgan, yangisi yonida",
+      "audio": "audio/vladelets/4-2.mp3",
+      "frames": 167,
+      "image": "captures/vladelets/4-2.png",
+      "highlights": [
+        {
+          "x": 273,
+          "y": 140,
+          "w": 1134,
+          "h": 35
+        },
+        {
+          "x": 273,
+          "y": 253,
+          "w": 1134,
+          "h": 95
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-3",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«История»: kim nima qildi",
+      "caption": "Sotuv arxivi alohida",
+      "audio": "audio/vladelets/4-3.mp3",
+      "frames": 174,
+      "image": "captures/vladelets/4-3.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 100,
+          "w": 325,
+          "h": 36
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 5,
+      "total": 7,
+      "title": "«Сотрудники»: xodimlar",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "5-1",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сотрудники»: xodimlar",
+      "caption": "Xodimlar va ularning kirishi",
+      "audio": "audio/vladelets/5-1.mp3",
+      "frames": 143,
+      "image": "captures/vladelets/5-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 755,
+          "w": 240,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 773
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "5-2",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сотрудники»: xodimlar",
+      "caption": "Yangi xodim qo'shamiz",
+      "audio": "audio/vladelets/5-2.mp3",
+      "frames": 277,
+      "image": "captures/vladelets/5-2.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 140,
+          "w": 718,
+          "h": 432
+        },
+        {
+          "x": 293,
+          "y": 536,
+          "w": 145,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 366,
+        "y": 554
+      },
+      "after": {
+        "image": "captures/vladelets/5-2-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 553,
+            "w": 1136,
+            "h": 187
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "5-3",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сотрудники»: xodimlar",
+      "caption": "Telegram arizasini tasdiqlaymiz",
+      "audio": "audio/vladelets/5-3.mp3",
+      "frames": 236,
+      "image": "captures/vladelets/5-3.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 200,
+          "w": 1094,
+          "h": 206
+        }
+      ],
+      "click": {
+        "x": 352,
+        "y": 375
+      },
+      "after": {
+        "image": "captures/vladelets/5-3-after.png",
+        "highlights": [
+          {
+            "x": 293,
+            "y": 300,
+            "w": 1094,
+            "h": 58
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "5-4",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Сотрудники»: xodimlar",
+      "caption": "Ketgan xodimni o'chiramiz",
+      "audio": "audio/vladelets/5-4.mp3",
+      "frames": 222,
+      "image": "captures/vladelets/5-4.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 534,
+          "w": 1094,
+          "h": 118
+        },
+        {
+          "x": 306,
+          "y": 603,
+          "w": 300,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 456,
+        "y": 621
+      },
+      "after": {
+        "image": "captures/vladelets/5-4-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 300,
+            "w": 1136,
+            "h": 195
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 6,
+      "total": 7,
+      "title": "«Партнёры» va «Заявки»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "6-1",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "«Партнёры» va «Заявки»",
+      "caption": "Dizaynerni qo'shamiz",
+      "audio": "audio/vladelets/6-1.mp3",
+      "frames": 140,
+      "image": "captures/vladelets/6-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 650,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 289,
+          "y": 149,
+          "w": 1102,
+          "h": 24
+        }
+      ],
+      "click": {
+        "x": 840,
+        "y": 161
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "6-2",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "«Партнёры» va «Заявки»",
+      "caption": "Partnyor turi — «Дизайнер»",
+      "audio": "audio/vladelets/6-2.mp3",
+      "frames": 184,
+      "image": "captures/vladelets/6-2.png",
+      "highlights": [
+        {
+          "x": 846,
+          "y": 205,
+          "w": 545,
+          "h": 36
+        },
+        {
+          "x": 289,
+          "y": 389,
+          "w": 154,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 366,
+        "y": 407
+      },
+      "after": {
+        "image": "captures/vladelets/6-2-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 352,
+            "w": 1136,
+            "h": 222
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "6-3",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "«Партнёры» va «Заявки»",
+      "caption": "Menejer biriktiramiz",
+      "audio": "audio/vladelets/6-3.mp3",
+      "frames": 179,
+      "image": "captures/vladelets/6-3.png",
+      "highlights": [
+        {
+          "x": 628,
+          "y": 469,
+          "w": 654,
+          "h": 36
+        },
+        {
+          "x": 1290,
+          "y": 469,
+          "w": 97,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 1339,
+        "y": 487
+      },
+      "after": {
+        "image": "captures/vladelets/6-3-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 352,
+            "w": 1136,
+            "h": 222
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "6-4",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "«Партнёры» va «Заявки»",
+      "caption": "Arizani qayta ishlaymiz",
+      "audio": "audio/vladelets/6-4.mp3",
+      "frames": 188,
+      "image": "captures/vladelets/6-4.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 755,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 272,
+          "y": 208,
+          "w": 1136,
+          "h": 279
+        }
+      ],
+      "click": {
+        "x": 504,
+        "y": 448
+      },
+      "after": {
+        "image": "captures/vladelets/6-4-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "scene",
+      "n": 7,
+      "total": 7,
+      "title": "«Каталог» va QR: mijoz nimani ko'radi",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "7-1",
+      "scene": 7,
+      "sceneTotal": 7,
+      "sceneTitle": "«Каталог» va QR: mijoz nimani ko'radi",
+      "caption": "Mijozlar uchun vitrina",
+      "audio": "audio/vladelets/7-1.mp3",
+      "frames": 188,
+      "image": "captures/vladelets/7-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 722,
+          "w": 240,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 740
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "7-2",
+      "scene": 7,
+      "sceneTotal": 7,
+      "sceneTitle": "«Каталог» va QR: mijoz nimani ko'radi",
+      "caption": "Mijoz shu kartochkani ko'radi",
+      "audio": "audio/vladelets/7-2.mp3",
+      "frames": 193,
+      "image": "captures/vladelets/7-2.png",
+      "highlights": [
+        {
+          "x": 685,
+          "y": 140,
+          "w": 309,
+          "h": 439
+        }
+      ],
+      "click": {
+        "x": 840,
+        "y": 256
+      },
+      "after": {
+        "image": "captures/vladelets/7-2-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "7-3",
+      "scene": 7,
+      "sceneTotal": 7,
+      "sceneTitle": "«Каталог» va QR: mijoz nimani ko'radi",
+      "caption": "Plitalarga QR yorliq",
+      "audio": "audio/vladelets/7-3.mp3",
+      "frames": 244,
+      "image": "captures/vladelets/7-3.png",
+      "highlights": [
+        {
+          "x": 284,
+          "y": 635,
+          "w": 20,
+          "h": 20
+        },
+        {
+          "x": 284,
+          "y": 777,
+          "w": 20,
+          "h": 20
+        },
+        {
+          "x": 1227,
+          "y": 526,
+          "w": 181,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 1318,
+        "y": 544
+      },
+      "after": {
+        "image": "captures/vladelets/7-3-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "outro",
+      "title": "Rahmat!",
+      "subtitle": "Onyx — Ega uchun qo'llanma",
+      "audio": "audio/vladelets/outro.mp3",
+      "frames": 204
+    }
+  ],
+  "durationInFrames": 6537
+}

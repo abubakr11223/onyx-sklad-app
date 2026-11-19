@@ -25,3 +25,13 @@ coverage/
 
 # lokal zaxiralar (scripts/backup.sh, har kuni 3:30)
 backups/
+
+# ТЗ №21 video pipeline
+video/remotion/out/
+video/remotion/public/
+
+# training-video stand (video/): logins, local photo store, screenshots
+video/.auth.local.json
+video/.photo-store/
+video/captures/
+video/assets/stones/*.placeholder.jpg

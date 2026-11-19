@@ -24,7 +24,11 @@
     "postinstall": "prisma generate",
     "tg:menu": "tsx prisma/set-tg-menu-cli.ts",
     "backup:photos": "tsx prisma/photos-export-cli.ts",
-    "repair:slab-area": "tsx prisma/repair-slab-area-cli.ts"
+    "repair:slab-area": "tsx prisma/repair-slab-area-cli.ts",
+    "video:db": "tsx video/seed-video.ts",
+    "video:capture": "tsx video/capture.ts",
+    "video:serve": "tsx video/serve.ts",
+    "video:build": "node video/remotion/render.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
@@ -51,6 +55,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.12",
     "jsdom": "^26.1.0",
+    "playwright": "1.63.0",
     "prisma": "^6.19.3",
     "tailwindcss": "^4.3.2",
     "tsx": "^4.22.5",

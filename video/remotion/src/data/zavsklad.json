@@ -1,0 +1,939 @@
+{
+  "role": "zavsklad",
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "device": "phone",
+  "viewport": {
+    "w": 390,
+    "h": 844,
+    "scale": 3
+  },
+  "stones": [
+    "stones/mramor-calacatta.jpg",
+    "stones/oniks-medovyy.jpg",
+    "stones/oniks-zelenyy.jpg",
+    "stones/travertin-klassik.jpg"
+  ],
+  "segments": [
+    {
+      "type": "intro",
+      "title": "Onyx — Ombor uchun qo'llanma",
+      "subtitle": "Qabul, karta, jo'natish va bo'lish telefondan",
+      "audio": "audio/zavsklad/intro.mp3",
+      "frames": 360
+    },
+    {
+      "type": "scene",
+      "n": 1,
+      "total": 7,
+      "title": "«Приёмка»: partiyani qabul qilish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "1-1",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Yangi partiyani kiritamiz",
+      "audio": "audio/zavsklad/1-1.mp3",
+      "frames": 124,
+      "image": "captures/zavsklad/1-1.png",
+      "highlights": [
+        {
+          "x": 78,
+          "y": 788,
+          "w": 78,
+          "h": 56
+        }
+      ],
+      "click": {
+        "x": 117,
+        "y": 816
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-2",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Tosh turini tanlaymiz",
+      "audio": "audio/zavsklad/1-2.mp3",
+      "frames": 162,
+      "image": "captures/zavsklad/1-2.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 80,
+          "w": 316,
+          "h": 48
+        },
+        {
+          "x": 37,
+          "y": 164,
+          "w": 316,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 186
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-3",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Nechta plita keldi",
+      "audio": "audio/zavsklad/1-3.mp3",
+      "frames": 150,
+      "image": "captures/zavsklad/1-3.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 200,
+          "w": 152,
+          "h": 44
+        },
+        {
+          "x": 201,
+          "y": 200,
+          "w": 152,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 113,
+        "y": 222
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-4",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Plita o'lchami",
+      "audio": "audio/zavsklad/1-4.mp3",
+      "frames": 217,
+      "image": "captures/zavsklad/1-4.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 220,
+          "w": 97,
+          "h": 44
+        },
+        {
+          "x": 146,
+          "y": 220,
+          "w": 97,
+          "h": 44
+        },
+        {
+          "x": 256,
+          "y": 220,
+          "w": 97,
+          "h": 44
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-5",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Bir nechta uzor bo'lsa",
+      "audio": "audio/zavsklad/1-5.mp3",
+      "frames": 184,
+      "image": "captures/zavsklad/1-5.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 144,
+          "w": 316,
+          "h": 48
+        },
+        {
+          "x": 37,
+          "y": 842,
+          "w": 136,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 105,
+        "y": 864
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-6",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Qayerga qo'ydik",
+      "audio": "audio/zavsklad/1-6.mp3",
+      "frames": 200,
+      "image": "captures/zavsklad/1-6.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 49,
+          "w": 358,
+          "h": 686
+        },
+        {
+          "x": 37,
+          "y": 614,
+          "w": 316,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 636
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-7",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Partiyaning rasmi",
+      "audio": "audio/zavsklad/1-7.mp3",
+      "frames": 157,
+      "image": "captures/zavsklad/1-7.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 200,
+          "w": 316,
+          "h": 20
+        },
+        {
+          "x": 37,
+          "y": 226,
+          "w": 316,
+          "h": 64
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 258
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "1-8",
+      "scene": 1,
+      "sceneTotal": 7,
+      "sceneTitle": "«Приёмка»: partiyani qabul qilish",
+      "caption": "Saqlaymiz",
+      "audio": "audio/zavsklad/1-8.mp3",
+      "frames": 156,
+      "image": "captures/zavsklad/1-8.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 500,
+          "w": 358,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 522
+      },
+      "after": {
+        "image": "captures/zavsklad/1-8-after.png",
+        "highlights": [
+          {
+            "x": 16,
+            "y": 96,
+            "w": 358,
+            "h": 70
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 2,
+      "total": 7,
+      "title": "«Карта склада»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "2-1",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Карта склада»",
+      "caption": "Ombor xaritasi",
+      "audio": "audio/zavsklad/2-1.mp3",
+      "frames": 138,
+      "image": "captures/zavsklad/2-1.png",
+      "highlights": [
+        {
+          "x": 312,
+          "y": 788,
+          "w": 78,
+          "h": 56
+        },
+        {
+          "x": 199,
+          "y": 398,
+          "w": 175,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 287,
+        "y": 420
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-2",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Карта склада»",
+      "caption": "Blok va ориентир",
+      "audio": "audio/zavsklad/2-2.mp3",
+      "frames": 227,
+      "image": "captures/zavsklad/2-2.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 70,
+          "w": 358,
+          "h": 450
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-3",
+      "scene": 2,
+      "sceneTotal": 7,
+      "sceneTitle": "«Карта склада»",
+      "caption": "To'lgan blokni belgilaymiz",
+      "audio": "audio/zavsklad/2-3.mp3",
+      "frames": 172,
+      "image": "captures/zavsklad/2-3.png",
+      "highlights": [
+        {
+          "x": 50,
+          "y": 316,
+          "w": 290,
+          "h": 20
+        },
+        {
+          "x": 50,
+          "y": 342,
+          "w": 290,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 364
+      },
+      "after": {
+        "image": "captures/zavsklad/2-3-after.png",
+        "highlights": [
+          {
+            "x": 16,
+            "y": 86,
+            "w": 358,
+            "h": 426
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 3,
+      "total": 7,
+      "title": "«Отгрузки»: jo'natish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "3-1",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Отгрузки»: jo'natish",
+      "caption": "Bugun nimani berish kerak",
+      "audio": "audio/zavsklad/3-1.mp3",
+      "frames": 229,
+      "image": "captures/zavsklad/3-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 788,
+          "w": 78,
+          "h": 56
+        },
+        {
+          "x": 16,
+          "y": 116,
+          "w": 71,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 39,
+        "y": 816
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-2",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Отгрузки»: jo'natish",
+      "caption": "Qaysi blokdan olinadi",
+      "audio": "audio/zavsklad/3-2.mp3",
+      "frames": 152,
+      "image": "captures/zavsklad/3-2.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 70,
+          "w": 358,
+          "h": 603
+        },
+        {
+          "x": 37,
+          "y": 225,
+          "w": 316,
+          "h": 28
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-3",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Отгрузки»: jo'natish",
+      "caption": "To'liq yoki qisman",
+      "audio": "audio/zavsklad/3-3.mp3",
+      "frames": 184,
+      "image": "captures/zavsklad/3-3.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 300,
+          "w": 154,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 114,
+        "y": 322
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-4",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Отгрузки»: jo'natish",
+      "caption": "Berilganini rasmga olamiz",
+      "audio": "audio/zavsklad/3-4.mp3",
+      "frames": 148,
+      "image": "captures/zavsklad/3-4.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 300,
+          "w": 316,
+          "h": 64
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 332
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-5",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Отгрузки»: jo'natish",
+      "caption": "Berildi deb belgilaymiz",
+      "audio": "audio/zavsklad/3-5.mp3",
+      "frames": 156,
+      "image": "captures/zavsklad/3-5.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 476,
+          "w": 316,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 498
+      },
+      "after": {
+        "image": "captures/zavsklad/3-5-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "3-6",
+      "scene": 3,
+      "sceneTotal": 7,
+      "sceneTitle": "«Отгрузки»: jo'natish",
+      "caption": "Nakladnoy",
+      "audio": "audio/zavsklad/3-6.mp3",
+      "frames": 156,
+      "image": "captures/zavsklad/3-6.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 300,
+          "w": 118,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 96,
+        "y": 322
+      },
+      "after": {
+        "image": "captures/zavsklad/3-6-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "scene",
+      "n": 4,
+      "total": 7,
+      "title": "«Разбить»: singan tosh",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "4-1",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«Разбить»: singan tosh",
+      "caption": "Partiyadan singan plita",
+      "audio": "audio/zavsklad/4-1.mp3",
+      "frames": 126,
+      "image": "captures/zavsklad/4-1.png",
+      "highlights": [
+        {
+          "x": 156,
+          "y": 788,
+          "w": 78,
+          "h": 56
+        },
+        {
+          "x": 37,
+          "y": 120,
+          "w": 316,
+          "h": 48
+        }
+      ],
+      "click": {
+        "x": 273,
+        "y": 144
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-2",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«Разбить»: singan tosh",
+      "caption": "Bo'laklarni yozamiz",
+      "audio": "audio/zavsklad/4-2.mp3",
+      "frames": 186,
+      "image": "captures/zavsklad/4-2.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 39,
+          "w": 358,
+          "h": 652
+        },
+        {
+          "x": 37,
+          "y": 626,
+          "w": 316,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 648
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-3",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«Разбить»: singan tosh",
+      "caption": "Nega singan",
+      "audio": "audio/zavsklad/4-3.mp3",
+      "frames": 119,
+      "image": "captures/zavsklad/4-3.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 858,
+          "w": 316,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 880
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-4",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«Разбить»: singan tosh",
+      "caption": "Saqlaymiz",
+      "audio": "audio/zavsklad/4-4.mp3",
+      "frames": 156,
+      "image": "captures/zavsklad/4-4.png",
+      "highlights": [
+        {
+          "x": 199,
+          "y": 732,
+          "w": 175,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 287,
+        "y": 754
+      },
+      "after": {
+        "image": "captures/zavsklad/4-4-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "4-5",
+      "scene": 4,
+      "sceneTotal": 7,
+      "sceneTitle": "«Разбить»: singan tosh",
+      "caption": "Rasm orqali — Telegram botda",
+      "audio": "audio/zavsklad/4-5.mp3",
+      "frames": 335,
+      "image": "captures/zavsklad/4-5.png",
+      "highlights": [],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 5,
+      "total": 7,
+      "title": "«Фотозапросы»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "5-1",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Фотозапросы»",
+      "caption": "Menejer rasm so'radi",
+      "audio": "audio/zavsklad/5-1.mp3",
+      "frames": 196,
+      "image": "captures/zavsklad/5-1.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 136,
+          "w": 358,
+          "h": 135
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "5-2",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Фотозапросы»",
+      "caption": "Rasmni javob qilib yuboramiz",
+      "audio": "audio/zavsklad/5-2.mp3",
+      "frames": 145,
+      "image": "captures/zavsklad/5-2.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 136,
+          "w": 358,
+          "h": 135
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "5-3",
+      "scene": 5,
+      "sceneTotal": 7,
+      "sceneTitle": "«Фотозапросы»",
+      "caption": "Hamma so'rovlar saytda ham",
+      "audio": "audio/zavsklad/5-3.mp3",
+      "frames": 131,
+      "image": "captures/zavsklad/5-3.png",
+      "highlights": [
+        {
+          "x": 312,
+          "y": 788,
+          "w": 78,
+          "h": 56
+        },
+        {
+          "x": 16,
+          "y": 502,
+          "w": 175,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 104,
+        "y": 524
+      },
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 6,
+      "total": 7,
+      "title": "Partiyani ko'chirish va «требует проверки»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "6-1",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "Partiyani ko'chirish va «требует проверки»",
+      "caption": "Partiya qayerda",
+      "audio": "audio/zavsklad/6-1.mp3",
+      "frames": 143,
+      "image": "captures/zavsklad/6-1.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 39,
+          "w": 358,
+          "h": 2268
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "6-2",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "Partiyani ko'chirish va «требует проверки»",
+      "caption": "Boshqa blokka ko'chiramiz",
+      "audio": "audio/zavsklad/6-2.mp3",
+      "frames": 156,
+      "image": "captures/zavsklad/6-2.png",
+      "highlights": [
+        {
+          "x": 138,
+          "y": 300,
+          "w": 176,
+          "h": 44
+        },
+        {
+          "x": 50,
+          "y": 350,
+          "w": 64,
+          "h": 44
+        },
+        {
+          "x": 190,
+          "y": 350,
+          "w": 114,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 247,
+        "y": 372
+      },
+      "after": {
+        "image": "captures/zavsklad/6-2-after.png",
+        "highlights": [
+          {
+            "x": 16,
+            "y": 39,
+            "w": 358,
+            "h": 2268
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "6-3",
+      "scene": 6,
+      "sceneTotal": 7,
+      "sceneTitle": "Partiyani ko'chirish va «требует проверки»",
+      "caption": "Shubhali partiyani belgilaymiz",
+      "audio": "audio/zavsklad/6-3.mp3",
+      "frames": 222,
+      "image": "captures/zavsklad/6-3.png",
+      "highlights": [
+        {
+          "x": 58,
+          "y": 300,
+          "w": 217,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 167,
+        "y": 322
+      },
+      "after": {
+        "image": "captures/zavsklad/6-3-after.png",
+        "highlights": [
+          {
+            "x": 37,
+            "y": 92,
+            "w": 316,
+            "h": 806
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 7,
+      "total": 7,
+      "title": "«Шоу-рум»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "7-1",
+      "scene": 7,
+      "sceneTotal": 7,
+      "sceneTitle": "«Шоу-рум»",
+      "caption": "Vitrinaga plita yuboramiz",
+      "audio": "audio/zavsklad/7-1.mp3",
+      "frames": 172,
+      "image": "captures/zavsklad/7-1.png",
+      "highlights": [
+        {
+          "x": 37,
+          "y": 200,
+          "w": 316,
+          "h": 44
+        },
+        {
+          "x": 37,
+          "y": 408,
+          "w": 316,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 195,
+        "y": 430
+      },
+      "after": {
+        "image": "captures/zavsklad/7-1-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "7-2",
+      "scene": 7,
+      "sceneTotal": 7,
+      "sceneTitle": "«Шоу-рум»",
+      "caption": "Omborga qaytaramiz",
+      "audio": "audio/zavsklad/7-2.mp3",
+      "frames": 156,
+      "image": "captures/zavsklad/7-2.png",
+      "highlights": [
+        {
+          "x": 16,
+          "y": 98,
+          "w": 358,
+          "h": 333
+        },
+        {
+          "x": 37,
+          "y": 366,
+          "w": 144,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 109,
+        "y": 388
+      },
+      "after": {
+        "image": "captures/zavsklad/7-2-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "outro",
+      "title": "Rahmat!",
+      "subtitle": "Onyx — Ombor uchun qo'llanma",
+      "audio": "audio/zavsklad/outro.mp3",
+      "frames": 209
+    }
+  ],
+  "durationInFrames": 6186
+}

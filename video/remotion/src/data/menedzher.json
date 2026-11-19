@@ -1,0 +1,1070 @@
+{
+  "role": "menedzher",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "device": "browser",
+  "viewport": {
+    "w": 1440,
+    "h": 900,
+    "scale": 2
+  },
+  "stones": [
+    "stones/mramor-calacatta.jpg",
+    "stones/oniks-medovyy.jpg",
+    "stones/oniks-zelenyy.jpg",
+    "stones/travertin-klassik.jpg"
+  ],
+  "segments": [
+    {
+      "type": "intro",
+      "title": "Onyx — Menejer uchun qo'llanma",
+      "subtitle": "Tosh topish, band qilish, sotish va mijozlar",
+      "audio": "audio/menedzher/intro.mp3",
+      "frames": 312
+    },
+    {
+      "type": "scene",
+      "n": 1,
+      "total": 9,
+      "title": "«Поиск»: toshni topish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "1-1",
+      "scene": 1,
+      "sceneTotal": 9,
+      "sceneTitle": "«Поиск»: toshni topish",
+      "caption": "Toshni nomi bo'yicha qidiramiz",
+      "audio": "audio/menedzher/1-1.mp3",
+      "frames": 275,
+      "image": "captures/menedzher/1-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 145,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 289,
+          "w": 1094,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 163
+      },
+      "after": {
+        "image": "captures/menedzher/1-1-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 532,
+            "w": 81,
+            "h": 24
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "1-2",
+      "scene": 1,
+      "sceneTotal": 9,
+      "sceneTitle": "«Поиск»: toshni topish",
+      "caption": "Kerakli o'lchamga mos tosh",
+      "audio": "audio/menedzher/1-2.mp3",
+      "frames": 208,
+      "image": "captures/menedzher/1-2.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 367,
+          "w": 534,
+          "h": 36
+        },
+        {
+          "x": 853,
+          "y": 367,
+          "w": 534,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 441,
+          "w": 103,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 345,
+        "y": 459
+      },
+      "after": {
+        "image": "captures/menedzher/1-2-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "1-3",
+      "scene": 1,
+      "sceneTotal": 9,
+      "sceneTitle": "«Поиск»: toshni topish",
+      "caption": "Oddiy so'z bilan so'raymiz",
+      "audio": "audio/menedzher/1-3.mp3",
+      "frames": 193,
+      "image": "captures/menedzher/1-3.png",
+      "highlights": [
+        {
+          "x": 289,
+          "y": 125,
+          "w": 1019,
+          "h": 36
+        },
+        {
+          "x": 1316,
+          "y": 125,
+          "w": 75,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 1354,
+        "y": 143
+      },
+      "after": {
+        "image": "captures/menedzher/1-3-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "1-4",
+      "scene": 1,
+      "sceneTotal": 9,
+      "sceneTitle": "«Поиск»: toshni topish",
+      "caption": "Rasm bo'yicha qidiruv",
+      "audio": "audio/menedzher/1-4.mp3",
+      "frames": 186,
+      "image": "captures/menedzher/1-4.png",
+      "highlights": [
+        {
+          "x": 289,
+          "y": 173,
+          "w": 123,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 351,
+        "y": 191
+      },
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 2,
+      "total": 9,
+      "title": "Tosh kartochkasi",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "2-1",
+      "scene": 2,
+      "sceneTotal": 9,
+      "sceneTitle": "Tosh kartochkasi",
+      "caption": "Toshning to'liq ma'lumoti",
+      "audio": "audio/menedzher/2-1.mp3",
+      "frames": 156,
+      "image": "captures/menedzher/2-1.png",
+      "highlights": [
+        {
+          "x": 324,
+          "y": 610,
+          "w": 1084,
+          "h": 132
+        }
+      ],
+      "click": {
+        "x": 866,
+        "y": 676
+      },
+      "after": {
+        "image": "captures/menedzher/2-1-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "2-2",
+      "scene": 2,
+      "sceneTotal": 9,
+      "sceneTitle": "Tosh kartochkasi",
+      "caption": "Qancha bor va qayerda yotibdi",
+      "audio": "audio/menedzher/2-2.mp3",
+      "frames": 227,
+      "image": "captures/menedzher/2-2.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 90,
+          "w": 960,
+          "h": 90
+        },
+        {
+          "x": 272,
+          "y": 838,
+          "w": 960,
+          "h": 703
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "2-3",
+      "scene": 2,
+      "sceneTotal": 9,
+      "sceneTitle": "Tosh kartochkasi",
+      "caption": "Ombordan yangi rasm so'raymiz",
+      "audio": "audio/menedzher/2-3.mp3",
+      "frames": 220,
+      "image": "captures/menedzher/2-3.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 894,
+          "w": 960,
+          "h": 174
+        }
+      ],
+      "click": {
+        "x": 511,
+        "y": 989
+      },
+      "after": {
+        "image": "captures/menedzher/2-3-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "scene",
+      "n": 3,
+      "total": 9,
+      "title": "«Бронь»: toshni band qilish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "3-1",
+      "scene": 3,
+      "sceneTotal": 9,
+      "sceneTitle": "«Бронь»: toshni band qilish",
+      "caption": "Toshni mijozga band qilamiz",
+      "audio": "audio/menedzher/3-1.mp3",
+      "frames": 128,
+      "image": "captures/menedzher/3-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 289,
+          "w": 240,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 307
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-2",
+      "scene": 3,
+      "sceneTotal": 9,
+      "sceneTitle": "«Бронь»: toshni band qilish",
+      "caption": "Tosh va mijozni tanlaymiz",
+      "audio": "audio/menedzher/3-2.mp3",
+      "frames": 148,
+      "image": "captures/menedzher/3-2.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 261,
+          "w": 638,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 333,
+          "w": 638,
+          "h": 36
+        },
+        {
+          "x": 306,
+          "y": 576,
+          "w": 186,
+          "h": 24
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "3-3",
+      "scene": 3,
+      "sceneTotal": 9,
+      "sceneTitle": "«Бронь»: toshni band qilish",
+      "caption": "Muddat — 3 kun",
+      "audio": "audio/menedzher/3-3.mp3",
+      "frames": 198,
+      "image": "captures/menedzher/3-3.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 669,
+          "w": 313,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 729,
+          "w": 137,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 362,
+        "y": 747
+      },
+      "after": {
+        "image": "captures/menedzher/3-3-after.png",
+        "highlights": [
+          {
+            "x": 976,
+            "y": 210,
+            "w": 432,
+            "h": 428
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 4,
+      "total": 9,
+      "title": "«Продажа»: boshidan oxirigacha",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "4-1",
+      "scene": 4,
+      "sceneTotal": 9,
+      "sceneTitle": "«Продажа»: boshidan oxirigacha",
+      "caption": "1-qadam: tosh turi",
+      "audio": "audio/menedzher/4-1.mp3",
+      "frames": 102,
+      "image": "captures/menedzher/4-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 253,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 402,
+          "w": 718,
+          "h": 70
+        }
+      ],
+      "click": {
+        "x": 652,
+        "y": 437
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-2",
+      "scene": 4,
+      "sceneTotal": 9,
+      "sceneTitle": "«Продажа»: boshidan oxirigacha",
+      "caption": "2-qadam: partiya yoki uzor",
+      "audio": "audio/menedzher/4-2.mp3",
+      "frames": 215,
+      "image": "captures/menedzher/4-2.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 325,
+          "w": 718,
+          "h": 114
+        }
+      ],
+      "click": {
+        "x": 477,
+        "y": 408
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-3",
+      "scene": 4,
+      "sceneTotal": 9,
+      "sceneTitle": "«Продажа»: boshidan oxirigacha",
+      "caption": "3-qadam: mijoz",
+      "audio": "audio/menedzher/4-3.mp3",
+      "frames": 181,
+      "image": "captures/menedzher/4-3.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": -65,
+          "w": 353,
+          "h": 36
+        },
+        {
+          "x": 294,
+          "y": 300,
+          "w": 716,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 652,
+        "y": 318
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-4",
+      "scene": 4,
+      "sceneTotal": 9,
+      "sceneTitle": "«Продажа»: boshidan oxirigacha",
+      "caption": "Qanday olib ketadi",
+      "audio": "audio/menedzher/4-4.mp3",
+      "frames": 172,
+      "image": "captures/menedzher/4-4.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 260,
+          "w": 718,
+          "h": 177
+        }
+      ],
+      "click": {
+        "x": 424,
+        "y": 403
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-5",
+      "scene": 4,
+      "sceneTotal": 9,
+      "sceneTitle": "«Продажа»: boshidan oxirigacha",
+      "caption": "To'lov: so'm yoki dollar",
+      "audio": "audio/menedzher/4-5.mp3",
+      "frames": 198,
+      "image": "captures/menedzher/4-5.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 90,
+          "w": 718,
+          "h": 484
+        },
+        {
+          "x": 1056,
+          "y": 24,
+          "w": 320,
+          "h": 366
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "4-6",
+      "scene": 4,
+      "sceneTotal": 9,
+      "sceneTitle": "«Продажа»: boshidan oxirigacha",
+      "caption": "4-qadam: tekshirib tasdiqlaymiz",
+      "audio": "audio/menedzher/4-6.mp3",
+      "frames": 156,
+      "image": "captures/menedzher/4-6.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 188,
+          "w": 760,
+          "h": 592
+        },
+        {
+          "x": 293,
+          "y": 695,
+          "w": 185,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 386,
+        "y": 713
+      },
+      "after": {
+        "image": "captures/menedzher/4-6-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 112,
+            "w": 760,
+            "h": 68
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 5,
+      "total": 9,
+      "title": "Namuna: «Выдать как образец»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "5-1",
+      "scene": 5,
+      "sceneTotal": 9,
+      "sceneTitle": "Namuna: «Выдать как образец»",
+      "caption": "Mijozga namuna beramiz",
+      "audio": "audio/menedzher/5-1.mp3",
+      "frames": 167,
+      "image": "captures/menedzher/5-1.png",
+      "highlights": [
+        {
+          "x": 306,
+          "y": 364,
+          "w": 692,
+          "h": 44
+        }
+      ],
+      "click": {
+        "x": 313,
+        "y": 387
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "5-2",
+      "scene": 5,
+      "sceneTotal": 9,
+      "sceneTitle": "Namuna: «Выдать как образец»",
+      "caption": "Qaytarish muddati",
+      "audio": "audio/menedzher/5-2.mp3",
+      "frames": 156,
+      "image": "captures/menedzher/5-2.png",
+      "highlights": [
+        {
+          "x": 306,
+          "y": 300,
+          "w": 692,
+          "h": 36
+        },
+        {
+          "x": 306,
+          "y": 364,
+          "w": 692,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 517,
+          "w": 202,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 394,
+        "y": 535
+      },
+      "after": {
+        "image": "captures/menedzher/5-2-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "5-3",
+      "scene": 5,
+      "sceneTotal": 9,
+      "sceneTitle": "Namuna: «Выдать как образец»",
+      "caption": "Kimda qaysi namuna",
+      "audio": "audio/menedzher/5-3.mp3",
+      "frames": 174,
+      "image": "captures/menedzher/5-3.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 361,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 272,
+          "y": 275,
+          "w": 1136,
+          "h": 413
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 379
+      },
+      "after": null
+    },
+    {
+      "type": "scene",
+      "n": 6,
+      "total": 9,
+      "title": "«Клиенты» va «Объекты»",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "6-1",
+      "scene": 6,
+      "sceneTotal": 9,
+      "sceneTitle": "«Клиенты» va «Объекты»",
+      "caption": "Mijoz kartochkasi",
+      "audio": "audio/menedzher/6-1.mp3",
+      "frames": 167,
+      "image": "captures/menedzher/6-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 470,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 285,
+          "y": 265,
+          "w": 87,
+          "h": 18
+        }
+      ],
+      "click": {
+        "x": 329,
+        "y": 274
+      },
+      "after": {
+        "image": "captures/menedzher/6-1-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 166,
+            "w": 960,
+            "h": 170
+          }
+        ]
+      }
+    },
+    {
+      "type": "step",
+      "key": "6-2",
+      "scene": 6,
+      "sceneTotal": 9,
+      "sceneTitle": "«Клиенты» va «Объекты»",
+      "caption": "Mijozning qarzi",
+      "audio": "audio/menedzher/6-2.mp3",
+      "frames": 128,
+      "image": "captures/menedzher/6-2.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 360,
+          "w": 960,
+          "h": 40
+        },
+        {
+          "x": 470,
+          "y": 360,
+          "w": 56,
+          "h": 40
+        }
+      ],
+      "click": {
+        "x": 498,
+        "y": 380
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "6-3",
+      "scene": 6,
+      "sceneTotal": 9,
+      "sceneTitle": "«Клиенты» va «Объекты»",
+      "caption": "To'lovni qabul qilamiz",
+      "audio": "audio/menedzher/6-3.mp3",
+      "frames": 164,
+      "image": "captures/menedzher/6-3.png",
+      "highlights": [
+        {
+          "x": 272,
+          "y": 236,
+          "w": 175,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 309,
+          "w": 470,
+          "h": 300
+        },
+        {
+          "x": 293,
+          "y": 573,
+          "w": 134,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 360,
+        "y": 591
+      },
+      "after": {
+        "image": "captures/menedzher/6-3-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "6-4",
+      "scene": 6,
+      "sceneTotal": 9,
+      "sceneTitle": "«Клиенты» va «Объекты»",
+      "caption": "Obekt bo'yicha sotuvlar",
+      "audio": "audio/menedzher/6-4.mp3",
+      "frames": 179,
+      "image": "captures/menedzher/6-4.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 506,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 285,
+          "y": 308,
+          "w": 233,
+          "h": 18
+        }
+      ],
+      "click": {
+        "x": 402,
+        "y": 317
+      },
+      "after": {
+        "image": "captures/menedzher/6-4-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "scene",
+      "n": 7,
+      "total": 9,
+      "title": "«Шоу-рум»: vitrinadan sotish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "7-1",
+      "scene": 7,
+      "sceneTotal": 9,
+      "sceneTitle": "«Шоу-рум»: vitrinadan sotish",
+      "caption": "Zaldagi toshlar",
+      "audio": "audio/menedzher/7-1.mp3",
+      "frames": 145,
+      "image": "captures/menedzher/7-1.png",
+      "highlights": [
+        {
+          "x": 0,
+          "y": 397,
+          "w": 240,
+          "h": 36
+        },
+        {
+          "x": 272,
+          "y": 128,
+          "w": 1136,
+          "h": 834
+        }
+      ],
+      "click": {
+        "x": 120,
+        "y": 415
+      },
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "7-2",
+      "scene": 7,
+      "sceneTotal": 9,
+      "sceneTitle": "«Шоу-рум»: vitrinadan sotish",
+      "caption": "Vitrinadan sotamiz",
+      "audio": "audio/menedzher/7-2.mp3",
+      "frames": 156,
+      "image": "captures/menedzher/7-2.png",
+      "highlights": [
+        {
+          "x": 400,
+          "y": 232,
+          "w": 640,
+          "h": 437
+        },
+        {
+          "x": 834,
+          "y": 612,
+          "w": 185,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 927,
+        "y": 630
+      },
+      "after": {
+        "image": "captures/menedzher/7-2-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "scene",
+      "n": 8,
+      "total": 9,
+      "title": "«Подборки»: mijozga tanlov yuborish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "8-1",
+      "scene": 8,
+      "sceneTotal": 9,
+      "sceneTitle": "«Подборки»: mijozga tanlov yuborish",
+      "caption": "Mijozga to'plam yasaymiz",
+      "audio": "audio/menedzher/8-1.mp3",
+      "frames": 174,
+      "image": "captures/menedzher/8-1.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 181,
+          "w": 457,
+          "h": 36
+        },
+        {
+          "x": 762,
+          "y": 181,
+          "w": 457,
+          "h": 36
+        },
+        {
+          "x": 1232,
+          "y": 181,
+          "w": 155,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 1310,
+        "y": 199
+      },
+      "after": {
+        "image": "captures/menedzher/8-1-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "8-2",
+      "scene": 8,
+      "sceneTotal": 9,
+      "sceneTitle": "«Подборки»: mijozga tanlov yuborish",
+      "caption": "Toshlarni qo'shamiz",
+      "audio": "audio/menedzher/8-2.mp3",
+      "frames": 156,
+      "image": "captures/menedzher/8-2.png",
+      "highlights": [
+        {
+          "x": 1011,
+          "y": 140,
+          "w": 309,
+          "h": 439
+        },
+        {
+          "x": 1024,
+          "y": 530,
+          "w": 283,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 1166,
+        "y": 548
+      },
+      "after": {
+        "image": "captures/menedzher/8-2-after.png",
+        "highlights": []
+      }
+    },
+    {
+      "type": "step",
+      "key": "8-3",
+      "scene": 8,
+      "sceneTotal": 9,
+      "sceneTitle": "«Подборки»: mijozga tanlov yuborish",
+      "caption": "Havolani yuboramiz",
+      "audio": "audio/menedzher/8-3.mp3",
+      "frames": 193,
+      "image": "captures/menedzher/8-3.png",
+      "highlights": [
+        {
+          "x": 293,
+          "y": 265,
+          "w": 918,
+          "h": 36
+        },
+        {
+          "x": 293,
+          "y": 265,
+          "w": 172,
+          "h": 36
+        },
+        {
+          "x": 473,
+          "y": 265,
+          "w": 114,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 379,
+        "y": 283
+      },
+      "after": {
+        "image": "captures/menedzher/8-3-after.png",
+        "highlights": [
+          {
+            "x": 595,
+            "y": 273,
+            "w": 141,
+            "h": 20
+          }
+        ]
+      }
+    },
+    {
+      "type": "scene",
+      "n": 9,
+      "total": 9,
+      "title": "Sotuvni qaytarish",
+      "frames": 66
+    },
+    {
+      "type": "step",
+      "key": "9-1",
+      "scene": 9,
+      "sceneTotal": 9,
+      "sceneTitle": "Sotuvni qaytarish",
+      "caption": "Qaytariladigan sotuvni topamiz",
+      "audio": "audio/menedzher/9-1.mp3",
+      "frames": 119,
+      "image": "captures/menedzher/9-1.png",
+      "highlights": [
+        {
+          "x": 285,
+          "y": 173,
+          "w": 734,
+          "h": 36
+        },
+        {
+          "x": 272,
+          "y": 494,
+          "w": 760,
+          "h": 136
+        }
+      ],
+      "click": null,
+      "after": null
+    },
+    {
+      "type": "step",
+      "key": "9-2",
+      "scene": 9,
+      "sceneTotal": 9,
+      "sceneTitle": "Sotuvni qaytarish",
+      "caption": "Qaytarishni yozamiz",
+      "audio": "audio/menedzher/9-2.mp3",
+      "frames": 156,
+      "image": "captures/menedzher/9-2.png",
+      "highlights": [
+        {
+          "x": 285,
+          "y": 252,
+          "w": 734,
+          "h": 388
+        },
+        {
+          "x": 298,
+          "y": 590,
+          "w": 152,
+          "h": 36
+        }
+      ],
+      "click": {
+        "x": 374,
+        "y": 608
+      },
+      "after": {
+        "image": "captures/menedzher/9-2-after.png",
+        "highlights": [
+          {
+            "x": 272,
+            "y": 260,
+            "w": 760,
+            "h": 160
+          }
+        ]
+      }
+    },
+    {
+      "type": "outro",
+      "title": "Rahmat!",
+      "subtitle": "Onyx — Menejer uchun qo'llanma",
+      "audio": "audio/menedzher/outro.mp3",
+      "frames": 209
+    }
+  ],
+  "durationInFrames": 6312
+}

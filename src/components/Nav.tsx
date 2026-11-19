@@ -19,6 +19,7 @@ import { useEffect, useRef } from "react";
 import { logoutSession } from "@/app/login/actions";
 import { groupedNavItems, type NavItem } from "@/components/nav-items";
 import { roleLabel } from "@/lib/role-labels";
+import { videoGuideHref } from "@/lib/video-guide";
 import type { Capabilities, Role } from "@/lib/permissions";
 
 const NAV_KEY = "onyx-nav";
@@ -47,6 +48,7 @@ export default function Nav({
   const pathname = usePathname();
   const groups = groupedNavItems(caps);
   const navRef = useRef<HTMLElement>(null);
+  const guideHref = user ? videoGuideHref(user.role) : null;
 
   // ТЗ №21 А5: меню выше окна — прокручиваем его так, чтобы активный пункт
   // был виден (при загрузке и при переходе). Только сам список меню, не страница.
@@ -127,6 +129,21 @@ export default function Nav({
 
       {/* Подвал: имя пользователя, «Выйти», свернуть меню. */}
       <div className="border-t border-onyx-800 px-3 py-3">
+        {guideHref && (
+          <a
+            href={guideHref}
+            target="_blank"
+            rel="noopener"
+            title="Видеоинструкция"
+            className="mb-1 flex h-9 items-center gap-2 rounded-field px-2 text-sm text-side-text transition-colors duration-150 hover:bg-onyx-900 hover:text-white nav-collapsed:justify-center"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="m10 9 5 3-5 3z" />
+            </svg>
+            <span className="nav-collapsed:sr-only">Видеоинструкция</span>
+          </a>
+        )}
         {user ? (
           <div className="flex items-center gap-2 nav-collapsed:flex-col">
             <span
