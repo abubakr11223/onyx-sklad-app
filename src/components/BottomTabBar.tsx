@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 import { logoutSession } from "@/app/login/actions";
 import { bottomTabItems, groupedNavItems, type NavItem } from "@/components/nav-items";
 import { roleLabel } from "@/lib/role-labels";
-import { videoGuideHref } from "@/lib/video-guide";
 import type { Capabilities, Role } from "@/lib/permissions";
 
 export default function BottomTabBar({
@@ -115,20 +114,6 @@ export default function BottomTabBar({
               </ul>
             </div>
           ))}
-          {user && videoGuideHref(user.role) && (
-            <a
-              href={videoGuideHref(user.role)!}
-              target="_blank"
-              rel="noopener"
-              className="mt-4 flex min-h-11 items-center gap-2 rounded-field border border-line px-3 text-sm text-ink"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-ink-2">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="m10 9 5 3-5 3z" />
-              </svg>
-              <span>Видеоинструкция</span>
-            </a>
-          )}
           {user && (
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
               <span className="min-w-0 truncate text-sm text-ink">

@@ -19,6 +19,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type Locator, type Page } from "playwright";
+import { renderTelegramFrames } from "./telegram-mock";
 import {
   AUTH_FILE,
   CAPTURES_DIR,
@@ -1181,6 +1182,8 @@ async function main(): Promise<void> {
     process.exitCode = 2;
   }
   console.log(`[capture] ${steps.length} steps → ${outDir}`);
+  // Шаги Telegram-бота на сайте не снять — рисуем чат поверх этих шагов.
+  if (roleKey === "zavsklad") await renderTelegramFrames();
 }
 
 main().catch((e) => {

@@ -663,9 +663,29 @@
       "audio": "audio/zavsklad/4-5.mp3",
       "frames": 335,
       "image": "captures/zavsklad/4-5.png",
-      "highlights": [],
-      "click": null,
-      "after": null
+      "highlights": [
+        {
+          "x": 0,
+          "y": 689,
+          "w": 390,
+          "h": 83
+        }
+      ],
+      "click": {
+        "x": 360,
+        "y": 730
+      },
+      "after": {
+        "image": "captures/zavsklad/4-5-after.png",
+        "highlights": [
+          {
+            "x": 8,
+            "y": 597,
+            "w": 307,
+            "h": 111
+          }
+        ]
+      }
     },
     {
       "type": "scene",
@@ -686,10 +706,10 @@
       "image": "captures/zavsklad/5-1.png",
       "highlights": [
         {
-          "x": 16,
-          "y": 136,
-          "w": 358,
-          "h": 135
+          "x": 8,
+          "y": 576,
+          "w": 307,
+          "h": 132
         }
       ],
       "click": null,
@@ -703,18 +723,37 @@
       "sceneTitle": "«Фотозапросы»",
       "caption": "Rasmni javob qilib yuboramiz",
       "audio": "audio/zavsklad/5-2.mp3",
-      "frames": 145,
+      "frames": 156,
       "image": "captures/zavsklad/5-2.png",
       "highlights": [
         {
-          "x": 16,
-          "y": 136,
-          "w": 358,
-          "h": 135
+          "x": 0,
+          "y": 647,
+          "w": 390,
+          "h": 125
         }
       ],
-      "click": null,
-      "after": null
+      "click": {
+        "x": 360,
+        "y": 730
+      },
+      "after": {
+        "image": "captures/zavsklad/5-2-after.png",
+        "highlights": [
+          {
+            "x": 142,
+            "y": 408,
+            "w": 240,
+            "h": 261
+          },
+          {
+            "x": 8,
+            "y": 675,
+            "w": 267,
+            "h": 33
+          }
+        ]
+      }
     },
     {
       "type": "step",
@@ -935,5 +974,5 @@
       "frames": 209
     }
   ],
-  "durationInFrames": 6186
+  "durationInFrames": 6197
 }

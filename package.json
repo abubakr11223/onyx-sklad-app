@@ -27,6 +27,7 @@
     "repair:slab-area": "tsx prisma/repair-slab-area-cli.ts",
     "video:db": "tsx video/seed-video.ts",
     "video:capture": "tsx video/capture.ts",
+    "video:telegram": "tsx video/telegram-mock.ts",
     "video:serve": "tsx video/serve.ts",
     "video:build": "node video/remotion/render.mjs"
   },
